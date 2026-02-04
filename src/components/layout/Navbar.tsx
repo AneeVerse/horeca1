@@ -15,6 +15,17 @@ import { cn } from '@/lib/utils';
 
 export function Navbar() {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+    const [isCategoriesSidebarOpen, setIsCategoriesSidebarOpen] = React.useState(false);
+
+    const categories = [
+        { label: 'Vegetables & Fruit', icon: '🥦' },
+        { label: 'Beverages', icon: '🥤' },
+        { label: 'Meats & Seafood', icon: '🥩' },
+        { label: 'Breakfast & Dairy', icon: '🥛' },
+        { label: 'Frozen Foods', icon: '❄️' },
+        { label: 'Biscuits & Snacks', icon: '🍪' },
+        { label: 'Grocery & Staples', icon: '🍞' }
+    ];
 
     return (
         <>
@@ -101,15 +112,7 @@ export function Navbar() {
 
                                 {/* Dropdown Menu */}
                                 <div className="absolute top-[calc(100%+8px)] left-0 w-64 bg-white rounded-xl shadow-2xl ring-1 ring-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-[110] overflow-hidden py-3">
-                                    {[
-                                        { label: 'Vegetables & Fruit', icon: '🥦' },
-                                        { label: 'Beverages', icon: '🥤' },
-                                        { label: 'Meats & Seafood', icon: '🥩' },
-                                        { label: 'Breakfast & Dairy', icon: '🥛' },
-                                        { label: 'Frozen Foods', icon: '❄️' },
-                                        { label: 'Biscuits & Snacks', icon: '🍪' },
-                                        { label: 'Grocery & Staples', icon: '🍞' }
-                                    ].map((item, idx) => (
+                                    {categories.map((item, idx) => (
                                         <div key={idx} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50 cursor-pointer group/item transition-colors">
                                             <div className="flex items-center gap-3">
                                                 <span className="text-xl leading-none">{item.icon}</span>
@@ -162,7 +165,7 @@ export function Navbar() {
                 </nav>
             </header>
 
-            {/* Mobile Sidebar */}
+            {/* Mobile Sidebar - Main Menu */}
             <div
                 className={cn(
                     "fixed inset-0 z-[200] bg-black/50 transition-opacity duration-300 md:hidden",
@@ -177,22 +180,17 @@ export function Navbar() {
                     )}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    {/* Sidebar Header */}
                     <div className="flex items-center justify-between">
                         <Link href="/" onClick={() => setIsSidebarOpen(false)}>
                             <h1 className="text-2xl font-extrabold text-primary flex items-center gap-1">
                                 Horeca<span className="text-text">Hub</span>
                             </h1>
                         </Link>
-                        <button
-                            className="p-2 hover:bg-gray-100 rounded-full transition-colors text-text-muted hover:text-text"
-                            onClick={() => setIsSidebarOpen(false)}
-                        >
+                        <button className="p-2 hover:bg-gray-100 rounded-full transition-colors" onClick={() => setIsSidebarOpen(false)}>
                             <span className="text-2xl font-light leading-none">×</span>
                         </button>
                     </div>
 
-                    {/* Sidebar Navigation */}
                     <div className="flex flex-col gap-1 overflow-y-auto">
                         {[
                             { label: 'Home', href: '/', options: true },
@@ -202,41 +200,64 @@ export function Navbar() {
                             { label: 'Blog', href: '/blog', options: true },
                             { label: 'Contact Us', href: '/contact', options: false },
                         ].map((item, idx) => (
-                            <div key={idx} className="group">
-                                <Link
-                                    href={item.href}
-                                    className="flex items-center justify-between py-3 px-2 border-b border-gray-50 group-hover:text-primary transition-colors text-text font-semibold"
-                                    onClick={() => setIsSidebarOpen(false)}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <span>{item.label}</span>
-                                        {item.badge && (
-                                            <span className={cn("text-[10px] text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider", item.badgeColor)}>
-                                                {item.badge}
-                                            </span>
-                                        )}
-                                    </div>
-                                    {item.options && (
-                                        <ChevronDown size={14} className="-rotate-90 text-gray-300 group-hover:text-primary transition-colors" />
-                                    )}
-                                </Link>
-                            </div>
+                            <Link key={idx} href={item.href} className="flex items-center justify-between py-3 px-2 border-b border-gray-50 font-semibold" onClick={() => setIsSidebarOpen(false)}>
+                                <div className="flex items-center gap-3">
+                                    <span>{item.label}</span>
+                                    {item.badge && <span className={cn("text-[10px] text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider", item.badgeColor)}>{item.badge}</span>}
+                                </div>
+                                {item.options && <ChevronDown size={14} className="-rotate-90 text-gray-300" />}
+                            </Link>
                         ))}
                     </div>
+                </div>
+            </div>
 
-                    {/* Sidebar Footer Info */}
-                    <div className="mt-auto border-t border-gray-100 pt-6">
-                        <div className="flex items-center gap-3 text-primary">
-                            <PhoneCall size={20} />
-                            <span className="font-bold">01- 234 567 890</span>
+            {/* Mobile Sidebar - Categories */}
+            <div
+                className={cn(
+                    "fixed inset-0 z-[200] bg-black/50 transition-opacity duration-300 md:hidden",
+                    isCategoriesSidebarOpen ? "opacity-100 visible" : "opacity-0 invisible"
+                )}
+                onClick={() => setIsCategoriesSidebarOpen(false)}
+            >
+                <div
+                    className={cn(
+                        "fixed inset-y-0 left-0 w-[280px] bg-white shadow-2xl transition-transform duration-300 ease-out transform p-6 flex flex-col gap-8",
+                        isCategoriesSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                    )}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Menu size={20} className="text-primary" />
+                            <h2 className="text-xl font-extrabold text-text">Categories</h2>
                         </div>
+                        <button className="p-2 hover:bg-gray-100 rounded-full transition-colors" onClick={() => setIsCategoriesSidebarOpen(false)}>
+                            <span className="text-2xl font-light leading-none">×</span>
+                        </button>
+                    </div>
+
+                    <div className="flex flex-col gap-1 overflow-y-auto">
+                        {categories.map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between py-3.5 px-2 border-b border-gray-50 group hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => setIsCategoriesSidebarOpen(false)}>
+                                <div className="flex items-center gap-4">
+                                    <span className="text-2xl leading-none">{item.icon}</span>
+                                    <span className="font-semibold text-text group-hover:text-primary transition-colors">{item.label}</span>
+                                </div>
+                                <ChevronDown size={16} className="-rotate-90 text-gray-300 group-hover:text-primary transition-colors" />
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
 
             {/* Mobile Location/Category bar */}
             <div className="md:hidden flex items-center justify-between px-[var(--container-padding)] py-3 border-b border-gray-100 bg-white">
-                <div className="flex items-center gap-2 text-[var(--text-sm)] font-bold">
+                <div
+                    className="flex items-center gap-2 text-[var(--text-sm)] font-bold cursor-pointer hover:text-primary transition-colors"
+                    onClick={() => setIsCategoriesSidebarOpen(true)}
+                >
+                    <Menu size={18} className="text-primary" />
                     <span>Categories</span>
                     <ChevronDown size={16} />
                 </div>
