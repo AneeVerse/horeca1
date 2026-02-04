@@ -29,11 +29,11 @@ export function Navbar() {
 
     return (
         <>
-            {/* Top Bar - Simple Green Line - Scrolls Away */}
-            <div className="w-full h-1.5 md:h-2 z-[110] relative" style={{ backgroundColor: '#299e60' }} />
+            {/* Top Header - Scrolls Away */}
+            <header className="w-full bg-white">
+                {/* Top Bar - Simple Green Line */}
+                <div className="w-full h-1.5 md:h-2" style={{ backgroundColor: '#299e60' }} />
 
-            {/* Main Header & Nav Container - Sticky to the top of the page */}
-            <header className="sticky top-0 z-[100] w-full bg-white shadow-sm ring-1 ring-gray-100">
                 {/* Main Header */}
                 <div className="w-full py-[var(--space-md)] px-[var(--container-padding)]">
                     <div className="max-w-[var(--container-max)] mx-auto flex items-center justify-between gap-6">
@@ -97,73 +97,73 @@ export function Navbar() {
                         </div>
                     </div>
                 </div>
+            </header>
 
-                {/* Nav Navigation */}
-                <nav className="w-full bg-white py-2 px-[var(--container-padding)] hidden md:block border-t border-gray-50">
-                    <div className="max-w-[var(--container-max)] mx-auto flex items-center justify-between">
-                        <div className="flex items-center gap-8">
-                            {/* Categories Dropdown Wrapper */}
-                            <div className="relative group">
-                                <div className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-all font-bold text-[var(--text-sm)]">
-                                    <Menu size={18} className="text-primary" />
-                                    <span>All Categories</span>
-                                    <ChevronDown size={16} className="text-text-muted group-hover:rotate-180 transition-transform duration-300" />
-                                </div>
-
-                                {/* Dropdown Menu */}
-                                <div className="absolute top-[calc(100%+8px)] left-0 w-64 bg-white rounded-xl shadow-2xl ring-1 ring-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-[110] overflow-hidden py-3">
-                                    {categories.map((item, idx) => (
-                                        <div key={idx} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50 cursor-pointer group/item transition-colors">
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-xl leading-none">{item.icon}</span>
-                                                <span className="text-sm font-medium text-text">{item.label}</span>
-                                            </div>
-                                            <ChevronDown size={14} className="-rotate-90 text-gray-300 group-hover/item:text-primary transition-colors" />
-                                        </div>
-                                    ))}
-                                </div>
+            {/* Sticky Nav Navigation - Only this sticks */}
+            <nav className="sticky top-0 z-[9999] w-full bg-white py-2 px-[var(--container-padding)] hidden md:block border-t border-b border-gray-100 shadow-sm">
+                <div className="max-w-[var(--container-max)] mx-auto flex items-center justify-between">
+                    <div className="flex items-center gap-8">
+                        {/* Categories Dropdown Wrapper */}
+                        <div className="relative group">
+                            <div className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-all font-bold text-[var(--text-sm)]">
+                                <Menu size={18} className="text-primary" />
+                                <span>All Categories</span>
+                                <ChevronDown size={16} className="text-text-muted group-hover:rotate-180 transition-transform duration-300" />
                             </div>
 
-                            <div className="flex items-center gap-6 text-[var(--text-sm)] font-semibold text-text-muted">
-                                <div className="relative group/nav">
-                                    <Link href="/" className="hover:text-primary flex items-center gap-1 py-4 group-hover/nav:text-primary">
-                                        Home <ChevronDown size={14} className="group-hover/nav:rotate-180 transition-transform" />
-                                    </Link>
-                                    {/* Home Dropdown */}
-                                    <div className="absolute top-full left-0 w-48 bg-white rounded-xl shadow-2xl ring-1 ring-gray-100 opacity-0 invisible group-hover/nav:opacity-100 group-hover/nav:visible translate-y-1 group-hover/nav:translate-y-0 transition-all duration-300 z-[110] py-4">
-                                        <div className="flex flex-col gap-1">
-                                            <Link href="#" className="px-6 py-2 hover:bg-gray-50 hover:text-primary transition-colors">Home Grocery</Link>
-                                            <Link href="#" className="px-6 py-2 hover:bg-gray-50 hover:text-primary transition-colors">Home Electronics</Link>
-                                            <Link href="#" className="px-6 py-2 hover:bg-gray-50 hover:text-primary transition-colors">Home Fashion</Link>
+                            {/* Dropdown Menu */}
+                            <div className="absolute top-[calc(100%+8px)] left-0 w-64 bg-white rounded-xl shadow-2xl ring-1 ring-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-[110] overflow-hidden py-3">
+                                {categories.map((item, idx) => (
+                                    <div key={idx} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50 cursor-pointer group/item transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xl leading-none">{item.icon}</span>
+                                            <span className="text-sm font-medium text-text">{item.label}</span>
                                         </div>
+                                        <ChevronDown size={14} className="-rotate-90 text-gray-300 group-hover/item:text-primary transition-colors" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-6 text-[var(--text-sm)] font-semibold text-text-muted">
+                            <div className="relative group/nav">
+                                <Link href="/" className="hover:text-primary flex items-center gap-1 py-4 group-hover/nav:text-primary">
+                                    Home <ChevronDown size={14} className="group-hover/nav:rotate-180 transition-transform" />
+                                </Link>
+                                {/* Home Dropdown */}
+                                <div className="absolute top-full left-0 w-48 bg-white rounded-xl shadow-2xl ring-1 ring-gray-100 opacity-0 invisible group-hover/nav:opacity-100 group-hover/nav:visible translate-y-1 group-hover/nav:translate-y-0 transition-all duration-300 z-[110] py-4">
+                                    <div className="flex flex-col gap-1">
+                                        <Link href="#" className="px-6 py-2 hover:bg-gray-50 hover:text-primary transition-colors">Home Grocery</Link>
+                                        <Link href="#" className="px-6 py-2 hover:bg-gray-50 hover:text-primary transition-colors">Home Electronics</Link>
+                                        <Link href="#" className="px-6 py-2 hover:bg-gray-50 hover:text-primary transition-colors">Home Fashion</Link>
                                     </div>
                                 </div>
-
-                                <Link href="/shop" className="hover:text-primary flex items-center gap-1">Shop <ChevronDown size={14} /></Link>
-                                <div className="relative group">
-                                    <Link href="/pages" className="hover:text-primary flex items-center gap-1">
-                                        Pages <ChevronDown size={14} />
-                                    </Link>
-                                    <span className="absolute -top-2 -right-4 bg-orange-500 text-[8px] text-white px-1 rounded font-bold uppercase tracking-wider scale-90">New</span>
-                                </div>
-                                <div className="relative group">
-                                    <Link href="/vendors" className="hover:text-primary flex items-center gap-1">
-                                        Vendors <ChevronDown size={14} />
-                                    </Link>
-                                    <span className="absolute -top-2 -right-4 bg-indigo-600 text-[8px] text-white px-1 rounded font-bold uppercase tracking-wider scale-90">New</span>
-                                </div>
-                                <Link href="/blog" className="hover:text-primary flex items-center gap-1">Blog <ChevronDown size={14} /></Link>
-                                <Link href="/contact" className="hover:text-primary">Contact Us</Link>
                             </div>
-                        </div>
 
-                        <div className="bg-primary hover:bg-primary-dark transition-all text-white px-6 py-3 flex items-center gap-3 cursor-pointer rounded-lg shadow-lg shadow-primary/20">
-                            <PhoneCall size={20} />
-                            <span className="font-bold text-[var(--text-sm)]">01- 234 567 890</span>
+                            <Link href="/shop" className="hover:text-primary flex items-center gap-1">Shop <ChevronDown size={14} /></Link>
+                            <div className="relative group">
+                                <Link href="/pages" className="hover:text-primary flex items-center gap-1">
+                                    Pages <ChevronDown size={14} />
+                                </Link>
+                                <span className="absolute -top-2 -right-4 bg-orange-500 text-[8px] text-white px-1 rounded font-bold uppercase tracking-wider scale-90">New</span>
+                            </div>
+                            <div className="relative group">
+                                <Link href="/vendors" className="hover:text-primary flex items-center gap-1">
+                                    Vendors <ChevronDown size={14} />
+                                </Link>
+                                <span className="absolute -top-2 -right-4 bg-indigo-600 text-[8px] text-white px-1 rounded font-bold uppercase tracking-wider scale-90">New</span>
+                            </div>
+                            <Link href="/blog" className="hover:text-primary flex items-center gap-1">Blog <ChevronDown size={14} /></Link>
+                            <Link href="/contact" className="hover:text-primary">Contact Us</Link>
                         </div>
                     </div>
-                </nav>
-            </header>
+
+                    <div className="bg-primary hover:bg-primary-dark transition-all text-white px-6 py-3 flex items-center gap-3 cursor-pointer rounded-lg shadow-lg shadow-primary/20">
+                        <PhoneCall size={20} />
+                        <span className="font-bold text-[var(--text-sm)]">01- 234 567 890</span>
+                    </div>
+                </div>
+            </nav>
 
             {/* Mobile Sidebar - Main Menu */}
             <div

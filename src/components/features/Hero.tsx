@@ -67,9 +67,9 @@ export function Hero() {
     };
 
     return (
-        <section className="w-full max-w-full overflow-x-clip pt-[var(--space-md)] pb-20 relative px-[clamp(0.75rem,3vw,2rem)]">
+        <section className="w-full max-w-full pt-[var(--space-md)] pb-20 relative px-[clamp(0.75rem,3vw,2rem)]">
             {/* Main Hero Container */}
-            <div className="relative w-full max-w-[1440px] mx-auto">
+            <div className="relative w-full max-w-[1440px] mx-auto overflow-visible">
 
                 {/* Hero Background */}
                 <div

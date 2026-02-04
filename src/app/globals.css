@@ -48,14 +48,13 @@
 
 @layer base {
   html {
-    overflow-x: hidden;
     max-width: 100vw;
   }
 
   body {
     font-family: "Quicksand", sans-serif;
     @apply bg-background text-text antialiased;
-    overflow-x: hidden;
+    overflow-x: clip;
     max-width: 100vw;
     width: 100%;
   }
