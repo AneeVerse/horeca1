@@ -1,7 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300..700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Quicksand", ui-sans-serif, system-ui, sans-serif;
   --color-primary: #299e60;
   --color-primary-dark: #22844f;
   --color-primary-light: #dcfce7;
@@ -52,7 +53,8 @@
   }
 
   body {
-    @apply bg-background text-text font-sans antialiased;
+    font-family: "Quicksand", sans-serif;
+    @apply bg-background text-text antialiased;
     overflow-x: hidden;
     max-width: 100vw;
     width: 100%;
