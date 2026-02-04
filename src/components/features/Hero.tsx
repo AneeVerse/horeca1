@@ -123,21 +123,21 @@ export function Hero() {
                     {/* Navigation Arrows */}
                     <button
                         onClick={() => handleSlideChange('left')} // Click Left UI button -> logic dir 'left' (Exit Left, Enter Right)
-                        className="hidden sm:flex absolute left-6 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md hover:bg-white w-12 h-12 md:w-14 md:h-14 items-center justify-center rounded-full shadow-lg transition-all text-gray-400 hover:text-primary z-30 group"
+                        className="flex absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md hover:bg-white w-10 h-10 md:w-14 md:h-14 items-center justify-center rounded-full shadow-lg transition-all text-gray-400 hover:text-primary z-30 group"
                     >
-                        <ChevronLeft size={28} className="group-hover:scale-110 transition-transform" />
+                        <ChevronLeft size={24} className="md:w-[28px] md:h-[28px] group-hover:scale-110 transition-transform" />
                     </button>
                     <button
                         onClick={() => handleSlideChange('right')} // Click Right UI button -> logic dir 'right' (Exit Right, Enter Left)
-                        className="hidden sm:flex absolute right-6 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md hover:bg-white w-12 h-12 md:w-14 md:h-14 items-center justify-center rounded-full shadow-lg transition-all text-gray-400 hover:text-primary z-30 group"
+                        className="flex absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md hover:bg-white w-10 h-10 md:w-14 md:h-14 items-center justify-center rounded-full shadow-lg transition-all text-gray-400 hover:text-primary z-30 group"
                     >
-                        <ChevronRight size={28} className="group-hover:scale-110 transition-transform" />
+                        <ChevronRight size={24} className="md:w-[28px] md:h-[28px] group-hover:scale-110 transition-transform" />
                     </button>
                 </div>
 
                 {/* Simplified Scroll Button */}
-                <div className="absolute bottom-[-34px] md:bottom-[-44px] left-1/2 -translate-x-1/2 z-40">
-                    <div className="w-[68px] h-[68px] md:w-[88px] md:h-[88px] bg-primary rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-all duration-300 shadow-xl shadow-primary/30 border-[5px] border-white group overflow-hidden"
+                <div className="absolute bottom-[-38px] md:bottom-[-44px] left-1/2 -translate-x-1/2 z-40">
+                    <div className="w-[76px] h-[76px] md:w-[88px] md:h-[88px] bg-primary rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-all duration-300 shadow-xl shadow-primary/30 border-[5px] border-white group overflow-hidden"
                         onClick={() => window.scrollTo({ top: window.innerHeight * 0.8, behavior: 'smooth' })}>
                         <div className="flex flex-col items-center justify-center animate-bounce-short">
                             <svg width="24" height="34" viewBox="0 0 24 34" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-white">

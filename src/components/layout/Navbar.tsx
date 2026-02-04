@@ -14,6 +14,8 @@ import {
 import { cn } from '@/lib/utils';
 
 export function Navbar() {
+    const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+
     return (
         <>
             {/* Top Bar - Simple Green Line - Scrolls Away */}
@@ -74,7 +76,10 @@ export function Navbar() {
                                     <ShoppingCart size={28} className="group-hover:text-primary transition-colors text-text" />
                                     <span className="absolute -top-2 -right-2 bg-primary text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-full font-extrabold shadow-sm">2</span>
                                 </div>
-                                <button className="md:hidden text-text hover:text-primary transition-colors">
+                                <button
+                                    className="md:hidden text-text hover:text-primary transition-colors"
+                                    onClick={() => setIsSidebarOpen(true)}
+                                >
                                     <Menu size={24} />
                                 </button>
                             </div>
@@ -156,6 +161,78 @@ export function Navbar() {
                     </div>
                 </nav>
             </header>
+
+            {/* Mobile Sidebar */}
+            <div
+                className={cn(
+                    "fixed inset-0 z-[200] bg-black/50 transition-opacity duration-300 md:hidden",
+                    isSidebarOpen ? "opacity-100 visible" : "opacity-0 invisible"
+                )}
+                onClick={() => setIsSidebarOpen(false)}
+            >
+                <div
+                    className={cn(
+                        "fixed inset-y-0 left-0 w-[280px] bg-white shadow-2xl transition-transform duration-300 ease-out transform p-6 flex flex-col gap-8",
+                        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                    )}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* Sidebar Header */}
+                    <div className="flex items-center justify-between">
+                        <Link href="/" onClick={() => setIsSidebarOpen(false)}>
+                            <h1 className="text-2xl font-extrabold text-primary flex items-center gap-1">
+                                Horeca<span className="text-text">Hub</span>
+                            </h1>
+                        </Link>
+                        <button
+                            className="p-2 hover:bg-gray-100 rounded-full transition-colors text-text-muted hover:text-text"
+                            onClick={() => setIsSidebarOpen(false)}
+                        >
+                            <span className="text-2xl font-light leading-none">×</span>
+                        </button>
+                    </div>
+
+                    {/* Sidebar Navigation */}
+                    <div className="flex flex-col gap-1 overflow-y-auto">
+                        {[
+                            { label: 'Home', href: '/', options: true },
+                            { label: 'Shop', href: '/shop', badge: 'New', badgeColor: 'bg-orange-500', options: true },
+                            { label: 'Pages', href: '/pages', badge: 'New', badgeColor: 'bg-indigo-600', options: true },
+                            { label: 'Vendors', href: '/vendors', options: true },
+                            { label: 'Blog', href: '/blog', options: true },
+                            { label: 'Contact Us', href: '/contact', options: false },
+                        ].map((item, idx) => (
+                            <div key={idx} className="group">
+                                <Link
+                                    href={item.href}
+                                    className="flex items-center justify-between py-3 px-2 border-b border-gray-50 group-hover:text-primary transition-colors text-text font-semibold"
+                                    onClick={() => setIsSidebarOpen(false)}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span>{item.label}</span>
+                                        {item.badge && (
+                                            <span className={cn("text-[10px] text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider", item.badgeColor)}>
+                                                {item.badge}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {item.options && (
+                                        <ChevronDown size={14} className="-rotate-90 text-gray-300 group-hover:text-primary transition-colors" />
+                                    )}
+                                </Link>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Sidebar Footer Info */}
+                    <div className="mt-auto border-t border-gray-100 pt-6">
+                        <div className="flex items-center gap-3 text-primary">
+                            <PhoneCall size={20} />
+                            <span className="font-bold">01- 234 567 890</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             {/* Mobile Location/Category bar */}
             <div className="md:hidden flex items-center justify-between px-[var(--container-padding)] py-3 border-b border-gray-100 bg-white">
