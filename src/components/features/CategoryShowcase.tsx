@@ -5,15 +5,15 @@ import Link from 'next/link';
 import Image from 'next/image';
 
 const CATEGORIES = [
-    { name: 'Vegetables', image: '/images/category/vegitable.png', count: '125+ Products', bgColor: '#f0f9eb' },
-    { name: 'Fish & Meats', image: '/images/category/fish & meat.png', count: '80+ Products', bgColor: '#e3f9eb' },
-    { name: 'Desserts', image: '/images/category/desset.png', count: '50+ Products', bgColor: '#fef3e9' },
-    { name: 'Drinks & Juice', image: '/images/category/drink-juice.png', count: '150+ Products', bgColor: '#fff1f1' },
-    { name: 'Animal Food', image: '/images/category/animal food.png', count: '40+ Products', bgColor: '#f1efff' },
-    { name: 'Fresh Fruits', image: '/images/category/fruits.png', count: '110+ Products', bgColor: '#fff9ef' },
-    { name: 'Yummy Candy', image: '/images/category/candy.png', count: '95+ Products', bgColor: '#f7ffef' },
-    { name: 'Dairy & Milk', image: '/images/category/milk.png', count: '65+ Products', bgColor: '#efefff' },
-    { name: 'Snacks', image: '/images/category/snacks.png', count: '130+ Products', bgColor: '#effffb' }
+    { name: 'Vegetables', image: '/images/category/vegitable.png', count: '125+ Products', bgColor: '#e8f9e9' },
+    { name: 'Fish & Meats', image: '/images/category/fish & meat.png', count: '80+ Products', bgColor: '#e8f9e9' },
+    { name: 'Desserts', image: '/images/category/desset.png', count: '50+ Products', bgColor: '#e8f9e9' },
+    { name: 'Drinks & Juice', image: '/images/category/drink-juice.png', count: '150+ Products', bgColor: '#e8f9e9' },
+    { name: 'Animal Food', image: '/images/category/animal food.png', count: '40+ Products', bgColor: '#e8f9e9' },
+    { name: 'Fresh Fruits', image: '/images/category/fruits.png', count: '110+ Products', bgColor: '#e8f9e9' },
+    { name: 'Yummy Candy', image: '/images/category/candy.png', count: '95+ Products', bgColor: '#e8f9e9' },
+    { name: 'Dairy & Milk', image: '/images/category/milk.png', count: '65+ Products', bgColor: '#e8f9e9' },
+    { name: 'Snacks', image: '/images/category/snacks.png', count: '130+ Products', bgColor: '#e8f9e9' }
 ];
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
