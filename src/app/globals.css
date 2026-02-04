@@ -36,8 +36,8 @@
   --space-section: clamp(4rem, 10vh, 8rem);
 
   /* Container & Layout */
-  --container-padding: clamp(1rem, 5vw, 5rem);
-  --container-max: 1320px;
+  --container-padding: clamp(0.75rem, 2.5vw, 2.5rem);
+  --container-max: 1440px;
 
   /* Radii */
   --radius-xl: 40px;
