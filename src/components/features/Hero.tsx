@@ -122,13 +122,13 @@ export function Hero() {
 
                     {/* Navigation Arrows */}
                     <button
-                        onClick={() => handleSlideChange('right')} // Click Left UI button -> logic dir 'right' (prev)
+                        onClick={() => handleSlideChange('left')} // Click Left UI button -> logic dir 'left' (Exit Left, Enter Right)
                         className="hidden sm:flex absolute left-6 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md hover:bg-white w-12 h-12 md:w-14 md:h-14 items-center justify-center rounded-full shadow-lg transition-all text-gray-400 hover:text-primary z-30 group"
                     >
                         <ChevronLeft size={28} className="group-hover:scale-110 transition-transform" />
                     </button>
                     <button
-                        onClick={() => handleSlideChange('left')} // Click Right UI button -> logic dir 'left' (next)
+                        onClick={() => handleSlideChange('right')} // Click Right UI button -> logic dir 'right' (Exit Right, Enter Left)
                         className="hidden sm:flex absolute right-6 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md hover:bg-white w-12 h-12 md:w-14 md:h-14 items-center justify-center rounded-full shadow-lg transition-all text-gray-400 hover:text-primary z-30 group"
                     >
                         <ChevronRight size={28} className="group-hover:scale-110 transition-transform" />
