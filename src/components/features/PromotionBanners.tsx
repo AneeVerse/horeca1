@@ -63,14 +63,14 @@ export function PromotionBanners() {
                             </div>
 
                             {/* Content */}
-                            <div className="relative z-20 flex flex-col items-start gap-6 max-w-[60%] h-full">
-                                <h3 className="text-[20px] md:text-[22px] lg:text-[26px] font-bold leading-tight" style={{ color: banner.textColor }}>
+                            <div className="relative z-20 flex flex-col items-start gap-3 md:gap-4 lg:gap-6 h-full">
+                                <h3 className="text-[20px] md:text-[22px] lg:text-[26px] font-bold leading-tight max-w-[180px] md:max-w-[220px]" style={{ color: banner.textColor }}>
                                     {banner.title}
                                 </h3>
 
                                 <Link
                                     href="/shop"
-                                    className="group flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-all shadow-md shadow-primary/20 hover:shadow-primary/30 mt-auto"
+                                    className="group flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-all shadow-md shadow-primary/20 hover:shadow-primary/30 mt-auto whitespace-nowrap w-fit"
                                 >
                                     Shop Now
                                     <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
