@@ -7,6 +7,7 @@ import { OfferBanners } from "@/components/features/OfferBanners";
 import { RecommendedProducts } from "@/components/features/RecommendedProducts";
 import { HotDeals } from "@/components/features/HotDeals";
 import { TopVendors } from "@/components/features/TopVendors";
+import { DailyBestSells } from "@/components/features/DailyBestSells";
 
 export default function Home() {
   return (
@@ -20,6 +21,7 @@ export default function Home() {
       <RecommendedProducts />
       <HotDeals />
       <TopVendors />
+      <DailyBestSells />
     </div>
   );
 }
