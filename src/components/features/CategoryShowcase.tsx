@@ -32,7 +32,7 @@ export function CategoryShowcase() {
     };
 
     return (
-        <section className="w-full pt-14 pb-8 md:pt-16 md:pb-12 bg-white relative -mt-6 md:-mt-10 z-30">
+        <section className="w-full pt-8 pb-8 md:pt-16 md:pb-12 bg-white relative -mt-10 md:-mt-10 z-30">
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] relative group/main">
                 {/* Navigation Arrows */}
                 <button

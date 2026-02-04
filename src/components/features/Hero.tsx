@@ -67,7 +67,7 @@ export function Hero() {
     };
 
     return (
-        <section className="w-full max-w-full pt-[var(--space-md)] pb-20 relative px-[var(--container-padding)]">
+        <section className="w-full max-w-full pt-[var(--space-md)] pb-8 md:pb-20 relative px-[var(--container-padding)]">
             {/* Main Hero Container */}
             <div className="relative w-full max-w-[var(--container-max)] mx-auto overflow-visible">
 
