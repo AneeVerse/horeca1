@@ -3,6 +3,7 @@ import { CategoryShowcase } from "@/components/features/CategoryShowcase";
 import { PromotionBanners } from "@/components/features/PromotionBanners";
 import { FlashSale } from "@/components/features/FlashSale";
 import { FeaturedProducts } from "@/components/features/FeaturedProducts";
+import { OfferBanners } from "@/components/features/OfferBanners";
 
 export default function Home() {
   return (
@@ -12,6 +13,7 @@ export default function Home() {
       <PromotionBanners />
       <FlashSale />
       <FeaturedProducts />
+      <OfferBanners />
     </div>
   );
 }
