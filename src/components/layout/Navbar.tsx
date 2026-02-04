@@ -1,0 +1,179 @@
+'use client';
+
+import React from 'react';
+import Link from 'next/link';
+import {
+    Search,
+    MapPin,
+    Heart,
+    ShoppingCart,
+    ChevronDown,
+    Menu,
+    PhoneCall
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+export function Navbar() {
+    return (
+        <>
+            {/* Top Bar - Simple Green Line - Scrolls Away */}
+            <div className="w-full h-1.5 md:h-2 z-[110] relative" style={{ backgroundColor: '#299e60' }} />
+
+            {/* Main Header & Nav Container - Sticky to the top of the page */}
+            <header className="sticky top-0 z-[100] w-full bg-white shadow-sm ring-1 ring-gray-100">
+                {/* Main Header */}
+                <div className="w-full py-[var(--space-md)] px-[var(--container-padding)]">
+                    <div className="max-w-[var(--container-max)] mx-auto flex items-center justify-between gap-6">
+                        {/* Logo */}
+                        <Link href="/" className="flex-shrink-0">
+                            <h1 className="text-[clamp(1.25rem,2.2vw,2.125rem)] font-extrabold text-primary flex items-center gap-1">
+                                Horeca<span className="text-text">Hub</span>
+                            </h1>
+                        </Link>
+
+                        {/* Search Bar */}
+                        <div className="hidden md:flex flex-1 max-w-2xl items-center relative group">
+                            <div className="flex items-center gap-3 px-5 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-xl w-full focus-within:border-primary/50 transition-all duration-300 shadow-sm">
+                                <div className="flex items-center gap-1 text-[var(--text-sm)] text-text-muted border-r-2 border-gray-100 pr-4 cursor-pointer hover:text-primary font-semibold">
+                                    <span>Ice Cream</span>
+                                    <ChevronDown size={16} />
+                                </div>
+                                <input
+                                    type="text"
+                                    placeholder="Search for a product or brand"
+                                    className="flex-1 bg-transparent text-[var(--text-base)] outline-none px-3 placeholder:text-gray-400"
+                                />
+                                <button className="bg-primary p-2.5 rounded-full text-white hover:bg-primary-dark transition-all shadow-md">
+                                    <Search size={20} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Location & Tools */}
+                        <div className="flex items-center gap-[var(--space-md)]">
+                            <div className="hidden lg:flex items-center gap-3 px-4 py-2.5 border-2 border-gray-50 rounded-xl cursor-pointer hover:border-primary/20 transition-colors bg-white shadow-sm">
+                                <MapPin size={22} className="text-primary" />
+                                <div className="flex flex-col leading-tight">
+                                    <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider">Your Location</span>
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-sm font-extrabold font-sans">New York</span>
+                                        <ChevronDown size={12} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-4">
+                                <button className="md:hidden text-text hover:text-primary transition-colors">
+                                    <Search size={24} />
+                                </button>
+                                <div className="relative cursor-pointer group">
+                                    <Heart size={28} className="group-hover:text-primary transition-colors text-text" />
+                                    <span className="absolute -top-2 -right-2 bg-primary text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-full font-extrabold shadow-sm">2</span>
+                                </div>
+                                <div className="relative cursor-pointer group">
+                                    <ShoppingCart size={28} className="group-hover:text-primary transition-colors text-text" />
+                                    <span className="absolute -top-2 -right-2 bg-primary text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-full font-extrabold shadow-sm">2</span>
+                                </div>
+                                <button className="md:hidden text-text hover:text-primary transition-colors">
+                                    <Menu size={24} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Nav Navigation */}
+                <nav className="w-full bg-white py-2 px-[var(--container-padding)] hidden md:block border-t border-gray-50">
+                    <div className="max-w-[var(--container-max)] mx-auto flex items-center justify-between">
+                        <div className="flex items-center gap-8">
+                            {/* Categories Dropdown Wrapper */}
+                            <div className="relative group">
+                                <div className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-all font-bold text-[var(--text-sm)]">
+                                    <Menu size={18} className="text-primary" />
+                                    <span>All Categories</span>
+                                    <ChevronDown size={16} className="text-text-muted group-hover:rotate-180 transition-transform duration-300" />
+                                </div>
+
+                                {/* Dropdown Menu */}
+                                <div className="absolute top-[calc(100%+8px)] left-0 w-64 bg-white rounded-xl shadow-2xl ring-1 ring-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-[110] overflow-hidden py-3">
+                                    {[
+                                        { label: 'Vegetables & Fruit', icon: '🥦' },
+                                        { label: 'Beverages', icon: '🥤' },
+                                        { label: 'Meats & Seafood', icon: '🥩' },
+                                        { label: 'Breakfast & Dairy', icon: '🥛' },
+                                        { label: 'Frozen Foods', icon: '❄️' },
+                                        { label: 'Biscuits & Snacks', icon: '🍪' },
+                                        { label: 'Grocery & Staples', icon: '🍞' }
+                                    ].map((item, idx) => (
+                                        <div key={idx} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50 cursor-pointer group/item transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xl leading-none">{item.icon}</span>
+                                                <span className="text-sm font-medium text-text">{item.label}</span>
+                                            </div>
+                                            <ChevronDown size={14} className="-rotate-90 text-gray-300 group-hover/item:text-primary transition-colors" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-6 text-[var(--text-sm)] font-semibold text-text-muted">
+                                <div className="relative group/nav">
+                                    <Link href="/" className="hover:text-primary flex items-center gap-1 py-4 group-hover/nav:text-primary">
+                                        Home <ChevronDown size={14} className="group-hover/nav:rotate-180 transition-transform" />
+                                    </Link>
+                                    {/* Home Dropdown */}
+                                    <div className="absolute top-full left-0 w-48 bg-white rounded-xl shadow-2xl ring-1 ring-gray-100 opacity-0 invisible group-hover/nav:opacity-100 group-hover/nav:visible translate-y-1 group-hover/nav:translate-y-0 transition-all duration-300 z-[110] py-4">
+                                        <div className="flex flex-col gap-1">
+                                            <Link href="#" className="px-6 py-2 hover:bg-gray-50 hover:text-primary transition-colors">Home Grocery</Link>
+                                            <Link href="#" className="px-6 py-2 hover:bg-gray-50 hover:text-primary transition-colors">Home Electronics</Link>
+                                            <Link href="#" className="px-6 py-2 hover:bg-gray-50 hover:text-primary transition-colors">Home Fashion</Link>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <Link href="/shop" className="hover:text-primary flex items-center gap-1">Shop <ChevronDown size={14} /></Link>
+                                <div className="relative group">
+                                    <Link href="/pages" className="hover:text-primary flex items-center gap-1">
+                                        Pages <ChevronDown size={14} />
+                                    </Link>
+                                    <span className="absolute -top-2 -right-4 bg-orange-500 text-[8px] text-white px-1 rounded font-bold uppercase tracking-wider scale-90">New</span>
+                                </div>
+                                <div className="relative group">
+                                    <Link href="/vendors" className="hover:text-primary flex items-center gap-1">
+                                        Vendors <ChevronDown size={14} />
+                                    </Link>
+                                    <span className="absolute -top-2 -right-4 bg-indigo-600 text-[8px] text-white px-1 rounded font-bold uppercase tracking-wider scale-90">New</span>
+                                </div>
+                                <Link href="/blog" className="hover:text-primary flex items-center gap-1">Blog <ChevronDown size={14} /></Link>
+                                <Link href="/contact" className="hover:text-primary">Contact Us</Link>
+                            </div>
+                        </div>
+
+                        <div className="bg-primary hover:bg-primary-dark transition-all text-white px-6 py-3 flex items-center gap-3 cursor-pointer rounded-lg shadow-lg shadow-primary/20">
+                            <PhoneCall size={20} />
+                            <span className="font-bold text-[var(--text-sm)]">01- 234 567 890</span>
+                        </div>
+                    </div>
+                </nav>
+            </header>
+
+            {/* Mobile Location/Category bar */}
+            <div className="md:hidden flex items-center justify-between px-[var(--container-padding)] py-3 border-b border-gray-100 bg-white">
+                <div className="flex items-center gap-2 text-[var(--text-sm)] font-bold">
+                    <span>Categories</span>
+                    <ChevronDown size={16} />
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-100 rounded-full bg-gray-50">
+                    <MapPin size={14} className="text-primary" />
+                    <div className="flex flex-col leading-none">
+                        <span className="text-[8px] text-text-muted">Your Location</span>
+                        <div className="flex items-center gap-0.5">
+                            <span className="text-[10px] font-bold">New York</span>
+                            <ChevronDown size={8} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+}
