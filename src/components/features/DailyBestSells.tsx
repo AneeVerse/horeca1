@@ -140,7 +140,7 @@ export function DailyBestSells() {
                     </div>
 
                     {/* Right: Large Promo Banner */}
-                    <div className="w-full xl:w-[450px] shrink-0 h-[400px] xl:h-auto rounded-[24px] overflow-hidden bg-[#f5eeff] relative flex flex-col items-center justify-center text-center p-8 group">
+                    <div className="w-full xl:w-[450px] shrink-0 h-[400px] xl:h-auto rounded-[24px] overflow-hidden bg-[#f6e6f6] relative flex flex-col items-center justify-center text-center p-8 group">
                         {/* Subtle pattern or overlay could go here */}
                         <div
                             className="absolute inset-0 opacity-10 pointer-events-none mix-blend-multiply"
