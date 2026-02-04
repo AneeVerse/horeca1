@@ -67,24 +67,26 @@ export function Hero() {
     };
 
     return (
-        <section className="w-full max-w-full overflow-x-hidden pt-[var(--space-md)] pb-20 relative px-[clamp(0.75rem,3vw,2rem)]">
+        <section className="w-full max-w-full overflow-x-clip pt-[var(--space-md)] pb-20 relative px-[clamp(0.75rem,3vw,2rem)]">
             {/* Main Hero Container */}
             <div className="relative w-full max-w-[1440px] mx-auto">
 
                 {/* Hero Background */}
                 <div
-                    className="relative w-full min-h-[clamp(450px,65dvh,750px)] rounded-[clamp(30px,4vw,60px)] overflow-hidden transition-colors duration-500"
+                    className="relative w-full min-h-[clamp(450px,65dvh,750px)] rounded-[clamp(30px,4vw,60px)] transition-colors duration-500"
                     style={{ backgroundColor: '#d3ebc0' }}
                 >
-                    {/* Background Pattern Image */}
-                    <div
-                        className="absolute inset-0 pointer-events-none opacity-40 mix-blend-overlay"
-                        style={{
-                            backgroundImage: 'url("/images/hero-banner-bg.png")',
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center'
-                        }}
-                    />
+                    {/* Background Pattern Image - Clipped */}
+                    <div className="absolute inset-0 rounded-[inherit] overflow-hidden pointer-events-none">
+                        <div
+                            className="absolute inset-0 opacity-40 mix-blend-overlay"
+                            style={{
+                                backgroundImage: 'url("/images/hero-banner-bg.png")',
+                                backgroundSize: 'cover',
+                                backgroundPosition: 'center'
+                            }}
+                        />
+                    </div>
 
                     <div className="relative z-10 h-full">
                         {/* Slide Content Wrapper */}
@@ -136,7 +138,7 @@ export function Hero() {
                 </div>
 
                 {/* Simplified Scroll Button */}
-                <div className="absolute bottom-[-38px] md:bottom-[-44px] left-1/2 -translate-x-1/2 z-40">
+                <div className="absolute bottom-[-38px] md:bottom-[-44px] left-1/2 -translate-x-1/2 z-50">
                     <div className="w-[76px] h-[76px] md:w-[88px] md:h-[88px] bg-primary rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-all duration-300 shadow-xl shadow-primary/30 border-[5px] border-white group overflow-hidden"
                         onClick={() => window.scrollTo({ top: window.innerHeight * 0.8, behavior: 'smooth' })}>
                         <div className="flex flex-col items-center justify-center animate-bounce-short">
