@@ -5,6 +5,8 @@ import { FlashSale } from "@/components/features/FlashSale";
 import { FeaturedProducts } from "@/components/features/FeaturedProducts";
 import { OfferBanners } from "@/components/features/OfferBanners";
 import { RecommendedProducts } from "@/components/features/RecommendedProducts";
+import { HotDeals } from "@/components/features/HotDeals";
+import { TopVendors } from "@/components/features/TopVendors";
 
 export default function Home() {
   return (
@@ -16,6 +18,8 @@ export default function Home() {
       <FeaturedProducts />
       <OfferBanners />
       <RecommendedProducts />
+      <HotDeals />
+      <TopVendors />
     </div>
   );
 }
