@@ -4,6 +4,7 @@ import { PromotionBanners } from "@/components/features/PromotionBanners";
 import { FlashSale } from "@/components/features/FlashSale";
 import { FeaturedProducts } from "@/components/features/FeaturedProducts";
 import { OfferBanners } from "@/components/features/OfferBanners";
+import { RecommendedProducts } from "@/components/features/RecommendedProducts";
 
 export default function Home() {
   return (
@@ -14,6 +15,7 @@ export default function Home() {
       <FlashSale />
       <FeaturedProducts />
       <OfferBanners />
+      <RecommendedProducts />
     </div>
   );
 }
