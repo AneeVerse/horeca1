@@ -134,7 +134,7 @@
   }
 
   .animate-bounce-short {
-    animation: bounce-short 1.5s ease-in-out infinite;
+    animation: bounce-short 2s ease-in-out infinite;
   }
 
   @keyframes slideOutLeft {
@@ -212,10 +212,10 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #299e6044;
+  background: #299e60;
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #299e6066;
+  background: #22844f;
 }

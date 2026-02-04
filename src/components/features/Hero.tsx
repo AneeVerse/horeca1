@@ -136,15 +136,15 @@ export function Hero() {
                 </div>
 
                 {/* Simplified Scroll Button */}
-                <div className="absolute bottom-[-25px] md:bottom-[-35px] left-1/2 -translate-x-1/2 z-40">
-                    <div className="w-[55px] h-[55px] md:w-[75px] md:h-[75px] bg-primary rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-all duration-300 shadow-xl shadow-primary/30 border-4 border-white group"
+                <div className="absolute bottom-[-34px] md:bottom-[-44px] left-1/2 -translate-x-1/2 z-40">
+                    <div className="w-[68px] h-[68px] md:w-[88px] md:h-[88px] bg-primary rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-all duration-300 shadow-xl shadow-primary/30 border-[5px] border-white group overflow-hidden"
                         onClick={() => window.scrollTo({ top: window.innerHeight * 0.8, behavior: 'smooth' })}>
-                        <div className="flex flex-col items-center justify-center gap-0.5">
-                            <div className="flex flex-col items-center gap-[3px] mb-1">
-                                <div className="w-[4px] h-[4px] bg-white rounded-full animate-bounce" />
-                                <div className="w-[4px] h-[10px] bg-white/80 rounded-full" />
-                            </div>
-                            <ChevronDown size={22} className="text-white -mt-2 animate-pulse" />
+                        <div className="flex flex-col items-center justify-center animate-bounce-short">
+                            <svg width="24" height="34" viewBox="0 0 24 34" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-white">
+                                <path d="M12 2V14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="4 4" />
+                                <path d="M6 18L12 24L18 18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                <path d="M6 26L12 32L18 26" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
                         </div>
                     </div>
                 </div>
