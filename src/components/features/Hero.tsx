@@ -88,7 +88,7 @@ export function Hero() {
                         />
                     </div>
 
-                    <div className="relative z-10 h-full">
+                    <div className="relative z-10 h-full overflow-hidden" style={{ isolation: 'isolate', contain: 'layout style paint' }}>
                         {/* Slide Content Wrapper */}
                         <div className={`grid grid-cols-1 lg:grid-cols-2 items-center gap-[var(--space-lg)] px-[clamp(1.5rem,5vw,5rem)] py-12 md:py-20 lg:py-24 min-h-[clamp(450px,65dvh,750px)] ${getAnimationClass()}`}>
 
