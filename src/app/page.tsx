@@ -12,6 +12,7 @@ import { DeliveryPoster } from "@/components/features/DeliveryPoster";
 import { OrganicFood } from "@/components/features/OrganicFood";
 import { ProductShowcase } from "@/components/features/ProductShowcase";
 import { ShopByBrands } from "@/components/features/ShopByBrands";
+import { NewArrivals } from "@/components/features/NewArrivals";
 
 export default function Home() {
   return (
@@ -30,6 +31,7 @@ export default function Home() {
       <OrganicFood />
       <ProductShowcase />
       <ShopByBrands />
+      <NewArrivals />
     </div>
   );
 }
