@@ -9,6 +9,7 @@ import { HotDeals } from "@/components/features/HotDeals";
 import { TopVendors } from "@/components/features/TopVendors";
 import { DailyBestSells } from "@/components/features/DailyBestSells";
 import { DeliveryPoster } from "@/components/features/DeliveryPoster";
+import { OrganicFood } from "@/components/features/OrganicFood";
 
 export default function Home() {
   return (
@@ -24,6 +25,7 @@ export default function Home() {
       <TopVendors />
       <DailyBestSells />
       <DeliveryPoster />
+      <OrganicFood />
     </div>
   );
 }
