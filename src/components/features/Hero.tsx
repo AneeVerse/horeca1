@@ -73,7 +73,7 @@ export function Hero() {
 
                 {/* Hero Background */}
                 <div
-                    className="relative w-full min-h-[clamp(450px,65dvh,750px)] rounded-[clamp(30px,4vw,60px)] transition-colors duration-500"
+                    className="relative w-full h-[520px] md:h-[clamp(450px,65dvh,750px)] rounded-[clamp(30px,4vw,60px)] transition-colors duration-500"
                     style={{ backgroundColor: '#d3ebc0' }}
                 >
                     {/* Background Pattern Image - Clipped */}
@@ -90,14 +90,14 @@ export function Hero() {
 
                     <div className="relative z-10 h-full overflow-hidden" style={{ isolation: 'isolate', contain: 'layout style paint' }}>
                         {/* Slide Content Wrapper */}
-                        <div className={`grid grid-cols-1 lg:grid-cols-2 items-center gap-[var(--space-lg)] px-[clamp(1.5rem,5vw,5rem)] py-12 md:py-20 lg:py-24 min-h-[clamp(450px,65dvh,750px)] ${getAnimationClass()}`}>
+                        <div className={`grid grid-cols-1 lg:grid-cols-2 items-center gap-4 md:gap-[var(--space-lg)] px-[clamp(1.5rem,5vw,5rem)] py-8 md:py-20 lg:py-24 h-full ${getAnimationClass()}`}>
 
                             {/* Content Left */}
                             <div className="flex flex-col items-start text-left w-full order-1">
                                 <span className="bg-white/60 text-primary px-4 py-1.5 rounded-full text-sm font-bold mb-6 backdrop-blur-sm border border-white/40">
                                     {SLIDES[currentSlide].tag}
                                 </span>
-                                <h1 className="text-[clamp(1.8rem,6vw,4rem)] font-extrabold text-[#0f172a] mb-[var(--space-md)] leading-[1.1] tracking-tight max-w-[650px]">
+                                <h1 className="text-[clamp(1.6rem,5vw,4rem)] font-extrabold text-[#0f172a] mb-4 md:mb-[var(--space-md)] leading-[1.1] tracking-tight max-w-[650px] min-h-[3.5em] md:min-h-0">
                                     {SLIDES[currentSlide].title}
                                 </h1>
 
@@ -108,8 +108,8 @@ export function Hero() {
                             </div>
 
                             {/* Image Right */}
-                            <div className="relative flex justify-center lg:justify-end order-2 w-full mt-10 lg:mt-0">
-                                <div className="relative w-full max-w-[clamp(280px,70vw,600px)] flex items-center justify-center">
+                            <div className="relative flex justify-center lg:justify-end order-2 w-full mt-4 lg:mt-0">
+                                <div className="relative w-full max-w-[clamp(220px,55vw,600px)] md:max-w-[clamp(280px,70vw,600px)] flex items-center justify-center">
                                     <div className="relative z-10">
                                         <img
                                             src={SLIDES[currentSlide].image}
