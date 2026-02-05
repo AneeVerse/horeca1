@@ -11,6 +11,7 @@ import { DailyBestSells } from "@/components/features/DailyBestSells";
 import { DeliveryPoster } from "@/components/features/DeliveryPoster";
 import { OrganicFood } from "@/components/features/OrganicFood";
 import { ProductShowcase } from "@/components/features/ProductShowcase";
+import { ShopByBrands } from "@/components/features/ShopByBrands";
 
 export default function Home() {
   return (
@@ -28,6 +29,7 @@ export default function Home() {
       <DeliveryPoster />
       <OrganicFood />
       <ProductShowcase />
+      <ShopByBrands />
     </div>
   );
 }
