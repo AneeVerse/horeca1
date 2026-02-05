@@ -152,9 +152,9 @@ export function Hero() {
                 </div>
             </div>
 
-            {/* Floating Scroll Top */}
+            {/* Floating Scroll Top - Hidden on mobile to avoid conflict with bottom nav */}
             <div
-                className="fixed bottom-6 right-6 w-12 h-12 border border-gray-200 bg-white rounded-full flex items-center justify-center text-primary cursor-pointer hover:bg-primary-light transition-all shadow-xl z-50 group hover:-translate-y-1"
+                className="hidden md:flex fixed bottom-6 right-6 w-12 h-12 border border-gray-200 bg-white rounded-full items-center justify-center text-primary cursor-pointer hover:bg-primary-light transition-all shadow-xl z-50 group hover:-translate-y-1"
                 onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             >
                 <svg width="24" height="24" className="group-hover:animate-bounce" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

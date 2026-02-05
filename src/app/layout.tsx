@@ -23,7 +23,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${quicksand.variable} font-sans antialiased bg-background`}>
         <Navbar />
-        <main className="w-full min-h-screen">
+        <main className="w-full min-h-screen pb-20 md:pb-0">
           {children}
         </main>
       </body>

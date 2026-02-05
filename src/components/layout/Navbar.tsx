@@ -9,9 +9,12 @@ import {
     ShoppingCart,
     ChevronDown,
     Menu,
-    PhoneCall
+    PhoneCall,
+    User,
+    X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MobileBottomNav } from './MobileBottomNav';
 
 export function Navbar() {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
@@ -30,69 +33,82 @@ export function Navbar() {
     return (
         <>
             {/* Top Header - Scrolls Away */}
-            <header className="w-full bg-white">
+            <header className="w-full bg-white relative z-[1000]">
                 {/* Top Bar - Simple Green Line */}
-                <div className="w-full h-1.5 md:h-2" style={{ backgroundColor: '#299e60' }} />
+                <div className="w-full h-1 md:h-2 bg-primary" />
 
                 {/* Main Header */}
-                <div className="w-full py-[var(--space-md)] px-[var(--container-padding)]">
-                    <div className="max-w-[var(--container-max)] mx-auto flex items-center justify-between gap-6">
-                        {/* Logo */}
-                        <Link href="/" className="flex-shrink-0">
-                            <h1 className="text-[clamp(1.25rem,2.2vw,2.125rem)] font-extrabold text-primary flex items-center gap-1">
-                                Horeca<span className="text-text">Hub</span>
-                            </h1>
-                        </Link>
+                <div className="w-full py-3 md:py-6 px-[var(--container-padding)]">
+                    <div className="max-w-[var(--container-max)] mx-auto">
+                        <div className="flex items-center justify-between gap-4 md:gap-6">
+                            {/* Logo */}
+                            <Link href="/" className="flex-shrink-0">
+                                <h1 className="text-[20px] md:text-[clamp(1.25rem,2.2vw,2.125rem)] font-extrabold text-primary flex items-center gap-1">
+                                    Horeca<span className="text-text">Hub</span>
+                                </h1>
+                            </Link>
 
-                        {/* Search Bar */}
-                        <div className="hidden md:flex flex-1 max-w-2xl items-center relative group">
-                            <div className="flex items-center gap-3 px-5 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-xl w-full focus-within:border-primary/50 transition-all duration-300 shadow-sm">
-                                <div className="flex items-center gap-1 text-[var(--text-sm)] text-text-muted border-r-2 border-gray-100 pr-4 cursor-pointer hover:text-primary font-semibold">
-                                    <span>Ice Cream</span>
-                                    <ChevronDown size={16} />
+                            {/* Desktop Search Bar */}
+                            <div className="hidden md:flex flex-1 max-w-2xl items-center relative group">
+                                <div className="flex items-center gap-3 px-5 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-xl w-full focus-within:border-primary/50 transition-all duration-300 shadow-sm">
+                                    <div className="flex items-center gap-1 text-[var(--text-sm)] text-text-muted border-r-2 border-gray-100 pr-4 cursor-pointer hover:text-primary font-semibold">
+                                        <span>Ice Cream</span>
+                                        <ChevronDown size={16} />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        placeholder="Search for a product or brand"
+                                        className="flex-1 bg-transparent text-[var(--text-base)] outline-none px-3 placeholder:text-gray-400"
+                                    />
+                                    <button className="bg-primary p-2.5 rounded-full text-white hover:bg-primary-dark transition-all shadow-md">
+                                        <Search size={20} />
+                                    </button>
                                 </div>
-                                <input
-                                    type="text"
-                                    placeholder="Search for a product or brand"
-                                    className="flex-1 bg-transparent text-[var(--text-base)] outline-none px-3 placeholder:text-gray-400"
-                                />
-                                <button className="bg-primary p-2.5 rounded-full text-white hover:bg-primary-dark transition-all shadow-md">
-                                    <Search size={20} />
-                                </button>
+                            </div>
+
+                            {/* Desktop Tools & Mobile Header Tools */}
+                            <div className="flex items-center gap-3 md:gap-6">
+                                {/* Location - Visible on all but simplified on mobile */}
+                                <div className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2.5 border-2 border-gray-50 rounded-xl cursor-pointer hover:border-primary/20 transition-colors bg-white shadow-sm max-w-[140px] md:max-w-none">
+                                    <MapPin size={18} className="text-primary flex-shrink-0" />
+                                    <div className="flex flex-col leading-tight min-w-0">
+                                        <span className="text-[8px] md:text-[10px] text-text-muted font-bold uppercase tracking-wider truncate">Location</span>
+                                        <div className="flex items-center gap-0.5">
+                                            <span className="text-[10px] md:text-sm font-extrabold font-sans truncate">New York</span>
+                                            <ChevronDown size={10} className="md:size-3" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Desktop Tools Icons */}
+                                <div className="hidden md:flex items-center gap-4">
+                                    <div className="relative cursor-pointer group">
+                                        <Heart size={28} className="group-hover:text-primary transition-colors text-text" />
+                                        <span className="absolute -top-2 -right-2 bg-primary text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-full font-extrabold shadow-sm">2</span>
+                                    </div>
+                                    <div className="relative cursor-pointer group">
+                                        <ShoppingCart size={28} className="group-hover:text-primary transition-colors text-text" />
+                                        <span className="absolute -top-2 -right-2 bg-primary text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-full font-extrabold shadow-sm">2</span>
+                                    </div>
+                                </div>
+
+                                {/* Mobile Cart Tool - Only on mobile top */}
+                                <div className="md:hidden relative cursor-pointer group">
+                                    <ShoppingCart size={24} className="group-hover:text-primary transition-colors text-text" />
+                                    <span className="absolute -top-1.5 -right-1.5 bg-primary text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-extrabold shadow-sm">2</span>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Location & Tools */}
-                        <div className="flex items-center gap-[var(--space-md)]">
-                            <div className="hidden lg:flex items-center gap-3 px-4 py-2.5 border-2 border-gray-50 rounded-xl cursor-pointer hover:border-primary/20 transition-colors bg-white shadow-sm">
-                                <MapPin size={22} className="text-primary" />
-                                <div className="flex flex-col leading-tight">
-                                    <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider">Your Location</span>
-                                    <div className="flex items-center gap-1">
-                                        <span className="text-sm font-extrabold font-sans">New York</span>
-                                        <ChevronDown size={12} />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-4">
-                                <button className="md:hidden text-text hover:text-primary transition-colors">
-                                    <Search size={24} />
-                                </button>
-                                <div className="relative cursor-pointer group">
-                                    <Heart size={28} className="group-hover:text-primary transition-colors text-text" />
-                                    <span className="absolute -top-2 -right-2 bg-primary text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-full font-extrabold shadow-sm">2</span>
-                                </div>
-                                <div className="relative cursor-pointer group">
-                                    <ShoppingCart size={28} className="group-hover:text-primary transition-colors text-text" />
-                                    <span className="absolute -top-2 -right-2 bg-primary text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-full font-extrabold shadow-sm">2</span>
-                                </div>
-                                <button
-                                    className="md:hidden text-text hover:text-primary transition-colors"
-                                    onClick={() => setIsSidebarOpen(true)}
-                                >
-                                    <Menu size={24} />
-                                </button>
+                        {/* Mobile Search Bar - Prominent below logo */}
+                        <div className="md:hidden mt-4">
+                            <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl w-full">
+                                <Search size={18} className="text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search for vegetables, fruits..."
+                                    className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400"
+                                />
                             </div>
                         </div>
                     </div>
@@ -251,27 +267,7 @@ export function Navbar() {
                 </div>
             </div>
 
-            {/* Mobile Location/Category bar */}
-            <div className="md:hidden flex items-center justify-between px-[var(--container-padding)] py-3 border-b border-gray-100 bg-white">
-                <div
-                    className="flex items-center gap-2 text-[var(--text-sm)] font-bold cursor-pointer hover:text-primary transition-colors"
-                    onClick={() => setIsCategoriesSidebarOpen(true)}
-                >
-                    <Menu size={18} className="text-primary" />
-                    <span>Categories</span>
-                    <ChevronDown size={16} />
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-100 rounded-full bg-gray-50">
-                    <MapPin size={14} className="text-primary" />
-                    <div className="flex flex-col leading-none">
-                        <span className="text-[8px] text-text-muted">Your Location</span>
-                        <div className="flex items-center gap-0.5">
-                            <span className="text-[10px] font-bold">New York</span>
-                            <ChevronDown size={8} />
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <MobileBottomNav onCategoriesClick={() => setIsCategoriesSidebarOpen(true)} />
         </>
     );
 }
