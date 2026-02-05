@@ -10,6 +10,7 @@ import { TopVendors } from "@/components/features/TopVendors";
 import { DailyBestSells } from "@/components/features/DailyBestSells";
 import { DeliveryPoster } from "@/components/features/DeliveryPoster";
 import { OrganicFood } from "@/components/features/OrganicFood";
+import { ProductShowcase } from "@/components/features/ProductShowcase";
 
 export default function Home() {
   return (
@@ -26,6 +27,7 @@ export default function Home() {
       <DailyBestSells />
       <DeliveryPoster />
       <OrganicFood />
+      <ProductShowcase />
     </div>
   );
 }
