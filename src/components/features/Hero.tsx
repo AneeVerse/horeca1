@@ -73,27 +73,21 @@ export function Hero() {
 
                 {/* Hero Background */}
                 <div
-                    className="relative w-full h-[520px] md:min-h-[clamp(450px,65dvh,750px)] md:h-auto rounded-[clamp(30px,4vw,60px)] transition-colors duration-500"
-                    style={{ backgroundColor: '#d3ebc0' }}
+                    className="relative w-full h-[580px] md:min-h-[clamp(500px,70dvh,820px)] md:h-auto transition-colors duration-500"
+                    style={{
+                        backgroundImage: 'url("/images/hero-bg-container.png")',
+                        backgroundSize: '100% 100%',
+                        backgroundPosition: 'center',
+                        backgroundRepeat: 'no-repeat'
+                    }}
                 >
-                    {/* Background Pattern Image - Clipped */}
-                    <div className="absolute inset-0 rounded-[inherit] overflow-hidden pointer-events-none">
-                        <div
-                            className="absolute inset-0 opacity-40 mix-blend-overlay"
-                            style={{
-                                backgroundImage: 'url("/images/hero-banner-bg.png")',
-                                backgroundSize: 'cover',
-                                backgroundPosition: 'center'
-                            }}
-                        />
-                    </div>
 
                     <div className="relative z-10 h-full overflow-hidden" style={{ isolation: 'isolate', contain: 'layout style paint' }}>
                         {/* Slide Content Wrapper */}
-                        <div className={`grid grid-cols-1 lg:grid-cols-2 items-center gap-4 md:gap-[var(--space-lg)] px-[clamp(1.5rem,5vw,5rem)] py-8 md:py-20 lg:py-24 h-full md:min-h-[clamp(450px,65dvh,750px)] ${getAnimationClass()}`}>
+                        <div className={`grid grid-cols-1 lg:grid-cols-2 items-start gap-4 md:gap-[var(--space-sm)] px-[clamp(1.5rem,5vw,5rem)] py-8 md:pt-20 md:pb-20 lg:pt-24 lg:pb-24 h-full md:min-h-[clamp(500px,70dvh,820px)] ${getAnimationClass()}`}>
 
                             {/* Content Left */}
-                            <div className="flex flex-col items-start text-left w-full order-1">
+                            <div className="flex flex-col items-start text-left w-full order-1 lg:ml-8">
                                 <span className="bg-white/60 text-primary px-4 py-1.5 rounded-full text-sm font-bold mb-6 backdrop-blur-sm border border-white/40">
                                     {SLIDES[currentSlide].tag}
                                 </span>
@@ -108,7 +102,7 @@ export function Hero() {
                             </div>
 
                             {/* Image Right */}
-                            <div className="relative flex justify-center lg:justify-end order-2 w-full mt-4 md:mt-10 lg:mt-0">
+                            <div className="relative flex justify-center lg:justify-end order-2 w-full mt-4 md:mt-10 lg:mt-8 lg:ml-6">
                                 <div className="relative w-full max-w-[55vw] md:max-w-[clamp(280px,70vw,600px)] flex items-center justify-center">
                                     <div className="relative z-10">
                                         <img
@@ -138,8 +132,8 @@ export function Hero() {
                 </div>
 
                 {/* Simplified Scroll Button */}
-                <div className="absolute bottom-[-38px] md:bottom-[-44px] left-1/2 -translate-x-1/2 z-50">
-                    <div className="w-[76px] h-[76px] md:w-[88px] md:h-[88px] bg-primary rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-all duration-300 shadow-xl shadow-primary/30 border-[5px] border-white group overflow-hidden"
+                <div className="absolute bottom-[-38px] md:bottom-[20px] left-1/2 -translate-x-1/2 z-50">
+                    <div className="w-[76px] h-[76px] md:w-[100px] md:h-[100px] bg-primary rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-all duration-300 shadow-xl shadow-primary/30 border-[3px] border-white group overflow-hidden"
                         onClick={() => window.scrollTo({ top: window.innerHeight * 0.8, behavior: 'smooth' })}>
                         <div className="flex flex-col items-center justify-center animate-bounce-short">
                             <svg width="24" height="34" viewBox="0 0 24 34" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-white">

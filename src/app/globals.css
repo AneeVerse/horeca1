@@ -37,7 +37,7 @@
 
   /* Container & Layout */
   --container-padding: clamp(0.75rem, 2.5vw, 2.5rem);
-  --container-max: 1440px;
+  --container-max: 1700px;
 
   /* Radii */
   --radius-xl: 40px;
