@@ -37,7 +37,7 @@ const BANNERS = [
 
 export function PromotionBanners() {
     return (
-        <section className="w-full pb-10 md:pb-16 bg-white overflow-hidden">
+        <section className="w-full md:mt-6 pb-10 md:pb-16 bg-white overflow-hidden">
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
 
                 {/* Mobile Header */}
