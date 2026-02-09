@@ -37,43 +37,46 @@ const BANNERS = [
 
 export function PromotionBanners() {
     return (
-        <section className="w-full pb-12 md:pb-16 bg-white">
+        <section className="w-full pb-10 md:pb-16 bg-white overflow-hidden">
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
+
+                {/* Mobile Header */}
+                <div className="block md:hidden mb-5">
+                    <h2 className="text-[0.9rem] font-[family-name:var(--font-inter)] font-[800] text-[#1e293b]">Everyday items</h2>
+                </div>
+
                 {/* Scrollable Container on Mobile, Grid on Desktop */}
-                <div className="flex overflow-x-auto md:grid md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 no-scrollbar snap-x snap-mandatory">
+                <div className="flex overflow-x-auto md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 no-scrollbar snap-x snap-mandatory">
                     {BANNERS.map((banner, idx) => (
                         <div
                             key={idx}
-                            className="relative min-w-[280px] md:min-w-0 flex-shrink-0 rounded-[20px] p-8 md:p-6 lg:p-8 overflow-hidden snap-start transition-transform duration-300 hover:shadow-lg h-[220px] md:h-[200px] lg:h-[240px] flex flex-col justify-between"
+                            className="relative min-w-[130px] md:min-w-0 flex-shrink-0 rounded-[18px] p-3 md:p-6 lg:p-8 overflow-hidden snap-start transition-transform duration-300 md:hover:shadow-lg h-[100px] md:h-[200px] lg:h-[240px] flex flex-col justify-between"
                             style={{ backgroundColor: banner.bgColor }}
                         >
-                            {/* Background Asset Pattern */}
+                            {/* Main Banner Image (Top-right asset) */}
                             <div
-                                className="absolute right-0 top-0 w-1/2 h-full opacity-60 pointer-events-none bg-no-repeat bg-right-top bg-contain"
+                                className="absolute right-0 top-0 w-[70%] h-full bg-no-repeat bg-right-top bg-contain pointer-events-none md:opacity-100"
                                 style={{ backgroundImage: `url(${banner.bgAsset})` }}
                             />
 
-                            {/* Product Image */}
-                            <div className="absolute right-4 bottom-4 w-[140px] h-[140px] md:w-[120px] md:h-[120px] lg:w-[150px] lg:h-[150px] z-10 transition-transform duration-500 hover:scale-110">
-                                <img
-                                    src={banner.image}
-                                    alt={banner.title}
-                                    className="w-full h-full object-contain drop-shadow-xl"
-                                />
-                            </div>
-
                             {/* Content */}
-                            <div className="relative z-20 flex flex-col items-start gap-3 md:gap-4 lg:gap-6 h-full">
-                                <h3 className="text-[20px] md:text-[22px] lg:text-[26px] font-bold leading-tight max-w-[180px] md:max-w-[220px]" style={{ color: banner.textColor }}>
-                                    {banner.title}
+                            <div className="relative z-20 flex flex-col items-start h-full">
+                                <h3 className="text-[11px] md:text-[22px] lg:text-[26px] font-[800] text-[#1e293b] leading-[1.2] max-w-[85px] md:max-w-[220px]" style={{ color: banner.textColor }}>
+                                    <span className="md:hidden">
+                                        {banner.title.split(' ')[0]}<br />
+                                        {banner.title.split(' ').slice(1).join(' ')}
+                                    </span>
+                                    <span className="hidden md:inline">
+                                        {banner.title}
+                                    </span>
                                 </h3>
 
                                 <Link
                                     href="/shop"
-                                    className="group flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-all shadow-md shadow-primary/20 hover:shadow-primary/30 mt-auto whitespace-nowrap w-fit"
+                                    className="group flex items-center gap-1 md:gap-2 bg-[#5cb85c] hover:bg-[#4cae4c] md:bg-primary md:hover:bg-primary-dark text-white px-2.5 py-1.5 md:px-5 md:py-2.5 rounded-full md:rounded-lg text-[8.5px] md:text-sm font-bold transition-all mt-auto whitespace-nowrap w-fit md:shadow-md md:shadow-primary/20 md:hover:shadow-primary/30"
                                 >
                                     Shop Now
-                                    <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+                                    <ArrowRight className="w-2.5 h-2.5 md:w-4 md:h-4 transition-transform md:group-hover:translate-x-1" />
                                 </Link>
                             </div>
                         </div>
@@ -81,7 +84,7 @@ export function PromotionBanners() {
                 </div>
             </div>
 
-            <style jsx>{`
+            <style jsx global>{`
                 .no-scrollbar::-webkit-scrollbar {
                     display: none;
                 }

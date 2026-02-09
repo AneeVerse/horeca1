@@ -23,6 +23,12 @@ const SLIDES = [
     }
 ];
 
+// Mobile Hero Data
+const MOBILE_HERO = {
+    title: "World Food Festival, Bring the world to your Kitchen!",
+    image: "/images/mobile-hero-right.png"
+};
+
 export function Hero() {
     const [currentSlide, setCurrentSlide] = useState(0);
     const [animationState, setAnimationState] = useState<'idle' | 'exiting' | 'entering'>('idle');
@@ -50,7 +56,7 @@ export function Hero() {
         }, 400); // Exiting duration
     };
 
-    // Auto-advance
+    // Auto-advance (only for desktop)
     useEffect(() => {
         const timer = setInterval(() => handleSlideChange('left'), 8000);
         return () => clearInterval(timer);
@@ -71,76 +77,109 @@ export function Hero() {
             {/* Main Hero Container */}
             <div className="relative w-full max-w-[var(--container-max)] mx-auto overflow-visible">
 
-                {/* Hero Background */}
-                <div
-                    className="relative w-full h-[580px] md:min-h-[clamp(500px,70dvh,820px)] md:h-auto transition-colors duration-500"
-                    style={{
-                        backgroundImage: 'url("/images/hero-bg-container.png")',
-                        backgroundSize: '100% 100%',
-                        backgroundPosition: 'center',
-                        backgroundRepeat: 'no-repeat'
-                    }}
-                >
-
-                    <div className="relative z-10 h-full overflow-hidden" style={{ isolation: 'isolate', contain: 'layout style paint' }}>
-                        {/* Slide Content Wrapper */}
-                        <div className={`grid grid-cols-1 lg:grid-cols-2 items-start gap-4 md:gap-[var(--space-sm)] px-[clamp(1.5rem,5vw,5rem)] py-8 md:pt-20 md:pb-20 lg:pt-24 lg:pb-24 h-full md:min-h-[clamp(500px,70dvh,820px)] ${getAnimationClass()}`}>
-
-                            {/* Content Left */}
-                            <div className="flex flex-col items-start text-left w-full order-1 lg:ml-8">
-                                <span className="bg-white/60 text-primary px-4 py-1.5 rounded-full text-sm font-bold mb-6 backdrop-blur-sm border border-white/40">
-                                    {SLIDES[currentSlide].tag}
-                                </span>
-                                <h1 className="text-[1.6rem] md:text-[clamp(1.8rem,6vw,4rem)] font-extrabold text-[#0f172a] mb-4 md:mb-[var(--space-md)] leading-[1.1] tracking-tight max-w-[650px] min-h-[3.5em] md:min-h-0">
-                                    {SLIDES[currentSlide].title}
-                                </h1>
-
-                                <button className="flex items-center gap-2 bg-primary hover:bg-primary-dark transition-all text-white px-[clamp(1.2rem,3vw,2.5rem)] py-[clamp(0.7rem,2vw,1.1rem)] rounded-full text-[clamp(1rem,1.8vw,1.1rem)] font-bold group shadow-xl shadow-primary/25 whitespace-nowrap">
-                                    Explore Shop
-                                    <ShoppingCart size={22} className="group-hover:translate-x-1 transition-transform" />
+                {/* ===== MOBILE HERO (shown only on mobile) ===== */}
+                <div className="block md:hidden">
+                    <div
+                        className="relative w-full rounded-[20px] overflow-hidden"
+                        style={{ backgroundColor: '#eff9f0' }}
+                    >
+                        <div className="flex items-center px-5 py-6">
+                            {/* Left Content */}
+                            <div className="flex-1 pr-2">
+                                <h2 className="text-[0.95rem] font-[family-name:var(--font-inter)] font-[800] text-[#0f172a] leading-[1.25] mb-5 max-w-[260px] tracking-tight">
+                                    World Food Festival,<br />
+                                    Bring the world to<br />
+                                    your Kitchen!
+                                </h2>
+                                <button className="bg-[#5cb85c] text-white px-5 py-2 rounded-[10px] text-[13px] font-medium transition-all active:scale-95">
+                                    Shop Now
                                 </button>
                             </div>
+                            {/* Right Image */}
+                            <div className="flex-shrink-0 w-[40%]">
+                                <img
+                                    src={MOBILE_HERO.image}
+                                    alt="Mobile Hero"
+                                    className="w-full h-auto object-contain"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                            {/* Image Right */}
-                            <div className="relative flex justify-center lg:justify-end order-2 w-full mt-4 md:mt-10 lg:mt-8 lg:ml-6">
-                                <div className="relative w-full max-w-[55vw] md:max-w-[clamp(280px,70vw,600px)] flex items-center justify-center">
-                                    <div className="relative z-10">
-                                        <img
-                                            src={SLIDES[currentSlide].image}
-                                            alt="Daily Grocery"
-                                            className="w-full h-auto object-contain drop-shadow-[0_35px_50px_rgba(0,0,0,0.15)]"
-                                        />
+                {/* ===== DESKTOP HERO (hidden on mobile) ===== */}
+                <div className="hidden md:block">
+                    {/* Hero Background */}
+                    <div
+                        className="relative w-full min-h-[clamp(500px,70dvh,820px)] h-auto transition-colors duration-500"
+                        style={{
+                            backgroundImage: 'url("/images/hero-bg-container.png")',
+                            backgroundSize: '100% 100%',
+                            backgroundPosition: 'center',
+                            backgroundRepeat: 'no-repeat'
+                        }}
+                    >
+
+                        <div className="relative z-10 h-full overflow-hidden" style={{ isolation: 'isolate', contain: 'layout style paint' }}>
+                            {/* Slide Content Wrapper */}
+                            <div className={`grid grid-cols-2 items-start gap-[var(--space-sm)] px-[clamp(1.5rem,5vw,5rem)] pt-24 pb-24 h-full min-h-[clamp(500px,70dvh,820px)] ${getAnimationClass()}`}>
+
+                                {/* Content Left */}
+                                <div className="flex flex-col items-start text-left w-full ml-8">
+                                    <span className="bg-white/60 text-primary px-4 py-1.5 rounded-full text-sm font-bold mb-6 backdrop-blur-sm border border-white/40">
+                                        {SLIDES[currentSlide].tag}
+                                    </span>
+                                    <h1 className="text-[clamp(1.8rem,6vw,4rem)] font-extrabold text-[#0f172a] mb-[var(--space-md)] leading-[1.1] tracking-tight max-w-[650px]">
+                                        {SLIDES[currentSlide].title}
+                                    </h1>
+
+                                    <button className="flex items-center gap-2 bg-primary hover:bg-primary-dark transition-all text-white px-[clamp(1.2rem,3vw,2.5rem)] py-[clamp(0.7rem,2vw,1.1rem)] rounded-full text-[clamp(1rem,1.8vw,1.1rem)] font-bold group shadow-xl shadow-primary/25 whitespace-nowrap">
+                                        Explore Shop
+                                        <ShoppingCart size={22} className="group-hover:translate-x-1 transition-transform" />
+                                    </button>
+                                </div>
+
+                                {/* Image Right */}
+                                <div className="relative flex justify-end w-full mt-8 ml-6">
+                                    <div className="relative w-full max-w-[clamp(280px,70vw,600px)] flex items-center justify-center">
+                                        <div className="relative z-10">
+                                            <img
+                                                src={SLIDES[currentSlide].image}
+                                                alt="Daily Grocery"
+                                                className="w-full h-auto object-contain drop-shadow-[0_35px_50px_rgba(0,0,0,0.15)]"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
+
+                        {/* Navigation Arrows */}
+                        <button
+                            onClick={() => handleSlideChange('left')}
+                            className="flex absolute left-6 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md hover:bg-white w-14 h-14 items-center justify-center rounded-full shadow-lg transition-all text-gray-400 hover:text-primary z-30 group"
+                        >
+                            <ChevronLeft size={28} className="group-hover:scale-110 transition-transform" />
+                        </button>
+                        <button
+                            onClick={() => handleSlideChange('right')}
+                            className="flex absolute right-6 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md hover:bg-white w-14 h-14 items-center justify-center rounded-full shadow-lg transition-all text-gray-400 hover:text-primary z-30 group"
+                        >
+                            <ChevronRight size={28} className="group-hover:scale-110 transition-transform" />
+                        </button>
                     </div>
 
-                    {/* Navigation Arrows */}
-                    <button
-                        onClick={() => handleSlideChange('left')} // Click Left UI button -> logic dir 'left' (Exit Left, Enter Right)
-                        className="flex absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md hover:bg-white w-10 h-10 md:w-14 md:h-14 items-center justify-center rounded-full shadow-lg transition-all text-gray-400 hover:text-primary z-30 group"
-                    >
-                        <ChevronLeft size={24} className="md:w-[28px] md:h-[28px] group-hover:scale-110 transition-transform" />
-                    </button>
-                    <button
-                        onClick={() => handleSlideChange('right')} // Click Right UI button -> logic dir 'right' (Exit Right, Enter Left)
-                        className="flex absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md hover:bg-white w-10 h-10 md:w-14 md:h-14 items-center justify-center rounded-full shadow-lg transition-all text-gray-400 hover:text-primary z-30 group"
-                    >
-                        <ChevronRight size={24} className="md:w-[28px] md:h-[28px] group-hover:scale-110 transition-transform" />
-                    </button>
-                </div>
-
-                {/* Simplified Scroll Button */}
-                <div className="absolute bottom-[-38px] md:bottom-[20px] left-1/2 -translate-x-1/2 z-50">
-                    <div className="w-[76px] h-[76px] md:w-[100px] md:h-[100px] bg-primary rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-all duration-300 shadow-xl shadow-primary/30 border-[3px] border-white group overflow-hidden"
-                        onClick={() => window.scrollTo({ top: window.innerHeight * 0.8, behavior: 'smooth' })}>
-                        <div className="flex flex-col items-center justify-center animate-bounce-short">
-                            <svg width="24" height="34" viewBox="0 0 24 34" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-white">
-                                <path d="M12 2V14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="4 4" />
-                                <path d="M6 18L12 24L18 18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                <path d="M6 26L12 32L18 26" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
+                    {/* Simplified Scroll Button - Desktop only */}
+                    <div className="absolute bottom-[20px] left-1/2 -translate-x-1/2 z-50">
+                        <div className="w-[100px] h-[100px] bg-primary rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-all duration-300 shadow-xl shadow-primary/30 border-[3px] border-white group overflow-hidden"
+                            onClick={() => window.scrollTo({ top: window.innerHeight * 0.8, behavior: 'smooth' })}>
+                            <div className="flex flex-col items-center justify-center animate-bounce-short">
+                                <svg width="24" height="34" viewBox="0 0 24 34" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-white">
+                                    <path d="M12 2V14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="4 4" />
+                                    <path d="M6 18L12 24L18 18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    <path d="M6 26L12 32L18 26" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -10,6 +10,13 @@ const quicksand = Quicksand({
   variable: "--font-quicksand",
 });
 
+import { Inter } from "next/font/google";
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+  variable: "--font-inter",
+});
+
 export const metadata: Metadata = {
   title: "HorecaHub - B2B E-commerce for Restaurant Products",
   description: "High speed, optimized B2B platform for restaurant and eating products.",
@@ -22,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${quicksand.variable} font-sans antialiased bg-background`}>
+      <body className={`${quicksand.variable} ${inter.variable} font-sans antialiased bg-background`}>
         <Navbar />
         <main className="w-full min-h-screen pb-20 md:pb-0">
           {children}

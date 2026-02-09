@@ -102,12 +102,11 @@ export function Navbar() {
 
                         {/* Mobile Search Bar - Prominent below logo */}
                         <div className="md:hidden mt-4">
-                            <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl w-full">
-                                <Search size={18} className="text-gray-400" />
+                            <div className="flex items-center gap-2 px-6 py-2 bg-white border border-gray-300 rounded-full w-full">
                                 <input
                                     type="text"
-                                    placeholder="Search for vegetables, fruits..."
-                                    className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400"
+                                    placeholder="search for product or brand,store..."
+                                    className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 lowercase"
                                 />
                             </div>
                         </div>
