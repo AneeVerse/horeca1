@@ -157,33 +157,38 @@ export function FlashSale() {
                     {FLASH_SALES.map((sale, idx) => (
                         <div
                             key={idx}
-                            className="relative flex-none w-[280px] xs:w-[320px] sm:w-[480px] lg:w-[calc(50%-12px)] h-[220px] sm:h-[260px] lg:h-[280px] rounded-[24px] overflow-hidden p-4 sm:p-6 md:p-8 flex items-center gap-3 md:gap-8 group bg-cover bg-center bg-no-repeat snap-start"
-                            style={{ backgroundImage: `url(${sale.bgPattern})` }}
+                            className="relative flex-none w-full sm:w-[480px] lg:w-[calc(50%-12px)] h-[150px] sm:h-[260px] lg:h-[280px] rounded-[20px] sm:rounded-[24px] overflow-hidden p-5 sm:p-6 md:p-8 flex items-center justify-between gap-3 md:gap-8 group bg-cover bg-center bg-no-repeat snap-start"
+                            style={{
+                                backgroundImage: `url(${sale.bgPattern})`,
+                                backgroundColor: sale.bgColor
+                            }}
                         >
+                            {/* Content */}
+                            <div className="relative z-10 flex flex-col items-start gap-1.5 sm:gap-4 flex-1">
+                                <h3 className="text-[18px] sm:text-[24px] md:text-[28px] font-bold text-text leading-tight whitespace-nowrap">
+                                    {sale.title}
+                                </h3>
+
+                                <div className="hidden md:block">
+                                    <CountdownTimer targetDate={sale.targetDate} />
+                                </div>
+
+                                <Link
+                                    href="/shop"
+                                    className="group flex items-center gap-1.5 xs:gap-2 bg-primary hover:bg-primary-dark text-white px-4 xs:px-6 sm:px-8 py-1.5 md:py-3 rounded-lg text-[11px] sm:text-sm font-bold transition-all shadow-lg hover:shadow-primary/30 mt-0.5 sm:mt-1 whitespace-nowrap"
+                                >
+                                    Shop Now
+                                    <ArrowRight size={14} className="sm:w-4 sm:h-4 transition-transform group-hover:translate-x-1" />
+                                </Link>
+                            </div>
+
                             {/* Product Image */}
-                            <div className="relative z-10 w-[100px] xs:w-[120px] sm:w-[180px] md:w-[220px] lg:w-[240px] flex-shrink-0 transition-transform duration-500 group-hover:scale-105">
+                            <div className="relative z-10 w-[120px] xs:w-[140px] sm:w-[180px] md:w-[220px] lg:w-[240px] flex-shrink-0 transition-transform duration-500 group-hover:scale-105">
                                 <img
                                     src={sale.image}
                                     alt={sale.title}
                                     className="w-full h-full object-contain drop-shadow-2xl"
                                 />
-                            </div>
-
-                            {/* Content */}
-                            <div className="relative z-10 flex flex-col items-start gap-2 sm:gap-4 flex-1">
-                                <h3 className="text-[16px] xs:text-[18px] sm:text-[24px] md:text-[28px] font-bold text-text leading-tight whitespace-nowrap">
-                                    {sale.title}
-                                </h3>
-
-                                <CountdownTimer targetDate={sale.targetDate} />
-
-                                <Link
-                                    href="/shop"
-                                    className="group flex items-center gap-1.5 xs:gap-2 bg-primary hover:bg-primary-dark text-white px-4 xs:px-6 sm:px-8 py-2 md:py-3 rounded-lg text-[12px] sm:text-sm font-bold transition-all shadow-lg hover:shadow-primary/30 mt-1 whitespace-nowrap"
-                                >
-                                    Shop Now
-                                    <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
-                                </Link>
                             </div>
                         </div>
                     ))}
