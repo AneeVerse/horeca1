@@ -28,14 +28,14 @@ export default function Home() {
       <FeaturedProducts />
       <OfferBanners />
       <RecommendedProducts />
-      <HotDeals />
-      <TopVendors />
-      <DailyBestSells />
+      {/* <HotDeals /> */}
+      {/* <TopVendors /> */}
+      {/* <DailyBestSells /> */}
       <DeliveryPoster />
-      <OrganicFood />
+      {/* <OrganicFood /> */}
       <ProductShowcase />
-      <ShopByBrands />
-      <NewArrivals />
+      {/* <ShopByBrands /> */}
+      {/* <NewArrivals /> */}
       <FeatureBar />
       <NewsletterBanner />
     </div>

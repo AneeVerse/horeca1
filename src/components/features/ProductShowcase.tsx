@@ -209,12 +209,16 @@ export function ProductShowcase() {
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                     {COLUMNS.map((col, idx) => (
-                        <ProductColumn
+                        <div
                             key={idx}
-                            title={col.title}
-                            products={col.products}
-                            globalIndex={globalIndex}
-                        />
+                            className={idx === 1 ? "block" : "hidden md:block"}
+                        >
+                            <ProductColumn
+                                title={col.title}
+                                products={col.products}
+                                globalIndex={globalIndex}
+                            />
+                        </div>
                     ))}
                 </div>
             </div>

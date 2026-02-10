@@ -69,7 +69,7 @@ export function Footer() {
 
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] relative z-10">
                 {/* Main Footer Links Section */}
-                <div className="py-12 md:py-16 flex flex-col lg:flex-row justify-between gap-10 lg:gap-0">
+                <div className="pt-0 pb-12 md:py-16 flex flex-col lg:flex-row justify-between gap-10 lg:gap-0">
 
                     {/* Column 1: Logo & Contact */}
                     <div className="w-full lg:w-[28%] space-y-6">

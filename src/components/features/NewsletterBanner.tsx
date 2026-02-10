@@ -13,7 +13,7 @@ export function NewsletterBanner() {
     };
 
     return (
-        <section className="w-full py-8 bg-white overflow-hidden">
+        <section className="w-full pt-1 pb-0 md:py-8 bg-white overflow-hidden">
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
                 <div
                     className="relative rounded-[24px] overflow-hidden min-h-[280px] md:min-h-[320px]"
