@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
 
 // --- Types ---
@@ -143,7 +144,11 @@ function ProductColumn({ title, products, globalIndex }: {
                     {slides.map((slide, slideIdx) => (
                         <div key={slideIdx} className="w-full flex-shrink-0 flex flex-col gap-4">
                             {slide.map((product) => (
-                                <div key={product.id} className="h-[90px] flex items-center gap-4 p-2 rounded-xl hover:bg-gray-50 transition-colors group cursor-pointer border border-transparent hover:border-gray-100">
+                                <Link
+                                    href={`/product/${product.id}`}
+                                    key={product.id}
+                                    className="h-[90px] flex items-center gap-4 p-2 rounded-xl hover:bg-gray-50 transition-colors group cursor-pointer border border-transparent hover:border-gray-100"
+                                >
                                     {/* Image */}
                                     <div className="w-[70px] h-[70px] bg-[#f7f7f8] rounded-lg p-2 flex items-center justify-center shrink-0">
                                         <img
@@ -171,7 +176,7 @@ function ProductColumn({ title, products, globalIndex }: {
                                             <span className="text-[11px] text-text-muted line-through">{product.oldPrice}</span>
                                         </div>
                                     </div>
-                                </div>
+                                </Link>
                             ))}
                         </div>
                     ))}

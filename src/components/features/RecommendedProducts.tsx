@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { ShoppingCart, Star, Store } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -186,7 +187,11 @@ export function RecommendedProducts() {
                 {/* Products Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-5">
                     {PRODUCTS.map((product) => (
-                        <div key={product.id} className="group bg-white rounded-2xl border border-gray-100 p-4 transition-all duration-300 hover:shadow-xl hover:shadow-gray-200/50 flex flex-col h-full relative">
+                        <Link
+                            href={`/product/${product.id}`}
+                            key={product.id}
+                            className="group bg-white rounded-2xl border border-gray-100 p-4 transition-all duration-300 hover:shadow-xl hover:shadow-gray-200/50 flex flex-col h-full relative"
+                        >
                             {/* Badge */}
                             {product.badge && (
                                 <div className={cn(
@@ -237,7 +242,7 @@ export function RecommendedProducts() {
                             <button className="mt-auto w-full flex items-center justify-center gap-2 bg-[#e8f9e9] text-primary hover:bg-primary hover:text-white py-2.5 rounded-full text-[13px] font-bold transition-all border border-transparent shadow-sm">
                                 Add To Cart <ShoppingCart size={14} />
                             </button>
-                        </div>
+                        </Link>
                     ))}
                 </div>
             </div>

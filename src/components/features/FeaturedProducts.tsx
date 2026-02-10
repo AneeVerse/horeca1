@@ -108,7 +108,11 @@ export function FeaturedProducts() {
                 {/* Products Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6">
                     {PRODUCTS.map((product) => (
-                        <div key={product.id} className="group bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 flex flex-col h-full">
+                        <Link
+                            href={`/product/${product.id}`}
+                            key={product.id}
+                            className="group bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 flex flex-col h-full"
+                        >
                             {/* Product Image & Add Button */}
                             <div className="relative aspect-square mb-4 bg-gray-50 rounded-xl overflow-hidden p-4 flex items-center justify-center">
                                 <img
@@ -160,7 +164,7 @@ export function FeaturedProducts() {
                                     <span>Sold: {product.sold}/{product.total}</span>
                                 </div>
                             </div>
-                        </div>
+                        </Link>
                     ))}
                 </div>
             </div>

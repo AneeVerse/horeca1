@@ -80,7 +80,11 @@ export function DailyBestSells() {
                     {/* Left: Product Grid (2x2) */}
                     <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-5">
                         {BEST_SELL_PRODUCTS.map((product) => (
-                            <div key={product.id} className="bg-white rounded-2xl border border-gray-100 p-4 transition-all duration-300 hover:shadow-lg flex gap-5 group relative">
+                            <Link
+                                href={`/product/${product.id}`}
+                                key={product.id}
+                                className="bg-white rounded-2xl border border-gray-100 p-4 transition-all duration-300 hover:shadow-lg flex gap-5 group relative"
+                            >
                                 {/* Sale Badge */}
                                 <div className="absolute top-4 left-4 z-10 bg-[#ef4444] text-white text-[10px] font-bold px-2 py-0.5 rounded">
                                     Sale 50%
@@ -135,7 +139,7 @@ export function DailyBestSells() {
                                         </button>
                                     </div>
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                     </div>
 

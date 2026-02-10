@@ -194,7 +194,8 @@ export function HotDeals() {
                             className="flex gap-4 md:gap-5 overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-smooth pb-1"
                         >
                             {PRODUCTS.map((product) => (
-                                <div
+                                <Link
+                                    href={`/product/${product.id}`}
                                     key={product.id}
                                     className="flex-none w-[calc(50%-8px)] md:w-[calc(33.333%-14px)] xl:w-[calc(25%-15px)] bg-white rounded-2xl border border-gray-100 p-3 md:p-4 transition-all duration-300 hover:shadow-xl hover:shadow-gray-200/50 flex flex-col h-full relative snap-start"
                                 >
@@ -248,7 +249,7 @@ export function HotDeals() {
                                     <button className="mt-auto w-full flex items-center justify-center gap-2 bg-[#e8f9e9] text-primary hover:bg-primary hover:text-white py-2 md:py-2.5 rounded-full text-[12px] md:text-[13px] font-bold transition-all border border-transparent shadow-sm">
                                         Add To Cart <ShoppingCart size={14} />
                                     </button>
-                                </div>
+                                </Link>
                             ))}
                         </div>
                     </div>

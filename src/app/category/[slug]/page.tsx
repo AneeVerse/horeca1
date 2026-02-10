@@ -345,7 +345,11 @@ export default function CategoryPage() {
                             {/* Main Product Grid */}
                             <div className="grid grid-cols-3 xl:grid-cols-4 gap-6">
                                 {PRODUCTS.map((product) => (
-                                    <div key={product.id} className="group bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 flex flex-col">
+                                    <Link
+                                        href={`/product/${product.id}`}
+                                        key={product.id}
+                                        className="group bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 flex flex-col"
+                                    >
                                         <div className="relative aspect-square mb-4 bg-gray-50 rounded-xl overflow-hidden p-4 flex items-center justify-center shrink-0">
                                             <img src={product.image} alt={product.name} className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110" />
                                             <button className="absolute top-2 right-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-[11px] font-bold opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all shadow-sm">
@@ -368,7 +372,7 @@ export default function CategoryPage() {
                                                 <ShoppingCart size={18} />
                                             </button>
                                         </div>
-                                    </div>
+                                    </Link>
                                 ))}
                             </div>
                         </div>
@@ -381,7 +385,11 @@ export default function CategoryPage() {
                 {/* Mobile Specific Grid */}
                 <div className="md:hidden grid grid-cols-2 gap-4">
                     {PRODUCTS.map((product) => (
-                        <div key={product.id} className="bg-white rounded-[22px] border border-gray-100 p-3.5 shadow-sm flex flex-col h-full active:bg-gray-50 transition-colors">
+                        <Link
+                            href={`/product/${product.id}`}
+                            key={product.id}
+                            className="bg-white rounded-[22px] border border-gray-100 p-3.5 shadow-sm flex flex-col h-full active:bg-gray-50 transition-colors"
+                        >
                             <div className="relative aspect-square mb-3.5 bg-[#f7f8f7] rounded-[18px] p-4 flex items-center justify-center shrink-0">
                                 <img src={product.image} alt={product.name} className="w-full h-full object-contain" />
                                 <button className="absolute -top-1 -right-1 bg-white text-[#2ca36a] px-3.5 py-2 rounded-full text-[11px] font-[900] shadow-md flex items-center gap-1 border border-[#e9f7ef] font-[family-name:var(--font-inter)]">
@@ -415,7 +423,7 @@ export default function CategoryPage() {
                                     <span>Sold: {product.sold}/{product.total}</span>
                                 </div>
                             </div>
-                        </div>
+                        </Link>
                     ))}
                 </div>
 

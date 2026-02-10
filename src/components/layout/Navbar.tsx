@@ -39,7 +39,7 @@ export function Navbar() {
             {/* Top Header - Scrolls Away */}
             <header className={cn(
                 "w-full bg-white relative z-[1000]",
-                isCategoryPage && "hidden md:block" // Hide mobile header on category pages
+                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/')) && "hidden md:block" // Hide mobile header on category/product pages
             )}>
                 {/* Top Bar - Simple Green Line */}
                 <div className="w-full h-1 md:h-2 bg-primary" />

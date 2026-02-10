@@ -80,9 +80,10 @@ export function FlashSaleBanner() {
                 {/* Products Grid/Scroll */}
                 <div className="flex overflow-x-auto md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 md:gap-6 no-scrollbar pb-4 snap-x snap-mandatory">
                     {FLASH_SALE_PRODUCTS.map((product) => (
-                        <div
+                        <Link
+                            href={`/product/${product.id}`}
                             key={product.id}
-                            className="relative min-w-[130px] md:min-w-0 bg-white rounded-[20px] p-2.5 md:p-4 flex flex-col snap-start shadow-sm"
+                            className="relative min-w-[130px] md:min-w-0 bg-white rounded-[20px] p-2.5 md:p-4 flex flex-col snap-start shadow-sm active:bg-gray-50 transition-colors"
                         >
                             {/* Image & Discount Badge */}
                             <div className="relative w-full aspect-square rounded-[15px] overflow-hidden bg-[#f8f8f8] mb-2 p-3 flex items-center justify-center">
@@ -119,7 +120,7 @@ export function FlashSaleBanner() {
                                     </button>
                                 </div>
                             </div>
-                        </div>
+                        </Link>
                     ))}
                 </div>
             </div>

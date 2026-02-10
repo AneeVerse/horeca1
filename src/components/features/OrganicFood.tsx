@@ -168,7 +168,8 @@ export function OrganicFood() {
                         className="flex gap-4 md:gap-5 overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-smooth pb-4"
                     >
                         {ORGANIC_PRODUCTS.map((product) => (
-                            <div
+                            <Link
+                                href={`/product/${product.id}`}
                                 key={product.id}
                                 className="flex-none w-[calc(50%-8px)] md:w-[calc(33.333%-14px)] lg:w-[calc(20%-16px)] xl:w-[calc(16.666%-17px)] bg-white rounded-2xl border border-gray-100 p-3 md:p-4 transition-all duration-300 hover:shadow-xl hover:shadow-gray-200/50 flex flex-col group snap-start"
                             >
@@ -208,11 +209,11 @@ export function OrganicFood() {
                                             <span className="text-[11px] text-text-muted">/Qty</span>
                                         </div>
                                     </div>
-                                    <button className="flex items-center gap-1.5 bg-[#e8f9e9] text-primary hover:bg-primary hover:text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-[12px] font-bold transition-all whitespace-nowrap">
+                                    <div className="flex items-center gap-1.5 bg-[#e8f9e9] text-primary group-hover:bg-primary group-hover:text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-[12px] font-bold transition-all whitespace-nowrap">
                                         Add <ShoppingCart size={14} />
-                                    </button>
+                                    </div>
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                     </div>
                 </div>
