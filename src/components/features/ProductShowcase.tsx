@@ -211,7 +211,7 @@ export function ProductShowcase() {
                     {COLUMNS.map((col, idx) => (
                         <div
                             key={idx}
-                            className={idx === 1 ? "block" : "hidden md:block"}
+                            className={idx === 0 ? "block" : "hidden md:block"}
                         >
                             <ProductColumn
                                 title={col.title}

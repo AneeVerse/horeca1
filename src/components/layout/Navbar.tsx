@@ -14,6 +14,7 @@ import {
     X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { usePathname } from 'next/navigation';
 import { MobileBottomNav } from './MobileBottomNav';
 
 export function Navbar() {
@@ -30,10 +31,16 @@ export function Navbar() {
         { label: 'Grocery & Staples', icon: '🍞' }
     ];
 
+    const pathname = usePathname();
+    const isCategoryPage = pathname?.startsWith('/category/');
+
     return (
         <>
             {/* Top Header - Scrolls Away */}
-            <header className="w-full bg-white relative z-[1000]">
+            <header className={cn(
+                "w-full bg-white relative z-[1000]",
+                isCategoryPage && "hidden md:block" // Hide mobile header on category pages
+            )}>
                 {/* Top Bar - Simple Green Line */}
                 <div className="w-full h-1 md:h-2 bg-primary" />
 
