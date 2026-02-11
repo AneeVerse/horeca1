@@ -2,49 +2,55 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import {
+    Home,
+    Store,
+    ShoppingCart,
+    Package,
+    Settings
+} from 'lucide-react';
 
 interface MobileBottomNavProps {
-    activeTab?: string;
-    onCategoriesClick: () => void;
+    onCategoriesClick?: () => void;
+    onStoreClick?: () => void;
 }
 
-export function MobileBottomNav({ activeTab = 'home', onCategoriesClick }: MobileBottomNavProps) {
+export function MobileBottomNav({ onCategoriesClick, onStoreClick }: MobileBottomNavProps) {
+    const pathname = usePathname();
+
     const navItems = [
         {
             id: 'home',
-            label: 'Shop',
-            icon: '/images/mobile-nav/shop.png',
+            label: 'Home',
+            icon: Home,
             href: '/',
-            type: 'link'
         },
         {
-            id: 'categories',
-            label: 'Explore',
-            icon: '/images/mobile-nav/explore.png',
-            onClick: onCategoriesClick,
-            type: 'button'
+            id: 'store',
+            label: 'Store',
+            icon: Store,
+            href: '/category', // Match any category page
+            onClick: onStoreClick,
         },
         {
             id: 'cart',
             label: 'Cart',
-            icon: '/images/mobile-nav/cart.png',
+            icon: ShoppingCart,
             href: '/cart',
-            type: 'link'
         },
         {
-            id: 'wishlist',
-            label: 'Favourite',
-            icon: '/images/mobile-nav/fav.png',
-            href: '#',
-            type: 'link'
+            id: 'order',
+            label: 'Order',
+            icon: Package,
+            href: '/orders',
         },
         {
-            id: 'account',
-            label: 'Account',
-            icon: '/images/mobile-nav/account.png',
-            href: '/account',
-            type: 'link'
+            id: 'setting',
+            label: 'Setting',
+            icon: Settings,
+            href: '/settings',
         }
     ];
 
@@ -59,52 +65,58 @@ export function MobileBottomNav({ activeTab = 'home', onCategoriesClick }: Mobil
         >
             <div className="flex items-center justify-around h-full px-2">
                 {navItems.map((item) => {
-                    const isCart = item.id === 'cart';
+                    const isActive = item.href === '/'
+                        ? pathname === '/'
+                        : pathname?.startsWith(item.href);
+
+                    const Icon = item.icon;
 
                     const content = (
                         <div className="flex flex-col items-center justify-center gap-1">
-                            <div className="relative w-[22px] h-[22px]">
-                                <img
-                                    src={item.icon}
-                                    alt={item.label}
-                                    className={cn(
-                                        "w-full h-full object-contain transition-all duration-300",
-                                        isCart ? "" : "brightness-0 opacity-80"
-                                    )}
-                                />
-                            </div>
+                            <Icon
+                                size={24}
+                                className={cn(
+                                    "transition-all duration-300",
+                                    isActive ? "text-[#33a852]" : "text-[#1a1a1a]"
+                                )}
+                                strokeWidth={isActive ? 2.5 : 2}
+                            />
                             <span className={cn(
-                                "text-[11px] font-bold tracking-tight",
-                                isCart ? "text-[#33a852]" : "text-[#1a1a1a]"
+                                "text-[10px] font-bold tracking-tight transition-colors duration-300",
+                                isActive ? "text-[#33a852]" : "text-[#1a1a1a]"
                             )}>
                                 {item.label}
                             </span>
                         </div>
                     );
 
-                    if (item.type === 'link') {
+                    if ('onClick' in item && item.onClick) {
                         return (
-                            <Link
+                            <button
                                 key={item.id}
-                                href={item.href || '#'}
-                                className="flex-1 flex flex-col items-center justify-center h-full active:scale-95 transition-transform"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    (item as any).onClick?.();
+                                }}
+                                className="flex-1 flex flex-col items-center justify-center h-full active:scale-95 transition-transform border-none bg-transparent outline-none"
                             >
                                 {content}
-                            </Link>
+                            </button>
                         );
                     }
 
                     return (
-                        <button
+                        <Link
                             key={item.id}
-                            onClick={item.onClick}
-                            className="flex-1 flex flex-col items-center justify-center h-full active:scale-95 transition-transform border-none bg-transparent"
+                            href={item.href}
+                            className="flex-1 flex flex-col items-center justify-center h-full active:scale-95 transition-transform"
                         >
                             {content}
-                        </button>
+                        </Link>
                     );
                 })}
             </div>
         </div>
     );
 }
+

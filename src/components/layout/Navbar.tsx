@@ -16,12 +16,20 @@ import {
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
 import { MobileBottomNav } from './MobileBottomNav';
+import { MobileSearchOverlay } from './MobileSearchOverlay';
 import { useCart } from '@/context/CartContext';
 
 export function Navbar() {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
     const [isCategoriesSidebarOpen, setIsCategoriesSidebarOpen] = React.useState(false);
+    const [isSearchOverlayOpen, setIsSearchOverlayOpen] = React.useState(false);
+    const [searchTab, setSearchTab] = React.useState<'items' | 'stores'>('items');
     const { totalItems } = useCart();
+
+    const openSearch = (tab: 'items' | 'stores' = 'items') => {
+        setSearchTab(tab);
+        setIsSearchOverlayOpen(true);
+    };
 
     const categories = [
         { label: 'Vegetables & Fruit', icon: '🥦' },
@@ -39,7 +47,7 @@ export function Navbar() {
     return (
         <>
             {/* Persistent Top Green Line */}
-            <div className="w-full h-1 md:h-2 bg-primary sticky top-0 z-[10001] shadow-sm" />
+            <div className="w-full h-2 bg-primary sticky top-0 z-[10001] shadow-sm" />
 
             {/* Top Header - Scrolls Away */}
             <header className={cn(
@@ -118,12 +126,13 @@ export function Navbar() {
                         </div>
 
                         {/* Mobile Search Bar - Prominent below logo */}
-                        <div className="md:hidden mt-4">
+                        <div className="md:hidden mt-4" onClick={() => openSearch('items')}>
                             <div className="flex items-center gap-2 px-6 py-2 bg-white border border-gray-300 rounded-full w-full">
                                 <input
                                     type="text"
                                     placeholder="search for product or brand,store..."
-                                    className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 lowercase"
+                                    className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 lowercase cursor-pointer"
+                                    readOnly
                                 />
                             </div>
                         </div>
@@ -283,7 +292,15 @@ export function Navbar() {
                 </div>
             </div>
 
-            <MobileBottomNav onCategoriesClick={() => setIsCategoriesSidebarOpen(true)} />
+            <MobileBottomNav
+                onCategoriesClick={() => setIsCategoriesSidebarOpen(true)}
+                onStoreClick={() => openSearch('stores')}
+            />
+            <MobileSearchOverlay
+                isOpen={isSearchOverlayOpen}
+                onClose={() => setIsSearchOverlayOpen(false)}
+                initialTab={searchTab}
+            />
 
         </>
     );
