@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, Plus, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useCart } from '@/context/CartContext';
 
 // --- Types ---
 interface Product {
@@ -69,6 +71,17 @@ function ProductColumn({ title, products, globalIndex }: {
     // Local manual override state
     const [manualIndex, setManualIndex] = useState<number | null>(null);
     const [isHovered, setIsHovered] = useState(false);
+
+    const { addToCart } = useCart();
+    const [addedId, setAddedId] = useState<number | null>(null);
+
+    const handleAddToCart = (e: React.MouseEvent, product: any) => {
+        e.preventDefault();
+        e.stopPropagation();
+        addToCart(product);
+        setAddedId(product.id);
+        setTimeout(() => setAddedId(null), 2000);
+    };
 
     // Timer ref to clear manual override
     const resetTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -171,9 +184,23 @@ function ProductColumn({ title, products, globalIndex }: {
                                             {product.name}
                                         </h4>
 
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[15px] font-extrabold text-text">{product.newPrice}</span>
-                                            <span className="text-[11px] text-text-muted line-through">{product.oldPrice}</span>
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[15px] font-extrabold text-text">{product.newPrice}</span>
+                                                <span className="text-[11px] text-text-muted line-through">{product.oldPrice}</span>
+                                            </div>
+
+                                            <button
+                                                onClick={(e) => handleAddToCart(e, product)}
+                                                className={cn(
+                                                    "w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-sm active:scale-90",
+                                                    addedId === product.id
+                                                        ? "bg-primary text-white"
+                                                        : "bg-primary/10 text-primary hover:bg-primary hover:text-white"
+                                                )}
+                                            >
+                                                {addedId === product.id ? <Check size={14} /> : <Plus size={14} />}
+                                            </button>
                                         </div>
                                     </div>
                                 </Link>

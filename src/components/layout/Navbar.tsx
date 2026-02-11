@@ -16,10 +16,12 @@ import {
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
 import { MobileBottomNav } from './MobileBottomNav';
+import { useCart } from '@/context/CartContext';
 
 export function Navbar() {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
     const [isCategoriesSidebarOpen, setIsCategoriesSidebarOpen] = React.useState(false);
+    const { totalItems } = useCart();
 
     const categories = [
         { label: 'Vegetables & Fruit', icon: '🥦' },
@@ -36,14 +38,14 @@ export function Navbar() {
 
     return (
         <>
+            {/* Persistent Top Green Line */}
+            <div className="w-full h-1 md:h-2 bg-primary sticky top-0 z-[10001] shadow-sm" />
+
             {/* Top Header - Scrolls Away */}
             <header className={cn(
                 "w-full bg-white relative z-[1000]",
-                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/')) && "hidden md:block" // Hide mobile header on category/product pages
+                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/') || pathname === '/cart') && "hidden md:block" // Hide mobile header on category/product/cart pages
             )}>
-                {/* Top Bar - Simple Green Line */}
-                <div className="w-full h-1 md:h-2 bg-primary" />
-
                 {/* Main Header */}
                 <div className="w-full py-3 md:py-6 px-[var(--container-padding)]">
                     <div className="max-w-[var(--container-max)] mx-auto">
@@ -93,17 +95,25 @@ export function Navbar() {
                                         <Heart size={28} className="group-hover:text-primary transition-colors text-text" />
                                         <span className="absolute -top-2 -right-2 bg-primary text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-full font-extrabold shadow-sm">2</span>
                                     </div>
-                                    <div className="relative cursor-pointer group">
+                                    <Link href="/cart" className="relative cursor-pointer group">
                                         <ShoppingCart size={28} className="group-hover:text-primary transition-colors text-text" />
-                                        <span className="absolute -top-2 -right-2 bg-primary text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-full font-extrabold shadow-sm">2</span>
-                                    </div>
+                                        {totalItems > 0 && (
+                                            <span className="absolute -top-2 -right-2 bg-primary text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-full font-extrabold shadow-sm animate-in zoom-in duration-300">
+                                                {totalItems}
+                                            </span>
+                                        )}
+                                    </Link>
                                 </div>
 
                                 {/* Mobile Cart Tool - Only on mobile top */}
-                                <div className="md:hidden relative cursor-pointer group">
+                                <Link href="/cart" className="md:hidden relative cursor-pointer group">
                                     <ShoppingCart size={24} className="group-hover:text-primary transition-colors text-text" />
-                                    <span className="absolute -top-1.5 -right-1.5 bg-primary text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-extrabold shadow-sm">2</span>
-                                </div>
+                                    {totalItems > 0 && (
+                                        <span className="absolute -top-1.5 -right-1.5 bg-primary text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-extrabold shadow-sm">
+                                            {totalItems}
+                                        </span>
+                                    )}
+                                </Link>
                             </div>
                         </div>
 
@@ -274,6 +284,7 @@ export function Navbar() {
             </div>
 
             <MobileBottomNav onCategoriesClick={() => setIsCategoriesSidebarOpen(true)} />
+
         </>
     );
 }

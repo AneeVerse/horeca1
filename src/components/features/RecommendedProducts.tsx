@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ShoppingCart, Star, Store } from 'lucide-react';
+import { ShoppingCart, Star, Store, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCart } from '@/context/CartContext';
 
 interface Product {
     id: number;
@@ -158,6 +159,15 @@ const PRODUCTS: Product[] = [
 
 export function RecommendedProducts() {
     const [activeCategory, setActiveCategory] = useState('All');
+    const { addToCart } = useCart();
+    const [addedId, setAddedId] = useState<number | null>(null);
+
+    const handleAddToCart = (e: React.MouseEvent, product: any) => {
+        e.preventDefault();
+        addToCart(product);
+        setAddedId(product.id);
+        setTimeout(() => setAddedId(null), 2000);
+    };
 
     return (
         <section className="w-full pb-16 bg-white overflow-hidden">
@@ -239,8 +249,20 @@ export function RecommendedProducts() {
                             </div>
 
                             {/* Add To Cart Button */}
-                            <button className="mt-auto w-full flex items-center justify-center gap-2 bg-[#e8f9e9] text-primary hover:bg-primary hover:text-white py-2.5 rounded-full text-[13px] font-bold transition-all border border-transparent shadow-sm">
-                                Add To Cart <ShoppingCart size={14} />
+                            <button
+                                onClick={(e) => handleAddToCart(e, product)}
+                                className={cn(
+                                    "mt-auto w-full flex items-center justify-center gap-2 py-2.5 rounded-full text-[13px] font-bold transition-all border border-transparent shadow-sm",
+                                    addedId === product.id
+                                        ? "bg-primary text-white"
+                                        : "bg-[#e8f9e9] text-primary hover:bg-primary hover:text-white"
+                                )}
+                            >
+                                {addedId === product.id ? (
+                                    <>Added <Check size={14} /></>
+                                ) : (
+                                    <>Add To Cart <ShoppingCart size={14} /></>
+                                )}
                             </button>
                         </Link>
                     ))}

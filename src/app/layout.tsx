@@ -22,6 +22,8 @@ export const metadata: Metadata = {
   description: "High speed, optimized B2B platform for restaurant and eating products.",
 };
 
+import { CartProvider } from "@/context/CartContext";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -30,12 +32,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${quicksand.variable} ${inter.variable} font-sans antialiased bg-background`}>
-        <Navbar />
-        <main className="w-full min-h-screen pb-20 md:pb-0">
-          {children}
-        </main>
-        <Footer />
+        <CartProvider>
+          <Navbar />
+          <main className="w-full min-h-screen pb-20 md:pb-0">
+            {children}
+          </main>
+          <Footer />
+        </CartProvider>
       </body>
     </html>
   );
 }
+

@@ -2,7 +2,9 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ChevronRight, Plus } from 'lucide-react';
+import { ChevronRight, Plus, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useCart } from '@/context/CartContext';
 
 const FLASH_SALE_PRODUCTS = [
     {
@@ -62,6 +64,17 @@ const FLASH_SALE_PRODUCTS = [
 ];
 
 export function FlashSaleBanner() {
+    const { addToCart } = useCart();
+    const [addedId, setAddedId] = React.useState<number | null>(null);
+
+    const handleAddToCart = (e: React.MouseEvent, product: any) => {
+        e.preventDefault();
+        e.stopPropagation();
+        addToCart(product);
+        setAddedId(product.id);
+        setTimeout(() => setAddedId(null), 2000);
+    };
+
     return (
         <section className="w-full py-5 md:py-12 bg-[#d4e6cd] mb-6 md:mb-10">
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
@@ -115,8 +128,20 @@ export function FlashSaleBanner() {
                                             ${product.originalPrice.toFixed(2)}
                                         </span>
                                     </div>
-                                    <button className="w-6 h-6 md:w-9 md:h-9 bg-[#d4e6cd] text-[#5cb85c] rounded-full flex items-center justify-center hover:bg-[#5cb85c] hover:text-white transition-colors flex-shrink-0">
-                                        <Plus size={14} strokeWidth={3} />
+                                    <button
+                                        onClick={(e) => handleAddToCart(e, product)}
+                                        className={cn(
+                                            "w-6 h-6 md:w-9 md:h-9 rounded-full flex items-center justify-center transition-all border-none shadow-sm active:scale-90",
+                                            addedId === product.id
+                                                ? "bg-primary text-white"
+                                                : "bg-[#d4e6cd] text-[#5cb85c] hover:bg-[#5cb85c] hover:text-white"
+                                        )}
+                                    >
+                                        {addedId === product.id ? (
+                                            <Check size={14} strokeWidth={3} />
+                                        ) : (
+                                            <Plus size={14} strokeWidth={3} />
+                                        )}
                                     </button>
                                 </div>
                             </div>

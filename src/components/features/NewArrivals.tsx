@@ -2,7 +2,9 @@
 
 import React, { useRef } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Star, Store, ShoppingCart } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, Store, ShoppingCart, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useCart } from '@/context/CartContext';
 
 interface Product {
     id: number;
@@ -100,6 +102,15 @@ const NEW_ARRIVALS: Product[] = [
 
 export function NewArrivals() {
     const scrollRef = useRef<HTMLDivElement>(null);
+    const { addToCart } = useCart();
+    const [addedId, setAddedId] = React.useState<number | null>(null);
+
+    const handleAddToCart = (e: React.MouseEvent, product: any) => {
+        e.preventDefault();
+        addToCart(product);
+        setAddedId(product.id);
+        setTimeout(() => setAddedId(null), 2000);
+    };
 
     const scroll = (direction: 'left' | 'right') => {
         if (scrollRef.current) {
@@ -186,9 +197,21 @@ export function NewArrivals() {
                                             <span className="text-[11px] text-text-muted">/Qty</span>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5 bg-[#2ca36a] text-white group-hover:bg-[#248f5c] px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-[12px] font-bold transition-all whitespace-nowrap">
-                                        Add <ShoppingCart size={14} />
-                                    </div>
+                                    <button
+                                        onClick={(e) => handleAddToCart(e, product)}
+                                        className={cn(
+                                            "flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-[12px] font-bold transition-all whitespace-nowrap border-none cursor-pointer active:scale-95 shadow-sm",
+                                            addedId === product.id
+                                                ? "bg-primary text-white"
+                                                : "bg-[#2ca36a] text-white hover:bg-[#248f5c]"
+                                        )}
+                                    >
+                                        {addedId === product.id ? (
+                                            <>Added <Check size={14} /></>
+                                        ) : (
+                                            <>Add <ShoppingCart size={14} /></>
+                                        )}
+                                    </button>
                                 </div>
                             </Link>
                         ))}

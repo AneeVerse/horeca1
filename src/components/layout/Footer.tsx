@@ -11,6 +11,8 @@ import {
     Instagram,
     Linkedin
 } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { cn } from '@/lib/utils';
 
 const FOOTER_LINKS = {
     information: [
@@ -55,8 +57,14 @@ const SOCIAL_LINKS = [
 ];
 
 export function Footer() {
+    const pathname = usePathname();
+    const isCartPage = pathname === '/cart';
+
     return (
-        <footer className="w-full bg-[#f8fff8] border-t border-[#e8f5e9] relative overflow-hidden pb-20 md:pb-0">
+        <footer className={cn(
+            "w-full bg-[#f8fff8] border-t border-[#e8f5e9] relative overflow-hidden pb-20 md:pb-0",
+            isCartPage && "hidden md:block"
+        )}>
             {/* Faint Background Pattern */}
             <div
                 className="absolute inset-0 opacity-[0.05] pointer-events-none"
