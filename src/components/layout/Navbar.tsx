@@ -52,21 +52,45 @@ export function Navbar() {
             {/* Top Header - Scrolls Away */}
             <header className={cn(
                 "w-full bg-white relative z-[1000]",
-                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/') || pathname === '/cart') && "hidden md:block" // Hide mobile header on category/product/cart pages
+                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/') || pathname === '/cart') && "hidden md:block"
             )}>
-                {/* Main Header */}
-                <div className="w-full py-3 md:py-6 px-[var(--container-padding)]">
+                <div className="w-full py-3 px-4 md:px-[var(--container-padding)]">
                     <div className="max-w-[var(--container-max)] mx-auto">
-                        <div className="flex items-center justify-between gap-4 md:gap-6">
+
+                        {/* Mobile Top Row: Location | Logo | Account */}
+                        <div className="flex md:hidden items-center justify-between mb-4">
+                            {/* Location Pill */}
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-full bg-white shadow-sm max-w-[120px]">
+                                <MapPin size={16} className="text-[#33a852]" fill="#33a852" fillOpacity={0.1} />
+                                <span className="text-[12px] font-bold text-gray-800 truncate">USA65</span>
+                                <ChevronDown size={14} className="text-gray-400" />
+                            </div>
+
+                            {/* Centered Logo */}
+                            <Link href="/" className="absolute left-1/2 -translate-x-1/2">
+                                <h1 className="text-[22px] font-extrabold flex items-center gap-1">
+                                    <span className="text-[#33a852]">Horeca</span>
+                                    <span className="text-gray-900">Hub</span>
+                                </h1>
+                            </Link>
+
+                            {/* Account Icon */}
+                            <Link href="/account" className="p-1">
+                                <User size={24} className="text-gray-800" />
+                            </Link>
+                        </div>
+
+                        {/* Desktop Header Content (Hidden on Mobile) */}
+                        <div className="hidden md:flex items-center justify-between gap-6">
                             {/* Logo */}
                             <Link href="/" className="flex-shrink-0">
-                                <h1 className="text-[20px] md:text-[clamp(1.25rem,2.2vw,2.125rem)] font-extrabold text-primary flex items-center gap-1">
+                                <h1 className="text-[clamp(1.25rem,2.2vw,2.125rem)] font-extrabold text-primary flex items-center gap-1">
                                     Horeca<span className="text-text">Hub</span>
                                 </h1>
                             </Link>
 
                             {/* Desktop Search Bar */}
-                            <div className="hidden md:flex flex-1 max-w-2xl items-center relative group">
+                            <div className="flex flex-1 max-w-2xl items-center relative group">
                                 <div className="flex items-center gap-3 px-5 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-xl w-full focus-within:border-primary/50 transition-all duration-300 shadow-sm">
                                     <div className="flex items-center gap-1 text-[var(--text-sm)] text-text-muted border-r-2 border-gray-100 pr-4 cursor-pointer hover:text-primary font-semibold">
                                         <span>Ice Cream</span>
@@ -83,22 +107,20 @@ export function Navbar() {
                                 </div>
                             </div>
 
-                            {/* Desktop Tools & Mobile Header Tools */}
-                            <div className="flex items-center gap-3 md:gap-6">
-                                {/* Location - Visible on all but simplified on mobile */}
-                                <div className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2.5 border-2 border-gray-50 rounded-xl cursor-pointer hover:border-primary/20 transition-colors bg-white shadow-sm max-w-[140px] md:max-w-none">
+                            {/* Desktop Tools */}
+                            <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-2 px-4 py-2.5 border-2 border-gray-50 rounded-xl cursor-pointer hover:border-primary/20 transition-colors bg-white shadow-sm">
                                     <MapPin size={18} className="text-primary flex-shrink-0" />
                                     <div className="flex flex-col leading-tight min-w-0">
-                                        <span className="text-[8px] md:text-[10px] text-text-muted font-bold uppercase tracking-wider truncate">Location</span>
+                                        <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider truncate">Location</span>
                                         <div className="flex items-center gap-0.5">
-                                            <span className="text-[10px] md:text-sm font-extrabold font-sans truncate">New York</span>
-                                            <ChevronDown size={10} className="md:size-3" />
+                                            <span className="text-sm font-extrabold font-sans truncate">New York</span>
+                                            <ChevronDown size={14} />
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Desktop Tools Icons */}
-                                <div className="hidden md:flex items-center gap-4">
+                                <div className="flex items-center gap-4">
                                     <div className="relative cursor-pointer group">
                                         <Heart size={28} className="group-hover:text-primary transition-colors text-text" />
                                         <span className="absolute -top-2 -right-2 bg-primary text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-full font-extrabold shadow-sm">2</span>
@@ -112,26 +134,17 @@ export function Navbar() {
                                         )}
                                     </Link>
                                 </div>
-
-                                {/* Mobile Cart Tool - Only on mobile top */}
-                                <Link href="/cart" className="md:hidden relative cursor-pointer group">
-                                    <ShoppingCart size={24} className="group-hover:text-primary transition-colors text-text" />
-                                    {totalItems > 0 && (
-                                        <span className="absolute -top-1.5 -right-1.5 bg-primary text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-extrabold shadow-sm">
-                                            {totalItems}
-                                        </span>
-                                    )}
-                                </Link>
                             </div>
                         </div>
 
                         {/* Mobile Search Bar - Prominent below logo */}
-                        <div className="md:hidden mt-4" onClick={() => openSearch('items')}>
-                            <div className="flex items-center gap-2 px-6 py-2 bg-white border border-gray-300 rounded-full w-full">
+                        <div className="md:hidden" onClick={() => openSearch('items')}>
+                            <div className="flex items-center gap-2.5 px-5 py-3 bg-white border border-gray-200 rounded-full w-full shadow-sm">
+                                <Search size={20} className="text-gray-400" />
                                 <input
                                     type="text"
                                     placeholder="search for product or brand,store..."
-                                    className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 lowercase cursor-pointer"
+                                    className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 cursor-pointer"
                                     readOnly
                                 />
                             </div>
