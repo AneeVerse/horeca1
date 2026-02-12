@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Search, X, Plus, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { StoreDetailOverlay } from './StoreDetailOverlay';
 
 interface MobileSearchOverlayProps {
     isOpen: boolean;
@@ -91,6 +92,8 @@ const STORES = [
 export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'items' }: MobileSearchOverlayProps) {
     const [activeTab, setActiveTab] = useState<'items' | 'stores'>(initialTab);
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedStore, setSelectedStore] = useState<any>(null);
+    const [isStoreDetailOpen, setIsStoreDetailOpen] = useState(false);
 
     // Sync activeTab with initialTab when overlay opens
     React.useEffect(() => {
@@ -145,7 +148,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'items' }: M
                         99
                     </span>
                     {activeTab === 'items' && (
-                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#33a852] rounded-t-full" />
+                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-1 bg-[#33a852] rounded-t-full" />
                     )}
                 </button>
                 <button
@@ -160,7 +163,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'items' }: M
                         11
                     </span>
                     {activeTab === 'stores' && (
-                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#33a852] rounded-t-full" />
+                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-1 bg-[#33a852] rounded-t-full" />
                     )}
                 </button>
             </div>
@@ -192,7 +195,14 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'items' }: M
                 ) : (
                     <div className="flex flex-col p-4 gap-3">
                         {STORES.map((store, idx) => (
-                            <div key={idx} className="flex items-center gap-4 p-3 bg-white border border-gray-100 rounded-xl shadow-sm">
+                            <div
+                                key={idx}
+                                onClick={() => {
+                                    setSelectedStore(store);
+                                    setIsStoreDetailOpen(true);
+                                }}
+                                className="flex items-center gap-4 p-3 bg-white border border-gray-100 rounded-lg shadow-sm cursor-pointer active:scale-[0.98] transition-transform"
+                            >
                                 <div className="w-16 h-16 shrink-0 bg-white rounded-lg overflow-hidden border border-gray-100 flex items-center justify-center p-2">
                                     <img src={store.image} alt={store.name} className="w-full h-full object-contain" />
                                 </div>
@@ -212,6 +222,12 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'items' }: M
                     </div>
                 )}
             </div>
-        </div>
+
+            <StoreDetailOverlay
+                isOpen={isStoreDetailOpen}
+                onClose={() => setIsStoreDetailOpen(false)}
+                store={selectedStore}
+            />
+        </div >
     );
 }
