@@ -17,12 +17,14 @@ import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileSearchOverlay } from './MobileSearchOverlay';
+import { LocationSelectionOverlay } from './LocationSelectionOverlay';
 import { useCart } from '@/context/CartContext';
 
 export function Navbar() {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
     const [isCategoriesSidebarOpen, setIsCategoriesSidebarOpen] = React.useState(false);
     const [isSearchOverlayOpen, setIsSearchOverlayOpen] = React.useState(false);
+    const [isLocationOverlayOpen, setIsLocationOverlayOpen] = React.useState(false);
     const [searchTab, setSearchTab] = React.useState<'items' | 'stores'>('items');
     const { totalItems } = useCart();
 
@@ -60,11 +62,14 @@ export function Navbar() {
                         {/* Mobile Top Row: Location | Logo | Account */}
                         <div className="flex md:hidden items-center justify-between mb-4">
                             {/* Location Pill */}
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-full bg-white shadow-sm max-w-[120px]">
+                            <button
+                                onClick={() => setIsLocationOverlayOpen(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-full bg-white shadow-sm max-w-[120px] active:scale-95 transition-transform"
+                            >
                                 <MapPin size={16} className="text-[#33a852]" fill="#33a852" fillOpacity={0.1} />
                                 <span className="text-[12px] font-bold text-gray-800 truncate">USA65</span>
                                 <ChevronDown size={14} className="text-gray-400" />
-                            </div>
+                            </button>
 
                             {/* Centered Logo */}
                             <Link href="/" className="absolute left-1/2 -translate-x-1/2">
@@ -315,6 +320,10 @@ export function Navbar() {
                 initialTab={searchTab}
             />
 
+            <LocationSelectionOverlay
+                isOpen={isLocationOverlayOpen}
+                onClose={() => setIsLocationOverlayOpen(false)}
+            />
         </>
     );
 }

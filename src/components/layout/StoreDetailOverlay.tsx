@@ -84,13 +84,13 @@ export function StoreDetailOverlay({ isOpen, onClose, store }: StoreDetailOverla
             <div className="flex-1 overflow-y-auto pb-20">
                 {/* Store Info Card */}
                 <div className="p-4">
-                    <div className="p-4 border border-gray-100 rounded-2xl shadow-sm bg-white">
+                    <div className="p-4 border border-gray-100 rounded-lg shadow-sm bg-white">
                         <div className="flex justify-between items-start mb-2">
                             <div>
                                 <h3 className="text-lg font-bold text-gray-800">{store.name}</h3>
                                 <p className="text-sm text-gray-500">{store.category}</p>
                             </div>
-                            <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-50 rounded-xl text-sm text-gray-600 font-medium border border-gray-100">
+                            <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-50 rounded-lg text-sm text-gray-600 font-medium border border-gray-100">
                                 Change store <ChevronDown size={16} />
                             </button>
                         </div>
@@ -107,7 +107,7 @@ export function StoreDetailOverlay({ isOpen, onClose, store }: StoreDetailOverla
 
                 {/* Search Bar */}
                 <div className="px-4 mb-4">
-                    <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl w-full">
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-lg w-full">
                         <Search size={20} className="text-gray-400 shrink-0" />
                         <input
                             type="text"
