@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Search, Plus, Minus, X } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { cn } from '@/lib/utils';
+import { ReviewItemsOverlay } from '@/components/layout/ReviewItemsOverlay';
 
 export default function CartPage() {
     const { cart, removeFromCart, updateQuantity, subtotal } = useCart();
+    const [isCheckoutOpen, setIsCheckoutOpen] = React.useState(false);
     const router = useRouter();
 
     // Internal dummy items for UI demonstration if cart is empty
@@ -115,7 +117,7 @@ export default function CartPage() {
             <div className="fixed bottom-[88px] left-1/2 -translate-x-1/2 w-full max-w-[calc(100%-48px)] z-50">
                 <button
                     className="w-full bg-[#53b175] text-white py-6 rounded-3xl font-bold text-[18px] shadow-lg shadow-green-200 active:scale-[0.98] transition-all flex items-center justify-center relative overflow-hidden group"
-                    onClick={() => console.log('Checkout click')}
+                    onClick={() => setIsCheckoutOpen(true)}
                 >
                     <span className="relative z-10">Go to Checkout</span>
                     {cart.length > 0 && (
@@ -125,6 +127,11 @@ export default function CartPage() {
                     )}
                 </button>
             </div>
+
+            <ReviewItemsOverlay
+                isOpen={isCheckoutOpen}
+                onClose={() => setIsCheckoutOpen(false)}
+            />
         </div>
     );
 }
