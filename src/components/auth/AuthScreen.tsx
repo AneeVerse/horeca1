@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Smartphone, Eye, EyeOff } from 'lucide-react';
+import { X, Smartphone, Eye, EyeOff, ChevronLeft, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AuthScreenProps {
@@ -12,16 +12,152 @@ interface AuthScreenProps {
 
 export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthScreenProps) {
     const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+    const [step, setStep] = useState<'form' | 'otp' | 'success'>('form');
     const [userRole, setUserRole] = useState<'customer' | 'vendor'>(initialMode);
     const [phoneNumber, setPhoneNumber] = useState('');
-    const [otp, setOtp] = useState('');
+    const [otp, setOtp] = useState(['', '', '', '']);
     const [rememberMe, setRememberMe] = useState(false);
 
     if (!isOpen) return null;
 
+    const handleClose = () => {
+        onClose();
+        // Reset state after closing animation
+        setTimeout(() => {
+            setStep('form');
+            setAuthMode('login');
+        }, 300);
+    };
+
     const handleRoleSwitch = () => {
         setUserRole(userRole === 'customer' ? 'vendor' : 'customer');
     };
+
+    const handleNext = () => {
+        if (authMode === 'register') {
+            if (userRole === 'customer') {
+                setStep('otp');
+            } else {
+                setStep('success');
+            }
+        }
+    };
+
+    const handleOtpChange = (index: number, value: string) => {
+        if (value.length <= 1) {
+            const newOtp = [...otp];
+            newOtp[index] = value;
+            setOtp(newOtp);
+
+            // Auto-focus next input
+            if (value && index < 3) {
+                const nextInput = document.getElementById(`otp-${index + 1}`);
+                nextInput?.focus();
+            }
+        }
+    };
+
+    if (step === 'success') {
+        return (
+            <div className="fixed inset-0 z-[13000] bg-white flex flex-col animate-in fade-in zoom-in duration-300">
+                {/* Close Button Top Right */}
+                <button
+                    onClick={handleClose}
+                    className="absolute top-6 right-6 p-2 hover:bg-gray-50 rounded-full transition-colors z-[10]"
+                >
+                    <X size={24} className="text-gray-800" />
+                </button>
+
+                <div className="flex-1 flex flex-col items-center justify-center px-8 pb-32">
+                    {/* Success Icon */}
+                    <div className="mb-8">
+                        <img
+                            src="/images/login/check%20icon.png"
+                            alt="Success"
+                            className="w-32 h-32 object-contain"
+                        />
+                    </div>
+
+                    {/* Content */}
+                    <h2 className="text-[28px] font-[800] text-gray-800 mb-4 text-center">
+                        Register Successful
+                    </h2>
+
+                    <p className="text-[15px] text-gray-400 text-center leading-relaxed">
+                        {userRole === 'customer'
+                            ? "You successfully register with Horeca1 application as Customer."
+                            : "Thank you for Choosing us, Our Onboarding Partner will contact you Shortly."
+                        }
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    if (step === 'otp') {
+        return (
+            <div className="fixed inset-0 z-[13000] bg-white flex flex-col animate-in slide-in-from-right duration-300">
+                {/* Header with Back Button */}
+                <div className="p-6">
+                    <button
+                        onClick={() => setStep('form')}
+                        className="p-2 hover:bg-gray-50 rounded-full transition-colors"
+                    >
+                        <ChevronLeft size={24} className="text-gray-800" />
+                    </button>
+                </div>
+
+                <div className="flex-1 flex flex-col items-center px-6 pt-12 max-w-sm mx-auto w-full">
+                    <h2 className="text-[24px] font-[800] text-gray-800 mb-2">OTP Verification</h2>
+                    <p className="text-[14px] text-gray-400 text-center mb-1">
+                        Enter The security code we have sent to
+                    </p>
+                    <div className="flex items-center gap-2 mb-10">
+                        <span className="text-[14px] font-bold text-gray-400">+91 {phoneNumber || "6956568958"}</span>
+                        <button className="text-[#33a852]">
+                            <Pencil size={14} className="stroke-[3px]" />
+                        </button>
+                    </div>
+
+                    {/* OTP Boxes */}
+                    <div className="flex gap-4 mb-12">
+                        {otp.map((digit, index) => (
+                            <input
+                                key={index}
+                                id={`otp-${index}`}
+                                type="text"
+                                maxLength={1}
+                                value={digit}
+                                onChange={(e) => handleOtpChange(index, e.target.value)}
+                                placeholder="*"
+                                className={cn(
+                                    "w-[60px] h-[60px] border-2 rounded-lg text-center text-[20px] font-bold outline-none transition-all",
+                                    digit ? "border-[#33a852] text-gray-800" : "border-gray-200 text-gray-300 focus:border-[#33a852]"
+                                )}
+                            />
+                        ))}
+                    </div>
+
+                    {/* Verify Button */}
+                    <button
+                        onClick={() => setStep('success')}
+                        className="w-full bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-4 rounded-xl shadow-lg shadow-green-100 active:scale-[0.98] transition-all text-[16px] mb-6"
+                    >
+                        Verify
+                    </button>
+
+                    {/* Resend Footer */}
+                    <div className="text-center">
+                        <p className="text-[13px] font-bold text-gray-700 mb-1">Don't Receive code?</p>
+                        <div className="flex items-center justify-center gap-2">
+                            <button className="text-[#33a852] font-bold text-[13px] hover:underline">Resend</button>
+                            <span className="text-gray-400 text-[13px] font-bold">- 00:52</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="fixed inset-0 z-[13000] bg-white flex flex-col animate-in fade-in slide-in-from-bottom duration-300">
@@ -89,13 +225,11 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                                 </div>
                             </div>
 
-                            {/* OTP Field */}
+                            {/* OTP Field (Login Only) */}
                             <div className="space-y-1.5">
                                 <label className="text-[13px] font-semibold text-gray-400 ml-1 tracking-tight">OTP</label>
                                 <input
                                     type="password"
-                                    value={otp}
-                                    onChange={(e) => setOtp(e.target.value)}
                                     placeholder=""
                                     autoComplete="off"
                                     autoCorrect="off"
@@ -153,6 +287,8 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                                         <input
                                             type="tel"
                                             placeholder="Enter your Phone no."
+                                            value={phoneNumber}
+                                            onChange={(e) => setPhoneNumber(e.target.value)}
                                             className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#33a852] transition-colors"
                                         />
                                     </div>
@@ -161,7 +297,7 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                                 <>
                                     {/* Vendor Specific */}
                                     <div className="space-y-1.5">
-                                        <label className="text-[12px) font-bold text-gray-800 ml-1">Business Name</label>
+                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Business Name</label>
                                         <input
                                             type="text"
                                             placeholder="Enter your restaurant name"
@@ -173,6 +309,8 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                                         <input
                                             type="tel"
                                             placeholder="Enter your Phone no."
+                                            value={phoneNumber}
+                                            onChange={(e) => setPhoneNumber(e.target.value)}
                                             className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#33a852] transition-colors"
                                         />
                                     </div>
@@ -214,8 +352,11 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                 </div>
 
                 {/* Submit Button */}
-                <button className="w-full bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-4 rounded-lg shadow-lg shadow-green-100 mt-10 active:scale-[0.98] transition-all text-base tracking-wide">
-                    {authMode === 'login' ? 'Login' : (userRole === 'vendor' ? 'Next' : 'Register')}
+                <button
+                    onClick={handleNext}
+                    className="w-full bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-4 rounded-lg shadow-lg shadow-green-100 mt-10 active:scale-[0.98] transition-all text-base tracking-wide"
+                >
+                    {authMode === 'login' ? 'Login' : (userRole === 'vendor' ? 'Register' : 'Register')}
                 </button>
 
                 {authMode === 'login' && (
@@ -241,8 +382,8 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
 
             {/* Close button */}
             <button
-                onClick={onClose}
-                className="absolute top-6 left-4 p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                onClick={handleClose}
+                className="absolute top-6 right-6 p-2 text-gray-400 hover:text-gray-600 transition-colors"
             >
                 <X size={24} />
             </button>
