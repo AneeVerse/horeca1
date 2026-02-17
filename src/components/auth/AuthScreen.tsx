@@ -26,20 +26,20 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
     return (
         <div className="fixed inset-0 z-[13000] bg-white flex flex-col animate-in fade-in slide-in-from-bottom duration-300">
             {/* Header / Logo */}
-            <div className="flex flex-col items-center pt-24 pb-12">
+            <div className="flex flex-col items-center pt-20 pb-8 shrink-0">
                 <h1 className="text-[34px] font-[900] tracking-tight flex items-center justify-center">
                     <span className="text-[#ee2c2c]">Horeca</span>
                     <span className="text-[#1a237e]">1</span>
                 </h1>
             </div>
 
-            <div className="flex-1 flex flex-col px-6 max-w-sm mx-auto w-full">
-                <h2 className="text-[22px] font-bold text-gray-800 mb-8">
-                    {authMode === 'login' ? 'Login to your Account' : 'Create an Account'}
+            <div className="flex-1 flex flex-col px-6 max-w-sm mx-auto w-full overflow-y-auto pb-6">
+                <h2 className="text-[22px] font-bold text-gray-800 mb-6 shrink-0">
+                    {authMode === 'login' ? 'Login to your Account' : 'Create your Account'}
                 </h2>
 
                 {/* Login/Register Toggle */}
-                <div className="flex p-0.5 bg-[#f8f9fa] rounded-lg border border-gray-100 mb-8 overflow-hidden">
+                <div className="flex p-0.5 bg-[#f8f9fa] rounded-lg border border-gray-100 mb-6 overflow-hidden shrink-0">
                     <button
                         onClick={() => setAuthMode('login')}
                         className={cn(
@@ -65,8 +65,8 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                     {authMode === 'login' ? (
                         <>
                             {/* Phone Number Field */}
-                            <div className="space-y-2">
-                                <label className="text-[13px] font-semibold text-gray-500 ml-1 tracking-tight">Phone number</label>
+                            <div className="space-y-1.5">
+                                <label className="text-[13px] font-semibold text-gray-400 ml-1 tracking-tight">Phone number</label>
                                 <div className="relative flex items-center">
                                     <div className="absolute left-4 flex items-center gap-2 text-gray-400">
                                         <Smartphone size={18} className="text-[#33a852]" />
@@ -90,8 +90,8 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                             </div>
 
                             {/* OTP Field */}
-                            <div className="space-y-2">
-                                <label className="text-[13px] font-semibold text-gray-500 ml-1 tracking-tight">OTP</label>
+                            <div className="space-y-1.5">
+                                <label className="text-[13px] font-semibold text-gray-400 ml-1 tracking-tight">OTP</label>
                                 <input
                                     type="password"
                                     value={otp}
@@ -161,7 +161,7 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                                 <>
                                     {/* Vendor Specific */}
                                     <div className="space-y-1.5">
-                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Business Name</label>
+                                        <label className="text-[12px) font-bold text-gray-800 ml-1">Business Name</label>
                                         <input
                                             type="text"
                                             placeholder="Enter your restaurant name"
@@ -214,40 +214,29 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                 </div>
 
                 {/* Submit Button */}
-                <button className="w-full bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-4 rounded-lg shadow-lg shadow-green-100 mt-8 active:scale-[0.98] transition-all text-base tracking-wide">
+                <button className="w-full bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-4 rounded-lg shadow-lg shadow-green-100 mt-10 active:scale-[0.98] transition-all text-base tracking-wide">
                     {authMode === 'login' ? 'Login' : (userRole === 'vendor' ? 'Next' : 'Register')}
                 </button>
 
-                {/* Role Switcher */}
-                <div className="mt-12">
-                    <div className="flex items-center gap-4 mb-8">
-                        <div className="h-[1px] flex-1 bg-gray-50" />
-                        <span className="text-[12px] font-medium text-gray-300 tracking-tight">Or login with</span>
-                        <div className="h-[1px] flex-1 bg-gray-50" />
+                {authMode === 'login' && (
+                    /* Role Switcher only for Login */
+                    <div className="mt-8 shrink-0 pb-10">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="h-[1px] flex-1 bg-gray-50" />
+                            <span className="text-[12px] font-medium text-gray-300 tracking-tight">Or login with</span>
+                            <div className="h-[1px] flex-1 bg-gray-50" />
+                        </div>
+
+                        <button
+                            onClick={handleRoleSwitch}
+                            className="w-full bg-[#f8f9fa] border border-gray-100 py-4 rounded-lg text-sm font-semibold text-gray-500 transition-colors hover:bg-gray-100"
+                        >
+                            Onboard as <span className="text-[#33a852] font-[800] underline ml-1">
+                                {userRole === 'customer' ? 'Vendor.' : 'Customer.'}
+                            </span>
+                        </button>
                     </div>
-
-                    <button
-                        onClick={handleRoleSwitch}
-                        className="w-full bg-[#f8f9fa] border border-gray-100 py-4 rounded-lg text-sm font-semibold text-gray-500 transition-colors hover:bg-gray-100"
-                    >
-                        Onboard as <span className="text-[#33a852] font-[800] underline ml-1">
-                            {userRole === 'customer' ? 'Vendor.' : 'Customer.'}
-                        </span>
-                    </button>
-                </div>
-
-                {/* Footer Switch */}
-                <div className="mt-auto pb-12 text-center text-[13px] font-bold">
-                    <span className="text-gray-400 tracking-tight">
-                        {authMode === 'login' ? "Dont have an account " : "Already have an account? "}
-                    </span>
-                    <button
-                        onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
-                        className="text-[#33a852] hover:underline"
-                    >
-                        {authMode === 'login' ? 'Register.' : 'Login.'}
-                    </button>
-                </div>
+                )}
             </div>
 
             {/* Close button */}
