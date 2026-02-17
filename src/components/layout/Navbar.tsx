@@ -19,6 +19,7 @@ import { MobileBottomNav } from './MobileBottomNav';
 import { MobileSearchOverlay } from './MobileSearchOverlay';
 import { LocationSelectionOverlay } from './LocationSelectionOverlay';
 import { useCart } from '@/context/CartContext';
+import { useAddress } from '@/context/AddressContext';
 
 export function Navbar() {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
@@ -27,6 +28,7 @@ export function Navbar() {
     const [isLocationOverlayOpen, setIsLocationOverlayOpen] = React.useState(false);
     const [searchTab, setSearchTab] = React.useState<'items' | 'stores'>('items');
     const { totalItems } = useCart();
+    const { selectedAddress } = useAddress();
 
     const openSearch = (tab: 'items' | 'stores' = 'items') => {
         setSearchTab(tab);
@@ -67,7 +69,7 @@ export function Navbar() {
                                 className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-full bg-white shadow-sm max-w-[120px] active:scale-95 transition-transform"
                             >
                                 <MapPin size={16} className="text-[#33a852]" fill="#33a852" fillOpacity={0.1} />
-                                <span className="text-[12px] font-bold text-gray-800 truncate">USA65</span>
+                                <span className="text-[12px] font-bold text-gray-800 truncate">{selectedAddress?.shortAddress || 'Select location'}</span>
                                 <ChevronDown size={14} className="text-gray-400" />
                             </button>
 
@@ -117,9 +119,9 @@ export function Navbar() {
                                 <div className="flex items-center gap-2 px-4 py-2.5 border-2 border-gray-50 rounded-xl cursor-pointer hover:border-primary/20 transition-colors bg-white shadow-sm">
                                     <MapPin size={18} className="text-primary flex-shrink-0" />
                                     <div className="flex flex-col leading-tight min-w-0">
-                                        <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider truncate">Location</span>
+                                        <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider truncate">{selectedAddress ? 'Delivering to' : 'Location'}</span>
                                         <div className="flex items-center gap-0.5">
-                                            <span className="text-sm font-extrabold font-sans truncate">New York</span>
+                                            <span className="text-sm font-extrabold font-sans truncate">{selectedAddress?.shortAddress || 'Select location'}</span>
                                             <ChevronDown size={14} />
                                         </div>
                                     </div>

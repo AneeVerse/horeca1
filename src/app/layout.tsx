@@ -23,6 +23,8 @@ export const metadata: Metadata = {
 };
 
 import { CartProvider } from "@/context/CartContext";
+import { GoogleMapsProvider } from "@/components/providers/GoogleMapsProvider";
+import { AddressProvider } from "@/context/AddressContext";
 
 export default function RootLayout({
   children,
@@ -32,13 +34,17 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${quicksand.variable} ${inter.variable} font-sans antialiased bg-background`}>
-        <CartProvider>
-          <Navbar />
-          <main className="w-full min-h-screen pb-20 md:pb-0">
-            {children}
-          </main>
-          <Footer />
-        </CartProvider>
+        <GoogleMapsProvider>
+          <AddressProvider>
+            <CartProvider>
+              <Navbar />
+              <main className="w-full min-h-screen pb-20 md:pb-0">
+                {children}
+              </main>
+              <Footer />
+            </CartProvider>
+          </AddressProvider>
+        </GoogleMapsProvider>
       </body>
     </html>
   );
