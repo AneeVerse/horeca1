@@ -20,12 +20,15 @@ import { MobileSearchOverlay } from './MobileSearchOverlay';
 import { LocationSelectionOverlay } from './LocationSelectionOverlay';
 import { useCart } from '@/context/CartContext';
 import { useAddress } from '@/context/AddressContext';
+import { SplashScreen } from '../auth/SplashScreen';
+import { AccountTypeSelection } from '../auth/AccountTypeSelection';
 
 export function Navbar() {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
     const [isCategoriesSidebarOpen, setIsCategoriesSidebarOpen] = React.useState(false);
     const [isSearchOverlayOpen, setIsSearchOverlayOpen] = React.useState(false);
     const [isLocationOverlayOpen, setIsLocationOverlayOpen] = React.useState(false);
+    const [isAccountOverlayOpen, setIsAccountOverlayOpen] = React.useState(false);
     const [searchTab, setSearchTab] = React.useState<'items' | 'stores'>('items');
     const { totalItems } = useCart();
     const { selectedAddress } = useAddress();
@@ -50,6 +53,15 @@ export function Navbar() {
 
     return (
         <>
+            {/* Splash Screen */}
+            <SplashScreen />
+
+            {/* Account Selection Overlay */}
+            <AccountTypeSelection
+                isOpen={isAccountOverlayOpen}
+                onClose={() => setIsAccountOverlayOpen(false)}
+            />
+
             {/* Persistent Top Green Line */}
             <div className="w-full h-2 bg-primary sticky top-0 z-[10001] shadow-sm" />
 
@@ -82,9 +94,12 @@ export function Navbar() {
                             </Link>
 
                             {/* Account Icon */}
-                            <Link href="/account" className="p-1">
+                            <button
+                                onClick={() => setIsAccountOverlayOpen(true)}
+                                className="p-1"
+                            >
                                 <User size={24} className="text-gray-800" />
-                            </Link>
+                            </button>
                         </div>
 
                         {/* Desktop Header Content (Hidden on Mobile) */}
