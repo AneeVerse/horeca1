@@ -22,6 +22,7 @@ import { useCart } from '@/context/CartContext';
 import { useAddress } from '@/context/AddressContext';
 import { SplashScreen } from '../auth/SplashScreen';
 import { AccountTypeSelection } from '../auth/AccountTypeSelection';
+import { AuthScreen } from '../auth/AuthScreen';
 
 export function Navbar() {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
@@ -29,6 +30,8 @@ export function Navbar() {
     const [isSearchOverlayOpen, setIsSearchOverlayOpen] = React.useState(false);
     const [isLocationOverlayOpen, setIsLocationOverlayOpen] = React.useState(false);
     const [isAccountOverlayOpen, setIsAccountOverlayOpen] = React.useState(false);
+    const [isAuthOverlayOpen, setIsAuthOverlayOpen] = React.useState(false);
+    const [selectedRole, setSelectedRole] = React.useState<'customer' | 'vendor'>('customer');
     const [searchTab, setSearchTab] = React.useState<'items' | 'stores'>('items');
     const { totalItems } = useCart();
     const { selectedAddress } = useAddress();
@@ -60,6 +63,18 @@ export function Navbar() {
             <AccountTypeSelection
                 isOpen={isAccountOverlayOpen}
                 onClose={() => setIsAccountOverlayOpen(false)}
+                onContinue={(role) => {
+                    setSelectedRole(role);
+                    setIsAccountOverlayOpen(false);
+                    setIsAuthOverlayOpen(true);
+                }}
+            />
+
+            {/* Auth Screen (Login/Register) */}
+            <AuthScreen
+                isOpen={isAuthOverlayOpen}
+                onClose={() => setIsAuthOverlayOpen(false)}
+                initialMode={selectedRole}
             />
 
             {/* Persistent Top Green Line */}

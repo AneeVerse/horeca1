@@ -7,9 +7,10 @@ import { cn } from '@/lib/utils';
 interface AccountTypeSelectionProps {
     isOpen: boolean;
     onClose: () => void;
+    onContinue: (role: 'customer' | 'vendor') => void;
 }
 
-export function AccountTypeSelection({ isOpen, onClose }: AccountTypeSelectionProps) {
+export function AccountTypeSelection({ isOpen, onClose, onContinue }: AccountTypeSelectionProps) {
     const [selectedType, setSelectedType] = useState<'customer' | 'vendor' | null>(null);
 
     if (!isOpen) return null;
@@ -87,8 +88,7 @@ export function AccountTypeSelection({ isOpen, onClose }: AccountTypeSelectionPr
                     disabled={!selectedType}
                     onClick={() => {
                         if (selectedType) {
-                            console.log('Selected type:', selectedType);
-                            onClose();
+                            onContinue(selectedType);
                         }
                     }}
                     className={cn(
