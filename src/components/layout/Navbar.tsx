@@ -1,5 +1,7 @@
 'use client';
 
+// Updated: 2026-02-17 20:00
+
 import React from 'react';
 import Link from 'next/link';
 import {
@@ -78,7 +80,7 @@ export function Navbar() {
             />
 
             {/* Persistent Top Green Line */}
-            <div className="w-full h-2 bg-primary sticky top-0 z-[10001] shadow-sm" />
+            <div className="w-[430px] h-[12px] bg-primary sticky top-0 z-[10001] shadow-sm" />
 
             {/* Top Header - Scrolls Away */}
             <header className={cn(
@@ -88,33 +90,64 @@ export function Navbar() {
                 <div className="w-full py-3 px-4 md:px-[var(--container-padding)]">
                     <div className="max-w-[var(--container-max)] mx-auto">
 
-                        {/* Mobile Top Row: Location | Logo | Account */}
-                        <div className="flex md:hidden items-center justify-between mb-4">
-                            {/* Location Pill */}
-                            <button
-                                onClick={() => setIsLocationOverlayOpen(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-full bg-white shadow-sm max-w-[120px] active:scale-95 transition-transform"
-                            >
-                                <MapPin size={16} className="text-[#33a852]" fill="#33a852" fillOpacity={0.1} />
-                                <span className="text-[12px] font-bold text-gray-800 truncate">{selectedAddress?.shortAddress || 'Select location'}</span>
-                                <ChevronDown size={14} className="text-gray-400" />
-                            </button>
+                        {/* Mobile Header Layout */}
+                        <div className="md:hidden space-y-3 pt-3">
+                            {/* Row 1: Logo & Cart */}
+                            <div className="flex items-center justify-between relative px-1">
+                                <div className="w-8" /> {/* Spacer */}
 
-                            {/* Centered Logo */}
-                            <Link href="/" className="absolute left-1/2 -translate-x-1/2">
-                                <h1 className="text-[22px] font-extrabold flex items-center gap-1">
-                                    <span className="text-[#33a852]">Horeca</span>
-                                    <span className="text-gray-900">Hub</span>
-                                </h1>
-                            </Link>
+                                <Link href="/" className="absolute left-1/2 -translate-x-1/2">
+                                    <img
+                                        src="/images/login/Horeca1.png"
+                                        alt="Horeca1"
+                                        className="h-6 w-auto object-contain"
+                                    />
+                                </Link>
 
-                            {/* Account Icon */}
-                            <button
-                                onClick={() => setIsAccountOverlayOpen(true)}
-                                className="p-1"
-                            >
-                                <User size={24} className="text-gray-800" />
-                            </button>
+                                <Link href="/cart" className="relative p-1">
+                                    <img
+                                        src="/images/mobile-nav/cart.svg"
+                                        alt="Cart"
+                                        className="w-6 h-6"
+                                    />
+                                    <span className="absolute -top-1 -right-1 bg-[#299e60] text-white text-[10px] w-4.5 h-4.5 flex items-center justify-center rounded-full font-bold border-2 border-white">
+                                        {totalItems}
+                                    </span>
+                                </Link>
+                            </div>
+
+                            {/* Row 2: Location Pill */}
+                            <div className="flex justify-center">
+                                <button
+                                    onClick={() => setIsLocationOverlayOpen(true)}
+                                    className="flex items-center gap-1.5 px-3 py-1 border border-gray-100 rounded-full bg-[#F7F7F7] shadow-sm hover:bg-gray-100 transition-colors"
+                                >
+                                    <div className="relative flex items-center justify-center">
+                                        <MapPin size={16} className="text-[#299e60]" fill="currentColor" />
+                                        <div className="absolute w-1.5 h-1.5 bg-white rounded-full top-[4px]" />
+                                    </div>
+                                    <span className="text-[12px] font-bold text-gray-800">
+                                        {selectedAddress?.shortAddress || 'Select location'}
+                                    </span>
+                                    <ChevronDown size={14} className="text-gray-800" />
+                                </button>
+                            </div>
+
+                            {/* Row 3: Search Bar */}
+                            <div className="px-1">
+                                <div
+                                    onClick={() => setIsSearchOverlayOpen(true)}
+                                    className="flex items-center gap-3 px-4 py-3 bg-[#F7F7F7] border border-gray-100 rounded-2xl cursor-pointer shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
+                                >
+                                    <Search size={20} className="text-gray-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="search for product or brand,store..."
+                                        className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 cursor-pointer"
+                                        readOnly
+                                    />
+                                </div>
+                            </div>
                         </div>
 
                         {/* Desktop Header Content (Hidden on Mobile) */}
@@ -171,19 +204,6 @@ export function Navbar() {
                                         )}
                                     </Link>
                                 </div>
-                            </div>
-                        </div>
-
-                        {/* Mobile Search Bar - Prominent below logo */}
-                        <div className="md:hidden" onClick={() => openSearch('items')}>
-                            <div className="flex items-center gap-2.5 px-5 py-3 bg-white border border-gray-200 rounded-full w-full shadow-sm">
-                                <Search size={20} className="text-gray-400" />
-                                <input
-                                    type="text"
-                                    placeholder="search for product or brand,store..."
-                                    className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 cursor-pointer"
-                                    readOnly
-                                />
                             </div>
                         </div>
                     </div>
