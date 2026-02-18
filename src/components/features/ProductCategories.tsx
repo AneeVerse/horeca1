@@ -90,9 +90,9 @@ const ProductCard = ({ product }: { product: Product }) => (
             {product.priceRange} /- <span className="text-gray-400 font-bold text-[10px] md:text-[12px]">QTY</span>
         </p>
 
-        <button className="w-full py-2 mt-auto bg-[#e9f7ef] rounded-full flex items-center justify-center gap-1.5 text-[#27ae60] text-[11px] md:text-[13px] font-semibold transition-colors hover:bg-[#d4f0df]">
+        <button className="w-full py-2 mt-auto bg-[#EAF6EF] rounded-full flex items-center justify-center gap-1.5 text-[#53B175] text-[11px] md:text-[13px] font-bold transition-all active:scale-95">
             Add To Cart
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" /></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" /></svg>
         </button>
     </div>
 );
@@ -119,8 +119,8 @@ export function ProductCategories() {
                                 </div>
                             </div>
                             <Link
-                                href="/see-all"
-                                className="text-[13px] md:text-[15px] font-semibold text-[#27ae60] hover:text-[#1e8449] transition-colors"
+                                href={`/category/${category.title.toLowerCase().replace(/ & /g, '-').replace(/\s+/g, '-')}`}
+                                className="text-[13px] md:text-[15px] font-semibold text-[#53B175] hover:opacity-80 transition-opacity"
                             >
                                 See all
                             </Link>
