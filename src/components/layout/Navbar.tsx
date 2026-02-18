@@ -80,7 +80,7 @@ export function Navbar() {
             />
 
             {/* Persistent Top Green Line */}
-            <div className="w-[430px] h-[12px] bg-primary sticky top-0 z-[10001] shadow-sm" />
+            <div className="w-full h-[12px] bg-primary sticky top-0 z-[10001] shadow-sm" />
 
             {/* Top Header - Scrolls Away */}
             <header className={cn(
@@ -122,10 +122,7 @@ export function Navbar() {
                                     onClick={() => setIsLocationOverlayOpen(true)}
                                     className="flex items-center gap-1.5 px-3 py-1 border border-gray-100 rounded-full bg-[#F7F7F7] shadow-sm hover:bg-gray-100 transition-colors"
                                 >
-                                    <div className="relative flex items-center justify-center">
-                                        <MapPin size={16} className="text-[#299e60]" fill="currentColor" />
-                                        <div className="absolute w-1.5 h-1.5 bg-white rounded-full top-[4px]" />
-                                    </div>
+                                    <MapPin size={14} className="text-[#299e60]" fill="currentColor" />
                                     <span className="text-[12px] font-bold text-gray-800">
                                         {selectedAddress?.shortAddress || 'Select location'}
                                     </span>
