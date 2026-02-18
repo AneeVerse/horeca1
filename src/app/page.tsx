@@ -26,7 +26,7 @@ export default function Home() {
       <Hero />
       <CategoryShowcase />
       <TrustedBy />
-      {/* <FlashSaleBanner /> */}
+      <FlashSaleBanner />
       {/* <PromotionBanners /> */}
       <ProductCategories />
       <FlashSale />
