@@ -1,5 +1,6 @@
 import { Hero } from "@/components/features/Hero";
 import { CategoryShowcase } from "@/components/features/CategoryShowcase";
+import { TrustedBy } from "@/components/features/TrustedBy";
 import { FlashSaleBanner } from "@/components/features/FlashSaleBanner";
 import { PromotionBanners } from "@/components/features/PromotionBanners";
 import { FlashSale } from "@/components/features/FlashSale";
@@ -16,24 +17,29 @@ import { ShopByBrands } from "@/components/features/ShopByBrands";
 import { NewArrivals } from "@/components/features/NewArrivals";
 import { FeatureBar } from "@/components/features/FeatureBar";
 import { NewsletterBanner } from "@/components/features/NewsletterBanner";
+import { ProductCategories } from "@/components/features/ProductCategories";
+import { RecommendedCategories } from "@/components/features/RecommendedCategories";
 
 export default function Home() {
   return (
     <div className="flex flex-col w-full">
       <Hero />
       <CategoryShowcase />
+      <TrustedBy />
       <FlashSaleBanner />
-      <PromotionBanners />
+      {/* <PromotionBanners /> */}
+      <ProductCategories />
       <FlashSale />
-      <FeaturedProducts />
-      <OfferBanners />
-      <RecommendedProducts />
+      <RecommendedCategories />
+      {/* <FeaturedProducts /> */}
+      {/* <OfferBanners /> */}
+      {/* <RecommendedProducts /> */}
       {/* <HotDeals /> */}
       {/* <TopVendors /> */}
       {/* <DailyBestSells /> */}
-      <DeliveryPoster />
+      {/* <DeliveryPoster /> */}
       {/* <OrganicFood /> */}
-      <ProductShowcase />
+      {/* <ProductShowcase /> */}
       {/* <ShopByBrands /> */}
       {/* <NewArrivals /> */}
       <FeatureBar />

@@ -30,76 +30,130 @@ const CATEGORIES = [
     { name: 'Dairy', image: '/images/category/milk.png' },
 ];
 
+const VEGETABLES = [
+    {
+        id: 1,
+        name: 'Ladies Finger 1 kg',
+        image: '/images/product/product-img1.png',
+        vendor: 'Sold by: 6 venders',
+    },
+    {
+        id: 2,
+        name: 'Desi Fresh Tomato 1 kg',
+        image: '/images/product/product-img3.png',
+        vendor: 'Sold by: 12 venders',
+    },
+    {
+        id: 3,
+        name: 'Ladies Finger 1 kg',
+        image: '/images/product/product-img1.png',
+        vendor: 'Sold by: 6 venders',
+    },
+    {
+        id: 4,
+        name: 'Desi Fresh Tomato 1 kg',
+        image: '/images/product/product-img3.png',
+        vendor: 'Sold by: 12 venders',
+    }
+];
+
+const FRUITS = [
+    {
+        id: 101,
+        name: 'Nagpur Oranges 1 kg',
+        image: '/images/category/fruits.png',
+        vendor: 'Sold by: 12 venders',
+    },
+    {
+        id: 102,
+        name: 'Kashmir Apple 1 kg',
+        image: '/images/recom-product/product-img10.png',
+        vendor: 'Sold by: 6 venders',
+    },
+    {
+        id: 103,
+        name: 'Nagpur Oranges 1 kg',
+        image: '/images/category/fruits.png',
+        vendor: 'Sold by: 12 venders',
+    },
+    {
+        id: 104,
+        name: 'Kashmir Apple 1 kg',
+        image: '/images/recom-product/product-img10.png',
+        vendor: 'Sold by: 6 venders',
+    }
+];
+
 const PRODUCTS = [
     {
         id: 1,
-        name: 'Taylor Farms Broccoli Florets Vegetables',
-        image: '/images/product/brokali.png',
+        name: 'Ladies Finger 1 kg',
+        image: '/images/product/product-img1.png', // Assuming correct veg image or using placeholder
         oldPrice: '$28.99',
         newPrice: '$14.99',
         rating: 4.8,
         reviews: '17k',
-        vendor: 'By Lucky Supermarket',
+        vendor: 'Sold by: 6 venders',
         sold: 18,
         total: 35
     },
     {
         id: 2,
-        name: 'Taylor Farms Broccoli Florets Vegetables',
-        image: '/images/product/product-img1.png',
-        oldPrice: '$28.99',
-        newPrice: '$14.99',
-        rating: 4.8,
-        reviews: '17k',
-        vendor: 'By Lucky Supermarket',
-        sold: 18,
-        total: 35
-    },
-    {
-        id: 3,
-        name: 'Taylor Farms Broccoli Florets Vegetables',
+        name: 'Desi Fresh Tomato 1 kg',
         image: '/images/product/product-img3.png',
         oldPrice: '$28.99',
         newPrice: '$14.99',
         rating: 4.8,
         reviews: '17k',
-        vendor: 'By Lucky Supermarket',
+        vendor: 'Sold by: 12 venders',
+        sold: 18,
+        total: 35
+    },
+    {
+        id: 3,
+        name: 'Onion 1 kg',
+        image: '/images/fruits-vegetables/onion.png',
+        oldPrice: '$28.99',
+        newPrice: '$14.99',
+        rating: 4.8,
+        reviews: '17k',
+        vendor: 'Sold by: 8 venders',
         sold: 18,
         total: 35
     },
     {
         id: 4,
-        name: 'Taylor Farms Broccoli Florets Vegetables',
-        image: '/images/product/product-img5.png',
+        name: 'Coriander 200 gms Bunch',
+        image: '/images/fruits-vegetables/corriander.png',
         oldPrice: '$28.99',
         newPrice: '$14.99',
         rating: 4.8,
         reviews: '17k',
-        vendor: 'By Lucky Supermarket',
+        vendor: 'Sold by: 10 venders',
         sold: 18,
         total: 35
     },
     {
         id: 5,
-        name: 'Taylor Farms Broccoli Florets Vegetables',
-        image: '/images/product/product-img6.png',
+        name: 'Fresh Carrots',
+        image: '/images/product/product-img5.png',
         oldPrice: '$28.99',
         newPrice: '$14.99',
         rating: 4.8,
         reviews: '17k',
-        vendor: 'By Lucky Supermarket',
+        vendor: 'Sold by: 5 venders',
         sold: 18,
         total: 35
     },
     {
         id: 6,
-        name: 'Taylor Farms Broccoli Florets Vegetables',
-        image: '/images/organic/product-img20.png',
+        name: 'Green Broccoli',
+        image: '/images/product/brokali.png',
         oldPrice: '$28.99',
         newPrice: '$14.99',
         rating: 4.8,
         reviews: '17k',
-        vendor: 'By Lucky Supermarket',
+        vendor: 'Sold by: 6 venders',
         sold: 18,
         total: 35
     }
@@ -113,15 +167,19 @@ const FEATURED_PRODUCTS = [
 ];
 
 const PROMO_SLIDES = [
-    { title: 'Fresh \n Vegetables', subtitle: 'Get Up To 40% OFF', image: '/images/category/vegitable.png', bg: 'from-[#fff5f0] via-[#ffffff] to-[#f4fcf4]' },
-    { title: 'Organic \n Fruits', subtitle: 'Save Extra 20%', image: '/images/category/fruits.png', bg: 'from-[#fdfcf0] via-[#ffffff] to-[#fff5f0]' },
+    { title: 'Fresh \n Vegetables', subtitle: 'Get Up To 40% OFF', image: '/images/category/vegitable.png', bg: 'from-[#EAF6EF] to-[#EAF6EF]' },
+    { title: 'Organic \n Fruits', subtitle: 'Save Extra 20%', image: '/images/category/fruits.png', bg: 'from-[#F2F3F2] to-[#F2F3F2]' },
     { title: 'Natural \n Drinks', subtitle: 'Best Price Guaranteed', image: '/images/category/drink-juice.png', bg: 'from-[#f0f9ff] via-[#ffffff] to-[#f0f9ff]' },
 ];
 
 export default function CategoryPage() {
     const params = useParams();
     const slug = params.slug as string;
-    const displayName = slug?.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Category';
+    const displayName = (slug || 'Fruits & Vegetables')
+        .replace(/%26/g, '&')
+        .split('-')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
     const [activeIdx, setActiveIdx] = useState(0);
     const scrollRef = React.useRef<HTMLDivElement>(null);
 
@@ -147,99 +205,126 @@ export default function CategoryPage() {
         if (newIdx !== activeIdx) setActiveIdx(newIdx);
     };
 
+    const ProductCard = ({ product }: { product: any }) => (
+        <div className="bg-white border border-[#E2E2E2] rounded-[18px] p-3 flex flex-col relative group transition-all duration-300">
+            <div className="w-full aspect-[1] mb-2 flex items-center justify-center p-2">
+                <Link href={`/product/${product.id}`} className="w-full h-full flex items-center justify-center">
+                    <img src={product.image} alt={product.name} className="max-w-full max-h-full object-contain" />
+                </Link>
+            </div>
+            <h3 className="text-[14px] font-bold text-[#181725] leading-snug mb-3 line-clamp-2 h-10">
+                {product.name}
+            </h3>
+            <div className="flex items-center gap-2 mb-4">
+                <img src="/images/shop.svg" alt="shop" className="w-[12px] h-[14px]" />
+                <span className="text-[11px] text-[#7C7C7C] font-medium">{product.vendor}</span>
+            </div>
+            <button className="w-full py-2.5 bg-[#EAF6EF] rounded-[15px] flex items-center justify-center gap-2 text-[#53B175] text-[13px] font-bold transition-all active:scale-95">
+                Add To Cart
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="9" cy="21" r="1" />
+                    <circle cx="20" cy="21" r="1" />
+                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                </svg>
+            </button>
+        </div>
+    );
+
     return (
         <div className="bg-white min-h-screen">
-            {/* ==================== MOBILE TOP SECTION (DETTO) ==================== */}
+            {/* Global Footer Hide for Mobile on this page */}
+            <style dangerouslySetInnerHTML={{
+                __html: `
+                @media (max-width: 768px) {
+                    footer { display: none !important; }
+                }
+            `}} />
+
+            {/* ==================== MOBILE TOP SECTION ==================== */}
             <div className="md:hidden">
                 {/* Green Theme Bar */}
-                <div className="w-full h-1.5 bg-[#2ca36a]" />
+                <div className="w-full h-[2px] bg-[#53B175] shadow-sm" />
 
                 {/* Main Header */}
-                <header className="bg-white px-4 py-4 flex items-center justify-between border-b border-gray-50">
+                <header className="bg-white px-4 py-3 flex items-center justify-between">
                     <Link href="/">
-                        <ArrowLeft size={24} className="text-[#1e293b]" strokeWidth={2.5} />
+                        <ArrowLeft size={22} className="text-[#181725]" strokeWidth={2.5} />
                     </Link>
-                    <h1 className="text-[18px] font-[800] text-[#1e293b] font-[family-name:var(--font-inter)]">
+                    <h1 className="text-[18px] font-bold text-[#181725] flex-1 text-center">
                         {displayName}
                     </h1>
                     <button className="p-1">
-                        <Search size={24} className="text-[#1e293b] stroke-2" />
+                        <Search size={22} className="text-[#181725]" strokeWidth={2.5} />
                     </button>
                 </header>
 
                 {/* Horizontal Category Select */}
-                <div className="bg-white border-b border-gray-100/80 overflow-x-auto no-scrollbar py-4 px-2">
-                    <div className="flex items-center gap-6 px-4">
-                        {CATEGORIES.map((cat, idx) => (
-                            <div key={idx} className="flex flex-col items-center flex-shrink-0 relative">
-                                <Link
-                                    href={`/category/${cat.name.toLowerCase()}`}
-                                    className={cn(
-                                        "w-[68px] h-[68px] rounded-[20px] flex items-center justify-center overflow-hidden transition-all duration-300",
-                                        idx === 0 ? "bg-[#cceccd] border-2 border-[#2ca36a] shadow-sm" : "bg-[#e9f7ef]"
+                <div className="bg-white overflow-x-auto no-scrollbar py-2">
+                    <div className="flex items-center gap-4 px-4">
+                        {CATEGORIES.map((cat, idx) => {
+                            const isActive = slug?.toLowerCase() === cat.name.toLowerCase() || (idx === 0 && !slug);
+                            return (
+                                <div key={idx} className="flex flex-col items-center flex-shrink-0 relative pb-2 min-w-[75px]">
+                                    <Link
+                                        href={`/category/${cat.name.toLowerCase().replace(/\s+/g, '-')}`}
+                                        className={cn(
+                                            "w-[64px] h-[64px] rounded-[18px] flex items-center justify-center overflow-hidden transition-all duration-300",
+                                            isActive ? "bg-[#EAF6EF] border-2 border-[#53B175]" : "bg-[#F2F3F2]"
+                                        )}
+                                    >
+                                        <img src={cat.image} alt={cat.name} className="w-[60%] h-[60%] object-contain" />
+                                    </Link>
+                                    <span className={cn(
+                                        "text-[12px] font-bold mt-2",
+                                        isActive ? "text-[#53B175]" : "text-[#7C7C7C]"
+                                    )}>
+                                        {cat.name}
+                                    </span>
+                                    {isActive && (
+                                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-[3px] bg-[#53B175] rounded-full"></div>
                                     )}
-                                >
-                                    <img src={cat.image} alt={cat.name} className="w-[65%] h-[65%] object-contain" />
-                                </Link>
-                                <span className={cn(
-                                    "text-[12px] font-[900] mt-3 tracking-tight font-[family-name:var(--font-inter)]",
-                                    idx === 0 ? "text-[#2ca36a]" : "text-[#64748b]"
-                                )}>
-                                    {cat.name}
-                                </span>
-                                {idx === 0 && (
-                                    <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-6 h-[2.5px] bg-[#2ca36a] rounded-full"></div>
-                                )}
-                            </div>
-                        ))}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 
-                {/* Mobile Promo Slider (Poster Component Style) */}
-                <div className="px-4 py-6">
+                {/* Mobile Promo Slider */}
+                <div className="px-4 py-4">
                     <div
                         ref={scrollRef}
                         onScroll={handleScroll}
                         className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar scroll-smooth"
                     >
                         {PROMO_SLIDES.map((slide, idx) => (
-                            <div key={idx} className="min-w-full snap-start pr-0 last:pr-0">
+                            <div key={idx} className="min-w-full snap-start">
                                 <div className={cn(
-                                    "relative h-[115px] rounded-[18px] overflow-hidden bg-gradient-to-r shadow-sm border border-gray-50/50",
+                                    "relative h-[115px] rounded-[18px] overflow-hidden flex items-center bg-gradient-to-r",
                                     slide.bg
                                 )}>
-                                    {/* Background Leaf/Pattern */}
-                                    <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'url("/images/flash-sale/flash-sale-bg1.png")', backgroundSize: '180px' }} />
+                                    <div className="w-[45%] flex items-center justify-center pl-4">
+                                        <img src={slide.image} alt="Featured" className="h-[90px] w-auto object-contain" />
+                                    </div>
 
-                                    <div className="relative z-10 flex items-center justify-between h-full px-5">
-                                        <div className="w-[38%] flex items-center justify-center">
-                                            <img src={slide.image} alt="Featured" className="w-[85%] h-auto object-contain drop-shadow-md" />
-                                        </div>
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center pr-4">
+                                        <h3 className="text-[18px] font-bold text-[#181725] leading-none mb-1 whitespace-pre-line">
+                                            {slide.title}
+                                        </h3>
+                                        <p className="text-[12px] font-bold text-[#53B175] mb-2 uppercase tracking-tight">
+                                            {slide.subtitle}
+                                        </p>
 
-                                        <div className="flex-1 flex flex-col items-center text-center">
-                                            <h3 className="text-[16px] font-[900] text-[#1e293b] leading-tight mb-0.5 font-[family-name:var(--font-inter)] uppercase tracking-wider whitespace-pre-line">
-                                                {slide.title}
-                                            </h3>
-                                            <p className="text-[12px] font-[800] text-[#2ca36a] mb-2 font-[family-name:var(--font-inter)]">
-                                                {slide.subtitle}
-                                            </p>
-
-                                            {/* Dots Indicator */}
-                                            <div className="flex items-center gap-1 mt-1">
-                                                {PROMO_SLIDES.map((_, dotIdx) => (
-                                                    <div
-                                                        key={dotIdx}
-                                                        className={cn(
-                                                            "transition-all duration-300 rounded-full",
-                                                            dotIdx === activeIdx ? "w-4 h-1 bg-[#2ca36a]" : "w-1 h-1 bg-gray-300"
-                                                        )}
-                                                    />
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div className="absolute right-2 top-2">
-                                            <img src="/images/banner/leaf-icon.png" alt="" className="w-5 opacity-40" />
+                                        {/* Dots Indicator */}
+                                        <div className="flex items-center gap-1.5 mt-1">
+                                            {PROMO_SLIDES.map((_, dotIdx) => (
+                                                <div
+                                                    key={dotIdx}
+                                                    className={cn(
+                                                        "transition-all duration-300 rounded-full",
+                                                        dotIdx === activeIdx ? "w-4 h-1 bg-[#53B175]" : "w-1 h-1 bg-gray-300"
+                                                    )}
+                                                />
+                                            ))}
                                         </div>
                                     </div>
                                 </div>
@@ -249,7 +334,7 @@ export default function CategoryPage() {
                 </div>
             </div>
 
-            {/* ==================== DESKTOP SECTION (MODERN IDEA) ==================== */}
+            {/* ==================== DESKTOP SECTION ==================== */}
             <div className="hidden md:block">
                 {/* Desktop Breadcrumb & Header */}
                 <div className="bg-[#f8fff8] py-8 border-b border-gray-100">
@@ -275,10 +360,10 @@ export default function CategoryPage() {
                                         {CATEGORIES.map((cat, idx) => (
                                             <Link
                                                 key={idx}
-                                                href={`/category/${cat.name.toLowerCase()}`}
+                                                href={`/category/${cat.name.toLowerCase().replace(/\s+/g, '-')}`}
                                                 className={cn(
                                                     "flex items-center justify-between group py-1",
-                                                    idx === 0 ? "text-primary" : "text-text-muted hover:text-primary transition-colors"
+                                                    slug?.toLowerCase() === cat.name.toLowerCase() ? "text-primary" : "text-text-muted hover:text-primary transition-colors"
                                                 )}
                                             >
                                                 <div className="flex items-center gap-3">
@@ -380,66 +465,55 @@ export default function CategoryPage() {
                 </div>
             </div>
 
-            {/* ==================== COMMON SECTIONS (MOBILE GRID & DOWN FEATURE) ==================== */}
-            <div className="max-w-[var(--container-max)] mx-auto px-4 md:px-[var(--container-padding)]">
-                {/* Mobile Specific Grid */}
-                <div className="md:hidden grid grid-cols-2 gap-4">
-                    {PRODUCTS.map((product) => (
-                        <Link
-                            href={`/product/${product.id}`}
-                            key={product.id}
-                            className="bg-white rounded-[22px] border border-gray-100 p-3.5 shadow-sm flex flex-col h-full active:bg-gray-50 transition-colors"
-                        >
-                            <div className="relative aspect-square mb-3.5 bg-[#f7f8f7] rounded-[18px] p-4 flex items-center justify-center shrink-0">
-                                <img src={product.image} alt={product.name} className="w-full h-full object-contain" />
-                                <button className="absolute -top-1 -right-1 bg-white text-[#2ca36a] px-3.5 py-2 rounded-full text-[11px] font-[900] shadow-md flex items-center gap-1 border border-[#e9f7ef] font-[family-name:var(--font-inter)]">
-                                    Add <ShoppingCart size={13} strokeWidth={3} />
-                                </button>
-                            </div>
-                            <div className="flex items-center gap-1.5 mb-2">
-                                <span className="text-[10px] text-text-muted line-through font-bold">{product.oldPrice}</span>
-                                <span className="text-[15px] font-[900] text-[#2ca36a] tracking-tighter">{product.newPrice}</span>
-                                <span className="text-[11px] font-bold text-[#64748b]">/Qty</span>
-                            </div>
-                            <div className="flex items-center gap-1 mb-2">
-                                <Star size={12} className="fill-[#ffb800] text-[#ffb800]" />
-                                <span className="text-[12px] font-extrabold text-[#111827]">{product.rating}</span>
-                                <span className="text-[10px] text-text-muted font-bold">({product.reviews})</span>
-                            </div>
-                            <h3 className="text-[13px] font-[800] text-[#111827] leading-[1.3] mb-3 line-clamp-2 h-8 font-[family-name:var(--font-inter)]">
-                                {product.name}
-                            </h3>
-                            <div className="flex items-center gap-2 mb-4">
-                                <div className="p-1 bg-[#f0fdf4] rounded-md">
-                                    <Store size={11} className="text-[#2ca36a]" />
-                                </div>
-                                <span className="text-[10px] text-[#64748b] font-bold italic">{product.vendor}</span>
-                            </div>
-                            <div className="mt-auto">
-                                <div className="w-full h-[3px] bg-gray-100 rounded-full overflow-hidden mb-1.5">
-                                    <div className="h-full bg-[#2ca36a] rounded-full" style={{ width: '51%' }} />
-                                </div>
-                                <div className="flex justify-between items-center text-[10px] font-extrabold text-[#111827]">
-                                    <span>Sold: {product.sold}/{product.total}</span>
-                                </div>
-                            </div>
-                        </Link>
+            {/* ==================== CONTENT SECTIONS ==================== */}
+            <div className="max-w-[var(--container-max)] mx-auto px-4 md:px-[var(--container-padding)] pb-20">
+
+                {/* 1. Vegetable Section (Mobile) */}
+                <div className="md:hidden grid grid-cols-2 gap-3 mt-4">
+                    {VEGETABLES.map((product, idx) => (
+                        <ProductCard key={`${product.id}-${idx}`} product={product} />
                     ))}
                 </div>
 
-                {/* Down Feature Section (Product Showcase) */}
-                <div className="mt-12 md:mt-16">
-                    <ProductShowcase />
+                {/* 2. Flash Sales Today Section (Mobile) */}
+                <div className="md:hidden mt-8">
+                    <h2 className="text-[20px] font-bold text-[#181725] mb-4">Flash Sales Today</h2>
+
+                    {/* Flash Sale Banner */}
+                    <div className="bg-[#E7F6E7] rounded-[22px] p-6 mb-6 flex items-center relative overflow-hidden">
+                        <div className="relative z-10 w-[60%]">
+                            <h3 className="text-[20px] font-bold text-[#181725] leading-tight mb-4">
+                                $5 off on your<br />firstorder
+                            </h3>
+                            <button className="bg-[#53B175] text-white px-6 py-2.5 rounded-[12px] text-[15px] font-bold shadow-sm transition-all active:scale-95">
+                                Shop Now
+                            </button>
+                        </div>
+                        <div className="absolute right-[-10px] top-1/2 -translate-y-1/2 w-[55%]">
+                            <img src="/images/flash-sale/flash-right1 (2).png" alt="Flash Sale" className="w-full h-auto object-contain" />
+                        </div>
+                        {/* Decorative background leaf pattern - conceptual */}
+                        <div className="absolute inset-0 opacity-[0.05] pointer-events-none" style={{ backgroundImage: 'url("/images/category/vegitable.png")', backgroundSize: '100px' }} />
+                    </div>
+
+                    {/* Flash Sale Fruit Grid */}
+                    <div className="grid grid-cols-2 gap-3">
+                        {FRUITS.map((product) => (
+                            <ProductCard key={product.id} product={product} />
+                        ))}
+                    </div>
                 </div>
+
+                {/* Down Feature Section */}
+                {/* <div className="mt-12 md:mt-16">
+                    <ProductShowcase />
+                </div> */}
             </div>
 
             {/* Newsletter Section */}
-            <div className="mt-8 md:mt-12 bg-white">
+            {/* <div className="mt-4 md:mt-12 bg-white">
                 <NewsletterBanner />
-            </div>
-
-            {/* Bottom Space for mobile nav */}
-            <div className="h-10 md:hidden" />
+            </div> */}
         </div>
     );
 }

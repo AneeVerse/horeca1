@@ -79,8 +79,8 @@ export function Navbar() {
                 initialMode={selectedRole}
             />
 
-            {/* Persistent Top Green Line */}
-            <div className="w-full h-[12px] bg-primary sticky top-0 z-[10001] shadow-sm" />
+            {/* Persistent Top Green Line - Scrolls Away */}
+            <div className="w-full h-[12px] bg-primary relative z-[1000] shadow-sm" />
 
             {/* Top Header - Scrolls Away */}
             <header className={cn(
@@ -98,9 +98,9 @@ export function Navbar() {
 
                                 <Link href="/" className="absolute left-1/2 -translate-x-1/2">
                                     <img
-                                        src="/images/login/Horeca1.png"
+                                        src="/Horeca1.png"
                                         alt="Horeca1"
-                                        className="h-6 w-auto object-contain"
+                                        className="h-[22px] w-auto object-contain"
                                     />
                                 </Link>
 
@@ -151,9 +151,7 @@ export function Navbar() {
                         <div className="hidden md:flex items-center justify-between gap-6">
                             {/* Logo */}
                             <Link href="/" className="flex-shrink-0">
-                                <h1 className="text-[clamp(1.25rem,2.2vw,2.125rem)] font-extrabold text-primary flex items-center gap-1">
-                                    Horeca<span className="text-text">Hub</span>
-                                </h1>
+                                <img src="/Horeca1.png" alt="Horeca1" className="h-[26px] w-auto object-contain" />
                             </Link>
 
                             {/* Desktop Search Bar */}
@@ -276,7 +274,7 @@ export function Navbar() {
             {/* Mobile Sidebar - Main Menu */}
             <div
                 className={cn(
-                    "fixed inset-0 z-[200] bg-black/50 transition-opacity duration-300 md:hidden",
+                    "fixed inset-0 z-[2000] bg-black/50 transition-opacity duration-300 md:hidden",
                     isSidebarOpen ? "opacity-100 visible" : "opacity-0 invisible"
                 )}
                 onClick={() => setIsSidebarOpen(false)}
@@ -290,9 +288,7 @@ export function Navbar() {
                 >
                     <div className="flex items-center justify-between">
                         <Link href="/" onClick={() => setIsSidebarOpen(false)}>
-                            <h1 className="text-2xl font-extrabold text-primary flex items-center gap-1">
-                                Horeca<span className="text-text">Hub</span>
-                            </h1>
+                            <img src="/Horeca1.png" alt="Horeca1" className="h-[22px] w-auto object-contain" />
                         </Link>
                         <button className="p-2 hover:bg-gray-100 rounded-full transition-colors" onClick={() => setIsSidebarOpen(false)}>
                             <span className="text-2xl font-light leading-none">×</span>
@@ -323,7 +319,7 @@ export function Navbar() {
             {/* Mobile Sidebar - Categories */}
             <div
                 className={cn(
-                    "fixed inset-0 z-[200] bg-black/50 transition-opacity duration-300 md:hidden",
+                    "fixed inset-0 z-[2000] bg-black/50 transition-opacity duration-300 md:hidden",
                     isCategoriesSidebarOpen ? "opacity-100 visible" : "opacity-0 invisible"
                 )}
                 onClick={() => setIsCategoriesSidebarOpen(false)}
@@ -360,8 +356,10 @@ export function Navbar() {
             </div>
 
             <MobileBottomNav
+                isCategoriesOpen={isCategoriesSidebarOpen}
                 onCategoriesClick={() => setIsCategoriesSidebarOpen(true)}
                 onStoreClick={() => openSearch('stores')}
+                onAccountClick={() => setIsAccountOverlayOpen(true)}
             />
             <MobileSearchOverlay
                 isOpen={isSearchOverlayOpen}
