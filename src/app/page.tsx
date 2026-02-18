@@ -17,6 +17,8 @@ import { ShopByBrands } from "@/components/features/ShopByBrands";
 import { NewArrivals } from "@/components/features/NewArrivals";
 import { FeatureBar } from "@/components/features/FeatureBar";
 import { NewsletterBanner } from "@/components/features/NewsletterBanner";
+import { ProductCategories } from "@/components/features/ProductCategories";
+import { RecommendedCategories } from "@/components/features/RecommendedCategories";
 
 export default function Home() {
   return (
@@ -24,18 +26,20 @@ export default function Home() {
       <Hero />
       <CategoryShowcase />
       <TrustedBy />
-      <FlashSaleBanner />
-      <PromotionBanners />
+      {/* <FlashSaleBanner /> */}
+      {/* <PromotionBanners /> */}
+      <ProductCategories />
       <FlashSale />
-      <FeaturedProducts />
-      <OfferBanners />
-      <RecommendedProducts />
+      <RecommendedCategories />
+      {/* <FeaturedProducts /> */}
+      {/* <OfferBanners /> */}
+      {/* <RecommendedProducts /> */}
       {/* <HotDeals /> */}
       {/* <TopVendors /> */}
       {/* <DailyBestSells /> */}
-      <DeliveryPoster />
+      {/* <DeliveryPoster /> */}
       {/* <OrganicFood /> */}
-      <ProductShowcase />
+      {/* <ProductShowcase /> */}
       {/* <ShopByBrands /> */}
       {/* <NewArrivals /> */}
       <FeatureBar />

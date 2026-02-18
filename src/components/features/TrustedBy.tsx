@@ -21,7 +21,7 @@ export function TrustedBy() {
     const firstSetRef = useRef<HTMLDivElement>(null);
     const offsetRef = useRef(0);
     const rafRef = useRef<number>(0);
-    const speed = 0.5;
+    const speed = 0.3;
 
     const animate = useCallback(() => {
         if (!scrollRef.current || !firstSetRef.current) return;

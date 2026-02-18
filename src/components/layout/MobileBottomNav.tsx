@@ -9,10 +9,11 @@ import { cn } from '@/lib/utils';
 interface MobileBottomNavProps {
     onCategoriesClick?: () => void;
     onStoreClick?: () => void;
+    onAccountClick?: () => void;
     isCategoriesOpen?: boolean;
 }
 
-export function MobileBottomNav({ onCategoriesClick, onStoreClick, isCategoriesOpen }: MobileBottomNavProps) {
+export function MobileBottomNav({ onCategoriesClick, onStoreClick, onAccountClick, isCategoriesOpen }: MobileBottomNavProps) {
     const pathname = usePathname();
 
     const navItems = [
@@ -39,7 +40,8 @@ export function MobileBottomNav({ onCategoriesClick, onStoreClick, isCategoriesO
             id: 'profile',
             label: 'Profile',
             icon: '/images/mobile-nav/profile.svg',
-            href: '/settings',
+            href: '/account',
+            onClick: onAccountClick,
         }
     ];
 
