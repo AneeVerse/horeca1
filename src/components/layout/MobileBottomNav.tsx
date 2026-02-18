@@ -4,52 +4,41 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import {
-    Home,
-    Store,
-    ShoppingCart,
-    Package,
-    Settings
-} from 'lucide-react';
+
 
 interface MobileBottomNavProps {
     onCategoriesClick?: () => void;
     onStoreClick?: () => void;
+    isCategoriesOpen?: boolean;
 }
 
-export function MobileBottomNav({ onCategoriesClick, onStoreClick }: MobileBottomNavProps) {
+export function MobileBottomNav({ onCategoriesClick, onStoreClick, isCategoriesOpen }: MobileBottomNavProps) {
     const pathname = usePathname();
 
     const navItems = [
         {
             id: 'home',
             label: 'Home',
-            icon: Home,
+            icon: '/images/mobile-nav/home.svg',
             href: '/',
         },
         {
-            id: 'store',
-            label: 'Store',
-            icon: Store,
-            href: '/category', // Match any category page
-            onClick: onStoreClick,
-        },
-        {
-            id: 'cart',
-            label: 'Cart',
-            icon: ShoppingCart,
-            href: '/cart',
+            id: 'categories',
+            label: 'Categories',
+            icon: '/images/mobile-nav/catagories.svg',
+            href: '/category',
+            onClick: onCategoriesClick,
         },
         {
             id: 'order',
             label: 'Order',
-            icon: Package,
+            icon: '/images/mobile-nav/order.svg',
             href: '/orders',
         },
         {
-            id: 'setting',
-            label: 'Setting',
-            icon: Settings,
+            id: 'profile',
+            label: 'Profile',
+            icon: '/images/mobile-nav/profile.svg',
             href: '/settings',
         }
     ];
@@ -63,30 +52,32 @@ export function MobileBottomNav({ onCategoriesClick, onStoreClick }: MobileBotto
                 WebkitBackfaceVisibility: 'hidden'
             }}
         >
-            <div className="flex items-center justify-around h-full px-2">
+            <div className="flex items-center justify-around h-full px-4">
                 {navItems.map((item) => {
-                    const isActive = item.href === '/'
-                        ? pathname === '/'
-                        : pathname?.startsWith(item.href);
-
-                    const Icon = item.icon;
+                    const isActive = item.id === 'categories'
+                        ? (isCategoriesOpen || pathname?.startsWith(item.href))
+                        : (item.href === '/'
+                            ? pathname === '/'
+                            : pathname?.startsWith(item.href));
 
                     const content = (
-                        <div className="flex flex-col items-center justify-center gap-1">
-                            <Icon
-                                size={24}
-                                className={cn(
-                                    "transition-all duration-300",
-                                    isActive ? "text-[#33a852]" : "text-[#1a1a1a]"
-                                )}
-                                strokeWidth={isActive ? 2.5 : 2}
+                        <div className="flex flex-col items-center justify-center">
+                            <div
+                                className="transition-all duration-300"
+                                style={{
+                                    backgroundColor: isActive ? '#53B175' : '#181725',
+                                    maskImage: `url(${item.icon})`,
+                                    WebkitMaskImage: `url(${item.icon})`,
+                                    maskRepeat: 'no-repeat',
+                                    WebkitMaskRepeat: 'no-repeat',
+                                    maskSize: 'contain',
+                                    WebkitMaskSize: 'contain',
+                                    maskPosition: 'center',
+                                    WebkitMaskPosition: 'center',
+                                    height: '40px',
+                                    width: item.id === 'categories' ? '60px' : '35px',
+                                }}
                             />
-                            <span className={cn(
-                                "text-[10px] font-bold tracking-tight transition-colors duration-300",
-                                isActive ? "text-[#33a852]" : "text-[#1a1a1a]"
-                            )}>
-                                {item.label}
-                            </span>
                         </div>
                     );
 
@@ -96,7 +87,7 @@ export function MobileBottomNav({ onCategoriesClick, onStoreClick }: MobileBotto
                                 key={item.id}
                                 onClick={(e) => {
                                     e.preventDefault();
-                                    (item as any).onClick?.();
+                                    item.onClick?.();
                                 }}
                                 className="flex-1 flex flex-col items-center justify-center h-full active:scale-95 transition-transform border-none bg-transparent outline-none"
                             >

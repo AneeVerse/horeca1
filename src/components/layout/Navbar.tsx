@@ -79,8 +79,8 @@ export function Navbar() {
                 initialMode={selectedRole}
             />
 
-            {/* Persistent Top Green Line */}
-            <div className="w-full h-[12px] bg-primary sticky top-0 z-[10001] shadow-sm" />
+            {/* Persistent Top Green Line - Scrolls Away */}
+            <div className="w-full h-[12px] bg-primary relative z-[1000] shadow-sm" />
 
             {/* Top Header - Scrolls Away */}
             <header className={cn(
@@ -276,7 +276,7 @@ export function Navbar() {
             {/* Mobile Sidebar - Main Menu */}
             <div
                 className={cn(
-                    "fixed inset-0 z-[200] bg-black/50 transition-opacity duration-300 md:hidden",
+                    "fixed inset-0 z-[2000] bg-black/50 transition-opacity duration-300 md:hidden",
                     isSidebarOpen ? "opacity-100 visible" : "opacity-0 invisible"
                 )}
                 onClick={() => setIsSidebarOpen(false)}
@@ -323,7 +323,7 @@ export function Navbar() {
             {/* Mobile Sidebar - Categories */}
             <div
                 className={cn(
-                    "fixed inset-0 z-[200] bg-black/50 transition-opacity duration-300 md:hidden",
+                    "fixed inset-0 z-[2000] bg-black/50 transition-opacity duration-300 md:hidden",
                     isCategoriesSidebarOpen ? "opacity-100 visible" : "opacity-0 invisible"
                 )}
                 onClick={() => setIsCategoriesSidebarOpen(false)}
@@ -360,6 +360,7 @@ export function Navbar() {
             </div>
 
             <MobileBottomNav
+                isCategoriesOpen={isCategoriesSidebarOpen}
                 onCategoriesClick={() => setIsCategoriesSidebarOpen(true)}
                 onStoreClick={() => openSearch('stores')}
             />

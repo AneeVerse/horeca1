@@ -1,5 +1,6 @@
 import { Hero } from "@/components/features/Hero";
 import { CategoryShowcase } from "@/components/features/CategoryShowcase";
+import { TrustedBy } from "@/components/features/TrustedBy";
 import { FlashSaleBanner } from "@/components/features/FlashSaleBanner";
 import { PromotionBanners } from "@/components/features/PromotionBanners";
 import { FlashSale } from "@/components/features/FlashSale";
@@ -22,6 +23,7 @@ export default function Home() {
     <div className="flex flex-col w-full">
       <Hero />
       <CategoryShowcase />
+      <TrustedBy />
       <FlashSaleBanner />
       <PromotionBanners />
       <FlashSale />
