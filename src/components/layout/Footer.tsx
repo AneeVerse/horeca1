@@ -68,7 +68,7 @@ export function Footer() {
             "w-full bg-white relative overflow-hidden pb-20 md:pb-0",
             isCartPage && "hidden md:block"
         )}>
-            <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] relative z-10">
+            <div className="max-w-[var(--container-max)] mx-auto px-5 md:px-[var(--container-padding)] relative z-10">
                 {/* Main Footer Section */}
                 <div className=" pb-8 md:py-16 flex flex-col lg:flex-row justify-between gap-10 lg:gap-0">
 
