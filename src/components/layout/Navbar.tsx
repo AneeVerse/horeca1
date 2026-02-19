@@ -57,7 +57,10 @@ export function Navbar() {
     ];
 
     const pathname = usePathname();
+    const isAdminPage = pathname?.startsWith('/admin');
     const isCategoryPage = pathname?.startsWith('/category/');
+
+    if (isAdminPage) return null;
 
     return (
         <>
