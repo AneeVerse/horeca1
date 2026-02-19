@@ -114,11 +114,11 @@ export function FeaturedProducts() {
                             className="group bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 flex flex-col h-full"
                         >
                             {/* Product Image & Add Button */}
-                            <div className="relative aspect-square mb-4 bg-gray-50 rounded-xl overflow-hidden p-4 flex items-center justify-center">
+                            <div className="relative aspect-square mb-4 bg-gray-50 rounded-xl overflow-hidden p-0.5 flex items-center justify-center">
                                 <img
                                     src={product.image}
                                     alt={product.name}
-                                    className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110"
+                                    className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110 scale-[1.2]"
                                 />
                                 <button className="absolute top-2 right-2 flex items-center gap-1.5 bg-[#e8f9e9] text-primary px-3 py-1.5 rounded-full text-[12px] font-bold hover:bg-primary hover:text-white transition-all shadow-sm">
                                     Add <ShoppingCart size={14} />

@@ -215,11 +215,11 @@ export function RecommendedProducts() {
                             )}
 
                             {/* Image */}
-                            <div className="aspect-square mb-4 bg-gray-50/50 rounded-xl p-4 flex items-center justify-center overflow-hidden">
+                            <div className="aspect-square mb-4 bg-gray-50/50 rounded-xl p-0.5 flex items-center justify-center overflow-hidden">
                                 <img
                                     src={product.image}
                                     alt={product.name}
-                                    className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110"
+                                    className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110 scale-[1.2]"
                                 />
                             </div>
 

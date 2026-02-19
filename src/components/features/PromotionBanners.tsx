@@ -46,11 +46,11 @@ export function PromotionBanners() {
                 </div>
 
                 {/* Scrollable Container on Mobile, Grid on Desktop */}
-                <div className="flex overflow-x-auto md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 no-scrollbar snap-x snap-mandatory">
+                <div className="flex overflow-x-auto md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 no-scrollbar snap-x snap-mandatory ">
                     {BANNERS.map((banner, idx) => (
                         <div
                             key={idx}
-                            className="relative min-w-[130px] md:min-w-0 flex-shrink-0 rounded-[18px] p-3 md:p-6 lg:p-8 overflow-hidden snap-start transition-transform duration-300 md:hover:shadow-lg h-[100px] md:h-[200px] lg:h-[240px] flex flex-col justify-between"
+                            className="relative min-w-[147px] w-[147px] h-[117.52px] md:min-w-0 md:w-full md:h-[200px] lg:h-[240px] flex-shrink-0 rounded-[18px] p-3 md:p-6 lg:p-8 overflow-hidden snap-start transition-transform duration-300 md:hover:shadow-lg flex flex-col justify-between"
                             style={{ backgroundColor: banner.bgColor }}
                         >
                             {/* Main Banner Image (Top-right asset) */}

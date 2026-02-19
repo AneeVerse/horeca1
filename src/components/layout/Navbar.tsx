@@ -35,11 +35,14 @@ export function Navbar() {
     const [isAuthOverlayOpen, setIsAuthOverlayOpen] = React.useState(false);
     const [selectedRole, setSelectedRole] = React.useState<'customer' | 'vendor'>('customer');
     const [searchTab, setSearchTab] = React.useState<'items' | 'stores'>('items');
+    const [isNavSearchFocused, setIsNavSearchFocused] = React.useState(false);
+    const [navSearchQuery, setNavSearchQuery] = React.useState('');
     const { totalItems } = useCart();
     const { selectedAddress } = useAddress();
 
-    const openSearch = (tab: 'items' | 'stores' = 'items') => {
+    const openSearch = (tab: 'items' | 'stores' = 'items', initialQuery = '') => {
         setSearchTab(tab);
+        setNavSearchQuery(initialQuery);
         setIsSearchOverlayOpen(true);
     };
 
@@ -58,8 +61,8 @@ export function Navbar() {
 
     return (
         <>
-            {/* Splash Screen */}
-            <SplashScreen />
+            {/* Splash Screen - Removed as per user request to fix intrusive startup animation */}
+            {/* <SplashScreen /> */}
 
             {/* Account Selection Overlay */}
             <AccountTypeSelection
@@ -133,15 +136,26 @@ export function Navbar() {
                             {/* Row 3: Search Bar */}
                             <div className="px-1">
                                 <div
-                                    onClick={() => setIsSearchOverlayOpen(true)}
-                                    className="flex items-center gap-3 px-4 py-3 bg-[#F7F7F7] border border-gray-100 rounded-2xl cursor-pointer shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
+                                    className={cn(
+                                        "flex items-center gap-3 px-4 py-3 bg-[#F7F7F7] border rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all duration-300",
+                                        isNavSearchFocused ? "border-[#53B175] bg-white ring-1 ring-[#53B175]/10" : "border-gray-100"
+                                    )}
                                 >
-                                    <Search size={20} className="text-gray-400" />
+                                    <Search size={20} className={cn("transition-colors", isNavSearchFocused ? "text-[#53B175]" : "text-gray-400")} />
                                     <input
                                         type="text"
                                         placeholder="search for product or brand,store..."
-                                        className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 cursor-pointer"
-                                        readOnly
+                                        className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 font-medium"
+                                        onFocus={() => setIsNavSearchFocused(true)}
+                                        onBlur={() => setIsNavSearchFocused(false)}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val.length > 0) {
+                                                openSearch('items', val);
+                                                // Reset the small input after opening overlay
+                                                e.target.value = '';
+                                            }
+                                        }}
                                     />
                                 </div>
                             </div>
@@ -363,8 +377,12 @@ export function Navbar() {
             />
             <MobileSearchOverlay
                 isOpen={isSearchOverlayOpen}
-                onClose={() => setIsSearchOverlayOpen(false)}
+                onClose={() => {
+                    setIsSearchOverlayOpen(false);
+                    setNavSearchQuery('');
+                }}
                 initialTab={searchTab}
+                initialQuery={navSearchQuery}
             />
 
             <LocationSelectionOverlay

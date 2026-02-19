@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 
 interface Product {
+    id: string;
     name: string;
     image: string;
     soldBy: number;
@@ -24,12 +25,14 @@ const CATEGORIES: Category[] = [
         icon: '/images/fruits-vegetables/vegetable-logo.png',
         products: [
             {
+                id: '1001',
                 name: 'Onion 1 kg',
                 image: '/images/fruits-vegetables/onion.png',
                 soldBy: 6,
                 priceRange: 'Rs 14.99 - Rs 22.99'
             },
             {
+                id: '1002',
                 name: 'Coriander 200 gms Bunch',
                 image: '/images/fruits-vegetables/corriander.png',
                 soldBy: 6,
@@ -43,12 +46,14 @@ const CATEGORIES: Category[] = [
         icon: '/images/dairy/dairy-logo.png',
         products: [
             {
+                id: '1003',
                 name: 'Amul Butter 100 gms',
                 image: '/images/dairy/amul-butter.png',
                 soldBy: 8,
                 priceRange: 'Rs 51.99 - Rs 59.99'
             },
             {
+                id: '1004',
                 name: 'Amul Cheese Block 400 gms',
                 image: '/images/dairy/amul-cheese.png',
                 soldBy: 8,
@@ -66,18 +71,20 @@ const ProductCard = ({ product }: { product: Product }) => (
         </button>
 
         {/* Product Image */}
-        <div className="w-full aspect-square md:aspect-auto md:h-[220px] flex items-center justify-center p-2 mb-2">
+        <Link href={`/product/${product.id}`} className="w-full aspect-square md:aspect-auto md:h-[220px] flex items-center justify-center p-2 mb-2 overflow-hidden">
             <img
                 src={product.image}
                 alt={product.name}
-                className="max-w-full max-h-full object-contain"
+                className="max-w-full max-h-full object-contain scale-[1.15]"
             />
-        </div>
+        </Link>
 
         {/* Product Info */}
-        <h4 className="text-[14px] md:text-[15px] font-semibold text-[#1e293b] mb-2 leading-[100%] tracking-[0%] line-clamp-2 min-h-[28px]">
-            {product.name}
-        </h4>
+        <Link href={`/product/${product.id}`}>
+            <h4 className="text-[14px] md:text-[15px] font-semibold text-[#1e293b] mb-2 leading-[100%] tracking-[0%] line-clamp-2 min-h-[28px] hover:text-[#53B175] transition-colors">
+                {product.name}
+            </h4>
+        </Link>
 
         <div className="flex items-center gap-1.5 mb-2">
             <img src="/images/shop.svg" alt="shop" className="w-[11px] h-[13px]" />
