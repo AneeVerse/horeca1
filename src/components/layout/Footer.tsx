@@ -59,6 +59,9 @@ const SOCIAL_LINKS = [
 export function Footer() {
     const pathname = usePathname();
     const isCartPage = pathname === '/cart';
+    const isProductPage = pathname?.startsWith('/product/');
+
+    if (isProductPage) return null;
 
     return (
         <footer className={cn(

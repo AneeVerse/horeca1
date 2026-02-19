@@ -58,8 +58,8 @@ export function Navbar() {
 
     return (
         <>
-            {/* Splash Screen */}
-            <SplashScreen />
+            {/* Splash Screen - Removed as per user request to fix intrusive startup animation */}
+            {/* <SplashScreen /> */}
 
             {/* Account Selection Overlay */}
             <AccountTypeSelection

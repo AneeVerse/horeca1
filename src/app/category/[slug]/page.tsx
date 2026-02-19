@@ -32,25 +32,25 @@ const CATEGORIES = [
 
 const VEGETABLES = [
     {
-        id: 1,
+        id: 3001,
         name: 'Ladies Finger 1 kg',
         image: '/images/product/product-img1.png',
         vendor: 'Sold by: 6 venders',
     },
     {
-        id: 2,
+        id: 3002,
         name: 'Desi Fresh Tomato 1 kg',
         image: '/images/product/product-img3.png',
         vendor: 'Sold by: 12 venders',
     },
     {
-        id: 3,
+        id: 3003,
         name: 'Ladies Finger 1 kg',
         image: '/images/product/product-img1.png',
         vendor: 'Sold by: 6 venders',
     },
     {
-        id: 4,
+        id: 3004,
         name: 'Desi Fresh Tomato 1 kg',
         image: '/images/product/product-img3.png',
         vendor: 'Sold by: 12 venders',
@@ -59,25 +59,25 @@ const VEGETABLES = [
 
 const FRUITS = [
     {
-        id: 101,
+        id: 4001,
         name: 'Nagpur Oranges 1 kg',
         image: '/images/category/fruits.png',
         vendor: 'Sold by: 12 venders',
     },
     {
-        id: 102,
+        id: 4002,
         name: 'Kashmir Apple 1 kg',
         image: '/images/recom-product/product-img10.png',
         vendor: 'Sold by: 6 venders',
     },
     {
-        id: 103,
+        id: 4003,
         name: 'Nagpur Oranges 1 kg',
         image: '/images/category/fruits.png',
         vendor: 'Sold by: 12 venders',
     },
     {
-        id: 104,
+        id: 4004,
         name: 'Kashmir Apple 1 kg',
         image: '/images/recom-product/product-img10.png',
         vendor: 'Sold by: 6 venders',
@@ -86,9 +86,9 @@ const FRUITS = [
 
 const PRODUCTS = [
     {
-        id: 1,
+        id: 3001,
         name: 'Ladies Finger 1 kg',
-        image: '/images/product/product-img1.png', // Assuming correct veg image or using placeholder
+        image: '/images/product/product-img1.png',
         oldPrice: '$28.99',
         newPrice: '$14.99',
         rating: 4.8,
@@ -98,7 +98,7 @@ const PRODUCTS = [
         total: 35
     },
     {
-        id: 2,
+        id: 3002,
         name: 'Desi Fresh Tomato 1 kg',
         image: '/images/product/product-img3.png',
         oldPrice: '$28.99',
@@ -110,7 +110,7 @@ const PRODUCTS = [
         total: 35
     },
     {
-        id: 3,
+        id: 3003,
         name: 'Onion 1 kg',
         image: '/images/fruits-vegetables/onion.png',
         oldPrice: '$28.99',
@@ -122,7 +122,7 @@ const PRODUCTS = [
         total: 35
     },
     {
-        id: 4,
+        id: 3004,
         name: 'Coriander 200 gms Bunch',
         image: '/images/fruits-vegetables/corriander.png',
         oldPrice: '$28.99',
@@ -134,7 +134,7 @@ const PRODUCTS = [
         total: 35
     },
     {
-        id: 5,
+        id: 3005,
         name: 'Fresh Carrots',
         image: '/images/product/product-img5.png',
         oldPrice: '$28.99',
@@ -146,7 +146,7 @@ const PRODUCTS = [
         total: 35
     },
     {
-        id: 6,
+        id: 3006,
         name: 'Green Broccoli',
         image: '/images/product/brokali.png',
         oldPrice: '$28.99',
@@ -207,14 +207,16 @@ export default function CategoryPage() {
 
     const ProductCard = ({ product }: { product: any }) => (
         <div className="bg-white border border-[#E2E2E2] rounded-[18px] p-3 flex flex-col relative group transition-all duration-300">
-            <div className="w-full aspect-[1] mb-2 flex items-center justify-center p-2">
+            <div className="w-full aspect-[1] mb-2 flex items-center justify-center p-2 overflow-hidden">
                 <Link href={`/product/${product.id}`} className="w-full h-full flex items-center justify-center">
-                    <img src={product.image} alt={product.name} className="max-w-full max-h-full object-contain" />
+                    <img src={product.image} alt={product.name} className="max-w-full max-h-full object-contain scale-[1.15]" />
                 </Link>
             </div>
-            <h3 className="text-[14px] font-bold text-[#181725] leading-snug mb-3 line-clamp-2 h-10">
-                {product.name}
-            </h3>
+            <Link href={`/product/${product.id}`}>
+                <h3 className="text-[14px] font-bold text-[#181725] leading-snug mb-3 line-clamp-2 h-10 hover:text-[#53B175] transition-colors">
+                    {product.name}
+                </h3>
+            </Link>
             <div className="flex items-center gap-2 mb-4">
                 <img src="/images/shop.svg" alt="shop" className="w-[12px] h-[14px]" />
                 <span className="text-[11px] text-[#7C7C7C] font-medium">{product.vendor}</span>
