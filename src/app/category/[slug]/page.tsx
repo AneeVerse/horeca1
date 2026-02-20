@@ -14,7 +14,7 @@ import {
     LayoutGrid,
     List
 } from 'lucide-react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ProductShowcase } from '@/components/features/ProductShowcase';
 import { NewsletterBanner } from '@/components/features/NewsletterBanner';
@@ -174,7 +174,13 @@ const PROMO_SLIDES = [
 
 export default function CategoryPage() {
     const params = useParams();
+    const searchParams = useSearchParams();
+    const router = useRouter();
     const slug = params.slug as string;
+
+    // Check for expanded state in URL
+    const isExpanded = searchParams.get('exp') === '1';
+
     const displayName = (slug || 'Fruits & Vegetables')
         .replace(/%26/g, '&')
         .split('-')
@@ -182,6 +188,26 @@ export default function CategoryPage() {
         .join(' ');
     const [activeIdx, setActiveIdx] = useState(0);
     const scrollRef = React.useRef<HTMLDivElement>(null);
+
+    // Toggle expansion via URL to persist across navigations
+    const toggleExpanded = () => {
+        const newExpanded = !isExpanded;
+        const currentParams = new URLSearchParams(searchParams.toString());
+        if (newExpanded) {
+            currentParams.set('exp', '1');
+        } else {
+            currentParams.delete('exp');
+        }
+        router.push(`?${currentParams.toString()}`, { scroll: false });
+    };
+
+    // Robust comparison for active tab
+    const isTabActive = (catName: string, currentSlug: string) => {
+        const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+        // Default to first item if no slug (usually Fruits & Vegetables in this context)
+        if (!currentSlug && normalize(catName) === 'vegetables') return true;
+        return normalize(decodeURIComponent(currentSlug || '')) === normalize(catName);
+    };
 
     React.useEffect(() => {
         const interval = setInterval(() => {
@@ -260,32 +286,49 @@ export default function CategoryPage() {
                     </button>
                 </header>
 
-                {/* Horizontal Category Select */}
-                <div className="bg-white overflow-x-auto no-scrollbar py-2">
-                    <div className="flex items-center gap-4 px-4">
-                        {CATEGORIES.map((cat, idx) => {
-                            const isActive = slug?.toLowerCase() === cat.name.toLowerCase() || (idx === 0 && !slug);
+                {/* Expandable Category Tab */}
+                <div className="bg-white px-4 pt-1 pb-4">
+                    <div className="flex items-center justify-end mb-3">
+                        <button
+                            onClick={toggleExpanded}
+                            className="text-[#53B175] font-bold text-[13px] flex items-center gap-1"
+                        >
+                            {isExpanded ? "Show Less" : "See All"}
+                            {!isExpanded && <ChevronRight size={16} />}
+                        </button>
+                    </div>
+
+                    {/* Category Grid - 4 columns */}
+                    <div className="grid grid-cols-4 gap-x-2 gap-y-6">
+                        {(isExpanded ? CATEGORIES : CATEGORIES.slice(0, 4)).map((cat, idx) => {
+                            const isActive = isTabActive(cat.name, slug);
                             return (
-                                <div key={idx} className="flex flex-col items-center flex-shrink-0 relative pb-2 min-w-[75px]">
-                                    <Link
-                                        href={`/category/${cat.name.toLowerCase().replace(/\s+/g, '-')}`}
+                                <Link
+                                    key={idx}
+                                    href={`/category/${cat.name.toLowerCase().replace(/\s+/g, '-')}${isExpanded ? '?exp=1' : ''}`}
+                                    className="flex flex-col items-center"
+                                >
+                                    {/* Image Box */}
+                                    <div
                                         className={cn(
-                                            "w-[64px] h-[64px] rounded-[18px] flex items-center justify-center overflow-hidden transition-all duration-300",
+                                            "w-full aspect-square rounded-[18px] flex items-center justify-center mb-2 overflow-hidden transition-all",
                                             isActive ? "bg-[#EAF6EF] border-2 border-[#53B175]" : "bg-[#F2F3F2]"
                                         )}
                                     >
-                                        <img src={cat.image} alt={cat.name} className="w-[60%] h-[60%] object-contain" />
-                                    </Link>
-                                    <span className={cn(
-                                        "text-[12px] font-bold mt-2",
-                                        isActive ? "text-[#53B175]" : "text-[#7C7C7C]"
+                                        <img
+                                            src={cat.image}
+                                            alt={cat.name}
+                                            className="w-[70%] h-[70%] object-contain"
+                                        />
+                                    </div>
+                                    {/* Category Name */}
+                                    <p className={cn(
+                                        "text-[10px] text-center font-bold leading-[1.2]",
+                                        isActive ? "text-[#53B175]" : "text-[#181725]"
                                     )}>
                                         {cat.name}
-                                    </span>
-                                    {isActive && (
-                                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-[3px] bg-[#53B175] rounded-full"></div>
-                                    )}
-                                </div>
+                                    </p>
+                                </Link>
                             );
                         })}
                     </div>
