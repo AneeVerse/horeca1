@@ -49,16 +49,16 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
 
         if (authMode === 'login') {
             if (!phoneNumber) newErrors.phone = 'Please fill this field';
-            // Mock login - usually would check OTP too
         } else {
             // Register validation
             if (!fullName) newErrors.fullName = 'Please fill this field';
             if (!phoneNumber) newErrors.phone = 'Please fill this field';
 
-            if (userRole === 'customer') {
+            if (userRole === 'vendor') {
+                if (!businessName) newErrors.businessName = 'Please fill this field';
                 if (!email) newErrors.email = 'Please fill this field';
             } else {
-                if (!businessName) newErrors.businessName = 'Please fill this field';
+                // Customer has address now
                 if (!address1) newErrors.address = 'Please fill this field';
                 if (!pincode) newErrors.pincode = 'Please fill this field';
                 if (!city) newErrors.city = 'Please fill this field';
@@ -316,8 +316,26 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                                 {errors.fullName && <p className="text-[10px] text-red-500 ml-1">{errors.fullName}</p>}
                             </div>
 
-                            {userRole === 'customer' ? (
+                            {userRole === 'vendor' ? (
                                 <>
+                                    {/* Vendor: Simple + Business Name + Email */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Business Name</label>
+                                        <input
+                                            type="text"
+                                            value={businessName}
+                                            onChange={(e) => {
+                                                setBusinessName(e.target.value);
+                                                if (errors.businessName) setErrors(prev => ({ ...prev, businessName: '' }));
+                                            }}
+                                            placeholder="Enter your restaurant name"
+                                            className={cn(
+                                                "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
+                                                errors.businessName ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                            )}
+                                        />
+                                        {errors.businessName && <p className="text-[10px] text-red-500 ml-1">{errors.businessName}</p>}
+                                    </div>
                                     <div className="space-y-1.5">
                                         <label className="text-[12px] font-bold text-gray-800 ml-1">Email</label>
                                         <input
@@ -355,23 +373,7 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                                 </>
                             ) : (
                                 <>
-                                    <div className="space-y-1.5">
-                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Business Name</label>
-                                        <input
-                                            type="text"
-                                            value={businessName}
-                                            onChange={(e) => {
-                                                setBusinessName(e.target.value);
-                                                if (errors.businessName) setErrors(prev => ({ ...prev, businessName: '' }));
-                                            }}
-                                            placeholder="Enter your restaurant name"
-                                            className={cn(
-                                                "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
-                                                errors.businessName ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
-                                            )}
-                                        />
-                                        {errors.businessName && <p className="text-[10px] text-red-500 ml-1">{errors.businessName}</p>}
-                                    </div>
+                                    {/* Customer: Complex Address - No Business Name */}
                                     <div className="space-y-1.5">
                                         <label className="text-[12px] font-bold text-gray-800 ml-1">Phone number</label>
                                         <input
