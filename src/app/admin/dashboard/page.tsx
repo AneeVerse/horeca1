@@ -318,7 +318,8 @@ export default function DashboardPage() {
                                 <th className="px-6 text-center text-[13px] font-bold text-[#4B4B4B]">Customers</th>
                                 <th className="px-6 text-center text-[13px] font-bold text-[#4B4B4B]">Vendor</th>
                                 <th className="px-6 text-center text-[13px] font-bold text-[#4B4B4B]">Status</th>
-                                <th className="px-6 text-center text-[13px] font-bold text-[#4B4B4B] last:rounded-r-[10px]">Date</th>
+                                <th className="px-6 text-center text-[13px] font-bold text-[#4B4B4B]">Date</th>
+                                <th className="px-6 text-center text-[13px] font-bold text-[#4B4B4B] last:rounded-r-[10px]">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#EEEEEE]">
@@ -340,13 +341,20 @@ export default function DashboardPage() {
                                         </div>
                                     </td>
                                     <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-medium">{row.date}</td>
+                                    <td className="py-5 px-6 text-center">
+                                        <div className="flex justify-center">
+                                            <Link href={`/admin/orders/${row.id}`} className="bg-[#299E60] hover:bg-[#238b54] text-white text-[12px] font-bold h-[28px] px-4 rounded-[5px] transition-colors cursor-pointer flex items-center justify-center">
+                                                View Details
+                                            </Link>
+                                        </div>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
                 <div className="mt-8 flex justify-center">
-                    <button className="flex items-center justify-center gap-[3px] w-[149px] h-[41px] border border-[#299E60] rounded-[5px] text-[14px] font-bold text-[#299E60] hover:bg-[#EEF8F1] transition-all pt-[4px] pb-[4px] pl-[3px] pr-[11px]">
+                    <button className="flex items-center justify-center gap-[3px] w-[149px] h-[41px] border border-[#299E60] rounded-[5px] text-[14px] font-bold text-[#299E60] hover:bg-[#EEF8F1] transition-all pt-[4px] pb-[4px] pl-[3px] pr-[11px] cursor-pointer">
                         <span>View all</span> <ChevronRight size={14} className="text-[#299E60]" />
                     </button>
                 </div>
