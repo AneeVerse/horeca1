@@ -17,6 +17,16 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
     const [phoneNumber, setPhoneNumber] = useState('');
     const [otp, setOtp] = useState(['', '', '', '']);
     const [rememberMe, setRememberMe] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
+    // Field state
+    const [fullName, setFullName] = useState('');
+    const [email, setEmail] = useState('');
+    const [businessName, setBusinessName] = useState('');
+    const [address1, setAddress1] = useState('');
+    const [address2, setAddress2] = useState('');
+    const [pincode, setPincode] = useState('');
+    const [city, setCity] = useState('');
 
     if (!isOpen) return null;
 
@@ -34,12 +44,36 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
     };
 
     const handleNext = () => {
-        if (authMode === 'register') {
-            if (userRole === 'customer') {
-                setStep('otp');
+        setErrors({});
+        const newErrors: Record<string, string> = {};
+
+        if (authMode === 'login') {
+            if (!phoneNumber) newErrors.phone = 'Please fill this field';
+        } else {
+            // Register validation
+            if (!fullName) newErrors.fullName = 'Please fill this field';
+            if (!phoneNumber) newErrors.phone = 'Please fill this field';
+
+            if (userRole === 'vendor') {
+                if (!businessName) newErrors.businessName = 'Please fill this field';
+                if (!email) newErrors.email = 'Please fill this field';
             } else {
-                setStep('success');
+                // Customer has address now
+                if (!address1) newErrors.address = 'Please fill this field';
+                if (!pincode) newErrors.pincode = 'Please fill this field';
+                if (!city) newErrors.city = 'Please fill this field';
             }
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            return;
+        }
+
+        if (authMode === 'register') {
+            setStep('otp'); // Now shows for BOTH customer and vendor
+        } else {
+            handleClose();
         }
     };
 
@@ -211,18 +245,21 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                                     <input
                                         type="tel"
                                         value={phoneNumber}
-                                        onChange={(e) => setPhoneNumber(e.target.value)}
+                                        onChange={(e) => {
+                                            setPhoneNumber(e.target.value);
+                                            if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
+                                        }}
                                         placeholder=""
-                                        autoComplete="one-time-code"
-                                        autoCorrect="off"
-                                        spellCheck="false"
-                                        data-lpignore="true"
-                                        className="w-full pl-[90px] pr-24 py-4 bg-white border border-gray-200 rounded-lg text-sm font-bold outline-none focus:border-[#33a852] transition-colors"
+                                        className={cn(
+                                            "w-full pl-[90px] pr-24 py-4 bg-white border rounded-lg text-sm font-bold outline-none transition-colors",
+                                            errors.phone ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                        )}
                                     />
                                     <button className="absolute right-2 bg-[#33a852] text-white text-[11px] font-bold px-3 py-2.5 rounded-md hover:bg-[#2d9448] transition-colors">
                                         Send OTP
                                     </button>
                                 </div>
+                                {errors.phone && <p className="text-[10px] text-red-500 ml-1 mt-0.5">{errors.phone}</p>}
                             </div>
 
                             {/* OTP Field (Login Only) */}
@@ -261,88 +298,157 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                     ) : (
                         /* Registration Fields - Role Specific */
                         <div className="space-y-4">
-                            {/* Full Name - Common */}
                             <div className="space-y-1.5">
                                 <label className="text-[12px] font-bold text-gray-800 ml-1">Full name</label>
                                 <input
                                     type="text"
+                                    value={fullName}
+                                    onChange={(e) => {
+                                        setFullName(e.target.value);
+                                        if (errors.fullName) setErrors(prev => ({ ...prev, fullName: '' }));
+                                    }}
                                     placeholder="Enter your name."
-                                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#33a852] transition-colors"
+                                    className={cn(
+                                        "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
+                                        errors.fullName ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                    )}
                                 />
+                                {errors.fullName && <p className="text-[10px] text-red-500 ml-1">{errors.fullName}</p>}
                             </div>
 
-                            {userRole === 'customer' ? (
+                            {userRole === 'vendor' ? (
                                 <>
-                                    {/* Customer Specific */}
-                                    <div className="space-y-1.5">
-                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Email</label>
-                                        <input
-                                            type="email"
-                                            placeholder="Enter your email id"
-                                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#33a852] transition-colors"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Phone number</label>
-                                        <input
-                                            type="tel"
-                                            placeholder="Enter your Phone no."
-                                            value={phoneNumber}
-                                            onChange={(e) => setPhoneNumber(e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#33a852] transition-colors"
-                                        />
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    {/* Vendor Specific */}
+                                    {/* Vendor: Simple + Business Name + Email */}
                                     <div className="space-y-1.5">
                                         <label className="text-[12px] font-bold text-gray-800 ml-1">Business Name</label>
                                         <input
                                             type="text"
+                                            value={businessName}
+                                            onChange={(e) => {
+                                                setBusinessName(e.target.value);
+                                                if (errors.businessName) setErrors(prev => ({ ...prev, businessName: '' }));
+                                            }}
                                             placeholder="Enter your restaurant name"
-                                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#33a852] transition-colors"
+                                            className={cn(
+                                                "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
+                                                errors.businessName ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                            )}
                                         />
+                                        {errors.businessName && <p className="text-[10px] text-red-500 ml-1">{errors.businessName}</p>}
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Email</label>
+                                        <input
+                                            type="email"
+                                            value={email}
+                                            onChange={(e) => {
+                                                setEmail(e.target.value);
+                                                if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
+                                            }}
+                                            placeholder="Enter your email id"
+                                            className={cn(
+                                                "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
+                                                errors.email ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                            )}
+                                        />
+                                        {errors.email && <p className="text-[10px] text-red-500 ml-1">{errors.email}</p>}
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-[12px] font-bold text-gray-800 ml-1">Phone number</label>
                                         <input
                                             type="tel"
-                                            placeholder="Enter your Phone no."
                                             value={phoneNumber}
-                                            onChange={(e) => setPhoneNumber(e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#33a852] transition-colors"
+                                            onChange={(e) => {
+                                                setPhoneNumber(e.target.value);
+                                                if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
+                                            }}
+                                            placeholder="Enter your Phone no."
+                                            className={cn(
+                                                "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
+                                                errors.phone ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                            )}
                                         />
+                                        {errors.phone && <p className="text-[10px] text-red-500 ml-1">{errors.phone}</p>}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    {/* Customer: Complex Address - No Business Name */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Phone number</label>
+                                        <input
+                                            type="tel"
+                                            value={phoneNumber}
+                                            onChange={(e) => {
+                                                setPhoneNumber(e.target.value);
+                                                if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
+                                            }}
+                                            placeholder="Enter your Phone no."
+                                            className={cn(
+                                                "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
+                                                errors.phone ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                            )}
+                                        />
+                                        {errors.phone && <p className="text-[10px] text-red-500 ml-1">{errors.phone}</p>}
                                     </div>
                                     <div className="space-y-3">
                                         <label className="text-[12px] font-bold text-gray-800 ml-1">Address</label>
                                         <input
                                             type="text"
+                                            value={address1}
+                                            onChange={(e) => {
+                                                setAddress1(e.target.value);
+                                                if (errors.address) setErrors(prev => ({ ...prev, address: '' }));
+                                            }}
                                             placeholder="Enter your address (line -1)"
-                                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#33a852] transition-colors"
+                                            className={cn(
+                                                "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
+                                                errors.address ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                            )}
                                         />
                                         <input
                                             type="text"
+                                            value={address2}
+                                            onChange={(e) => setAddress2(e.target.value)}
                                             placeholder="Enter your address (line -2)"
                                             className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#33a852] transition-colors"
                                         />
+                                        {errors.address && <p className="text-[10px] text-red-500 ml-1">{errors.address}</p>}
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1.5">
                                             <label className="text-[12px] font-bold text-gray-800 ml-1">Pincode</label>
                                             <input
                                                 type="text"
+                                                value={pincode}
+                                                onChange={(e) => {
+                                                    setPincode(e.target.value);
+                                                    if (errors.pincode) setErrors(prev => ({ ...prev, pincode: '' }));
+                                                }}
                                                 placeholder="Enter Pincode"
-                                                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#33a852] transition-colors"
+                                                className={cn(
+                                                    "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
+                                                    errors.pincode ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                                )}
                                             />
+                                            {errors.pincode && <p className="text-[10px] text-red-500 ml-1">{errors.pincode}</p>}
                                         </div>
                                         <div className="space-y-1.5">
                                             <label className="text-[12px] font-bold text-gray-800 ml-1">City</label>
                                             <input
                                                 type="text"
+                                                value={city}
+                                                onChange={(e) => {
+                                                    setCity(e.target.value);
+                                                    if (errors.city) setErrors(prev => ({ ...prev, city: '' }));
+                                                }}
                                                 placeholder="Enter City"
-                                                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#33a852] transition-colors"
+                                                className={cn(
+                                                    "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
+                                                    errors.city ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                                )}
                                             />
+                                            {errors.city && <p className="text-[10px] text-red-500 ml-1">{errors.city}</p>}
                                         </div>
                                     </div>
                                 </>
@@ -356,11 +462,23 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                     onClick={handleNext}
                     className="w-full bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-4 rounded-lg shadow-lg shadow-green-100 mt-10 active:scale-[0.98] transition-all text-base tracking-wide"
                 >
-                    {authMode === 'login' ? 'Login' : (userRole === 'vendor' ? 'Register' : 'Register')}
+                    {authMode === 'login' ? 'Login' : 'Next'}
                 </button>
 
+                {/* Role Switcher for Register Mode */}
+                {authMode === 'register' && (
+                    <div className="mt-8 shrink-0 pb-10 text-center">
+                        <p className="text-[14px] text-gray-500">
+                            Onboard as <button onClick={handleRoleSwitch} className="text-[#33a852] font-[800] underline ml-1">
+                                {userRole === 'customer' ? 'Vendor.' : 'Customer.'}
+                            </button>
+                        </p>
+                    </div>
+                )}
+
+                {/* Role Switcher Commented out as per request */}
+                {/* 
                 {authMode === 'login' && (
-                    /* Role Switcher only for Login */
                     <div className="mt-8 shrink-0 pb-10">
                         <div className="flex items-center gap-4 mb-6">
                             <div className="h-[1px] flex-1 bg-gray-50" />
@@ -378,6 +496,7 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                         </button>
                     </div>
                 )}
+                */}
             </div>
 
             {/* Close button */}

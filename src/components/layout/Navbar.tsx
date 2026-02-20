@@ -67,7 +67,8 @@ export function Navbar() {
             {/* Splash Screen - Removed as per user request to fix intrusive startup animation */}
             {/* <SplashScreen /> */}
 
-            {/* Account Selection Overlay */}
+            {/* Account Selection Overlay - Commented out to skip role selection step as per user request */}
+            {/* 
             <AccountTypeSelection
                 isOpen={isAccountOverlayOpen}
                 onClose={() => setIsAccountOverlayOpen(false)}
@@ -77,6 +78,7 @@ export function Navbar() {
                     setIsAuthOverlayOpen(true);
                 }}
             />
+            */}
 
             {/* Auth Screen (Login/Register) */}
             <AuthScreen
@@ -376,7 +378,7 @@ export function Navbar() {
                 isCategoriesOpen={isCategoriesSidebarOpen}
                 onCategoriesClick={() => setIsCategoriesSidebarOpen(true)}
                 onStoreClick={() => openSearch('stores')}
-                onAccountClick={() => setIsAccountOverlayOpen(true)}
+                onAccountClick={() => setIsAuthOverlayOpen(true)}
             />
             <MobileSearchOverlay
                 isOpen={isSearchOverlayOpen}
