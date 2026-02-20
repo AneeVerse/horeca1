@@ -25,10 +25,10 @@ import {
 } from 'recharts';
 
 const STAT_CARDS = [
-    { label: 'Total Order Today', value: '469', icon: ShoppingCart, color: 'bg-blue-50 text-blue-600' },
-    { label: 'Total Customers', value: '1,446', icon: Users, color: 'bg-yellow-50 text-yellow-600' },
-    { label: 'Total Vendors', value: '210', icon: Store, color: 'bg-pink-50 text-pink-600' },
-    { label: 'Revenue This Month', value: '₹ 1,15,000', icon: Wallet, color: 'bg-green-50 text-green-600' },
+    { label: 'Total Order Today', value: '469', icon: ShoppingCart, color: 'bg-blue-50 text-blue-600', trend: '+12.5%', trendType: 'up' },
+    { label: 'Total Customers', value: '1,446', icon: Users, color: 'bg-yellow-50 text-yellow-600', trend: '+5.4%', trendType: 'up' },
+    { label: 'Total Vendors', value: '210', icon: Store, color: 'bg-pink-50 text-pink-600', trend: '+2.1%', trendType: 'up' },
+    { label: 'Revenue This Month', value: '₹ 1,15,000', icon: Wallet, color: 'bg-green-50 text-green-600', trend: '+18.2%', trendType: 'up' },
 ];
 
 const SALES_DATA = [
@@ -133,6 +133,30 @@ export default function DashboardPage() {
             {/* Stat Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {STAT_CARDS.map((stat, idx) => (
+                    <div key={idx} className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm hover:shadow-md transition-all h-[145px] flex flex-col justify-between cursor-default">
+                        <div className="flex items-center gap-3">
+                            <div className={cn("w-11 h-11 rounded-lg flex items-center justify-center shrink-0", stat.color)}>
+                                <stat.icon size={22} />
+                            </div>
+                            <span className="text-[15px] font-bold text-[#4B4B4B]">{stat.label}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-[28px] font-[800] text-[#181725] leading-none">{stat.value}</h4>
+                            <div className={cn(
+                                "flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-bold",
+                                stat.trendType === 'up' ? "bg-[#EEF8F1] text-[#299E60]" : "bg-[#FFF0F0] text-[#E74C3C]"
+                            )}>
+                                {stat.trend}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Previous Stat Cards Layout (Commented Out)
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {STAT_CARDS.map((stat, idx) => (
                     <div key={idx} className="bg-white h-[135px] px-6 rounded-[14px] border border-[#EEEEEE] flex items-center gap-5 shadow-sm hover:shadow-md transition-shadow cursor-default">
                         <div className={cn("w-[52px] h-[52px] rounded-full flex items-center justify-center shrink-0", stat.color)}>
                             <stat.icon size={24} />
@@ -144,6 +168,7 @@ export default function DashboardPage() {
                     </div>
                 ))}
             </div>
+            */}
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
