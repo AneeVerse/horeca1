@@ -279,9 +279,9 @@ export default function VendorsPage() {
 
                         {/* Footer Buttons */}
                         <div className="p-6 border-t border-[#EEEEEE] flex items-center gap-3">
-                            <button className="flex-1 h-[44px] bg-[#299E60] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#238a54] transition-all shadow-sm">
+                            <Link href={`/admin/vendors/${vendor.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, '')}`} className="flex-1 h-[44px] bg-[#299E60] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center justify-center">
                                 View Profile
-                            </button>
+                            </Link>
                             <button className="flex-1 h-[44px] bg-[#EEF8F1] text-[#299E60] rounded-[10px] text-[14px] font-bold hover:bg-[#e0f0e5] transition-all">
                                 Edit Profile
                             </button>
