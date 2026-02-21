@@ -34,7 +34,7 @@ import {
     Bar
 } from 'recharts';
 
-const getVendorSlug = (name: string) => name.toLowerCase().split(' ')[0];
+const getVendorSlug = (name: string) => name.toLowerCase().split(' ')[0].replace(/[^a-z0-9]/g, '');
 
 const REVENUE_DATA_MONTHLY = [
     { name: 'Jan', total: 4000 },
@@ -80,7 +80,8 @@ const FINANCE_STATS = [
         isPositive: true,
         icon: Wallet,
         color: '#299E60',
-        bgColor: '#EEF8F1'
+        bgColor: '#EEF8F1',
+        href: '#payout-queue'
     },
     {
         label: 'Projected Revenue',
@@ -89,7 +90,8 @@ const FINANCE_STATS = [
         isPositive: true,
         icon: TrendingUp,
         color: '#3B82F6',
-        bgColor: '#EFF6FF'
+        bgColor: '#EFF6FF',
+        href: '/admin/reports'
     },
     {
         label: 'Commission Earned',
@@ -98,7 +100,8 @@ const FINANCE_STATS = [
         isPositive: false,
         icon: Coins,
         color: '#F59E0B',
-        bgColor: '#FFF7E6'
+        bgColor: '#FFF7E6',
+        href: '/admin/reports'
     }
 ];
 
@@ -231,9 +234,13 @@ export default function FinancePage() {
             {/* Stats Overview */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {FINANCE_STATS.map((stat, idx) => (
-                    <div key={idx} className="bg-white p-6 rounded-[24px] border border-[#EEEEEE] shadow-sm flex items-center gap-6 hover:shadow-md transition-all group">
+                    <Link
+                        key={idx}
+                        href={stat.href}
+                        className="bg-white p-6 rounded-[24px] border border-[#EEEEEE] shadow-sm flex items-center gap-6 hover:shadow-md transition-all group"
+                    >
                         <div
-                            className="w-[68px] h-[68px] rounded-[20px] flex items-center justify-center shrink-0 transition-transform"
+                            className="w-[68px] h-[68px] rounded-[20px] flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
                             style={{ backgroundColor: stat.bgColor, color: stat.color }}
                         >
                             <stat.icon size={34} strokeWidth={2.5} />
@@ -251,7 +258,7 @@ export default function FinancePage() {
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </Link>
                 ))}
             </div>
 
@@ -428,17 +435,18 @@ export default function FinancePage() {
                         </thead>
                         <tbody className="divide-y divide-[#EEEEEE]">
                             {filteredPayouts.map((payout) => (
-                                <tr key={payout.id} className="hover:bg-[#FDFDFD] transition-colors group">
+                                <tr
+                                    key={payout.id}
+                                    onClick={() => window.location.href = `/admin/vendors/${getVendorSlug(payout.vendor)}`}
+                                    className="hover:bg-[#F8F9FB] transition-colors group cursor-pointer"
+                                >
                                     <td className="px-8 py-5">
-                                        <Link
-                                            href={`/admin/vendors/${getVendorSlug(payout.vendor)}`}
-                                            className="flex items-center gap-3 hover:opacity-80 transition-opacity w-fit"
-                                        >
-                                            <div className="w-10 h-10 rounded-[10px] bg-[#F8F9FB] border border-[#EEEEEE] p-2 flex items-center justify-center">
+                                        <div className="flex items-center gap-3 w-fit">
+                                            <div className="w-10 h-10 rounded-[10px] bg-[#F8F9FB] border border-[#EEEEEE] p-2 flex items-center justify-center group-hover:bg-white transition-colors">
                                                 <img src={payout.logo} alt="" className="w-full h-full object-contain" />
                                             </div>
                                             <span className="text-[15px] font-extrabold text-[#181725]">{payout.vendor}</span>
-                                        </Link>
+                                        </div>
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex flex-col">
@@ -470,7 +478,7 @@ export default function FinancePage() {
                                             {processingIds.includes(payout.id) ? 'Processing...' : payout.status}
                                         </span>
                                     </td>
-                                    <td className="px-8 py-5">
+                                    <td className="px-8 py-5" onClick={(e) => e.stopPropagation()}>
                                         {payout.status === 'Completed' ? (
                                             <button
                                                 onClick={() => handleDownloadReceipt(payout.vendor)}

@@ -149,7 +149,8 @@ export default function ApprovalsPage() {
             icon: Clock,
             color: '#299E60',
             bgColor: '#EEF8F1',
-            trendColor: '#F59E0B'
+            trendColor: '#F59E0B',
+            href: '#requests-table'
         },
         {
             label: 'Approved Today',
@@ -158,7 +159,8 @@ export default function ApprovalsPage() {
             icon: CheckCircle2,
             color: '#F59E0B',
             bgColor: '#FFF7E6',
-            trendColor: '#299E60'
+            trendColor: '#299E60',
+            href: '#requests-table'
         },
         {
             label: 'Rejected Summary',
@@ -167,7 +169,8 @@ export default function ApprovalsPage() {
             icon: XCircle,
             color: '#E74C3C',
             bgColor: '#FFF2F0',
-            trendColor: '#AEAEAE'
+            trendColor: '#AEAEAE',
+            href: '#requests-table'
         },
         {
             label: 'Avg. Response Time',
@@ -176,7 +179,8 @@ export default function ApprovalsPage() {
             icon: Timer,
             color: '#3B82F6',
             bgColor: '#EFF6FF',
-            trendColor: totalProcessed > 0 ? '#299E60' : '#7C7C7C'
+            trendColor: totalProcessed > 0 ? '#299E60' : '#7C7C7C',
+            href: '/admin/reports'
         }
     ];
 
@@ -200,12 +204,13 @@ export default function ApprovalsPage() {
             {/* Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {dynamicStats.map((stat, idx) => (
-                    <div
+                    <Link
                         key={idx}
-                        className="bg-white p-6 rounded-[20px] border border-[#EEEEEE] shadow-sm flex items-center gap-5 hover:shadow-md transition-shadow"
+                        href={stat.href}
+                        className="bg-white p-6 rounded-[20px] border border-[#EEEEEE] shadow-sm flex items-center gap-5 hover:shadow-md transition-shadow group"
                     >
                         <div
-                            className="w-[64px] h-[64px] rounded-[16px] flex items-center justify-center shrink-0"
+                            className="w-[64px] h-[64px] rounded-[16px] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform"
                             style={{ backgroundColor: stat.bgColor, color: stat.color }}
                         >
                             <stat.icon size={32} strokeWidth={2.5} />
@@ -219,12 +224,12 @@ export default function ApprovalsPage() {
                                 <span className="text-[12px] font-extrabold" style={{ color: stat.trendColor }}>{stat.trend}</span>
                             </div>
                         </div>
-                    </div>
+                    </Link>
                 ))}
             </div>
 
             {/* Main Content Card */}
-            <div className="bg-white rounded-[24px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+            <div id="requests-table" className="bg-white rounded-[24px] border border-[#EEEEEE] shadow-sm overflow-hidden">
                 <div className="p-8 border-b border-[#EEEEEE]">
                     <div className="flex flex-col gap-8">
                         {/* Tab Switcher */}
@@ -324,12 +329,13 @@ export default function ApprovalsPage() {
                         </thead>
                         <tbody className="divide-y divide-[#EEEEEE]">
                             {filteredRequests.map((request) => (
-                                <tr key={request.id} className="hover:bg-[#FDFDFD] transition-colors group">
+                                <tr
+                                    key={request.id}
+                                    onClick={() => (request as any).href && (window.location.href = (request as any).href)}
+                                    className="hover:bg-[#F8F9FB] transition-colors group cursor-pointer"
+                                >
                                     <td className="px-8 py-5">
-                                        <Link
-                                            href={(request as any).href || '#'}
-                                            className="flex items-center gap-3 w-fit hover:opacity-80 transition-opacity"
-                                        >
+                                        <div className="flex items-center gap-3 w-fit">
                                             {request.requester.avatar ? (
                                                 <img src={request.requester.avatar} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm" />
                                             ) : (
@@ -340,8 +346,8 @@ export default function ApprovalsPage() {
                                                     {request.requester.initials}
                                                 </div>
                                             )}
-                                            <span className="text-[15px] font-extrabold text-[#181725]">{request.requester.name}</span>
-                                        </Link>
+                                            <span className="text-[15px] font-extrabold text-[#181725] group-hover:text-[#299E60] transition-colors">{request.requester.name}</span>
+                                        </div>
                                     </td>
                                     <td className="px-6 py-5">
                                         <span
@@ -377,7 +383,7 @@ export default function ApprovalsPage() {
                                         </span>
                                     </td>
                                     {activeTab === 'Pending' && (
-                                        <td className="px-8 py-5">
+                                        <td className="px-8 py-5" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex items-center gap-2.5">
                                                 <button
                                                     onClick={() => handleAction(request.id, 'Approved')}
