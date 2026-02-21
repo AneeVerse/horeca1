@@ -252,7 +252,7 @@ export default function CustomerDetailsPage() {
                                                         tx.status === 'Cancel' ? "bg-[#FFF0F0] text-[#E74C3C]" : "bg-[#FFF7ED] text-[#F59E0B]"
                                                 )}>{tx.status}</span>
                                             </td>
-                                            <td className="px-6 py-4 text-[14px] font-[800] text-[#181725]">{tx.amount}</td>
+                                            <td className="px-6 py-4 text-[14px] font-[800] text-[#181725] text-left">{tx.amount}</td>
                                             <td className="px-6 py-4 text-[13px] font-[800] text-[#7C7C7C]">{tx.date}</td>
                                             <td className="px-6 py-4 text-[13px] font-[800] text-[#7C7C7C]">
                                                 <div className="flex items-center gap-2">

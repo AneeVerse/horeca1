@@ -264,7 +264,7 @@ export default function CustomersPage() {
                                         <td className="p-4 text-[13px] font-medium text-[#7C7C7C]">{customer.invoiceId}</td>
                                         <td className="p-4">
                                             <span className={cn(
-                                                "inline-flex items-center justify-center px-3 py-1 rounded-md text-[11px] font-bold min-w-[80px]",
+                                                "inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold ml",
                                                 customer.status === 'Completed' ? "bg-[#EEF8F1] text-[#299E60]" :
                                                     customer.status === 'Cancel' ? "bg-[#FFF0F0] text-[#E74C3C]" :
                                                         "bg-[#FFF7ED] text-[#F59E0B]"
