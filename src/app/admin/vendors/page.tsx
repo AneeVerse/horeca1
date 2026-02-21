@@ -15,12 +15,15 @@ import {
     Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
+
+const getVendorSlug = (name: string) => name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, '');
 
 const VENDORS = [
     {
         name: 'ZARA International',
         category: 'Fashion',
-        website: 'www.zarafashion.co',
+        website: 'www.zara.com',
         rating: 4.5,
         reviews: '3.5k',
         address: '4604, Philli Lane Kiowa IN 47404',
@@ -36,7 +39,7 @@ const VENDORS = [
     {
         name: 'Rolex Watches',
         category: 'Watch',
-        website: 'www.rolexwatch.co',
+        website: 'www.rolex.com',
         rating: 4.5,
         reviews: '1.2k',
         address: '1678 Avenue Milwaukee, WI 53202',
@@ -52,7 +55,7 @@ const VENDORS = [
     {
         name: 'Dyson Machinery',
         category: 'Electronics',
-        website: 'www.dysonmachine.co',
+        website: 'www.dyson.com',
         rating: 4.1,
         reviews: '3.7k',
         address: '23 Cubbine Road GHOOLI WA 6426',
@@ -68,7 +71,7 @@ const VENDORS = [
     {
         name: 'GoPro Camera',
         category: 'Electronics',
-        website: 'www.goprocamera.co',
+        website: 'www.gopro.com',
         rating: 4.3,
         reviews: '7.2k',
         address: '5 Gaffney Street MIDDLE PARK VIC 3206',
@@ -84,7 +87,7 @@ const VENDORS = [
     {
         name: 'H&M',
         category: 'Fashion',
-        website: 'www.hmfashion.co',
+        website: 'www.hm.com',
         rating: 4.5,
         reviews: '15.3k',
         address: '1697 Bay Street Toronto, ON M5J 2R8',
@@ -102,7 +105,7 @@ const VENDORS = [
         category: 'Electronics',
         rating: 4.1,
         reviews: '8.2k',
-        website: 'www.huaweiphone.co',
+        website: 'www.huawei.com',
         address: '2182 Blanchard Victoria, BC V8W 2H9',
         email: 'huaweiphone@dayrep.com',
         phone: '+1(250) 987-6543',
@@ -118,7 +121,7 @@ const VENDORS = [
         category: 'Fashion',
         rating: 4.5,
         reviews: '18.9k',
-        website: 'www.nikebrand.co',
+        website: 'www.nike.com',
         address: '2113 Eglinton Avenue Toronto 1A5',
         email: 'nikefashion@dayrep.com',
         phone: '+1(416) 987-6543',
@@ -134,7 +137,7 @@ const VENDORS = [
         category: 'Fashion',
         rating: 4.4,
         reviews: '12.7k',
-        website: 'thenorthface.co',
+        website: 'www.thenorthface.com',
         address: '1377 49th Avenue Clyde River, 0E0',
         email: 'thenorthface@dayrep.com',
         phone: '+1(867) 123-4567',
@@ -149,6 +152,11 @@ const VENDORS = [
 
 export default function VendorsPage() {
     const [searchQuery, setSearchQuery] = useState('');
+    const router = useRouter();
+
+    const handleCardClick = (vendorName: string) => {
+        router.push(`/admin/vendors/${getVendorSlug(vendorName)}`);
+    };
 
     const filteredVendors = VENDORS.filter(vendor =>
         vendor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -181,11 +189,18 @@ export default function VendorsPage() {
             {/* Vendors Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-[24px]">
                 {filteredVendors.map((vendor, idx) => (
-                    <div key={idx} className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden flex flex-col h-full hover:shadow-md transition-shadow max-w-[381px] w-full mx-auto">
+                    <div
+                        key={idx}
+                        onClick={() => handleCardClick(vendor.name)}
+                        className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden flex flex-col h-full hover:shadow-md transition-all cursor-pointer max-w-[381px] w-full mx-auto active:scale-[0.98]"
+                    >
                         {/* Top Grey Logo Box */}
                         <div className="p-3">
                             <div className="bg-[#F1F4F9] rounded-[12px] h-[144px] relative flex items-center justify-center p-6">
-                                <button className="absolute top-4 right-4 text-[#AEAEAE] hover:text-[#181725] transition-colors">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); /* detail info */ }}
+                                    className="absolute top-4 right-4 text-[#AEAEAE] hover:text-[#181725] transition-colors z-20"
+                                >
                                     <Info size={18} />
                                 </button>
                                 <img
@@ -212,9 +227,15 @@ export default function VendorsPage() {
                                         <span className="text-[12px] text-[#AEAEAE] font-medium">{vendor.reviews}</span>
                                     </div>
                                 </div>
-                                <Link href="#" className="text-[13px] font-bold text-[#299E60] hover:underline mt-2 block">
+                                <a
+                                    href={vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-[13px] font-bold text-[#299E60] hover:underline mt-2 block w-fit"
+                                >
                                     {vendor.website}
-                                </Link>
+                                </a>
                             </div>
 
                             {/* Contact Details */}
@@ -279,13 +300,22 @@ export default function VendorsPage() {
 
                         {/* Footer Buttons */}
                         <div className="p-6 border-t border-[#EEEEEE] flex items-center gap-3">
-                            <Link href={`/admin/vendors/${vendor.name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, '')}`} className="flex-1 h-[44px] bg-[#299E60] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center justify-center">
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handleCardClick(vendor.name); }}
+                                className="flex-1 h-[44px] bg-[#299E60] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center justify-center"
+                            >
                                 View Profile
-                            </Link>
-                            <button className="flex-1 h-[44px] bg-[#EEF8F1] text-[#299E60] rounded-[10px] text-[14px] font-bold hover:bg-[#e0f0e5] transition-all">
+                            </button>
+                            <button
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex-1 h-[44px] bg-[#EEF8F1] text-[#299E60] rounded-[10px] text-[14px] font-bold hover:bg-[#e0f0e5] transition-all"
+                            >
                                 Edit Profile
                             </button>
-                            <button className="group w-[44px] h-[44px] rounded-[10px] border border-[#EEEEEE] flex items-center justify-center text-[#299E60] hover:bg-[#EEF8F1] transition-all">
+                            <button
+                                onClick={(e) => e.stopPropagation()}
+                                className="group w-[44px] h-[44px] rounded-[10px] border border-[#EEEEEE] flex items-center justify-center text-[#299E60] hover:bg-[#EEF8F1] transition-all"
+                            >
                                 <Heart size={18} className="transition-all group-hover:fill-[#299E60]" />
                             </button>
                         </div>
