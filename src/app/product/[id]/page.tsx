@@ -8,7 +8,10 @@ import {
     ChevronDown,
     ChevronUp,
     Plus,
-    ShoppingCart
+    ShoppingCart,
+    Search,
+    X,
+    Share2
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -224,162 +227,152 @@ export default function ProductDetailPage() {
             <div className="w-full h-[5px] bg-[#53B175] md:hidden" />
 
             {/* Header */}
-            <header className="bg-white px-4 py-3 flex items-center justify-between md:hidden uppercase">
+            <header className="bg-white px-4 py-3 flex items-center justify-between sticky top-0 z-[100] border-b border-gray-50">
                 <button onClick={() => router.back()} className="p-1">
-                    <ArrowLeft size={24} className="text-[#181725]" strokeWidth={2.5} />
+                    <ArrowLeft size={22} className="text-[#181725]" strokeWidth={2} />
                 </button>
-                <div className="flex-1" />
+                <div className="absolute left-1/2 -translate-x-1/2 text-[18px] font-extrabold text-[#181725] tracking-tight">
+                    emarket
+                </div>
+                <button className="p-1">
+                    <Search size={22} className="text-[#181725]" strokeWidth={2} />
+                </button>
             </header>
 
             {/* Mobile View */}
-            <div className="md:hidden pb-10">
-                {/* Image Section */}
-                <div className="bg-white px-4 pt-1 pb-8 flex flex-col items-center">
+            <div className="md:hidden pb-10 bg-[#F8F9FB]/30">
+                {/* Search Bar */}
+                <div className="px-4 py-3 bg-white">
+                    <div className="relative flex items-center">
+                        <Search size={18} className="absolute left-4 text-gray-400" />
+                        <input
+                            type="text"
+                            defaultValue="Ketchup"
+                            className="w-full bg-[#F2F3F2] rounded-full py-2.5 pl-11 pr-10 text-[14px] font-medium text-[#181725] outline-none border-none focus:ring-1 focus:ring-[#53B175]/30"
+                        />
+                        <button className="absolute right-4 text-gray-400">
+                            <X size={16} />
+                        </button>
+                    </div>
+                </div>
 
+                {/* Main Product Section - White Card */}
+                <div className="mx-0 bg-white pt-2 pb-8 px-5 rounded-b-[30px] shadow-sm">
+                    {/* Image Section */}
+                    <div className="relative flex flex-col items-center pt-4">
+                        <button className="absolute top-0 right-0 p-1.5 text-[#181725] hover:bg-gray-100 rounded-full z-10">
+                            <Share2 size={20} strokeWidth={1.5} />
+                        </button>
 
-                    <div className="flex items-center gap-[0.5px] mt-10">
-                        {/* Product Image Container */}
-                        <div className="w-[215px] h-[215px] flex items-center justify-center overflow-hidden">
+                        <div className="w-[240px] h-[240px] flex items-center justify-center p-4">
                             <img
                                 src={product.image}
                                 alt={product.name}
-                                className={cn(
-                                    "w-full h-full object-contain transition-transform duration-300",
-                                    (product.name.toLowerCase().includes('onion') ||
-                                        product.name.toLowerCase().includes('cheese') ||
-                                        product.name.toLowerCase().includes('gemini'))
-                                        ? "scale-[1.0]" : "scale-[1.3]"
-                                )}
+                                className="w-full h-full object-contain"
                             />
                         </div>
 
-                        {/* Side Banner (Double Red Bar) - Exact as per screenshot */}
-                        <div className="flex flex-col gap-[3px] w-[44px] h-[215px]">
-                            {/* Top Part: Product Name Tag */}
-                            <div className="flex-1 bg-[#DA251C] rounded-tr-[12px] rounded-tl-[4px] rounded-br-[4px] rounded-bl-[4px] flex flex-col items-center justify-center">
-                                <span className="text-white font-bold text-[13px] [writing-mode:vertical-lr] flex items-center tracking-[0.16em] uppercase">
-                                    {product.sideBanner || 'Product'}
-                                </span>
-                            </div>
-
-                            {/* Bottom Part: Weight Tag */}
-                            <div className="h-[52px] bg-[#DA251C] rounded-[4px] flex flex-col items-center justify-center">
-                                <span className="text-white font-black text-[20px] leading-none mb-0.5">{product.weight?.split(' ')[0]}</span>
-                                <span className="text-white font-bold text-[10px] uppercase tracking-tighter leading-none">{product.weight?.split(' ')[1]}</span>
-                            </div>
+                        {/* Pagination Dots */}
+                        <div className="flex gap-1.5 mt-4">
+                            <div className="w-[18px] h-[6px] bg-[#7C7C7C] rounded-full" />
+                            <div className="w-[6px] h-[6px] bg-[#E2E2E2] rounded-full" />
+                            <div className="w-[6px] h-[6px] bg-[#E2E2E2] rounded-full" />
+                            <div className="w-[6px] h-[6px] bg-[#E2E2E2] rounded-full" />
                         </div>
                     </div>
 
-                    {/* Pagination Dots */}
-                    <div className="flex gap-1.5 mt-8">
-                        <div className="w-[9.17px] h-[9.17px] bg-[#299E60] rounded-full" />
-                        <div className="w-[9.17px] h-[9.17px] bg-[#E2E2E2] rounded-full" />
-                        <div className="w-[9.17px] h-[9.17px] bg-[#E2E2E2] rounded-full" />
+                    {/* Basic Info */}
+                    <div className="pt-8">
+                        <span className="inline-block px-2 py-1 rounded-[6px] bg-[#EAF6EF] text-[#53B175] text-[11px] font-bold mb-3">
+                            {product.category}
+                        </span>
+
+                        <div className="flex items-start justify-between gap-4 mb-1">
+                            <h1 className="text-[24px] font-extrabold text-[#181725] leading-tight flex-1">
+                                {product.name}
+                            </h1>
+                            <button className="text-[#181725] pt-1">
+                                <Heart size={24} strokeWidth={1.5} />
+                            </button>
+                        </div>
+                        <p className="text-[15px] font-medium text-[#7C7C7C] mb-6">{product.weight || '1 kg'}</p>
+
+                        {/* Tiered Pricing Section */}
+                        <div className="bg-[#F1FBF4]/40 border border-[#53B175]/15 rounded-[22px] overflow-hidden mb-6">
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-[#53B175]/10">
+                                <span className="text-[15px] font-bold text-[#53B175]">₹ 147/kg for 3 kg</span>
+                                <button className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm">
+                                    <Plus size={16} strokeWidth={3.5} /> ADD
+                                </button>
+                            </div>
+                            <div className="flex items-center justify-between px-4 py-3">
+                                <span className="text-[15px] font-bold text-[#53B175]">₹ 245/kg for 5 kg</span>
+                                <button className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm">
+                                    <Plus size={16} strokeWidth={3.5} /> ADD
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Final Price Row */}
+                        <div className="flex items-baseline gap-1.5 mb-6">
+                            <span className="text-[22px] font-black text-[#181725]">₹ {product.vendors?.[0]?.price.split('/')[0].replace('₹', '') || '49'}</span>
+                            <span className="text-[15px] text-[#7C7C7C] font-semibold"> /kg</span>
+                        </div>
+
+                        {/* Add to Cart Button */}
+                        <button className="w-full py-4 bg-[#EAF7EF] rounded-[20px] border border-[#53B175]/30 flex items-center justify-center gap-3 text-[#53B175] text-[16px] font-bold transition-all active:scale-95 hover:bg-[#E2F2E8]">
+                            <span>Add To Cart</span>
+                            <ShoppingCart size={20} />
+                        </button>
                     </div>
                 </div>
 
-                {/* Info Section */}
-                <div className="px-5 pt-4">
-                    <span className="inline-block px-2.5 py-1 rounded-[6px] bg-[#EAF6EF] text-[#53B175] text-[10px] font-bold mb-3">
-                        {product.category}
-                    </span>
+                {/* Product details Section */}
+                <div className="mt-4 mx-4 bg-white rounded-[18px] p-5 shadow-sm border border-gray-50">
+                    <h2 className="text-[20px] font-bold text-[#181725] mb-3">Product details</h2>
+                    <p className="text-[14px] text-[#4C4C4C] leading-[1.6] font-medium opacity-80">
+                        {product.description}
+                    </p>
+                </div>
 
-                    <div className="flex items-start justify-between gap-4 mb-6">
-                        <h1 className="text-[24px] font-extrabold text-[#181725] leading-[1.2] flex-1">
-                            {product.name}
-                        </h1>
-                        <button className="flex items-center justify-center text-[#7C7C7C] mt-2">
-                            <Heart size={24} strokeWidth={1.5} />
-                        </button>
-                    </div>
-
-                    {/* Expandable Product Details */}
-                    <div className="bg-white border border-[#B8B8B8] rounded-[10px] overflow-hidden mb-6">
-                        <button
-                            onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
-                            className="w-full px-5 py-4 flex items-center justify-between text-[#181725] font-normal text-[16px] leading-[24px] tracking-[-0.5px]"
-                        >
-                            Product details
-                            {isDetailsExpanded ? <ChevronUp size={20} className="text-[#181725]" /> : <ChevronDown size={20} className="text-[#181725]" />}
-                        </button>
-                        {isDetailsExpanded && (
-                            <div className="px-5 pb-5 pt-0 border-t border-[#B8B8B8]">
-                                <p className="text-[14px] text-[#525252] leading-[20px] font-normal mt-4 tracking-[-0.5px]">
-                                    {product.description}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Vendor List */}
-                    <div>
-                        <h2 className="text-[18px] font-medium text-[#181725] mb-5 leading-[28px] tracking-[-0.5px]">
-                            Available from vendors
-                        </h2>
-
-                        <div className="space-y-4">
-                            {product.vendors.map((vendor) => (
-                                <div key={vendor.id} className="bg-white border border-[#B8B8B8] rounded-[10px] px-4 py-3 flex flex-col gap-2.5 min-h-[74px] justify-center">
-                                    {/* First Row: Name & Min Qty */}
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[12px] font-normal text-[#000000] leading-none">{vendor.name}</span>
-                                        <div className="w-[53px] h-[13.25px] bg-[#4CAD73]/20 border border-[#4CAD73]/10 rounded-[3px] flex items-center justify-center">
-                                            <span className="text-[7.5px] font-bold text-[#4CAD73] whitespace-nowrap">Min Qty: {vendor.minQty}</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Second Row: Price, Stock & Add */}
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[18px] font-extrabold text-[#181725] leading-none">{vendor.price}</span>
-
-                                        <div className="w-[53px] h-[13.25px] bg-[#4CAD73]/20 border border-[#4CAD73]/10 rounded-[3px] flex items-center justify-center">
-                                            <span className="text-[7.5px] font-bold text-[#4CAD73] whitespace-nowrap">In Stock: {vendor.stock}</span>
-                                        </div>
-
-                                        <button className="w-[73px] h-[23.15px] flex items-center justify-center gap-1 border border-[#B8B8B8] rounded-full text-[#4CAD73] font-bold text-[11px] active:scale-95 transition-all">
-                                            <Plus size={12} strokeWidth={4} /> ADD
-                                        </button>
-                                    </div>
+                {/* Similar items Section */}
+                <div className="mt-6 px-4">
+                    <h2 className="text-[18px] font-bold text-[#181725] mb-4">Similar items</h2>
+                    <div className="flex gap-3 overflow-x-auto pb-6 no-scrollbar -mx-4 px-4 snap-x">
+                        {similarItemsList.map((item: any) => (
+                            <Link
+                                key={item.id}
+                                href={`/product/${item.originalId || item.id}`}
+                                className="min-w-[150px] bg-white border border-gray-100 rounded-[18px] p-3 flex flex-col snap-start shadow-sm"
+                            >
+                                <div className="w-full aspect-[4/3] flex items-center justify-center mb-3">
+                                    <img src={item.image} alt={item.name} className="max-w-[80%] max-h-full object-contain" />
                                 </div>
-                            ))}
-                        </div>
-                        {/* Similar Items Section */}
-                        <div className="mt-10">
-                            <h2 className="text-[20px] font-bold text-[#181725] mb-4">
-                                Similar items
-                            </h2>
-                            <div className="flex gap-4 overflow-x-auto -mx-5 px-5 pb-6 no-scrollbar">
-                                {similarItemsList.map((item: any) => (
-                                    <Link
-                                        key={item.id}
-                                        href={`/product/${item.originalId || item.id}`}
-                                        className="min-w-[155px] w-[155px] h-[168px] bg-white border border-[#B8B8B8] rounded-[10px] p-3 flex flex-col flex-shrink-0 active:scale-95 transition-all"
-                                    >
-                                        <div className="w-[131px] h-[98px] flex items-center justify-center mb-2 overflow-hidden bg-transparent rounded-[8px]">
-                                            <img
-                                                src={item.image}
-                                                alt={item.name}
-                                                className="max-w-full max-h-full object-contain p-1"
-                                            />
-                                        </div>
-                                        <div className="mt-auto">
-                                            <h3 className="text-[12px] font-semibold text-[#181725] line-clamp-1 leading-tight">{item.name}</h3>
-                                            <p className="text-[11px] text-[#7C7C7C] font-normal mt-0.5 whitespace-nowrap">Sold by {item.vendorCount} vendors</p>
-                                        </div>
-                                    </Link>
-                                ))}
-                            </div>
-                        </div>
+                                <h3 className="text-[13px] font-bold text-[#181725] leading-tight line-clamp-1 mb-1">{item.name}</h3>
+                                <p className="text-[10px] text-[#7C7C7C] font-medium">Sold by {item.vendorCount || 3} vendors</p>
+                            </Link>
+                        ))}
                     </div>
                 </div>
 
-                {/* Everyday Items & Delivery Poster */}
-                <div className="mt-0">
-                    <PromotionBanners />
+                {/* More from Category */}
+                <div className="mt-2 px-4">
+                    <h2 className="text-[18px] font-bold text-[#181725] mb-4">More from {product.category}</h2>
+                    <div className="flex gap-4 overflow-x-auto pb-10 no-scrollbar">
+                        <div className="min-w-[140px] relative">
+                            <img src={product.image} className="w-[140px] h-[100px] object-contain" />
+                            <Plus size={20} className="absolute bottom-0 right-0 bg-[#53B175] text-white rounded-full p-1" />
+                        </div>
+                    </div>
                 </div>
-                <div className="mt-0">
-                    <DeliveryPoster />
-                </div>
+            </div>
+
+            {/* Everyday Items & Delivery Poster */}
+            <div className="mt-0">
+                <PromotionBanners />
+            </div>
+            <div className="mt-0">
+                <DeliveryPoster />
             </div>
 
             {/* Desktop View (Placeholder/Idea) */}
