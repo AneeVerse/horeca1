@@ -128,7 +128,7 @@ export function Navbar() {
                                 >
                                     <MapPin size={14} className="text-primary" />
                                     <span className="text-[12px] font-bold text-text-muted">
-                                        {selectedAddress?.city || 'Select location'}
+                                        {selectedAddress?.shortAddress || 'Select location'}
                                     </span>
                                     <ChevronDown size={14} className="text-text-muted" />
                                 </button>
