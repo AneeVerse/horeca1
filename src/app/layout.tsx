@@ -40,6 +40,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${quicksand.variable} ${inter.variable} ${poppins.variable} font-sans antialiased bg-background`}>
+        {/* Persistent 12px Top Green Bar */}
+        <div className="w-full h-[12px] bg-[#53B175] sticky top-0 z-[10000]" />
+        
         <GoogleMapsProvider>
           <AddressProvider>
             <CartProvider>
