@@ -19,12 +19,14 @@ import { FeatureBar } from "@/components/features/FeatureBar";
 import { NewsletterBanner } from "@/components/features/NewsletterBanner";
 import { ProductCategories } from "@/components/features/ProductCategories";
 import { RecommendedCategories } from "@/components/features/RecommendedCategories";
+import { ShopByStore } from "@/components/features/ShopByStore";
 
 export default function Home() {
   return (
     <div className="flex flex-col w-full">
       <Hero />
       <CategoryShowcase />
+      <ShopByStore />
       <TrustedBy />
       <FlashSaleBanner />
       {/* <PromotionBanners /> */}

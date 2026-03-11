@@ -29,6 +29,7 @@ import { AuthScreen } from '../auth/AuthScreen';
 export function Navbar() {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
     const [isCategoriesSidebarOpen, setIsCategoriesSidebarOpen] = React.useState(false);
+    const [isCategoriesExpanded, setIsCategoriesExpanded] = React.useState(false);
     const [isSearchOverlayOpen, setIsSearchOverlayOpen] = React.useState(false);
     const [isLocationOverlayOpen, setIsLocationOverlayOpen] = React.useState(false);
     const [isAccountOverlayOpen, setIsAccountOverlayOpen] = React.useState(false);
@@ -47,13 +48,22 @@ export function Navbar() {
     };
 
     const categories = [
-        { label: 'Vegetables & Fruit', icon: '🥦' },
-        { label: 'Beverages', icon: '🥤' },
-        { label: 'Meats & Seafood', icon: '🥩' },
-        { label: 'Breakfast & Dairy', icon: '🥛' },
-        { label: 'Frozen Foods', icon: '❄️' },
-        { label: 'Biscuits & Snacks', icon: '🍪' },
-        { label: 'Grocery & Staples', icon: '🍞' }
+        { name: 'Fruits & Vegetables', image: '/images/category/vegitable.png' },
+        { name: 'Dairy', image: '/images/category/milk.png' },
+        { name: 'Canned & Imported', image: '/images/category/candy.png' },
+        { name: 'Flours', image: '/images/category/snacks.png' },
+        { name: 'Sauces & Seasoning', image: '/images/category/drink-juice.png' },
+        { name: 'Masala, Salt & Sugar', image: '/images/category/candy.png' },
+        { name: 'Chicken & Eggs', image: '/images/category/animal food.png' },
+        { name: 'Edible Oils', image: '/images/category/fruits.png' },
+        { name: 'Custom Packaging', image: '/images/category/vegitable.png' },
+        { name: 'Frozen & Instant Food', image: '/images/category/frozen foods.png' },
+        { name: 'Packaging Material', image: '/images/category/vegitable.png' },
+        { name: 'Bakery & Chocolates', image: '/images/category/candy.png' },
+        { name: 'Beverages & Mixers', image: '/images/category/drink-juice.png' },
+        { name: 'Cleaning & Consumables', image: '/images/category/vegitable.png' },
+        { name: 'Pulses', image: '/images/category/snacks.png' },
+        { name: 'Mutton, Duck & Meat', image: '/images/category/fish & meat.png' },
     ];
 
     const pathname = usePathname();
@@ -88,12 +98,11 @@ export function Navbar() {
             />
 
             {/* Persistent Top Green Line - Scrolls Away */}
-            <div className="w-full h-[12px] bg-primary relative z-[1000] shadow-sm" />
 
             {/* Top Header - Scrolls Away */}
             <header className={cn(
                 "w-full bg-white relative z-[1000]",
-                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/') || pathname === '/cart') && "hidden md:block"
+                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/') || pathname === '/cart' || pathname === '/orders') && "hidden md:block"
             )}>
                 <div className="w-full py-3 px-4 md:px-[var(--container-padding)]">
                     <div className="max-w-[var(--container-max)] mx-auto">
@@ -238,14 +247,16 @@ export function Navbar() {
 
                             {/* Dropdown Menu */}
                             <div className="absolute top-[calc(100%+8px)] left-0 w-64 bg-white rounded-xl shadow-2xl ring-1 ring-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-[110] overflow-hidden py-3">
-                                {categories.map((item, idx) => (
-                                    <div key={idx} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50 cursor-pointer group/item transition-colors">
+                                {categories.slice(0, 10).map((item, idx) => (
+                                    <Link key={idx} href={`/category/${item.name.toLowerCase().replace(/\s+/g, '-')}`} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50 cursor-pointer group/item transition-colors">
                                         <div className="flex items-center gap-3">
-                                            <span className="text-xl leading-none">{item.icon}</span>
-                                            <span className="text-sm font-medium text-text">{item.label}</span>
+                                            <div className="w-6 h-6 flex items-center justify-center">
+                                                <img src={item.image} alt="" className="max-w-full max-h-full object-contain opacity-70 group-hover:opacity-100 transition-opacity" />
+                                            </div>
+                                            <span className="text-sm font-medium text-text">{item.name}</span>
                                         </div>
                                         <ChevronDown size={14} className="-rotate-90 text-gray-300 group-hover/item:text-primary transition-colors" />
-                                    </div>
+                                    </Link>
                                 ))}
                             </div>
                         </div>
@@ -335,41 +346,75 @@ export function Navbar() {
                 </div>
             </div>
 
-            {/* Mobile Sidebar - Categories */}
+            {/* Mobile Bottom-Sheet - Categories */}
             <div
                 className={cn(
-                    "fixed inset-0 z-[2000] bg-black/50 transition-opacity duration-300 md:hidden",
+                    "fixed inset-0 z-[9998] bg-black/60 transition-opacity duration-300 md:hidden",
                     isCategoriesSidebarOpen ? "opacity-100 visible" : "opacity-0 invisible"
                 )}
+                style={{ bottom: '72px' }}
                 onClick={() => setIsCategoriesSidebarOpen(false)}
             >
                 <div
                     className={cn(
-                        "fixed inset-y-0 left-0 w-[280px] bg-white shadow-2xl transition-transform duration-300 ease-out transform p-6 flex flex-col gap-8",
-                        isCategoriesSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                        "fixed bottom-[72px] left-0 right-0 bg-white shadow-2xl transition-transform duration-300 ease-out transform rounded-t-[30px] flex flex-col min-h-[50vh] max-h-[80vh] z-[9999]",
+                        isCategoriesSidebarOpen ? "translate-y-0" : "translate-y-full"
                     )}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Menu size={20} className="text-primary" />
-                            <h2 className="text-xl font-extrabold text-text">Categories</h2>
-                        </div>
-                        <button className="p-2 hover:bg-gray-100 rounded-full transition-colors" onClick={() => setIsCategoriesSidebarOpen(false)}>
-                            <span className="text-2xl font-light leading-none">×</span>
-                        </button>
+                    {/* Handle Bar */}
+                    <div className="w-full flex justify-center py-4">
+                        <div className="w-16 h-1.5 bg-gray-300 rounded-full" />
                     </div>
 
-                    <div className="flex flex-col gap-1 overflow-y-auto">
-                        {categories.map((item, idx) => (
-                            <div key={idx} className="flex items-center justify-between py-3.5 px-2 border-b border-gray-50 group hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => setIsCategoriesSidebarOpen(false)}>
-                                <div className="flex items-center gap-4">
-                                    <span className="text-2xl leading-none">{item.icon}</span>
-                                    <span className="font-semibold text-text group-hover:text-primary transition-colors">{item.label}</span>
-                                </div>
-                                <ChevronDown size={16} className="-rotate-90 text-gray-300 group-hover:text-primary transition-colors" />
-                            </div>
-                        ))}
+                    <div className="px-6 flex items-center justify-between pt-2 mb-6">
+                        <h2 className="text-[1.1rem] font-bold text-[#181725]">Shop By Category</h2>
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setIsCategoriesExpanded(!isCategoriesExpanded)}
+                                className="text-[#53B175] font-bold text-[14px] flex items-center gap-1"
+                            >
+                                {isCategoriesExpanded ? (
+                                    <ChevronDown size={20} className="text-[#181725] rotate-180" />
+                                ) : (
+                                    "See All"
+                                )}
+                            </button>
+                            <button
+                                className="p-2 bg-gray-50 rounded-full hover:bg-gray-100 transition-colors"
+                                onClick={() => {
+                                    setIsCategoriesSidebarOpen(false);
+                                    setIsCategoriesExpanded(false);
+                                }}
+                            >
+                                <X size={18} className="text-gray-600" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Category Grid */}
+                    <div className="px-4 pb-12 overflow-y-auto">
+                        <div className="grid grid-cols-4 gap-y-8 gap-x-2">
+                            {(isCategoriesExpanded ? categories : categories.slice(0, 8)).map((item, idx) => (
+                                <Link
+                                    key={idx}
+                                    href={`/category/${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+                                    className="flex flex-col items-center gap-2 group"
+                                    onClick={() => setIsCategoriesSidebarOpen(false)}
+                                >
+                                    <div className="w-full aspect-square bg-[#F7F8FA] rounded-2xl flex items-center justify-center p-2 transition-transform active:scale-95">
+                                        <img
+                                            src={item.image}
+                                            alt={item.name}
+                                            className="w-[75%] h-[75%] object-contain"
+                                        />
+                                    </div>
+                                    <span className="text-[11px] font-bold text-center text-[#181725] leading-tight line-clamp-2">
+                                        {item.name}
+                                    </span>
+                                </Link>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>

@@ -12,7 +12,10 @@ import {
     ArrowLeft,
     Filter,
     LayoutGrid,
-    List
+    List,
+    Share2,
+    Plus,
+    ChevronDown
 } from 'lucide-react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -21,13 +24,13 @@ import { NewsletterBanner } from '@/components/features/NewsletterBanner';
 
 // --- Shared Data ---
 const CATEGORIES = [
-    { name: 'Vegetables', image: '/images/category/vegitable.png' },
-    { name: 'Fruits', image: '/images/category/fruits.png' },
-    { name: 'Meat & Eggs', image: '/images/category/animal food.png' },
-    { name: 'Drinks', image: '/images/category/drink-juice.png' },
-    { name: 'Bakery', image: '/images/category/candy.png' },
-    { name: 'Snacks', image: '/images/category/snacks.png' },
+    { name: 'Fruits & Vegetables', image: '/images/category/vegitable.png' },
     { name: 'Dairy', image: '/images/category/milk.png' },
+    { name: 'Canned & Imported', image: '/images/category/candy.png' }, // Placeholder image
+    { name: 'Flours', image: '/images/category/snacks.png' }, // Placeholder image
+    { name: 'Noodles & Sauces', image: '/images/category/drink-juice.png' }, // Placeholder image
+    { name: 'Meat & Eggs', image: '/images/category/animal food.png' },
+    { name: 'Bakery', image: '/images/category/candy.png' },
 ];
 
 const VEGETABLES = [
@@ -232,53 +235,87 @@ export default function CategoryPage() {
     };
 
     const ProductCard = ({ product }: { product: any }) => (
-        <div className="bg-white border border-[#E2E2E2] rounded-[18px] p-3 flex flex-col relative group transition-all duration-300">
-            <div className="w-full aspect-[1] mb-2 flex items-center justify-center p-2 overflow-hidden">
+        <div className="bg-white border border-[#E2E2E2] rounded-[22px] p-4 flex flex-col relative w-full h-[440px] group transition-all duration-300">
+            {/* Share Button */}
+            <button className="absolute top-4 right-4 p-1.5 text-[#181725] hover:bg-gray-100 rounded-full z-10 transition-colors">
+                <Share2 size={18} strokeWidth={1.5} />
+            </button>
+
+            {/* Product Image */}
+            <div className="w-full h-[160px] mb-4 flex items-center justify-center p-2 overflow-hidden">
                 <Link href={`/product/${product.id}`} className="w-full h-full flex items-center justify-center">
-                    <img src={product.image} alt={product.name} className="max-w-full max-h-full object-contain scale-[1.15]" />
+                    <img
+                        src={product.image}
+                        alt={product.name}
+                        className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105"
+                    />
                 </Link>
             </div>
-            <Link href={`/product/${product.id}`}>
-                <h3 className="text-[14px] font-bold text-[#181725] leading-snug mb-3 line-clamp-2 h-10 hover:text-[#53B175] transition-colors">
-                    {product.name}
-                </h3>
-            </Link>
-            <div className="flex items-center gap-2 mb-4">
-                <img src="/images/shop.svg" alt="shop" className="w-[12px] h-[14px]" />
-                <span className="text-[11px] text-[#7C7C7C] font-medium">{product.vendor}</span>
+
+            {/* Product Info */}
+            <div className="flex-1 flex flex-col">
+                <Link href={`/product/${product.id}`}>
+                    <h3 className="text-[16px] font-bold text-[#181725] leading-tight mb-0.5 line-clamp-2">
+                        {product.name}
+                    </h3>
+                </Link>
+
+                <p className="text-[13px] text-[#7C7C7C] font-medium mb-3">1 pc</p>
+
+                {/* Tiered Pricing Section */}
+                <div className="bg-[#F1FBF4]/60 border border-[#53B175]/15 rounded-[12px] overflow-hidden mb-4">
+                    {/* Tier 1 */}
+                    <div className="flex items-center justify-between px-3 py-2">
+                        <span className="text-[12px] font-bold text-[#53B175]">₹174/pc for 6 pcs+</span>
+                        <button className="bg-white border border-[#E2E2E2] rounded-full px-3 py-1 flex items-center gap-1.5 text-[10px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm">
+                            <Plus size={12} strokeWidth={4} /> ADD
+                        </button>
+                    </div>
+
+                    <div className="h-[1px] w-full bg-[#53B175]/10" />
+
+                    {/* Tier 2 */}
+                    <div className="flex items-center justify-between px-3 py-2">
+                        <span className="text-[12px] font-bold text-[#53B175]">₹175/pc for 3 pcs+</span>
+                        <button className="bg-white border border-[#E2E2E2] rounded-full px-3 py-1 flex items-center gap-1.5 text-[10px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm">
+                            <Plus size={12} strokeWidth={4} /> ADD
+                        </button>
+                    </div>
+                </div>
+
+                {/* Final Pricing */}
+                <div className="mb-4 flex items-baseline gap-1">
+                    <span className="text-[17px] font-bold text-[#181725]">₹ 177</span>
+                    <span className="text-[13px] text-[#7C7C7C] font-semibold">/pc</span>
+                </div>
+
+                {/* Main Action Button */}
+                <button className="w-full py-2.5 bg-[#EAF7EF] rounded-[16px] border border-[#53B175]/30 flex items-center justify-center gap-2 text-[#53B175] text-[14px] font-bold transition-all active:scale-95 hover:bg-[#E2F2E8] shadow-sm mt-auto">
+                    <span>Add To Cart</span>
+                    <ShoppingCart size={16} />
+                </button>
             </div>
-            <button className="w-full py-2.5 bg-[#EAF6EF] rounded-[15px] flex items-center justify-center gap-2 text-[#53B175] text-[13px] font-bold transition-all active:scale-95">
-                Add To Cart
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="9" cy="21" r="1" />
-                    <circle cx="20" cy="21" r="1" />
-                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-                </svg>
-            </button>
         </div>
     );
 
     return (
-        <div className="bg-white min-h-screen">
+        <div className="bg-white min-h-screen flex flex-col">
             {/* Global Footer Hide for Mobile on this page */}
             <style dangerouslySetInnerHTML={{
                 __html: `
                 @media (max-width: 768px) {
-                    footer { display: none !important; }
+                    footer, .bottom-nav { display: none !important; }
                 }
             `}} />
 
-            {/* ==================== MOBILE TOP SECTION ==================== */}
-            <div className="md:hidden">
-                {/* Green Theme Bar */}
-                <div className="w-full h-[2px] bg-[#53B175] shadow-sm" />
-
-                {/* Main Header */}
-                <header className="bg-white px-4 py-3 flex items-center justify-between">
+            {/* ==================== MOBILE LAYOUT ==================== */}
+            <div className="md:hidden flex flex-col h-screen overflow-hidden">
+                {/* Fixed Header */}
+                <header className="bg-white px-4 py-4 flex items-center justify-between border-b border-[#F2F3F2] shrink-0 relative">
                     <Link href="/">
-                        <ArrowLeft size={22} className="text-[#181725]" strokeWidth={2.5} />
+                        <ArrowLeft size={24} className="text-[#181725]" />
                     </Link>
-                    <h1 className="text-[18px] font-bold text-[#181725] flex-1 text-center">
+                    <h1 className="absolute left-1/2 -translate-x-1/2 text-[18px] font-bold text-[#181725] whitespace-nowrap">
                         {displayName}
                     </h1>
                     <button className="p-1">
@@ -286,44 +323,39 @@ export default function CategoryPage() {
                     </button>
                 </header>
 
-                {/* Expandable Category Tab */}
-                <div className="bg-white px-4 pt-1 pb-4">
-                    <div className="flex items-center justify-end mb-3">
-                        <button
-                            onClick={toggleExpanded}
-                            className="text-[#53B175] font-bold text-[13px] flex items-center gap-1"
-                        >
-                            {isExpanded ? "Show Less" : "See All"}
-                            {!isExpanded && <ChevronRight size={16} />}
-                        </button>
-                    </div>
-
-                    {/* Category Grid - 4 columns */}
-                    <div className="grid grid-cols-4 gap-x-2 gap-y-6">
-                        {(isExpanded ? CATEGORIES : CATEGORIES.slice(0, 4)).map((cat, idx) => {
-                            const isActive = isTabActive(cat.name, slug);
+                <div className="flex flex-1 overflow-hidden">
+                    {/* Left Sidebar: Categories */}
+                    <div className="w-[100px] bg-white overflow-y-auto no-scrollbar border-r border-[#D0D0D0] flex flex-col pt-2">
+                        {[{ name: 'See All', image: null }, ...CATEGORIES].map((cat, idx) => {
+                            const isActive = cat.name === 'See All' ? false : isTabActive(cat.name, slug);
                             return (
                                 <Link
                                     key={idx}
-                                    href={`/category/${cat.name.toLowerCase().replace(/\s+/g, '-')}${isExpanded ? '?exp=1' : ''}`}
-                                    className="flex flex-col items-center"
+                                    href={cat.name === 'See All' ? '#' : `/category/${cat.name.toLowerCase().replace(/\s+/g, '-')}`}
+                                    className={cn(
+                                        "flex flex-col items-center py-4 px-1 relative transition-all",
+                                        "bg-white"
+                                    )}
                                 >
-                                    {/* Image Box */}
-                                    <div
-                                        className={cn(
-                                            "w-full aspect-square rounded-[18px] flex items-center justify-center mb-2 overflow-hidden transition-all",
-                                            isActive ? "bg-[#EAF6EF] border-2 border-[#53B175]" : "bg-[#F2F3F2]"
+                                    {isActive && <div className="absolute right-[-1px] top-[16px] h-[72px] w-[4px] bg-[#53B175] rounded-l-md z-20" />}
+                                    <div className={cn(
+                                        "flex items-center justify-center mb-2 overflow-hidden transition-all",
+                                        cat.name === 'See All' ? "w-[64px] h-[64px] rounded-full bg-[#F8F9FA]" : "w-[72px] h-[72px] rounded-[14px] bg-white",
+                                        isActive ? "border-[1.5px] border-[#53B175]" : (cat.name !== 'See All' ? "border border-transparent" : "border border-transparent")
+                                    )}>
+                                        {cat.image ? (
+                                            <img src={cat.image} alt={cat.name} className="w-[70%] h-[70%] object-contain" />
+                                        ) : (
+                                            <div className="grid grid-cols-2 gap-[2px] p-[2px]">
+                                                <div className="w-[10px] h-[10px] bg-[#181725] rounded-[2px]" />
+                                                <div className="w-[10px] h-[10px] bg-[#181725] rounded-[2px]" />
+                                                <div className="w-[10px] h-[10px] bg-[#181725] rounded-[2px]" />
+                                                <div className="w-[10px] h-[10px] bg-[#181725] rounded-full" />
+                                            </div>
                                         )}
-                                    >
-                                        <img
-                                            src={cat.image}
-                                            alt={cat.name}
-                                            className="w-[70%] h-[70%] object-contain"
-                                        />
                                     </div>
-                                    {/* Category Name */}
                                     <p className={cn(
-                                        "text-[10px] text-center font-bold leading-[1.2]",
+                                        "text-[11px] text-center font-bold leading-tight px-1",
                                         isActive ? "text-[#53B175]" : "text-[#181725]"
                                     )}>
                                         {cat.name}
@@ -332,49 +364,37 @@ export default function CategoryPage() {
                             );
                         })}
                     </div>
-                </div>
 
-                {/* Mobile Promo Slider */}
-                <div className="px-4 py-4">
-                    <div
-                        ref={scrollRef}
-                        onScroll={handleScroll}
-                        className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar scroll-smooth"
-                    >
-                        {PROMO_SLIDES.map((slide, idx) => (
-                            <div key={idx} className="min-w-full snap-start">
-                                <div className={cn(
-                                    "relative h-[115px] rounded-[18px] overflow-hidden flex items-center bg-gradient-to-r",
-                                    slide.bg
-                                )}>
-                                    <div className="w-[45%] flex items-center justify-center pl-4">
-                                        <img src={slide.image} alt="Featured" className="h-[90px] w-auto object-contain" />
-                                    </div>
+                    {/* Right Content Area: Chips + Products */}
+                    <div className="flex-1 flex flex-col overflow-hidden bg-white">
+                        {/* Scrollable Filter Chips */}
+                        <div className="flex overflow-x-auto px-4 py-3 gap-2 no-scrollbar border-b border-[#F2F3F2]">
+                            {[
+                                { label: 'Above 4.0+', icon: <Star size={14} className="fill-[#FFB800] text-[#FFB800] mr-1" /> },
+                                { label: 'Brand', hasArrow: true },
+                                { label: 'Type', hasArrow: true },
+                                { label: 'Price', hasArrow: true },
+                            ].map((chip, idx) => (
+                                <button
+                                    key={idx}
+                                    className="flex items-center px-4 py-2 rounded-[12px] border border-[#E2E2E2] bg-white text-[13px] font-bold text-[#181725] whitespace-nowrap whitespace-nowrap"
+                                >
+                                    {chip.icon}
+                                    {chip.label}
+                                    {chip.hasArrow && <ChevronDown size={14} className="ml-1" />}
+                                </button>
+                            ))}
+                        </div>
 
-                                    <div className="flex-1 flex flex-col items-center justify-center text-center pr-4">
-                                        <h3 className="text-[18px] font-bold text-[#181725] leading-none mb-1 whitespace-pre-line">
-                                            {slide.title}
-                                        </h3>
-                                        <p className="text-[12px] font-bold text-[#53B175] mb-2 uppercase tracking-tight">
-                                            {slide.subtitle}
-                                        </p>
-
-                                        {/* Dots Indicator */}
-                                        <div className="flex items-center gap-1.5 mt-1">
-                                            {PROMO_SLIDES.map((_, dotIdx) => (
-                                                <div
-                                                    key={dotIdx}
-                                                    className={cn(
-                                                        "transition-all duration-300 rounded-full",
-                                                        dotIdx === activeIdx ? "w-4 h-1 bg-[#53B175]" : "w-1 h-1 bg-gray-300"
-                                                    )}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                        {/* Product Feed */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+                            {PRODUCTS.map((product, idx) => (
+                                <ProductCard
+                                    key={`${product.id}-${idx}`}
+                                    product={product}
+                                />
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -509,56 +529,6 @@ export default function CategoryPage() {
                     </div>
                 </div>
             </div>
-
-            {/* ==================== CONTENT SECTIONS ==================== */}
-            <div className="max-w-[var(--container-max)] mx-auto px-4 md:px-[var(--container-padding)] pb-20">
-
-                {/* 1. Vegetable Section (Mobile) */}
-                <div className="md:hidden grid grid-cols-2 gap-3 mt-4">
-                    {VEGETABLES.map((product, idx) => (
-                        <ProductCard key={`${product.id}-${idx}`} product={product} />
-                    ))}
-                </div>
-
-                {/* 2. Flash Sales Today Section (Mobile) */}
-                <div className="md:hidden mt-8">
-                    <h2 className="text-[20px] font-bold text-[#181725] mb-4">Flash Sales Today</h2>
-
-                    {/* Flash Sale Banner */}
-                    <div className="bg-[#E7F6E7] rounded-[22px] p-6 mb-6 flex items-center relative overflow-hidden">
-                        <div className="relative z-10 w-[60%]">
-                            <h3 className="text-[20px] font-bold text-[#181725] leading-tight mb-4">
-                                $5 off on your<br />firstorder
-                            </h3>
-                            <button className="bg-[#53B175] text-white px-6 py-2.5 rounded-[12px] text-[15px] font-bold shadow-sm transition-all active:scale-95">
-                                Shop Now
-                            </button>
-                        </div>
-                        <div className="absolute right-[-10px] top-1/2 -translate-y-1/2 w-[55%]">
-                            <img src="/images/flash-sale/flash-right1 (2).png" alt="Flash Sale" className="w-full h-auto object-contain" />
-                        </div>
-                        {/* Decorative background leaf pattern - conceptual */}
-                        <div className="absolute inset-0 opacity-[0.05] pointer-events-none" style={{ backgroundImage: 'url("/images/category/vegitable.png")', backgroundSize: '100px' }} />
-                    </div>
-
-                    {/* Flash Sale Fruit Grid */}
-                    <div className="grid grid-cols-2 gap-3">
-                        {FRUITS.map((product) => (
-                            <ProductCard key={product.id} product={product} />
-                        ))}
-                    </div>
-                </div>
-
-                {/* Down Feature Section */}
-                {/* <div className="mt-12 md:mt-16">
-                    <ProductShowcase />
-                </div> */}
-            </div>
-
-            {/* Newsletter Section */}
-            {/* <div className="mt-4 md:mt-12 bg-white">
-                <NewsletterBanner />
-            </div> */}
         </div>
     );
 }
