@@ -51,10 +51,9 @@ export function TrustedBy() {
 
     return (
         <section className="py-6 bg-white overflow-hidden">
-            <div className="fluid-container">
+            <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
                 <h2
-                    style={{ fontFamily: "'Poppins', sans-serif" }}
-                    className="text-[16px] md:text-[24px] font-bold text-[#181725] mb-5 leading-[100%] tracking-[0%]"
+                    className="text-[20px] font-bold text-[#181725] mb-6"
                 >
                     Trusted By
                 </h2>
