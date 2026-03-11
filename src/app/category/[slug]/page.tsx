@@ -21,6 +21,8 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ProductShowcase } from '@/components/features/ProductShowcase';
 import { NewsletterBanner } from '@/components/features/NewsletterBanner';
+import { useCart } from '@/context/CartContext';
+
 
 // --- Shared Data ---
 const CATEGORIES = [
@@ -180,6 +182,8 @@ export default function CategoryPage() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const slug = params.slug as string;
+    const { addToCart } = useCart();
+
 
     // Check for expanded state in URL
     const isExpanded = searchParams.get('exp') === '1';
@@ -234,69 +238,86 @@ export default function CategoryPage() {
         if (newIdx !== activeIdx) setActiveIdx(newIdx);
     };
 
-    const ProductCard = ({ product }: { product: any }) => (
-        <div className="bg-white border border-[#E2E2E2] rounded-[22px] p-4 flex flex-col relative w-full h-[440px] group transition-all duration-300">
-            {/* Share Button */}
-            <button className="absolute top-4 right-4 p-1.5 text-[#181725] hover:bg-gray-100 rounded-full z-10 transition-colors">
-                <Share2 size={18} strokeWidth={1.5} />
-            </button>
+    const ProductCard = ({ product }: { product: any }) => {
+        const handleAdd = (e: React.MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            addToCart(product);
+        };
 
-            {/* Product Image */}
-            <div className="w-full h-[160px] mb-4 flex items-center justify-center p-2 overflow-hidden">
-                <Link href={`/product/${product.id}`} className="w-full h-full flex items-center justify-center">
-                    <img
-                        src={product.image}
-                        alt={product.name}
-                        className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105"
-                    />
-                </Link>
-            </div>
-
-            {/* Product Info */}
-            <div className="flex-1 flex flex-col">
-                <Link href={`/product/${product.id}`}>
-                    <h3 className="text-[16px] font-bold text-[#181725] leading-tight mb-0.5 line-clamp-2">
-                        {product.name}
-                    </h3>
-                </Link>
-
-                <p className="text-[13px] text-[#7C7C7C] font-medium mb-3">1 pc</p>
-
-                {/* Tiered Pricing Section */}
-                <div className="bg-[#F1FBF4]/60 border border-[#53B175]/15 rounded-[12px] overflow-hidden mb-4">
-                    {/* Tier 1 */}
-                    <div className="flex items-center justify-between px-3 py-2">
-                        <span className="text-[12px] font-bold text-[#53B175]">₹174/pc for 6 pcs+</span>
-                        <button className="bg-white border border-[#E2E2E2] rounded-full px-3 py-1 flex items-center gap-1.5 text-[10px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm">
-                            <Plus size={12} strokeWidth={4} /> ADD
-                        </button>
-                    </div>
-
-                    <div className="h-[1px] w-full bg-[#53B175]/10" />
-
-                    {/* Tier 2 */}
-                    <div className="flex items-center justify-between px-3 py-2">
-                        <span className="text-[12px] font-bold text-[#53B175]">₹175/pc for 3 pcs+</span>
-                        <button className="bg-white border border-[#E2E2E2] rounded-full px-3 py-1 flex items-center gap-1.5 text-[10px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm">
-                            <Plus size={12} strokeWidth={4} /> ADD
-                        </button>
-                    </div>
-                </div>
-
-                {/* Final Pricing */}
-                <div className="mb-4 flex items-baseline gap-1">
-                    <span className="text-[17px] font-bold text-[#181725]">₹ 177</span>
-                    <span className="text-[13px] text-[#7C7C7C] font-semibold">/pc</span>
-                </div>
-
-                {/* Main Action Button */}
-                <button className="w-full py-2.5 bg-[#EAF7EF] rounded-[16px] border border-[#53B175]/30 flex items-center justify-center gap-2 text-[#53B175] text-[14px] font-bold transition-all active:scale-95 hover:bg-[#E2F2E8] shadow-sm mt-auto">
-                    <span>Add To Cart</span>
-                    <ShoppingCart size={16} />
+        return (
+            <div className="bg-white border border-[#E2E2E2] rounded-[22px] p-4 flex flex-col relative w-full h-[440px] group transition-all duration-300">
+                {/* Share Button */}
+                <button className="absolute top-4 right-4 p-1.5 text-[#181725] hover:bg-gray-100 rounded-full z-10 transition-colors">
+                    <Share2 size={18} strokeWidth={1.5} />
                 </button>
+
+                {/* Product Image */}
+                <div className="w-full h-[160px] mb-4 flex items-center justify-center p-2 overflow-hidden">
+                    <Link href={`/product/${product.id}`} className="w-full h-full flex items-center justify-center">
+                        <img
+                            src={product.image}
+                            alt={product.name}
+                            className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105"
+                        />
+                    </Link>
+                </div>
+
+                {/* Product Info */}
+                <div className="flex-1 flex flex-col">
+                    <Link href={`/product/${product.id}`}>
+                        <h3 className="text-[16px] font-bold text-[#181725] leading-tight mb-0.5 line-clamp-2">
+                            {product.name}
+                        </h3>
+                    </Link>
+
+                    <p className="text-[13px] text-[#7C7C7C] font-medium mb-3">1 pc</p>
+
+                    {/* Tiered Pricing Section */}
+                    <div className="bg-[#F1FBF4]/60 border border-[#53B175]/15 rounded-[12px] overflow-hidden mb-4">
+                        {/* Tier 1 */}
+                        <div className="flex items-center justify-between px-3 py-2">
+                            <span className="text-[12px] font-bold text-[#53B175]">₹174/pc for 6 pcs+</span>
+                            <button
+                                onClick={handleAdd}
+                                className="bg-white border border-[#E2E2E2] rounded-full px-3 py-1 flex items-center gap-1.5 text-[10px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm"
+                            >
+                                <Plus size={12} strokeWidth={4} /> ADD
+                            </button>
+                        </div>
+
+                        <div className="h-[1px] w-full bg-[#53B175]/10" />
+
+                        {/* Tier 2 */}
+                        <div className="flex items-center justify-between px-3 py-2">
+                            <span className="text-[12px] font-bold text-[#53B175]">₹175/pc for 3 pcs+</span>
+                            <button
+                                onClick={handleAdd}
+                                className="bg-white border border-[#E2E2E2] rounded-full px-3 py-1 flex items-center gap-1.5 text-[10px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm"
+                            >
+                                <Plus size={12} strokeWidth={4} /> ADD
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Final Pricing */}
+                    <div className="mb-4 flex items-baseline gap-1">
+                        <span className="text-[17px] font-bold text-[#181725]">₹ 177</span>
+                        <span className="text-[13px] text-[#7C7C7C] font-semibold">/pc</span>
+                    </div>
+
+                    {/* Main Action Button */}
+                    <button
+                        onClick={handleAdd}
+                        className="w-full py-2.5 bg-[#EAF7EF] rounded-[16px] border border-[#53B175]/30 flex items-center justify-center gap-2 text-[#53B175] text-[14px] font-bold transition-all active:scale-95 hover:bg-[#E2F2E8] shadow-sm mt-auto"
+                    >
+                        <span>Add To Cart</span>
+                        <ShoppingCart size={16} />
+                    </button>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <div className="bg-white min-h-screen flex flex-col">
@@ -495,14 +516,19 @@ export default function CategoryPage() {
                             {/* Main Product Grid */}
                             <div className="grid grid-cols-3 xl:grid-cols-4 gap-6">
                                 {PRODUCTS.map((product) => (
-                                    <Link
-                                        href={`/product/${product.id}`}
+                                    <div
                                         key={product.id}
                                         className="group bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 flex flex-col"
                                     >
                                         <div className="relative aspect-square mb-4 bg-gray-50 rounded-xl overflow-hidden p-4 flex items-center justify-center shrink-0">
                                             <img src={product.image} alt={product.name} className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110" />
-                                            <button className="absolute top-2 right-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-[11px] font-bold opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all shadow-sm">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    addToCart(product);
+                                                }}
+                                                className="absolute top-2 right-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-[11px] font-bold opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all shadow-sm"
+                                            >
                                                 Quick Add +
                                             </button>
                                         </div>
@@ -510,19 +536,27 @@ export default function CategoryPage() {
                                             <Star size={12} className="fill-[#ffb800] text-[#ffb800]" />
                                             <span className="text-[12px] font-bold text-text">{product.rating}</span>
                                         </div>
-                                        <h3 className="text-[14px] font-bold text-text leading-tight mb-2 line-clamp-2 h-9 group-hover:text-primary transition-colors">
-                                            {product.name}
-                                        </h3>
+                                        <Link href={`/product/${product.id}`}>
+                                            <h3 className="text-[14px] font-bold text-text leading-tight mb-2 line-clamp-2 h-9 group-hover:text-primary transition-colors">
+                                                {product.name}
+                                            </h3>
+                                        </Link>
                                         <div className="mt-auto pt-2 flex items-center justify-between">
                                             <div className="flex flex-col">
                                                 <span className="text-[18px] font-extrabold text-primary">{product.newPrice}</span>
                                                 <span className="text-[11px] text-text-muted line-through">{product.oldPrice}</span>
                                             </div>
-                                            <button className="w-9 h-9 bg-primary text-white rounded-xl flex items-center justify-center hover:bg-primary-dark transition-all transform active:scale-90">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    addToCart(product);
+                                                }}
+                                                className="w-9 h-9 bg-primary text-white rounded-xl flex items-center justify-center hover:bg-primary-dark transition-all transform active:scale-90"
+                                            >
                                                 <ShoppingCart size={18} />
                                             </button>
                                         </div>
-                                    </Link>
+                                    </div>
                                 ))}
                             </div>
                         </div>

@@ -3,6 +3,10 @@ import { Quicksand, Poppins } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { Inter } from "next/font/google";
+import { CartProvider } from "@/context/CartContext";
+import { GoogleMapsProvider } from "@/components/providers/GoogleMapsProvider";
+import { AddressProvider } from "@/context/AddressContext";
 
 const quicksand = Quicksand({
   subsets: ["latin"],
@@ -16,7 +20,6 @@ const poppins = Poppins({
   variable: "--font-poppins",
 });
 
-import { Inter } from "next/font/google";
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800", "900"],
@@ -28,10 +31,6 @@ export const metadata: Metadata = {
   description: "High speed, optimized B2B platform for restaurant and eating products.",
 };
 
-import { CartProvider } from "@/context/CartContext";
-import { GoogleMapsProvider } from "@/components/providers/GoogleMapsProvider";
-import { AddressProvider } from "@/context/AddressContext";
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -40,9 +39,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${quicksand.variable} ${inter.variable} ${poppins.variable} font-sans antialiased bg-background`}>
-        {/* Persistent 12px Top Green Bar */}
-        <div className="w-full h-[12px] bg-[#53B175] sticky top-0 z-[10000]" />
-        
         <GoogleMapsProvider>
           <AddressProvider>
             <CartProvider>
@@ -58,4 +54,3 @@ export default function RootLayout({
     </html>
   );
 }
-
