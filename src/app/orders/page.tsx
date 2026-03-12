@@ -60,18 +60,20 @@ export default function OrderHistoryPage() {
         <div className="min-h-screen bg-[#F2F3F2]">
 
             {/* Header */}
-            <div className="sticky top-[12px] z-50 bg-[#F2F3F2] px-4 h-16 flex items-center justify-between">
-                <button onClick={() => router.back()} className="p-2 -ml-2">
-                    <ChevronLeft size={24} className="text-[#181725]" />
+            <div className="sticky top-[12px] z-50 bg-[#F2F3F2] px-2 min-[340px]:px-4 h-16 flex items-center justify-between">
+                <button onClick={() => router.back()} className="p-2 -ml-1 flex-shrink-0">
+                    <ChevronLeft size={22} className="text-[#181725]" />
                 </button>
-                <h1 className="text-[20px] font-bold text-[#181725] absolute left-1/2 -translate-x-1/2 whitespace-nowrap">Your Orders</h1>
-                <div className="flex items-center gap-4">
-                    <button className="p-1">
-                        <Heart size={24} className="text-[#181725]" />
+                <h1 className="text-[16px] min-[340px]:text-[20px] font-bold text-[#181725] absolute left-1/2 -translate-x-1/2 whitespace-nowrap">
+                    Your Orders
+                </h1>
+                <div className="flex items-center gap-1 min-[340px]:gap-4 flex-shrink-0">
+                    <button className="p-1.5 grayscale-[0.5] opacity-80">
+                        <Heart size={20} className="text-[#181725]" />
                     </button>
-                    <Link href="/cart" className="relative p-1">
-                        <ShoppingCart size={24} className="text-[#181725]" />
-                        <span className="absolute -top-1 -right-1 bg-[#53B175] text-white text-[10px] w-4.5 h-4.5 flex items-center justify-center rounded-full font-bold border-2 border-white">
+                    <Link href="/cart" className="relative p-1.5 flex items-center justify-center">
+                        <ShoppingCart size={20} className="text-[#181725]" />
+                        <span className="absolute top-0 right-0 bg-[#53B175] text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white translate-x-1 -translate-y-1">
                             0
                         </span>
                     </Link>

@@ -8,7 +8,7 @@ export function QuickActions() {
     const actions = [
         { href: '/orders', icon: RotateCcw, label: 'Reorder', color: 'bg-blue-50 text-blue-600', desc: 'From last order' },
         { href: '/order-lists', icon: ListOrdered, label: 'Quick Order', color: 'bg-purple-50 text-purple-600', desc: 'Order lists' },
-        { href: '#vendors', icon: Store, label: 'My Vendors', color: 'bg-orange-50 text-orange-600', desc: 'Saved vendors' },
+        { href: '/vendors', icon: Store, label: 'My Vendors', color: 'bg-orange-50 text-orange-600', desc: 'Saved vendors' },
     ];
 
     return (

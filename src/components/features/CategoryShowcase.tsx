@@ -45,7 +45,10 @@ export function CategoryShowcase() {
     const visibleCategories = isExpanded ? CATEGORIES : CATEGORIES.slice(0, 8);
 
     return (
-        <section className="w-full pt-6 pb-6 md:pt-16 md:pb-12 bg-white relative md:-mt-10 z-30">
+        <section 
+            className="w-full pt-6 pb-6 md:pt-16 md:pb-12 bg-white relative md:-mt-10 z-30"
+            suppressHydrationWarning={true}
+        >
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] relative group/main">
 
                 {/* ===== MOBILE LAYOUT ===== */}
@@ -75,13 +78,14 @@ export function CategoryShowcase() {
                             >
                                 {/* Image Box */}
                                 <div
-                                    className="w-full aspect-square rounded-[15px] flex items-center justify-center mb-2.5 overflow-hidden"
+                                    className="w-full aspect-square rounded-[15px] flex items-center justify-center mb-2.5 overflow-hidden relative"
                                     style={{ backgroundColor: '#F2F3F2' }}
                                 >
-                                    <img
+                                    <Image
                                         src={cat.image}
                                         alt={cat.name}
-                                        className="w-[70%] h-[70%] object-contain"
+                                        fill
+                                        className="object-contain p-2"
                                     />
                                 </div>
                                 {/* Category Name */}
@@ -128,10 +132,11 @@ export function CategoryShowcase() {
                                     style={{ backgroundColor: cat.bgColor }}
                                 >
                                     <div className="relative w-[70%] h-[70%] group-hover:scale-110 transition-transform duration-500">
-                                        <img
+                                        <Image
                                             src={cat.image}
                                             alt={cat.name}
-                                            className="w-full h-full object-contain drop-shadow-md"
+                                            fill
+                                            className="object-contain drop-shadow-md"
                                         />
                                     </div>
                                 </div>
@@ -150,16 +155,6 @@ export function CategoryShowcase() {
                     </div>
                 </div>
             </div>
-
-            <style jsx global>{`
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
         </section>
     );
 }

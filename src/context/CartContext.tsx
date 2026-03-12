@@ -79,6 +79,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const groups = useMemo(() => {
         const grouped: Record<string, VendorCartGroup> = {};
         cart.forEach(item => {
+            if (!item.product) return;
             const vId = item.product.vendorId;
             if (!grouped[vId]) {
                 grouped[vId] = {
@@ -92,15 +93,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                 };
             }
             grouped[vId].items.push(item);
-            grouped[vId].subtotal += item.product.price * item.quantity;
+            grouped[vId].subtotal += (item.product.price || 0) * item.quantity;
             grouped[vId].meetsMinOrder = grouped[vId].subtotal >= grouped[vId].minOrderValue;
         });
         return Object.values(grouped);
     }, [cart]);
 
-    const totalItems = useMemo(() => cart.reduce((sum, item) => sum + item.quantity, 0), [cart]);
+    const totalItems = useMemo(() => cart.reduce((sum, item) => sum + (item.quantity || 0), 0), [cart]);
     
     const subtotal = useMemo(() => cart.reduce((sum, item) => {
+        if (!item.product) return sum;
         const price = item.product.price || 0;
         return sum + (price * item.quantity);
     }, 0), [cart]);

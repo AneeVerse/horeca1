@@ -27,7 +27,7 @@ export default function CartPage() {
     // Grouping shipments logic (Simplified for flat cart)
     const shipments = useMemo(() => {
         if (cart.length === 0) return DEMO_SHIPMENTS;
-        
+
         // Group items by vendor
         const grouped: Record<string, any[]> = {};
         cart.forEach(item => {
@@ -72,13 +72,13 @@ export default function CartPage() {
                     Your items has been placcd and is on <br /> its way to being processed.
                 </p>
                 <div className="w-full space-y-4">
-                    <button 
+                    <button
                         onClick={() => router.push('/orders')}
                         className="w-full bg-[#53B175] text-white py-[20px] rounded-[18px] font-bold text-[18px] shadow-lg shadow-[#53B175]/20"
                     >
                         Track Order
                     </button>
-                    <button 
+                    <button
                         onClick={() => router.push('/')}
                         className="w-full text-[#181725] font-bold text-[18px] py-4"
                     >
@@ -113,7 +113,7 @@ export default function CartPage() {
                                     <div className="w-2.5 h-2.5 rounded-full bg-[#53B175]" />
                                 </div>
                             </label>
-                             <label className="flex items-center justify-between p-3 border rounded-xl border-gray-100 bg-gray-50/50">
+                            <label className="flex items-center justify-between p-3 border rounded-xl border-gray-100 bg-gray-50/50">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border font-bold text-green-600">COD</div>
                                     <span className="font-bold text-[#181725]">Cash on Delivery</span>
@@ -132,7 +132,7 @@ export default function CartPage() {
                 </div>
 
                 <div className="fixed bottom-0 left-0 right-0 px-5 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50">
-                    <button 
+                    <button
                         onClick={() => setScreen('success')}
                         className="w-full bg-[#53B175] text-white py-[18px] rounded-[16px] font-bold text-[18px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20"
                     >
@@ -168,7 +168,7 @@ export default function CartPage() {
                 <h1 className="text-[20px] font-bold text-[#181725] absolute left-1/2 -translate-x-1/2">Cart</h1>
                 <div className="flex items-center gap-1">
                     {cart.length > 0 && (
-                        <button 
+                        <button
                             onClick={() => {
                                 if (window.confirm('Are you sure you want to clear your cart?')) {
                                     clearCart();
@@ -189,18 +189,18 @@ export default function CartPage() {
             <div className="flex-1 px-4 space-y-3 pt-2">
                 {/* === SHIPMENT CARDS === */}
                 {shipments.map((shipment) => (
-                    <Link 
+                    <Link
                         key={shipment.id}
                         href={shipment.id === 's1' ? '#' : `/cart/shipment/${shipment.id}`}
                         className="block bg-white rounded-[16px] border border-[#CFCECE] overflow-hidden"
                     >
                         <div className="w-full p-4 flex items-center gap-3 active:bg-gray-50/50 transition-colors">
                             <div className="w-[7px] h-[7px] rounded-full bg-[#53B175] shrink-0" />
-                            
+
                             <div className="flex items-center -space-x-6 mr-auto pl-2">
                                 {shipment.items.slice(0, 3).map((item: any, idx: number) => (
-                                    <div 
-                                        key={idx} 
+                                    <div
+                                        key={idx}
                                         className="w-[52px] h-[52px] rounded-full bg-white flex items-center justify-center shrink-0 border border-gray-100 shadow-sm"
                                         style={{ zIndex: shipment.items.length - idx }}
                                     >
@@ -267,14 +267,14 @@ export default function CartPage() {
                 <div className="bg-white rounded-[16px] border border-[#CFCECE] px-4 py-3 flex items-center gap-3">
                     <AlertTriangle size={24} className="text-[#555555] shrink-0" fill="#555555" stroke="white" strokeWidth={2.5} />
                     <p className="text-[12px] text-[#181725] font-bold leading-snug">
-                       Safety is our top priority. We ensure standard quality & hygiene benchmarks.
+                        Safety is our top priority. We ensure standard quality & hygiene benchmarks.
                     </p>
                 </div>
             </div>
 
             {/* Fixed Checkout Bar */}
             <div className="fixed bottom-0 left-0 right-0 px-5 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50">
-                <button 
+                <button
                     onClick={() => setScreen('payment')}
                     className="w-full bg-[#53B175] text-white py-[18px] rounded-[16px] font-bold text-[18px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20"
                 >

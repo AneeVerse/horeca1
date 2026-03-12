@@ -31,15 +31,17 @@ export default function ShipmentDetailPage() {
         if (id === 'cart-shipment') {
             // Flatten all vendor groups for the shipment view
             const allItems = groups.flatMap(g =>
-                g.items.map(item => ({
-                    id: String(item.productId || item.product.id),
-                    vendorId: g.vendorId,
-                    name: item.product.name,
-                    size: item.product.packSize || '1 pc',
-                    pcs: item.quantity,
-                    price: item.product.price,
-                    image: item.product.images[0] || '/images/recom-product/product-img10.png',
-                }))
+                g.items
+                    .filter(item => !!item.product)
+                    .map(item => ({
+                        id: String(item.productId || (item.product && item.product.id)),
+                        vendorId: g.vendorId,
+                        name: item.product.name,
+                        size: item.product.packSize || '1 pc',
+                        pcs: item.quantity,
+                        price: item.product.price || 0,
+                        image: (item.product.images && item.product.images[0]) || '/images/recom-product/product-img10.png',
+                    }))
             );
             return {
                 id: 'cart-shipment',
