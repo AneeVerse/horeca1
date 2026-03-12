@@ -19,21 +19,21 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
 
     const handleAdd = (qty: number = 1) => {
         if (currentQty > 0) {
-            updateQuantity(product.vendorId, product.id, currentQty + qty);
+            updateQuantity(product.id, currentQty + qty);
         } else {
             addToCart(product, qty);
         }
     };
 
     const handleIncrement = () => {
-        updateQuantity(product.vendorId, product.id, currentQty + 1);
+        updateQuantity(product.id, currentQty + 1);
     };
 
     const handleDecrement = () => {
         if (currentQty <= 1) {
-            removeFromCart(product.vendorId, product.id);
+            removeFromCart(product.id);
         } else {
-            updateQuantity(product.vendorId, product.id, currentQty - 1);
+            updateQuantity(product.id, currentQty - 1);
         }
     };
 

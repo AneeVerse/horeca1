@@ -12,6 +12,8 @@ interface CartContextType {
     clearCart: () => void;
     totalItems: number;
     subtotal: number;
+    totalAmount: number; // Aliases subtotal for backward compatibility
+    vendorCount: number;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -103,6 +105,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return sum + (price * item.quantity);
     }, 0), [cart]);
 
+    const totalAmount = subtotal;
+    const vendorCount = groups.length;
+
     return (
         <CartContext.Provider value={{ 
             cart, 
@@ -112,7 +117,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             updateQuantity, 
             clearCart, 
             totalItems, 
-            subtotal 
+            subtotal,
+            totalAmount,
+            vendorCount
         }}>
             {children}
         </CartContext.Provider>
