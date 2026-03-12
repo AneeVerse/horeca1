@@ -1,77 +1,129 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import type { VendorProduct, VendorCartGroup, CartItem } from '@/types';
 
-interface CartItem {
-    id: number | string;
-    name: string;
-    price: string;
-    image: string;
-    quantity: number;
-    description?: string;
-}
+// ============================================================
+// Horeca1 V2.2 — Vendor-Grouped Cart Context
+// ============================================================
 
 interface CartContextType {
-    cart: CartItem[];
-    addToCart: (product: any) => void;
-    removeFromCart: (productId: number | string) => void;
-    updateQuantity: (productId: number | string, delta: number) => void;
+    groups: VendorCartGroup[];
+    addToCart: (product: VendorProduct, quantity?: number) => void;
+    removeFromCart: (vendorId: string, productId: string) => void;
+    updateQuantity: (vendorId: string, productId: string, quantity: number) => void;
+    clearVendor: (vendorId: string) => void;
+    clearCart: () => void;
     totalItems: number;
-    subtotal: number;
+    totalAmount: number;
+    vendorCount: number;
+    getVendorGroup: (vendorId: string) => VendorCartGroup | undefined;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
-    const [cart, setCart] = useState<CartItem[]>([]);
+    const [groups, setGroups] = useState<VendorCartGroup[]>([]);
 
-    const addToCart = (product: any) => {
-        setCart(prev => {
-            const existing = prev.find(item => item.id === product.id);
-            if (existing) {
-                return prev.map(item =>
-                    item.id === product.id
-                        ? { ...item, quantity: item.quantity + 1 }
-                        : item
-                );
+    const addToCart = useCallback((product: VendorProduct, quantity: number = 1) => {
+        setGroups(prev => {
+            const existingGroup = prev.find(g => g.vendorId === product.vendorId);
+
+            if (existingGroup) {
+                const existingItem = existingGroup.items.find(i => i.productId === product.id);
+
+                if (existingItem) {
+                    // Update quantity of existing item
+                    const updatedGroups = prev.map(g => {
+                        if (g.vendorId !== product.vendorId) return g;
+                        const updatedItems = g.items.map(i =>
+                            i.productId === product.id
+                                ? { ...i, quantity: i.quantity + quantity }
+                                : i
+                        );
+                        const subtotal = updatedItems.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+                        return { ...g, items: updatedItems, subtotal, meetsMinOrder: subtotal >= g.minOrderValue };
+                    });
+                    return updatedGroups;
+                } else {
+                    // Add new item to existing vendor group
+                    const updatedGroups = prev.map(g => {
+                        if (g.vendorId !== product.vendorId) return g;
+                        const newItem: CartItem = { productId: product.id, product, quantity };
+                        const updatedItems = [...g.items, newItem];
+                        const subtotal = updatedItems.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+                        return { ...g, items: updatedItems, subtotal, meetsMinOrder: subtotal >= g.minOrderValue };
+                    });
+                    return updatedGroups;
+                }
+            } else {
+                // Create new vendor group
+                const newItem: CartItem = { productId: product.id, product, quantity };
+                const subtotal = product.price * quantity;
+                const newGroup: VendorCartGroup = {
+                    vendorId: product.vendorId,
+                    vendorName: product.vendorName,
+                    vendorLogo: product.vendorLogo,
+                    items: [newItem],
+                    subtotal,
+                    minOrderValue: product.minOrderQuantity || 0,
+                    meetsMinOrder: true,
+                };
+                return [...prev, newGroup];
             }
-            const rawPrice = product.newPrice || product.price;
-            const formattedPrice = typeof rawPrice === 'number' ? `$${rawPrice.toFixed(2)}` : rawPrice;
-
-            return [...prev, {
-                id: product.id,
-                name: product.name,
-                price: formattedPrice,
-                image: product.image,
-                quantity: 1,
-                description: product.vendor || product.weight || '1kg, Price'
-            }];
         });
-    };
+    }, []);
 
-    const removeFromCart = (productId: number | string) => {
-        setCart(prev => prev.filter(item => item.id !== productId));
-    };
+    const removeFromCart = useCallback((vendorId: string, productId: string) => {
+        setGroups(prev => {
+            const updatedGroups = prev.map(g => {
+                if (g.vendorId !== vendorId) return g;
+                const updatedItems = g.items.filter(i => i.productId !== productId);
+                if (updatedItems.length === 0) return null;
+                const subtotal = updatedItems.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+                return { ...g, items: updatedItems, subtotal, meetsMinOrder: subtotal >= g.minOrderValue };
+            }).filter(Boolean) as VendorCartGroup[];
+            return updatedGroups;
+        });
+    }, []);
 
-    const updateQuantity = (productId: number | string, delta: number) => {
-        setCart(prev => prev.map(item => {
-            if (item.id === productId) {
-                const newQty = Math.max(1, item.quantity + delta);
-                return { ...item, quantity: newQty };
-            }
-            return item;
+    const updateQuantity = useCallback((vendorId: string, productId: string, quantity: number) => {
+        if (quantity <= 0) {
+            removeFromCart(vendorId, productId);
+            return;
+        }
+        setGroups(prev => prev.map(g => {
+            if (g.vendorId !== vendorId) return g;
+            const updatedItems = g.items.map(i =>
+                i.productId === productId ? { ...i, quantity } : i
+            );
+            const subtotal = updatedItems.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+            return { ...g, items: updatedItems, subtotal, meetsMinOrder: subtotal >= g.minOrderValue };
         }));
-    };
+    }, [removeFromCart]);
 
-    const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-    const subtotal = cart.reduce((sum, item) => {
-        const priceStr = typeof item.price === 'string' ? item.price : String(item.price);
-        const price = parseFloat(priceStr.replace(/[^0-9.]/g, '')) || 0;
-        return sum + (price * item.quantity);
-    }, 0);
+    const clearVendor = useCallback((vendorId: string) => {
+        setGroups(prev => prev.filter(g => g.vendorId !== vendorId));
+    }, []);
+
+    const clearCart = useCallback(() => {
+        setGroups([]);
+    }, []);
+
+    const getVendorGroup = useCallback((vendorId: string) => {
+        return groups.find(g => g.vendorId === vendorId);
+    }, [groups]);
+
+    const totalItems = useMemo(() => groups.reduce((sum, g) => sum + g.items.reduce((s, i) => s + i.quantity, 0), 0), [groups]);
+    const totalAmount = useMemo(() => groups.reduce((sum, g) => sum + g.subtotal, 0), [groups]);
+    const vendorCount = groups.length;
 
     return (
-        <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateQuantity, totalItems, subtotal }}>
+        <CartContext.Provider value={{
+            groups, addToCart, removeFromCart, updateQuantity,
+            clearVendor, clearCart, totalItems, totalAmount,
+            vendorCount, getVendorGroup
+        }}>
             {children}
         </CartContext.Provider>
     );
