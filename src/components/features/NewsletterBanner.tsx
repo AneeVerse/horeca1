@@ -41,7 +41,7 @@ export function NewsletterBanner() {
                                 Grocery Deals
                             </h2>
                             <p className="text-[13px] md:text-[15px] text-white/90 uppercase tracking-[2px] mb-8 font-semibold">
-                                SING UP FOR THE UPDATE NEWSLETTER
+                                SIGN UP FOR THE UPDATE NEWSLETTER
                             </p>
 
                             {/* Email Form */}

@@ -6,6 +6,7 @@ import { QuickActions } from "@/components/features/homepage/QuickActions";
 import { ContinueOrdering } from "@/components/features/homepage/ContinueOrdering";
 import { NearbyVendors } from "@/components/features/homepage/NearbyVendors";
 import { Collections } from "@/components/features/homepage/Collections";
+import { NewsletterBanner } from "@/components/features/NewsletterBanner";
 
 export default function Home() {
   return (
@@ -31,8 +32,13 @@ export default function Home() {
       {/* Collections: Italian Kitchen, Oriental, etc. */}
       <Collections />
 
+
       {/* Features Bar */}
       <FeatureBar />
+
+
+      {/* Newsletter / Subscription */}
+      <NewsletterBanner />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { ChevronUp } from 'lucide-react';
 
 interface Store {
-    id: number;
+    id: string;
     name: string;
     logo: string;
     categories: string;
@@ -16,7 +16,7 @@ interface Store {
 
 const STORES: Store[] = [
     {
-        id: 1,
+        id: 'v1',
         name: 'emarket',
         logo: '/images/top vendors/emarket.png',
         categories: 'Grocery, Vegetable, 2+',
@@ -24,7 +24,7 @@ const STORES: Store[] = [
         noContainer: true
     },
     {
-        id: 2,
+        id: 'v2',
         name: 'Whole Food M..',
         logo: '/images/top vendors/whole-foods-market.png',
         categories: 'Grocery, Fruits & Ve..',
@@ -32,21 +32,21 @@ const STORES: Store[] = [
         noContainer: true
     },
     {
-        id: 3,
+        id: 'v3',
         name: 'M Mart',
         logo: '/images/top vendors/m-mart.png',
         categories: 'Grocery, Dry Fruits, 3+',
         bgColor: 'bg-[#013518]'
     },
     {
-        id: 4,
+        id: 'v4',
         name: 'Groceri',
         logo: '/images/top vendors/groceri.png',
         categories: 'Grocery & Fruits',
         bgColor: 'bg-[#53B175]'
     },
     {
-        id: 5,
+        id: 'v5',
         name: 'Bee Mart',
         logo: '/images/top vendors/bee-mart.png',
         categories: 'Honey, Snacks, 1+',
@@ -54,7 +54,7 @@ const STORES: Store[] = [
         noContainer: true
     },
     {
-        id: 6,
+        id: 'v6',
         name: 'Family Market',
         logo: '/images/top vendors/family-supermarket.png',
         categories: 'Fruits, Meat & More',
@@ -62,7 +62,7 @@ const STORES: Store[] = [
         noContainer: true
     },
     {
-        id: 7,
+        id: 'v1',
         name: 'Fresh Mart',
         logo: '/images/top vendors/family-supermarket.png',
         categories: 'Fresh, Organic, 10+',
@@ -70,7 +70,7 @@ const STORES: Store[] = [
         noContainer: true
     },
     {
-        id: 8,
+        id: 'v2',
         name: 'Mega Store',
         logo: '/images/top vendors/family-supermarket.png',
         categories: 'All in one, 50+',
@@ -88,17 +88,15 @@ export function ShopByStore() {
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-[16px] font-[700] text-[#181725]">Shop By Store</h2>
-                    <button
-                        onClick={() => setIsExpanded(!isExpanded)}
+                    <Link href="/vendors" className="hover:opacity-80 transition-opacity">
+                        <h2 className="text-[16px] font-[700] text-[#181725]">Shop By Store</h2>
+                    </Link>
+                    <Link 
+                        href="/vendors"
                         className="text-[13px] md:text-[15px] font-semibold text-[#53B175] hover:opacity-80 transition-opacity flex items-center gap-1"
                     >
-                        {isExpanded ? (
-                            <ChevronUp size={20} className="text-[#181725]" />
-                        ) : (
-                            "See All"
-                        )}
-                    </button>
+                        See All
+                    </Link>
                 </div>
 
                 {/* Stores Container */}
@@ -108,40 +106,44 @@ export function ShopByStore() {
                         ? "grid grid-cols-4 md:flex md:flex-wrap"
                         : "flex overflow-x-auto -mx-[var(--container-padding)] px-[var(--container-padding)]"
                 )}>
-                    {visibleStores.map((store) => (
-                        <div key={store.id} className={cn(
+                    {visibleStores.map((store, index) => (
+                        <div key={`${store.id}-${index}`} className={cn(
                             "flex flex-col items-center",
                             isExpanded ? "min-w-0 w-full" : "min-w-[87px]"
                         )}>
                             <Link
-                                href={`/store/${store.id}`}
-                                className={cn(
-                                    "w-[87px] h-[87px] mb-3 flex items-center justify-center transition-all active:scale-95 group overflow-hidden",
-                                    !store.noContainer ? cn("rounded-[8px] shadow-sm", store.bgColor) : "p-0"
-                                )}
+                                href={`/vendor/${store.id}`}
+                                className="w-full flex flex-col items-center group"
                             >
-                                <div className="w-full h-full relative flex items-center justify-center">
-                                    <img
-                                        src={store.logo}
-                                        alt={store.name}
-                                        className={cn(
-                                            "max-w-[80%] max-h-[80%] object-contain transition-transform duration-300 group-hover:scale-110",
-                                            // Apply normalization scales to equalize visual height
-                                            store.name.toLowerCase().includes('whole food') ? "scale-[0.85]" :
-                                                store.name.toLowerCase().includes('emarket') ? "scale-[1.4]" :
-                                                    store.name.toLowerCase().includes('groceri') ? "scale-[1.9] translate-y-[6px]" : "scale-[1.5]"
-                                        )}
-                                    />
+                                <div
+                                    className={cn(
+                                        "w-[87px] h-[87px] mb-3 flex items-center justify-center transition-all active:scale-95 overflow-hidden",
+                                        !store.noContainer ? cn("rounded-[8px] shadow-sm", store.bgColor) : "p-0"
+                                    )}
+                                >
+                                    <div className="w-full h-full relative flex items-center justify-center">
+                                        <img
+                                            src={store.logo}
+                                            alt={store.name}
+                                            className={cn(
+                                                "max-w-[80%] max-h-[80%] object-contain transition-transform duration-300 group-hover:scale-110",
+                                                // Apply normalization scales to equalize visual height
+                                                store.name.toLowerCase().includes('whole food') ? "scale-[0.85]" :
+                                                    store.name.toLowerCase().includes('emarket') ? "scale-[1.4]" :
+                                                        store.name.toLowerCase().includes('groceri') ? "scale-[1.9] translate-y-[6px]" : "scale-[1.5]"
+                                            )}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="text-center w-full px-0.5">
+                                    <h3 className="text-[14px] md:text-[16px] font-bold text-[#181725] mb-0.5 leading-tight line-clamp-1 group-hover:text-[#53B175] transition-colors">
+                                        {store.name}
+                                    </h3>
+                                    <p className="text-[10px] md:text-[11px] text-[#7C7C7C] font-medium leading-tight line-clamp-2">
+                                        {store.categories}
+                                    </p>
                                 </div>
                             </Link>
-                            <div className="text-center w-full px-0.5">
-                                <h3 className="text-[14px] md:text-[16px] font-bold text-[#181725] mb-0.5 leading-tight line-clamp-1">
-                                    {store.name}
-                                </h3>
-                                <p className="text-[10px] md:text-[11px] text-[#7C7C7C] font-medium leading-tight line-clamp-2">
-                                    {store.categories}
-                                </p>
-                            </div>
                         </div>
                     ))}
                 </div>

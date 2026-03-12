@@ -302,12 +302,12 @@ export function Navbar() {
                 </div>
             </div>
 
-            {/* <MobileBottomNav
+            <MobileBottomNav
                 isCategoriesOpen={isCategoriesSidebarOpen}
                 onCategoriesClick={() => setIsCategoriesSidebarOpen(true)}
                 onStoreClick={() => openSearch('stores')}
                 onAccountClick={() => setIsAuthOverlayOpen(true)}
-            /> */}
+            />
             <MobileSearchOverlay
                 isOpen={isSearchOverlayOpen}
                 onClose={() => {
