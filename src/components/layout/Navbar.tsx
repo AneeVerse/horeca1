@@ -92,7 +92,7 @@ export function Navbar() {
                         {/* Mobile Header Layout */}
                         <div className="md:hidden space-y-3 pt-3">
                             {/* Row 1: Logo & Cart */}
-                            <div className="flex items-center justify-between relative px-1">
+                            <div className="flex items-center justify-end relative px-1">
                                 {/* <button
                                     onClick={() => setIsSidebarOpen(true)}
                                     className="p-1 -ml-1 hover:bg-gray-100 rounded-full transition-colors"
