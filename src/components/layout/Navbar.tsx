@@ -93,12 +93,12 @@ export function Navbar() {
                         <div className="md:hidden space-y-3 pt-3">
                             {/* Row 1: Logo & Cart */}
                             <div className="flex items-center justify-between relative px-1">
-                                <button
+                                {/* <button
                                     onClick={() => setIsSidebarOpen(true)}
                                     className="p-1 -ml-1 hover:bg-gray-100 rounded-full transition-colors"
                                 >
                                     <Menu size={22} className="text-[#181725]" />
-                                </button>
+                                </button> */}
 
                                 <Link href="/" className="absolute left-1/2 -translate-x-1/2">
                                     <img
@@ -128,7 +128,7 @@ export function Navbar() {
                                 >
                                     <MapPin size={14} className="text-primary" />
                                     <span className="text-[12px] font-bold text-text-muted">
-                                        {selectedAddress?.city || 'Select location'}
+                                        {selectedAddress?.shortAddress || 'Select location'}
                                     </span>
                                     <ChevronDown size={14} className="text-text-muted" />
                                 </button>
@@ -302,12 +302,12 @@ export function Navbar() {
                 </div>
             </div>
 
-            <MobileBottomNav
+            {/* <MobileBottomNav
                 isCategoriesOpen={isCategoriesSidebarOpen}
                 onCategoriesClick={() => setIsCategoriesSidebarOpen(true)}
                 onStoreClick={() => openSearch('stores')}
                 onAccountClick={() => setIsAuthOverlayOpen(true)}
-            />
+            /> */}
             <MobileSearchOverlay
                 isOpen={isSearchOverlayOpen}
                 onClose={() => {

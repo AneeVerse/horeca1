@@ -58,11 +58,11 @@ const SOCIAL_LINKS = [
 
 export function Footer() {
     const pathname = usePathname();
-    const isCartPage = pathname === '/cart';
+    const isCartPage = pathname?.startsWith('/cart');
     const isProductPage = pathname?.startsWith('/product/');
     const isAdminPage = pathname?.startsWith('/admin');
 
-    if (isProductPage || isAdminPage) return null;
+    if (isProductPage || isAdminPage || isCartPage) return null;
 
     return (
         <footer className={cn(
@@ -110,9 +110,9 @@ export function Footer() {
                         </ul>
                     </div>
 
-                    {/* Links Columns - 2x2 Grid on Mobile, row on Desktop */}
+                    {/* Links Columns - 2x2 Grid on Mobile, row on Desktop - Commented out as not in screenshot */}
+                    {/* 
                     <div className="w-full lg:flex-1 grid grid-cols-2 lg:flex lg:flex-row lg:justify-around gap-x-4 gap-y-10 lg:gap-4 lg:px-6">
-                        {/* Information */}
                         <div className="min-w-fit">
                             <h4 className="text-[16px] md:text-[18px] font-bold text-[#181725] mb-5">Information</h4>
                             <ul className="space-y-4">
@@ -126,7 +126,6 @@ export function Footer() {
                             </ul>
                         </div>
 
-                        {/* Customer Support */}
                         <div className="min-w-fit">
                             <h4 className="text-[16px] md:text-[18px] font-bold text-[#181725] mb-5">Customer Support</h4>
                             <ul className="space-y-4">
@@ -140,7 +139,6 @@ export function Footer() {
                             </ul>
                         </div>
 
-                        {/* My Account */}
                         <div className="min-w-fit">
                             <h4 className="text-[16px] md:text-[18px] font-bold text-[#181725] mb-5">My Account</h4>
                             <ul className="space-y-4">
@@ -154,7 +152,6 @@ export function Footer() {
                             </ul>
                         </div>
 
-                        {/* Daily Groceries */}
                         <div className="min-w-fit">
                             <h4 className="text-[16px] md:text-[18px] font-bold text-[#181725] mb-5">Daily Groceries</h4>
                             <ul className="space-y-4">
@@ -168,6 +165,7 @@ export function Footer() {
                             </ul>
                         </div>
                     </div>
+                    */}
                 </div>
 
                 {/* Shop on The Go + Social Links */}

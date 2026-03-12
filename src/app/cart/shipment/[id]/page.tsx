@@ -213,19 +213,12 @@ export default function ShipmentDetailPage() {
                             <span className="text-[16px] font-bold text-[#181725]">To Pay</span>
                             <div className="text-right">
                                 <div className="text-[18px] font-black text-[#181725]">₹ {totalPay.toFixed(2)}</div>
-                                <div className="text-[11px] text-[#7C7C7C] font-semibold line-through">₹{(totalPay +SavingsDemo).toFixed(0)}</div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Saving Section */}
-                <div className="bg-white rounded-[10px] border border-[#E2E2E2] px-4 py-3 flex items-center justify-between">
-                    <span className="text-[15px] font-bold text-[#181725]">Saving on this order</span>
-                    <div className="bg-[#3BB77E] text-white px-3 py-1 rounded-[6px] text-[15px] font-bold">
-                        ₹ {SavingsDemo}
-                    </div>
-                </div>
+
 
             </div>
 

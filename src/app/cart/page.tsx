@@ -48,7 +48,7 @@ const DEMO_SHIPMENTS = [
 
 // ==================== MAIN COMPONENT ====================
 export default function CartPage() {
-    const { cart, removeFromCart, updateQuantity, totalItems, subtotal } = useCart();
+    const { cart, removeFromCart, updateQuantity, totalItems, subtotal, clearCart } = useCart();
     const router = useRouter();
 
     // Screen state: 'cart' | 'payment' | 'success'
@@ -256,9 +256,23 @@ export default function CartPage() {
                     <ArrowLeft size={22} className="text-[#181725]" />
                 </button>
                 <h1 className="text-[20px] font-bold text-[#181725] absolute left-1/2 -translate-x-1/2">Cart</h1>
-                <button className="p-2 -mr-2">
-                    <Search size={22} className="text-[#181725]" />
-                </button>
+                <div className="flex items-center gap-1">
+                    {cart.length > 0 && (
+                        <button
+                            onClick={() => {
+                                if (window.confirm('Are you sure you want to clear your cart?')) {
+                                    clearCart();
+                                }
+                            }}
+                            className="text-[12px] font-bold text-red-500 px-2 py-1 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                            Clear
+                        </button>
+                    )}
+                    <button className="p-2 -mr-2">
+                        <Search size={22} className="text-[#181725]" />
+                    </button>
+                </div>
             </header>
 
             {/* Content */}
@@ -380,20 +394,13 @@ export default function CartPage() {
                                 <span className="text-[16px] font-bold text-[#181725]">To Pay</span>
                                 <div className="flex flex-col items-end">
                                     <span className="text-[20px] font-extrabold text-[#181725]">₹ {totalPay.toFixed(2)}</span>
-                                    <span className="text-[12px] text-[#AAAAAA] line-through font-medium">₹{originalPrice.toFixed(1)}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Savings Banner */}
-                <div className="bg-white rounded-[16px] border border-[#CFCECE] px-4 py-3.5 flex items-center justify-between">
-                    <span className="text-[14px] font-bold text-[#181725]">Saving on this order</span>
-                    <div className="bg-[#53B175] text-white px-3 py-1 rounded-[6px] text-[14px] font-bold">
-                        ₹ {Math.round(savings)}
-                    </div>
-                </div>
+
             </div>
 
             {/* === PROCEED TO PAY BUTTON === */}

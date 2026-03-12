@@ -18,12 +18,34 @@ interface CartContextType {
     updateQuantity: (productId: number | string, delta: number) => void;
     totalItems: number;
     subtotal: number;
+    clearCart: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
     const [cart, setCart] = useState<CartItem[]>([]);
+    const [isInitialized, setIsInitialized] = useState(false);
+
+    // Initial load from localStorage
+    useEffect(() => {
+        const storedCart = localStorage.getItem('horeca_cart');
+        if (storedCart) {
+            try {
+                setCart(JSON.parse(storedCart));
+            } catch (err) {
+                console.error('Failed to load cart:', err);
+            }
+        }
+        setIsInitialized(true);
+    }, []);
+
+    // Persist to localStorage when cart changes
+    useEffect(() => {
+        if (isInitialized) {
+            localStorage.setItem('horeca_cart', JSON.stringify(cart));
+        }
+    }, [cart, isInitialized]);
 
     const addToCart = (product: any) => {
         setCart(prev => {
@@ -63,6 +85,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }));
     };
 
+    const clearCart = () => {
+        setCart([]);
+    };
+
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
     const subtotal = cart.reduce((sum, item) => {
         const priceStr = typeof item.price === 'string' ? item.price : String(item.price);
@@ -71,7 +97,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }, 0);
 
     return (
-        <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateQuantity, totalItems, subtotal }}>
+        <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateQuantity, totalItems, subtotal, clearCart }}>
             {children}
         </CartContext.Provider>
     );

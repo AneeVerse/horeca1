@@ -28,11 +28,11 @@ export default function Home() {
       <CategoryShowcase />
       <ShopByStore />
       <TrustedBy />
-      <FlashSaleBanner />
+      {/* <FlashSaleBanner /> */}
       {/* <PromotionBanners /> */}
-      <ProductCategories />
-      <FlashSale />
-      <RecommendedCategories />
+      {/* <ProductCategories /> */}
+      {/* <FlashSale /> */}
+      {/* <RecommendedCategories /> */}
       {/* <FeaturedProducts /> */}
       {/* <OfferBanners /> */}
       {/* <RecommendedProducts /> */}
@@ -44,7 +44,7 @@ export default function Home() {
       {/* <ProductShowcase /> */}
       {/* <ShopByBrands /> */}
       {/* <NewArrivals /> */}
-      <FeatureBar />
+      {/* <FeatureBar /> */}
       <NewsletterBanner />
     </div>
   );
