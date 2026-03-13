@@ -61,8 +61,9 @@ export function Footer() {
     const isCartPage = pathname?.startsWith('/cart');
     const isProductPage = pathname?.startsWith('/product/');
     const isAdminPage = pathname?.startsWith('/admin');
+    const isProfilePage = pathname === '/profile';
 
-    if (isProductPage || isAdminPage || isCartPage) return null;
+    if (isProductPage || isAdminPage || isCartPage || isProfilePage) return null;
 
     return (
         <footer className={cn(

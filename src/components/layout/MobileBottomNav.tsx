@@ -44,7 +44,7 @@ export function MobileBottomNav({ onCategoriesClick, onStoreClick, onAccountClic
             id: 'profile',
             label: 'Profile',
             icon: '/images/mobile-nav/profile.svg',
-            href: '/account',
+            href: '/profile',
             onClick: onAccountClick,
         }
     ];

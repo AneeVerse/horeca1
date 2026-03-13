@@ -14,8 +14,9 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
     const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
     const [step, setStep] = useState<'form' | 'otp' | 'success'>('form');
     const [userRole, setUserRole] = useState<'customer' | 'vendor'>(initialMode);
-    const [phoneNumber, setPhoneNumber] = useState('');
-    const [otp, setOtp] = useState(['', '', '', '']);
+    const [phoneNumber, setPhoneNumber] = useState('7777777777');
+    const [loginOtp, setLoginOtp] = useState('777777');
+    const [otp, setOtp] = useState(['7', '7', '7', '7', '7', '7']);
     const [rememberMe, setRememberMe] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -84,7 +85,7 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
             setOtp(newOtp);
 
             // Auto-focus next input
-            if (value && index < 3) {
+            if (value && index < 5) {
                 const nextInput = document.getElementById(`otp-${index + 1}`);
                 nextInput?.focus();
             }
@@ -266,7 +267,9 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                             <div className="space-y-1.5">
                                 <label className="text-[13px] font-semibold text-gray-400 ml-1 tracking-tight">OTP</label>
                                 <input
-                                    type="password"
+                                    type="text"
+                                    value={loginOtp}
+                                    onChange={(e) => setLoginOtp(e.target.value)}
                                     placeholder=""
                                     autoComplete="off"
                                     autoCorrect="off"

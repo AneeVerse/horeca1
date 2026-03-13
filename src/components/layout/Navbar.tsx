@@ -16,20 +16,23 @@ import {
     X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileSearchOverlay } from './MobileSearchOverlay';
 import { LocationSelectionOverlay } from './LocationSelectionOverlay';
 import { useCart } from '@/context/CartContext';
 import { useAddress } from '@/context/AddressContext';
-import { AuthScreen } from '../auth/AuthScreen';
+import { LoginOverlay } from '../auth/LoginOverlay';
+import { ProfileScreen } from '../auth/ProfileScreen';
 
 export function Navbar() {
+    const router = useRouter();
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
     const [isCategoriesSidebarOpen, setIsCategoriesSidebarOpen] = React.useState(false);
     const [isSearchOverlayOpen, setIsSearchOverlayOpen] = React.useState(false);
     const [isLocationOverlayOpen, setIsLocationOverlayOpen] = React.useState(false);
-    const [isAuthOverlayOpen, setIsAuthOverlayOpen] = React.useState(false);
+    const [isLoginOverlayOpen, setIsLoginOverlayOpen] = React.useState(false);
+    const [isLoggedIn, setIsLoggedIn] = React.useState(false);
     const [selectedRole, setSelectedRole] = React.useState<'customer' | 'vendor'>('customer');
     const [searchTab, setSearchTab] = React.useState<'items' | 'stores'>('items');
     const [isNavSearchFocused, setIsNavSearchFocused] = React.useState(false);
@@ -71,12 +74,18 @@ export function Navbar() {
 
     return (
         <>
-            {/* Auth Screen (Login/Register) */}
-            <AuthScreen
-                isOpen={isAuthOverlayOpen}
-                onClose={() => setIsAuthOverlayOpen(false)}
-                initialMode={selectedRole}
+            {/* Login Overlay (Simple Phone + OTP) */}
+            <LoginOverlay
+                isOpen={isLoginOverlayOpen}
+                onClose={() => setIsLoginOverlayOpen(false)}
+                onLoginSuccess={() => {
+                    setIsLoginOverlayOpen(false);
+                    setIsLoggedIn(true);
+                    router.push('/profile');
+                }}
             />
+
+
 
             {/* Persistent 12px Top Green Bar - Now part of Navbar for easy toggling */}
             <div className="w-full h-[12px] bg-[#53B175] sticky top-0 z-[10000]" />
@@ -84,7 +93,7 @@ export function Navbar() {
             {/* Top Header - Scrolls Away */}
             <header className={cn(
                 "w-full bg-white relative z-[1000]",
-                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/') || pathname === '/cart' || pathname === '/orders') && "hidden md:block"
+                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/') || pathname === '/cart' || pathname === '/orders' || pathname === '/profile') && "hidden md:block"
             )}>
                 <div className="w-full py-3 px-4 md:px-[var(--container-padding)]">
                     <div className="max-w-[var(--container-max)] mx-auto">
@@ -201,7 +210,13 @@ export function Navbar() {
                                         </span>
                                     </Link>
                                     <button
-                                        onClick={() => setIsAuthOverlayOpen(true)}
+                                        onClick={() => {
+                                            if (isLoggedIn) {
+                                                router.push('/profile');
+                                            } else {
+                                                setIsLoginOverlayOpen(true);
+                                            }
+                                        }}
                                         className="p-2 hover:bg-gray-50 rounded-full transition-all group"
                                     >
                                         <User size={24} className="text-text group-hover:text-primary transition-colors" />
@@ -306,7 +321,13 @@ export function Navbar() {
                 isCategoriesOpen={isCategoriesSidebarOpen}
                 onCategoriesClick={() => setIsCategoriesSidebarOpen(true)}
                 onStoreClick={() => openSearch('stores')}
-                onAccountClick={() => setIsAuthOverlayOpen(true)}
+                onAccountClick={() => {
+                    if (isLoggedIn) {
+                        router.push('/profile');
+                    } else {
+                        setIsLoginOverlayOpen(true);
+                    }
+                }}
             />
             <MobileSearchOverlay
                 isOpen={isSearchOverlayOpen}
