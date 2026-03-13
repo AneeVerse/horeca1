@@ -47,33 +47,47 @@ const STORES: Store[] = [
     },
     {
         id: 'v5',
-        name: 'Bee Mart',
-        logo: '/images/top vendors/bee-mart.png',
-        categories: 'Honey, Snacks, 1+',
+        name: 'Borcelle',
+        logo: '/images/top vendors/961d17c25868145dd167df9f88ca0d40a7c057d1.png',
+        categories: 'Grocery, Dry Fruits',
         bgColor: '',
         noContainer: true
     },
     {
         id: 'v6',
-        name: 'Family Market',
-        logo: '/images/top vendors/family-supermarket.png',
-        categories: 'Fruits, Meat & More',
+        name: 'Arisha Mart',
+        logo: '/images/top vendors/39a5dd37096e44eb8b72e053055e32896d63c44a.png',
+        categories: 'grocery',
+        bgColor: 'bg-[#AB202A]'
+    },
+    {
+        id: 'v7',
+        name: 'Mentari Ma..',
+        logo: '/images/top vendors/658b597eb627e280b99c0cf10e482793 2.png',
+        categories: 'Grocery & Vegetables',
         bgColor: '',
         noContainer: true
     },
     {
-        id: 'v1',
-        name: 'Fresh Mart',
-        logo: '/images/top vendors/family-supermarket.png',
-        categories: 'Fresh, Organic, 10+',
+        id: 'v8',
+        name: 'Walmart',
+        logo: '/images/top vendors/ecommerce-logo-template_658705-117 3.png',
+        categories: 'Grocery, Electronic, 3+',
+        bgColor: 'bg-[#0071CE]'
+    },
+    {
+        id: 'v9',
+        name: 'Allure Mart',
+        logo: '/images/top vendors/da025fadd66fb2aef4d63f0db58b86b5 2.png',
+        categories: 'Grocery & Fruits',
         bgColor: '',
         noContainer: true
     },
     {
-        id: 'v2',
-        name: 'Mega Store',
-        logo: '/images/top vendors/family-supermarket.png',
-        categories: 'All in one, 50+',
+        id: 'v10',
+        name: 'Cartomart',
+        logo: '/images/top vendors/m-mart-grocery-store-brands-logo-238132857 3.png',
+        categories: 'Grocery, Dry Fruits',
         bgColor: '',
         noContainer: true
     }
@@ -81,35 +95,33 @@ const STORES: Store[] = [
 
 export function ShopByStore() {
     const [isExpanded, setIsExpanded] = useState(false);
-    const visibleStores = isExpanded ? STORES : STORES.slice(0, 4);
+    const visibleStores = isExpanded ? STORES : STORES; // Show all if scrollable, but maybe limit if grid? 
+    // Actually, user wants horizontal scroll by default.
 
     return (
         <section className="w-full pt-4 pb-2 bg-white overflow-hidden">
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
-                    <Link href="/vendors" className="hover:opacity-80 transition-opacity">
-                        <h2 className="text-[16px] font-[700] text-[#181725]">Shop By Store</h2>
-                    </Link>
-                    <Link 
-                        href="/vendors"
+                    <h2 className="text-[16px] font-[700] text-[#181725]">Shop By Store</h2>
+                    <button 
+                        onClick={() => setIsExpanded(!isExpanded)}
                         className="text-[13px] md:text-[15px] font-semibold text-[#53B175] hover:opacity-80 transition-opacity flex items-center gap-1"
                     >
-                        See All
-                    </Link>
+                        {isExpanded ? "Show Less" : "See All"}
+                    </button>
                 </div>
 
                 {/* Stores Container */}
                 <div className={cn(
-                    "gap-4 pb-4 no-scrollbar transition-all duration-300",
+                    "gap-x-4 gap-y-6 no-scrollbar transition-all duration-300",
                     isExpanded
-                        ? "grid grid-cols-4 md:flex md:flex-wrap"
-                        : "flex overflow-x-auto -mx-[var(--container-padding)] px-[var(--container-padding)]"
+                        ? "grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 pb-4"
+                        : "grid grid-rows-2 grid-flow-col overflow-x-auto auto-cols-[90px] md:auto-cols-[110px] gap-x-3 md:gap-x-4 pb-4"
                 )}>
                     {visibleStores.map((store, index) => (
                         <div key={`${store.id}-${index}`} className={cn(
-                            "flex flex-col items-center",
-                            isExpanded ? "min-w-0 w-full" : "min-w-[87px]"
+                            "flex flex-col items-center w-full"
                         )}>
                             <Link
                                 href={`/vendor/${store.id}`}
@@ -117,8 +129,8 @@ export function ShopByStore() {
                             >
                                 <div
                                     className={cn(
-                                        "w-[87px] h-[87px] mb-3 flex items-center justify-center transition-all active:scale-95 overflow-hidden",
-                                        !store.noContainer ? cn("rounded-[8px] shadow-sm", store.bgColor) : "p-0"
+                                        "w-[85px] h-[85px] md:w-[100px] md:h-[100px] mb-3 flex items-center justify-center transition-all active:scale-95 overflow-hidden",
+                                        !store.noContainer ? cn("rounded-[12px] shadow-sm", store.bgColor) : (store.name === 'Borcelle' ? "bg-[#F7F2ED] rounded-[12px]" : "p-0")
                                     )}
                                 >
                                     <div className="w-full h-full relative flex items-center justify-center">
@@ -126,11 +138,8 @@ export function ShopByStore() {
                                             src={store.logo}
                                             alt={store.name}
                                             className={cn(
-                                                "max-w-[80%] max-h-[80%] object-contain transition-transform duration-300 group-hover:scale-110",
-                                                // Apply normalization scales to equalize visual height
-                                                store.name.toLowerCase().includes('whole food') ? "scale-[0.85]" :
-                                                    store.name.toLowerCase().includes('emarket') ? "scale-[1.4]" :
-                                                        store.name.toLowerCase().includes('groceri') ? "scale-[1.9] translate-y-[6px]" : "scale-[1.5]"
+                                                "max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-110 p-1",
+                                                store.noContainer ? "scale-[1.3]" : "scale-[0.8]"
                                             )}
                                         />
                                     </div>

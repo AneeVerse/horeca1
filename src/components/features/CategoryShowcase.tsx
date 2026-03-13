@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { cn } from '@/lib/utils';
 
 const CATEGORIES = [
     { name: 'Fruits & Vegetables', image: '/images/category/vegitable.png', count: '125+ Products', bgColor: '#e8f9e9' },
@@ -32,127 +33,63 @@ export function CategoryShowcase() {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const scrollRef = React.useRef<HTMLDivElement>(null);
 
-    const scroll = (direction: 'left' | 'right') => {
-        if (scrollRef.current) {
-            const scrollAmount = 300;
-            scrollRef.current.scrollBy({
-                left: direction === 'left' ? -scrollAmount : scrollAmount,
-                behavior: 'smooth'
-            });
-        }
-    };
-
-    const visibleCategories = isExpanded ? CATEGORIES : CATEGORIES.slice(0, 8);
+    const visibleCategories = isExpanded ? CATEGORIES : CATEGORIES;
 
     return (
         <section 
-            className="w-full pt-6 pb-6 md:pt-16 md:pb-12 bg-white relative md:-mt-10 z-30"
+            className="w-full pt-4 pb-6 bg-white relative z-30 overflow-hidden"
             suppressHydrationWarning={true}
         >
-            <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] relative group/main">
+            <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-[16px] font-bold text-[#181725]">Shop By Category</h2>
+                    <button
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        className="text-[#53B175] font-bold text-sm flex items-center gap-1 transition-opacity hover:opacity-80"
+                    >
+                        {isExpanded ? "Show Less" : "See All"}
+                    </button>
+                </div>
 
-                {/* ===== MOBILE LAYOUT ===== */}
-                <div className="block md:hidden">
-                    {/* Mobile Header */}
-                    <div className="flex items-center justify-between mb-5">
-                        <h2 className="text-[1.1rem] font-bold text-[#181725]">Shop By Category</h2>
-                        <button
-                            onClick={() => setIsExpanded(!isExpanded)}
-                            className="text-[#5cb85c] font-bold text-sm flex items-center gap-1"
-                        >
-                            {isExpanded ? (
-                                <ChevronUp size={20} className="text-[#181725]" />
-                            ) : (
-                                "See All"
+                {/* Categories Container */}
+                <div 
+                    ref={scrollRef}
+                    className={cn(
+                        "gap-x-4 gap-y-6 no-scrollbar transition-all duration-300",
+                        isExpanded 
+                            ? "grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 pb-4" 
+                            : "grid grid-rows-2 grid-flow-col overflow-x-auto auto-cols-[90px] md:auto-cols-[110px] gap-x-3 md:gap-x-4 pb-4 scroll-smooth snap-x"
+                    )}
+                >
+                    {visibleCategories.map((cat, idx) => (
+                        <Link
+                            key={idx}
+                            href={`/category/${cat.name.toLowerCase().replace(/\s+/g, '-')}`}
+                            className={cn(
+                                "flex flex-col items-center group transition-transform active:scale-95 snap-start w-full"
                             )}
-                        </button>
-                    </div>
-
-                    {/* Mobile Grid - 4 columns */}
-                    <div className="grid grid-cols-4 gap-x-2 gap-y-6">
-                        {visibleCategories.map((cat, idx) => (
-                            <Link
-                                key={idx}
-                                href={`/category/${cat.name.toLowerCase().replace(/\s+/g, '-')}`}
-                                className="flex flex-col items-center"
+                        >
+                            {/* Image Box */}
+                            <div
+                                className="w-full aspect-square rounded-[18px] flex items-center justify-center mb-2 overflow-hidden relative border border-gray-50 shadow-sm transition-shadow group-hover:shadow-md"
+                                style={{ backgroundColor: cat.bgColor || '#F2F3F2' }}
                             >
-                                {/* Image Box */}
-                                <div
-                                    className="w-full aspect-square rounded-[15px] flex items-center justify-center mb-2.5 overflow-hidden relative"
-                                    style={{ backgroundColor: '#F2F3F2' }}
-                                >
+                                <div className="relative w-[70%] h-[70%] transition-transform duration-300 group-hover:scale-110">
                                     <Image
                                         src={cat.image}
                                         alt={cat.name}
                                         fill
-                                        className="object-contain p-2"
+                                        className="object-contain"
                                     />
                                 </div>
-                                {/* Category Name */}
-                                <p className="text-[11px] text-center font-bold text-[#181725] leading-[1.3] px-0.5">
-                                    {cat.name}
-                                </p>
-                            </Link>
-                        ))}
-                    </div>
-                </div>
-
-                {/* ===== DESKTOP LAYOUT ===== */}
-                <div className="hidden md:block">
-                    {/* Navigation Arrows */}
-                    <button
-                        onClick={() => scroll('left')}
-                        className="absolute left-[var(--container-padding)] top-1/2 -translate-y-1/2 -translate-x-1/2 z-50 bg-white w-10 h-10 rounded-full shadow-lg flex items-center justify-center text-text-muted hover:text-primary transition-all opacity-0 group-hover/main:opacity-100 border border-gray-100"
-                    >
-                        <ChevronLeft size={24} />
-                    </button>
-
-                    <button
-                        onClick={() => scroll('right')}
-                        className="absolute right-[var(--container-padding)] top-1/2 -translate-y-1/2 translate-x-1/2 z-50 bg-white w-10 h-10 rounded-full shadow-lg flex items-center justify-center text-text-muted hover:text-primary transition-all opacity-0 group-hover/main:opacity-100 border border-gray-100"
-                    >
-                        <ChevronRight size={24} />
-                    </button>
-
-                    {/* Scrollable Container */}
-                    <div
-                        ref={scrollRef}
-                        className="flex overflow-x-auto pt-4 pb-4 gap-6 lg:gap-8 no-scrollbar scroll-smooth snap-x snap-mandatory justify-start"
-                    >
-                        {CATEGORIES.map((cat, idx) => (
-                            <Link
-                                key={idx}
-                                href={`/category/${cat.name.toLowerCase().replace(/\s+/g, '-')}`}
-                                className="flex flex-col items-center flex-shrink-0 group snap-start"
-                                style={{ width: 'clamp(110px, 12vw, 150px)' }}
-                            >
-                                {/* Image Circle */}
-                                <div
-                                    className="relative w-[130px] h-[130px] lg:w-[145px] lg:h-[145px] rounded-full flex items-center justify-center mb-4 transition-all duration-500 group-hover:scale-105 group-hover:shadow-xl group-hover:shadow-primary/10 border-2 border-transparent group-hover:border-primary/20 overflow-hidden"
-                                    style={{ backgroundColor: cat.bgColor }}
-                                >
-                                    <div className="relative w-[70%] h-[70%] group-hover:scale-110 transition-transform duration-500">
-                                        <Image
-                                            src={cat.image}
-                                            alt={cat.name}
-                                            fill
-                                            className="object-contain drop-shadow-md"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Text Info */}
-                                <div className="text-center">
-                                    <h3 className="text-[16px] font-extrabold text-[#1a2b4b] mb-0.5 group-hover:text-primary transition-colors whitespace-nowrap">
-                                        {cat.name}
-                                    </h3>
-                                    <p className="text-[12px] text-text-muted font-medium whitespace-nowrap opacity-60">
-                                        {cat.count}
-                                    </p>
-                                </div>
-                            </Link>
-                        ))}
-                    </div>
+                            </div>
+                            {/* Category Name */}
+                            <p className="text-[11px] md:text-[13px] text-center font-bold text-[#181725] leading-tight px-0.5 line-clamp-2 h-[2.4em] group-hover:text-[#53B175] transition-colors">
+                                {cat.name}
+                            </p>
+                        </Link>
+                    ))}
                 </div>
             </div>
         </section>

@@ -21,7 +21,7 @@ export interface Address {
 interface AddressContextType {
     selectedAddress: Address | null;
     savedAddresses: Address[];
-    setSelectedAddress: (address: Address) => void;
+    setSelectedAddress: (address: Address | null) => void;
     addAddress: (address: Address) => void;
     removeAddress: (id: string) => void;
     updateAddress: (id: string, updates: Partial<Address>) => void;
@@ -66,10 +66,14 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
 
     // ─── Persist to localStorage ─────────────────────────────────────────
 
-    const setSelectedAddress = useCallback((address: Address) => {
+    const setSelectedAddress = useCallback((address: Address | null) => {
         setSelectedAddressState(address);
         try {
-            localStorage.setItem(STORAGE_KEYS.SELECTED, JSON.stringify(address));
+            if (address) {
+                localStorage.setItem(STORAGE_KEYS.SELECTED, JSON.stringify(address));
+            } else {
+                localStorage.removeItem(STORAGE_KEYS.SELECTED);
+            }
         } catch (e) {
             console.warn('Failed to save selected address:', e);
         }

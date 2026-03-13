@@ -2,14 +2,13 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Search, X, Plus, Star } from 'lucide-react';
+import { ArrowLeft, Search, X, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { StoreDetailOverlay } from './StoreDetailOverlay';
 
 interface MobileSearchOverlayProps {
     isOpen: boolean;
     onClose: () => void;
-    initialTab?: 'items' | 'venders' | 'stores';
+    initialTab?: 'items' | 'vendors' | 'stores';
     initialQuery?: string;
 }
 
@@ -24,7 +23,7 @@ const VENDORS = [
 
 export function MobileSearchOverlay({ isOpen, onClose, initialQuery = '' }: MobileSearchOverlayProps) {
     const [searchQuery, setSearchQuery] = useState(initialQuery);
-    const [activeTab, setActiveTab] = useState<'items' | 'venders'>('items');
+    const [activeTab, setActiveTab] = useState<'items' | 'vendors'>('items');
 
     // Sync search query when overlay opens
     React.useEffect(() => {
@@ -106,20 +105,20 @@ export function MobileSearchOverlay({ isOpen, onClose, initialQuery = '' }: Mobi
                         )}
                     </button>
                     <button
-                        onClick={() => setActiveTab('venders')}
+                        onClick={() => setActiveTab('vendors')}
                         className={cn(
                             "flex items-center gap-2 pb-3.5 px-1 transition-all relative",
-                            activeTab === 'venders' ? "text-[#53B175]" : "text-[#181725]"
+                            activeTab === 'vendors' ? "text-[#53B175]" : "text-[#181725]"
                         )}
                     >
-                        <span className="text-[17px] font-semibold">Venders</span>
+                        <span className="text-[17px] font-semibold">Vendors</span>
                         <span className={cn(
                             "text-[11px] px-2 py-0.5 rounded-full font-bold",
-                            activeTab === 'venders' ? "bg-[#53B175] text-white" : "bg-[#E5E7EB] text-[#181725]"
+                            activeTab === 'vendors' ? "bg-[#53B175] text-white" : "bg-[#E5E7EB] text-[#181725]"
                         )}>
                             {filteredVendors.length}
                         </span>
-                        {activeTab === 'venders' && (
+                        {activeTab === 'vendors' && (
                             <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#53B175] rounded-t-full" />
                         )}
                     </button>
@@ -178,13 +177,13 @@ export function MobileSearchOverlay({ isOpen, onClose, initialQuery = '' }: Mobi
                     </>
                 )}
 
-                {activeTab === 'venders' && (
+                {activeTab === 'vendors' && (
                     <>
                         {filteredVendors.length > 0 ? (
                             filteredVendors.map((vendor) => (
                                 <Link
                                     key={vendor.id}
-                                    href={`/store/${vendor.id}`}
+                                    href={`/vendor/${vendor.id}`}
                                     onClick={onClose}
                                     className="flex items-center gap-4 p-4 bg-white rounded-[16px] border border-[#EEEEEE] active:scale-[0.98] transition-all hover:border-[#53B175]/30 group"
                                 >
@@ -229,4 +228,3 @@ export function MobileSearchOverlay({ isOpen, onClose, initialQuery = '' }: Mobi
         </div>
     );
 }
-
