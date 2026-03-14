@@ -1,15 +1,25 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { RotateCcw, ListOrdered, Store } from 'lucide-react';
 
 export function QuickActions() {
+    const [isMounted, setIsMounted] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+        setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
+    }, []);
+
     const actions = [
         { href: '/orders', icon: RotateCcw, label: 'Reorder', color: 'bg-blue-50 text-blue-600', desc: 'From last order' },
         { href: '/order-lists', icon: ListOrdered, label: 'Quick Order', color: 'bg-purple-50 text-purple-600', desc: 'Order lists' },
         { href: '/vendors', icon: Store, label: 'My Vendors', color: 'bg-orange-50 text-orange-600', desc: 'Saved vendors' },
     ];
+
+    if (!isMounted || !isLoggedIn) return null;
 
     return (
         <section className="w-full py-3 bg-white">

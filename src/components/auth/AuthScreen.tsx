@@ -75,6 +75,8 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
         if (authMode === 'register') {
             setStep('otp'); // Now shows for BOTH customer and vendor
         } else {
+            localStorage.setItem('isLoggedIn', 'true');
+            localStorage.setItem('userPhone', phoneNumber);
             if (onLoginSuccess) onLoginSuccess();
             handleClose();
         }
