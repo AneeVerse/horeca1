@@ -6,7 +6,8 @@ import { VendorStoreHeader } from '@/components/features/vendor/VendorStoreHeade
 import { VendorCatalogNav } from '@/components/features/vendor/VendorCatalogNav';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
-import { MOCK_VENDORS, MOCK_VENDOR_PRODUCTS } from '@/lib/mockData';
+import { getVendorById } from '@/data/vendorData';
+import type { VendorProduct } from '@/types';
 
 export default function VendorStorePage() {
     const params = useParams();
@@ -14,8 +15,34 @@ export default function VendorStorePage() {
     const [activeTab, setActiveTab] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
 
-    const vendor = MOCK_VENDORS.find(v => v.id === vendorId);
-    const products = MOCK_VENDOR_PRODUCTS[vendorId] || [];
+    const vendor = getVendorById(vendorId);
+    const products = useMemo(() => {
+        if (!vendor?.catalog) return [];
+        return vendor.catalog.flatMap(cat => 
+            cat.products.map(p => ({
+                id: p.id,
+                vendorId: vendor.id,
+                vendorName: vendor.name,
+                name: p.name,
+                description: '', // fallback
+                category: cat.name,
+                packSize: p.unit,
+                unit: p.unit,
+                price: p.price,
+                originalPrice: p.originalPrice,
+                stock: p.inStock ? 100 : 0,
+                images: [p.image],
+                bulkPrices: [],
+                creditBadge: vendor.creditEnabled,
+                minOrderQuantity: 1,
+                isActive: true,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                isDeal: !!p.discount,
+                frequentlyOrdered: false
+            } as VendorProduct))
+        );
+    }, [vendor]);
 
     const filteredProducts = useMemo(() => {
         let result = products;
@@ -63,7 +90,7 @@ export default function VendorStorePage() {
             <VendorCatalogNav
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                categories={vendor.categories}
+                categories={vendor.catalog?.map(c => c.name) || vendor.categories}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
             />

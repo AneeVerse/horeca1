@@ -78,12 +78,17 @@ export function VendorStoreHeader({ vendor }: VendorStoreHeaderProps) {
 
                 {/* Vendor Categories (Icon Style) */}
                 <div className="flex items-start gap-4 pb-6 overflow-x-auto no-scrollbar -mx-[var(--container-padding)] px-[var(--container-padding)]">
-                    {vendor.categories.map((catName, idx) => {
+                    {(vendor.catalog && vendor.catalog.length > 0 
+                        ? vendor.catalog.map(c => c.name) 
+                        : vendor.categories
+                    ).map((catName, idx) => {
+                        // Find image from catalog first, then fallback to global
+                        const catalogItem = vendor.catalog?.find(c => c.name === catName);
                         const global = globalCategories.find(g => 
                             g.name.toLowerCase() === catName.toLowerCase() || 
                             catName.toLowerCase().includes(g.name.toLowerCase())
                         );
-                        const image = global?.image || '/images/category/vegitable.png';
+                        const image = catalogItem?.image || global?.image || '/images/category/vegitable.png';
                         
                         const slugify = (text: string) => text.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
                         

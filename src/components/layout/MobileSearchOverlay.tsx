@@ -47,7 +47,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                         bulkPrices: [],
                         isDeal: !!p.discount,
                         frequentlyOrdered: false,
-                        creditBadge: v.acceptsCredit,
+                        creditBadge: v.creditEnabled,
                         minOrderQuantity: 1,
                         isActive: true,
                         createdAt: new Date(),
@@ -62,8 +62,8 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
     const filteredItems = useMemo(() => {
         if (!searchQuery.trim()) return [];
         const q = searchQuery.toLowerCase();
-        return allProducts.filter(item => 
-            item.name.toLowerCase().includes(q) || 
+        return allProducts.filter(item =>
+            item.name.toLowerCase().includes(q) ||
             item.category.toLowerCase().includes(q)
         );
     }, [searchQuery, allProducts]);
@@ -71,7 +71,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
     const filteredVendors = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
         if (!q) return vendors;
-        
+
         const cleanQuery = q.replace(/&/g, 'and').replace(/\s+/g, ' ');
         const STOP_WORDS = ['and', 'for', 'with', 'the', 'item', 'list', 'page'];
         const queryKeywords = cleanQuery.split(' ')
@@ -91,14 +91,14 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
 
             // 2. High Priority: Catalog Category Match (Source of Truth)
             // If the vendor has the category in their catalog, they definitely sell it.
-            const hasCatalogMatch = catalogCatNames.some(cat => 
-                cat.includes(cleanQuery) || 
+            const hasCatalogMatch = catalogCatNames.some(cat =>
+                cat.includes(cleanQuery) ||
                 (queryKeywords.length > 0 && queryKeywords.some(word => cat.includes(word)))
             );
             if (hasCatalogMatch) return true;
 
             // 3. High Priority: Product match (Does the store sell an item with this name?)
-            const hasProductMatch = v.catalog.some(cat => 
+            const hasProductMatch = v.catalog.some(cat =>
                 cat.products.some(p => p.name.toLowerCase().includes(q))
             );
             if (hasProductMatch) return true;
@@ -107,8 +107,8 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
             // If user searches "Fruits", we don't want to match a vendor just because they have a "Vegetables" tag.
             // We only use tags for general attributes like "Organic", "Fast", "Wholesale", etc.
             if (!isCategorySearch) {
-                const hasTagMatch = vendorTags.some(tag => 
-                    tag.includes(cleanQuery) || 
+                const hasTagMatch = vendorTags.some(tag =>
+                    tag.includes(cleanQuery) ||
                     (queryKeywords.length > 0 && queryKeywords.some(word => tag.includes(word)))
                 );
                 if (hasTagMatch) return true;
@@ -196,7 +196,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                         {filteredItems.length > 0 && (
                             <>
                                 {/* Search in Category Card */}
-                                <button 
+                                <button
                                     onClick={() => {
                                         setSearchQuery(filteredItems[0].name);
                                         setActiveTab('vendors');
@@ -219,31 +219,16 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                                             <button
                                                 key={item.id}
                                                 onClick={() => {
-                                                    if (item.stock > 0) {
-                                                        setSearchQuery(item.name);
-                                                        setActiveTab('vendors');
-                                                    }
+                                                    setSearchQuery(item.name);
+                                                    setActiveTab('vendors');
                                                 }}
-                                                className={cn(
-                                                    "flex items-center gap-4 p-2 border border-[#EEEEEE] rounded-[14px] active:scale-[0.98] transition-all group w-full text-left relative overflow-hidden",
-                                                    item.stock > 0 ? "hover:border-[#53B175]/30" : "opacity-60 cursor-not-allowed grayscale-[0.5]"
-                                                )}
+                                                className="flex items-center gap-4 p-2 border border-[#EEEEEE] rounded-[14px] active:scale-[0.98] transition-all hover:border-[#53B175]/30 group w-full text-left"
                                             >
                                                 <div className="w-[48px] h-[58px] flex items-center justify-center p-1 shrink-0 overflow-hidden">
                                                     <img src={item.images[0]} alt={item.name} className="max-w-full max-h-full object-contain" />
                                                 </div>
-                                                <div className="flex-1 flex items-center gap-2">
-                                                    <div className={cn(
-                                                        "text-[14px] font-semibold text-[#181725] leading-tight transition-colors",
-                                                        item.stock > 0 ? "group-hover:text-[#53B175]" : "text-gray-400"
-                                                    )}>
-                                                        {item.name}
-                                                    </div>
-                                                    {item.stock <= 0 && (
-                                                        <span className="text-[12px] font-bold text-[#FF4D4D] whitespace-nowrap">
-                                                            Out of Stock
-                                                        </span>
-                                                    )}
+                                                <div className="text-[14px] font-semibold text-[#181725] leading-tight group-hover:text-[#53B175] transition-colors">
+                                                    {item.name}
                                                 </div>
                                             </button>
                                         ))}
@@ -270,8 +255,8 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                             filteredVendors.map((vendor) => (
                                 <Link
                                     key={vendor.id}
-                                    href={searchQuery 
-                                        ? `/category/${vendor.id}/${searchQuery.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')}` 
+                                    href={searchQuery
+                                        ? `/category/${vendor.id}/${searchQuery.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')}`
                                         : `/vendor/${vendor.id}`}
                                     onClick={onClose}
                                     className="flex items-center gap-4 p-4 bg-white rounded-[16px] border border-[#EEEEEE] active:scale-[0.98] transition-all hover:border-[#53B175]/30 group"
