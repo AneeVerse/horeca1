@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     ChevronLeft,
     ChevronRight,
@@ -56,10 +56,20 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
         city: 'Thane',
     });
 
+    useEffect(() => {
+        const storedPhone = localStorage.getItem('userPhone');
+        if (storedPhone) {
+            setUserData(prev => ({ ...prev, phone: storedPhone }));
+        }
+    }, []);
+
     if (!isOpen) return null;
 
     const handleLogout = () => {
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('userPhone');
         onClose();
+        window.location.reload(); // Optional, but good to refresh state
     };
 
     const topActions = [

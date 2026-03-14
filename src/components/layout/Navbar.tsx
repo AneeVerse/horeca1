@@ -37,6 +37,11 @@ export function Navbar() {
     const [isLocationOverlayOpen, setIsLocationOverlayOpen] = React.useState(false);
     const [isLoginOverlayOpen, setIsLoginOverlayOpen] = React.useState(false);
     const [isLoggedIn, setIsLoggedIn] = React.useState(false);
+
+    React.useEffect(() => {
+        setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
+    }, []);
+
     const [selectedRole, setSelectedRole] = React.useState<'customer' | 'vendor'>('customer');
     const [searchTab, setSearchTab] = React.useState<'items' | 'stores'>('stores');
     const [isNavSearchFocused, setIsNavSearchFocused] = React.useState(false);

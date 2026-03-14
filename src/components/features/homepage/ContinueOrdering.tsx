@@ -1,13 +1,23 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronRight, Clock } from 'lucide-react';
 import { MOCK_VENDORS } from '@/lib/mockData';
 
 export function ContinueOrdering() {
+    const [isMounted, setIsMounted] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+        setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
+    }, []);
+
     // Show first 3 vendors as "recently ordered from" (mock)
     const recentVendors = MOCK_VENDORS.slice(0, 3);
+
+    if (!isMounted || !isLoggedIn) return null;
 
     return (
         <section className="w-full py-4 bg-white">
