@@ -157,7 +157,7 @@ export function Navbar() {
             {/* Top Header - Scrolls Away */}
             <header className={cn(
                 "w-full bg-white relative z-[1000]",
-                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/')) && "hidden md:block"
+                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/') || pathname === '/cart' || pathname === '/orders' || pathname === '/wishlist' || pathname === '/profile') && "hidden md:block"
             )}>
                 <div className="w-full py-3 px-4 md:px-[var(--container-padding)]">
                     <div className="max-w-[var(--container-max)] mx-auto">

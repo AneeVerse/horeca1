@@ -26,15 +26,15 @@ export default function OrderListDetailPage() {
         // 1. Check Mock Data
         let found = MOCK_ORDER_LISTS.find(l => l.id === listId);
 
-        // 2. Check Local Storage if not found in mock
+        // 2. Check Merged Local Storage (Mock + Custom)
         if (!found) {
-            const saved = localStorage.getItem('custom_order_lists');
+            const saved = localStorage.getItem('horeca_order_lists_all');
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
                     found = parsed.find((l: any) => l.id === listId);
                 } catch (e) {
-                    console.error('Failed to parse custom lists', e);
+                    console.error('Failed to parse lists', e);
                 }
             }
         }
