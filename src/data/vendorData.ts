@@ -23,14 +23,18 @@ export interface VendorCategory {
 export interface Vendor {
   id: string;
   name: string;
+  slug: string;
   logo: string;
   tagline: string;
   categories: string[]; // short summary tags
   rating: number;
+  totalRatings: number;
+  deliverySchedule: string;
   deliveryTime: string;
-  minOrder: number;
-  acceptsCredit: boolean;
+  minOrderValue: number;
+  creditEnabled: boolean;
   isOpen: boolean;
+  isActive: boolean;
   catalog: VendorCategory[];
 }
 
@@ -71,14 +75,18 @@ export const vendors: Vendor[] = [
   {
     id: 'v6',
     name: 'Arisha Mart',
+    slug: 'arisha-mart',
     logo: '/images/top vendors/39a5dd37096e44eb8b72e053055e32896d63c44a.png',
     tagline: 'Fresh grocery delivered daily',
-    categories: ['Grocery', 'Dairy', 'Flours'],
+    categories: ['Dairy', 'Flours', 'Chicken & Eggs'],
     rating: 4.6,
+    totalRatings: 98,
+    deliverySchedule: 'Tomorrow 10:00 AM',
     deliveryTime: '24 hrs',
-    minOrder: 500,
-    acceptsCredit: true,
+    minOrderValue: 500,
+    creditEnabled: true,
     isOpen: true,
+    isActive: true,
     catalog: [
       {
         id: 'dairy',
@@ -113,14 +121,18 @@ export const vendors: Vendor[] = [
   {
     id: 'v7',
     name: 'Mentari Mart',
+    slug: 'mentari-mart',
     logo: '/images/top vendors/658b597eb627e280b99c0cf10e482793 2.png',
     tagline: 'Grocery & Vegetables marketplace',
-    categories: ['Grocery', 'Vegetables', 'Oils'],
+    categories: ['Pulses', 'Edible Oils'],
     rating: 4.3,
+    totalRatings: 110,
+    deliverySchedule: 'Tomorrow 9:00 AM',
     deliveryTime: '18 hrs',
-    minOrder: 1000,
-    acceptsCredit: true,
+    minOrderValue: 1000,
+    creditEnabled: true,
     isOpen: true,
+    isActive: true,
     catalog: [
       {
         id: 'pulses',
@@ -147,14 +159,18 @@ export const vendors: Vendor[] = [
   {
     id: 'v5',
     name: 'Borcelle',
+    slug: 'borcelle',
     logo: '/images/top vendors/961d17c25868145dd167df9f88ca0d40a7c057d1.png',
     tagline: 'Organic and dry fruits specialists',
-    categories: ['Grocery', 'Dry Fruits', 'Organic'],
+    categories: ['Fruits & Vegetables', 'Dry Fruits & Nuts'],
     rating: 4.8,
+    totalRatings: 201,
+    deliverySchedule: 'Tomorrow 8:00 AM',
     deliveryTime: '6 hrs',
-    minOrder: 300,
-    acceptsCredit: false,
+    minOrderValue: 300,
+    creditEnabled: false,
     isOpen: true,
+    isActive: true,
     catalog: [
       {
         id: 'fruits-vegetables',
@@ -181,14 +197,18 @@ export const vendors: Vendor[] = [
   {
     id: 'v8',
     name: 'Walmart',
+    slug: 'walmart',
     logo: '/images/top vendors/ecommerce-logo-template_658705-117 3.png',
     tagline: 'Grocery, Electronics and more',
-    categories: ['Grocery', 'Packaging', 'Electronics'],
+    categories: ['Dairy', 'Custom Packaging'],
     rating: 4.5,
+    totalRatings: 1200,
+    deliverySchedule: 'Today 8:00 PM',
     deliveryTime: '20 hrs',
-    minOrder: 400,
-    acceptsCredit: true,
+    minOrderValue: 400,
+    creditEnabled: true,
     isOpen: true,
+    isActive: true,
     catalog: [
       {
         id: 'dairy',
@@ -215,14 +235,18 @@ export const vendors: Vendor[] = [
   {
     id: 'v9',
     name: 'Allure Mart',
+    slug: 'allure-mart',
     logo: '/images/top vendors/da025fadd66fb2aef4d63f0db58b86b5 2.png',
     tagline: 'Premium grocery and beauty products',
-    categories: ['Grocery', 'Instant Food', 'Spices'],
+    categories: ['Masala, Salt & Sugar', 'Frozen & Instant Food'],
     rating: 4.4,
+    totalRatings: 150,
+    deliverySchedule: 'Tomorrow 11:00 AM',
     deliveryTime: '24 hrs',
-    minOrder: 750,
-    acceptsCredit: false,
+    minOrderValue: 750,
+    creditEnabled: false,
     isOpen: true,
+    isActive: true,
     catalog: [
       {
         id: 'masala-salt-sugar',
@@ -249,14 +273,18 @@ export const vendors: Vendor[] = [
   {
     id: 'v10',
     name: 'Cartomart',
+    slug: 'cartomart',
     logo: '/images/top vendors/m-mart-grocery-store-brands-logo-238132857 3.png',
     tagline: 'Grocery and dry fruits center',
-    categories: ['Grocery', 'Bakery', 'Packaging'],
+    categories: ['Bakery & Chocolates', 'Packaging Material'],
     rating: 4.7,
+    totalRatings: 85,
+    deliverySchedule: 'Tomorrow 7:00 AM',
     deliveryTime: '22 hrs',
-    minOrder: 600,
-    acceptsCredit: true,
+    minOrderValue: 600,
+    creditEnabled: true,
     isOpen: true,
+    isActive: true,
     catalog: [
       {
         id: 'bakery-chocolates',
@@ -282,14 +310,18 @@ export const vendors: Vendor[] = [
   {
     id: 'v1',
     name: 'emarket',
+    slug: 'emarket',
     logo: '/images/top vendors/emarket.png',
     tagline: 'Your everyday grocery and household needs',
-    categories: ['Grocery', 'Cleaning', 'Bakery'],
+    categories: ['Fruits & Vegetables', 'Cleaning & Consumables', 'Bakery & Chocolates'],
     rating: 4.1,
+    totalRatings: 234,
+    deliverySchedule: 'Tomorrow 7:00 AM',
     deliveryTime: '12 hrs',
-    minOrder: 250,
-    acceptsCredit: false,
+    minOrderValue: 250,
+    creditEnabled: false,
     isOpen: true,
+    isActive: true,
     catalog: [
       {
         id: 'fruits-vegetables',
@@ -324,14 +356,18 @@ export const vendors: Vendor[] = [
   {
     id: 'v2',
     name: 'Whole Food Market',
+    slug: 'whole-foods',
     logo: '/images/top vendors/whole-foods-market.png',
     tagline: 'Organic and whole grain superstore',
-    categories: ['Organic', 'Beverages', 'Rice'],
+    categories: ['Fruits & Vegetables', 'Beverages & Mixers', 'Rice & Rice Products'],
     rating: 4.6,
+    totalRatings: 312,
+    deliverySchedule: 'Today 4:00 PM',
     deliveryTime: '14 hrs',
-    minOrder: 500,
-    acceptsCredit: true,
+    minOrderValue: 500,
+    creditEnabled: true,
     isOpen: true,
+    isActive: true,
     catalog: [
       {
         id: 'fruits-vegetables',
@@ -365,14 +401,18 @@ export const vendors: Vendor[] = [
   {
     id: 'v3',
     name: 'M Mart',
+    slug: 'm-mart',
     logo: '/images/top vendors/m-mart.png',
     tagline: 'Imported, frozen, and ready-to-eat specialists',
-    categories: ['Imported', 'Meat', 'Seafood'],
+    categories: ['Canned & Imported', 'Mutton, Duck & Meat', 'Fish, Prawns & Seafood', 'Sauces & Seasoning'],
     rating: 4.2,
+    totalRatings: 189,
+    deliverySchedule: 'Tomorrow 6:00 AM',
     deliveryTime: '16 hrs',
-    minOrder: 800,
-    acceptsCredit: false,
+    minOrderValue: 800,
+    creditEnabled: false,
     isOpen: true,
+    isActive: true,
     catalog: [
       {
         id: 'canned-imported',
@@ -413,14 +453,18 @@ export const vendors: Vendor[] = [
   {
     id: 'v4',
     name: 'Groceri',
+    slug: 'groceri',
     logo: '/images/top vendors/groceri.png',
     tagline: 'Complete grocery and daily essentials',
-    categories: ['Grocery', 'Pulse', 'Dairy'],
+    categories: ['Pulses', 'Dairy'],
     rating: 4.0,
+    totalRatings: 156,
+    deliverySchedule: 'Tomorrow 5:30 AM',
     deliveryTime: '10 hrs',
-    minOrder: 200,
-    acceptsCredit: true,
+    minOrderValue: 200,
+    creditEnabled: true,
     isOpen: true,
+    isActive: true,
     catalog: [
       {
         id: 'pulses',

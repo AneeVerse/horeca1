@@ -4,11 +4,11 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, Star, Clock, CreditCard, Package, Search } from 'lucide-react';
 import Link from 'next/link';
-import { MOCK_VENDORS } from '@/lib/mockData';
+import { vendors } from '@/data/vendorData';
 
 export default function VendorsPage() {
     const router = useRouter();
-    const vendors = MOCK_VENDORS;
+    const allVendors = vendors;
 
     return (
         <div className="min-h-screen bg-gray-50/50">
@@ -49,7 +49,7 @@ export default function VendorsPage() {
             {/* Vendor Grid */}
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-6 pb-24">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-                    {vendors.map((vendor) => (
+                    {allVendors.map((vendor) => (
                         <Link
                             key={vendor.id}
                             href={`/vendor/${vendor.id}`}

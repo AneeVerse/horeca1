@@ -47,7 +47,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                         bulkPrices: [],
                         isDeal: !!p.discount,
                         frequentlyOrdered: false,
-                        creditBadge: v.acceptsCredit,
+                        creditBadge: v.creditEnabled,
                         minOrderQuantity: 1,
                         isActive: true,
                         createdAt: new Date(),
