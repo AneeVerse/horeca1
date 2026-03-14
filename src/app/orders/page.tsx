@@ -92,9 +92,9 @@ export default function OrderHistoryPage() {
                             <p className="text-[13px] text-[#7C7C7C] mb-5">{order.date}</p>
 
                             {/* Product Images */}
-                            <div className="flex gap-3 overflow-x-auto no-scrollbar mb-6 py-0.5">
+                            <div className="flex gap-2 overflow-x-auto no-scrollbar mb-6 py-0.5">
                                 {order.items.map((item, idx) => (
-                                    <div key={idx} className="w-[66px] h-[66px] min-w-[66px] rounded-[12px] border border-[#CFCECE] flex items-center justify-center p-1.5 bg-white">
+                                    <div key={idx} className="w-[50px] h-[50px] min-w-[50px] rounded-[8px] border border-[#CFCECE] flex items-center justify-center p-1 bg-white">
                                         <img src={item.image} alt="product" className="max-w-[85%] max-h-[85%] object-contain" />
                                     </div>
                                 ))}

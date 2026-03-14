@@ -58,17 +58,12 @@ const SOCIAL_LINKS = [
 
 export function Footer() {
     const pathname = usePathname();
-    const isCartPage = pathname?.startsWith('/cart');
-    const isProductPage = pathname?.startsWith('/product/');
-    const isAdminPage = pathname?.startsWith('/admin');
-    const isProfilePage = pathname === '/profile';
 
-    if (isProductPage || isAdminPage || isCartPage || isProfilePage) return null;
+    if (pathname !== '/') return null;
 
     return (
         <footer className={cn(
-            "w-full bg-white relative overflow-hidden pb-20 md:pb-0",
-            isCartPage && "hidden md:block"
+            "w-full bg-white relative overflow-hidden pb-20 md:pb-0"
         )}>
             <div className="max-w-[var(--container-max)] mx-auto px-5 md:px-[var(--container-padding)] relative z-10">
                 {/* Main Footer Section */}
