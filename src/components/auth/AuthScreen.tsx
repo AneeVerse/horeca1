@@ -7,10 +7,11 @@ import { cn } from '@/lib/utils';
 interface AuthScreenProps {
     isOpen: boolean;
     onClose: () => void;
+    onLoginSuccess?: () => void;
     initialMode?: 'customer' | 'vendor';
 }
 
-export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthScreenProps) {
+export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'customer' }: AuthScreenProps) {
     const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
     const [step, setStep] = useState<'form' | 'otp' | 'success'>('form');
     const [userRole, setUserRole] = useState<'customer' | 'vendor'>(initialMode);
@@ -74,6 +75,7 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
         if (authMode === 'register') {
             setStep('otp'); // Now shows for BOTH customer and vendor
         } else {
+            if (onLoginSuccess) onLoginSuccess();
             handleClose();
         }
     };
@@ -468,6 +470,21 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                     {authMode === 'login' ? 'Login' : 'Next'}
                 </button>
 
+                {/* Footer Link */}
+                <div className="mt-auto pt-10 pb-6 text-center">
+                    <p className="text-[13px] text-gray-400 font-medium">
+                        {authMode === 'login' ? (
+                            <>
+                                Dont have an account <button onClick={() => setAuthMode('register')} className="text-[#33a852] font-bold hover:underline">Register.</button>
+                            </>
+                        ) : (
+                            <>
+                                Already have an account <button onClick={() => setAuthMode('login')} className="text-[#33a852] font-bold hover:underline">Login.</button>
+                            </>
+                        )}
+                    </p>
+                </div>
+
                 {/* Role Switcher for Register Mode */}
                 {authMode === 'register' && (
                     <div className="mt-8 shrink-0 pb-10 text-center">
@@ -479,10 +496,9 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                     </div>
                 )}
 
-                {/* Role Switcher Commented out as per request */}
-                {/* 
+                {/* Onboard as Button for Login View */}
                 {authMode === 'login' && (
-                    <div className="mt-8 shrink-0 pb-10">
+                    <div className="mt-8 shrink-0 pb-2">
                         <div className="flex items-center gap-4 mb-6">
                             <div className="h-[1px] flex-1 bg-gray-50" />
                             <span className="text-[12px] font-medium text-gray-300 tracking-tight">Or login with</span>
@@ -491,7 +507,7 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
 
                         <button
                             onClick={handleRoleSwitch}
-                            className="w-full bg-[#f8f9fa] border border-gray-100 py-4 rounded-lg text-sm font-semibold text-gray-500 transition-colors hover:bg-gray-100"
+                            className="w-full bg-[#f8f9fa] border border-gray-100 py-3 rounded-lg text-sm font-semibold text-gray-500 transition-colors hover:bg-gray-100"
                         >
                             Onboard as <span className="text-[#33a852] font-[800] underline ml-1">
                                 {userRole === 'customer' ? 'Vendor.' : 'Customer.'}
@@ -499,7 +515,6 @@ export function AuthScreen({ isOpen, onClose, initialMode = 'customer' }: AuthSc
                         </button>
                     </div>
                 )}
-                */}
             </div>
 
             {/* Close button */}

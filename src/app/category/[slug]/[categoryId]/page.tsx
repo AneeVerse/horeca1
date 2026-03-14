@@ -21,7 +21,7 @@ function VendorCategoryPageContent() {
     const params = useParams();
     const router = useRouter();
 
-    const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 
     const slug = params.slug as string;
     const categoryId = params.categoryId as string;
@@ -32,8 +32,8 @@ function VendorCategoryPageContent() {
     }, [slug]);
 
     const activeCategory = useMemo(() => {
-        if (!vendor) return null;
-        const targetCat = slugify(categoryId);
+        if (!vendor || !vendor.catalog.length) return null;
+        const targetCat = slugify(categoryId || '');
         
         // 1. Try direct match on ID or Name
         let found = vendor.catalog.find(c => 
@@ -47,8 +47,9 @@ function VendorCategoryPageContent() {
                 cat.products.some(p => slugify(p.name).includes(targetCat) || targetCat.includes(slugify(p.name)))
             );
         }
-        
-        return found;
+
+        // 3. Final Fallback: First category if we're on this vendor's space
+        return found || vendor.catalog[0];
     }, [vendor, categoryId]);
 
     const filteredProducts = useMemo(() => {
@@ -174,19 +175,23 @@ function VendorCategoryPageContent() {
                         {/* Product Feed */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
                             {filteredProducts.length > 0 ? (
-                                filteredProducts.map((product) => (
-                                    <VendorProductCard
-                                        key={product.id}
-                                        product={{
-                                            ...product,
-                                            vendorId: vendor.id,
-                                            vendorName: vendor.name,
-                                            images: [product.image],
-                                            packSize: product.unit,
-                                            stock: product.inStock ? 10 : 0
-                                        } as any}
-                                    />
-                                ))
+                                filteredProducts.map((product: any) => {
+                                    if (!activeCategory) return null;
+                                    return (
+                                        <VendorProductCard
+                                            key={product.id}
+                                            product={{
+                                                ...product,
+                                                vendorId: vendor.id,
+                                                vendorName: vendor.name,
+                                                category: activeCategory.name,
+                                                images: [product.image],
+                                                packSize: product.unit,
+                                                stock: product.inStock ? 100 : 0
+                                            } as any}
+                                        />
+                                    );
+                                })
                             ) : (
                                 <div className="text-center py-20 flex flex-col items-center">
                                     <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">

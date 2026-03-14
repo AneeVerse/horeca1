@@ -219,16 +219,31 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                                             <button
                                                 key={item.id}
                                                 onClick={() => {
-                                                    setSearchQuery(item.name);
-                                                    setActiveTab('vendors');
+                                                    if (item.stock > 0) {
+                                                        setSearchQuery(item.name);
+                                                        setActiveTab('vendors');
+                                                    }
                                                 }}
-                                                className="flex items-center gap-4 p-2 border border-[#EEEEEE] rounded-[14px] active:scale-[0.98] transition-all hover:border-[#53B175]/30 group w-full text-left"
+                                                className={cn(
+                                                    "flex items-center gap-4 p-2 border border-[#EEEEEE] rounded-[14px] active:scale-[0.98] transition-all group w-full text-left relative overflow-hidden",
+                                                    item.stock > 0 ? "hover:border-[#53B175]/30" : "opacity-60 cursor-not-allowed grayscale-[0.5]"
+                                                )}
                                             >
                                                 <div className="w-[48px] h-[58px] flex items-center justify-center p-1 shrink-0 overflow-hidden">
                                                     <img src={item.images[0]} alt={item.name} className="max-w-full max-h-full object-contain" />
                                                 </div>
-                                                <div className="text-[14px] font-semibold text-[#181725] leading-tight group-hover:text-[#53B175] transition-colors">
-                                                    {item.name}
+                                                <div className="flex-1 flex items-center gap-2">
+                                                    <div className={cn(
+                                                        "text-[14px] font-semibold text-[#181725] leading-tight transition-colors",
+                                                        item.stock > 0 ? "group-hover:text-[#53B175]" : "text-gray-400"
+                                                    )}>
+                                                        {item.name}
+                                                    </div>
+                                                    {item.stock <= 0 && (
+                                                        <span className="text-[12px] font-bold text-[#FF4D4D] whitespace-nowrap">
+                                                            Out of Stock
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </button>
                                         ))}

@@ -403,7 +403,10 @@ export const vendors: Vendor[] = [
         name: 'Sauces & Seasoning',
         image: '/images/category/drink-juice.png',
         products: [
-          { id: 'mm-ss1', name: 'Ketchup 1kg', image: '/images/category/drink-juice.png', price: 120, originalPrice: 150, unit: '1 kg', inStock: true },
+          { id: 'mm-ss1', name: 'Kissan Fresh Tomato Ketchup 750 gms', image: '/images/category/drink-juice.png', price: 120, originalPrice: 150, unit: '750 gms', inStock: true },
+          { id: 'mm-ss2', name: 'Del Monte Tomato Ketchup Pouch 1 kg', image: '/images/category/drink-juice.png', price: 160, originalPrice: 190, unit: '1 kg', inStock: true },
+          { id: 'mm-ss3', name: 'Maggi Tomato Ketchup Bottle 450 gms', image: '/images/category/drink-juice.png', price: 95, originalPrice: 110, unit: '450 gms', inStock: false },
+          { id: 'mm-ss4', name: 'Heinz Tomato Ketchup Bottle 750 gms', image: '/images/category/drink-juice.png', price: 210, originalPrice: 240, unit: '750 gms', inStock: false },
         ],
       },
     ],

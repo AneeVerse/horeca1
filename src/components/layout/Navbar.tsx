@@ -22,7 +22,7 @@ import { MobileSearchOverlay } from './MobileSearchOverlay';
 import { LocationSelectionOverlay } from './LocationSelectionOverlay';
 import { useCart } from '@/context/CartContext';
 import { useAddress } from '@/context/AddressContext';
-import { LoginOverlay } from '../auth/LoginOverlay';
+import { AuthScreen } from '../auth/AuthScreen';
 import { ProfileScreen } from '../auth/ProfileScreen';
 import { InitialPincodeOverlay } from './InitialPincodeOverlay';
 import { WishlistOverlay } from '../auth/WishlistOverlay';
@@ -31,6 +31,7 @@ export function Navbar() {
     const router = useRouter();
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
     const [isCategoriesSidebarOpen, setIsCategoriesSidebarOpen] = React.useState(false);
+    const [isCategoriesExpanded, setIsCategoriesExpanded] = React.useState(false);
     const [isSearchOverlayOpen, setIsSearchOverlayOpen] = React.useState(false);
     const [isLocationOverlayOpen, setIsLocationOverlayOpen] = React.useState(false);
     const [isLoginOverlayOpen, setIsLoginOverlayOpen] = React.useState(false);
@@ -78,22 +79,22 @@ export function Navbar() {
     }
 
     const categories = [
-        { name: 'Fruits & Vegetables', image: '/images/category/vegitable.png' },
-        { name: 'Dairy', image: '/images/category/milk.png' },
-        { name: 'Canned & Imported', image: '/images/category/candy.png' },
-        { name: 'Flours', image: '/images/category/snacks.png' },
-        { name: 'Sauces & Seasoning', image: '/images/category/drink-juice.png' },
-        { name: 'Masala, Salt & Sugar', image: '/images/category/candy.png' },
-        { name: 'Chicken & Eggs', image: '/images/category/animal food.png' },
-        { name: 'Edible Oils', image: '/images/category/fruits.png' },
-        { name: 'Custom Packaging', image: '/images/category/vegitable.png' },
-        { name: 'Frozen & Instant Food', image: '/images/category/frozen foods.png' },
-        { name: 'Packaging Material', image: '/images/category/vegitable.png' },
-        { name: 'Bakery & Chocolates', image: '/images/category/candy.png' },
-        { name: 'Beverages & Mixers', image: '/images/category/drink-juice.png' },
-        { name: 'Cleaning & Consumables', image: '/images/category/vegitable.png' },
-        { name: 'Pulses', image: '/images/category/snacks.png' },
-        { name: 'Mutton, Duck & Meat', image: '/images/category/fish & meat.png' },
+        { name: 'Fruits & Vegetables', image: '/images/category/vegitable.png', bgColor: '#e8f9e9' },
+        { name: 'Dairy', image: '/images/category/milk.png', bgColor: '#eef2ff' },
+        { name: 'Canned & Imported', image: '/images/category/animal food.png', bgColor: '#fff7ed' },
+        { name: 'Flours', image: '/images/category/snacks.png', bgColor: '#fef2f2' },
+        { name: 'Sauces & Seasoning', image: '/images/category/drink-juice.png', bgColor: '#fdf4ff' },
+        { name: 'Masala, Salt & Sugar', image: '/images/category/candy.png', bgColor: '#eff6ff' },
+        { name: 'Chicken & Eggs', image: '/images/category/fish & meat.png', bgColor: '#fffbeb' },
+        { name: 'Edible Oils', image: '/images/category/fruits.png', bgColor: '#f0fdf4' },
+        { name: 'Custom Packaging', image: '/images/category/vegitable.png', bgColor: '#f8fafc' },
+        { name: 'Frozen & Instant Food', image: '/images/category/frozen foods.png', bgColor: '#f0f9ff' },
+        { name: 'Packaging Material', image: '/images/category/vegitable.png', bgColor: '#fdf2f8' },
+        { name: 'Bakery & Chocolates', image: '/images/category/candy.png', bgColor: '#fff1f2' },
+        { name: 'Beverages & Mixers', image: '/images/category/drink-juice.png', bgColor: '#ecfdf5' },
+        { name: 'Cleaning & Consumables', image: '/images/category/vegitable.png', bgColor: '#fafaf9' },
+        { name: 'Pulses', image: '/images/category/snacks.png', bgColor: '#f5f3ff' },
+        { name: 'Mutton, Duck & Meat', image: '/images/category/fish & meat.png', bgColor: '#fdfcf0' },
     ];
 
     const pathname = usePathname();
@@ -127,8 +128,8 @@ export function Navbar() {
                     }
                 }}
             />
-            {/* Login Overlay (Simple Phone + OTP) */}
-            <LoginOverlay
+            {/* Auth Screen (Login/Register) */}
+            <AuthScreen
                 isOpen={isLoginOverlayOpen}
                 onClose={() => setIsLoginOverlayOpen(false)}
                 onLoginSuccess={() => {
@@ -336,39 +337,70 @@ export function Navbar() {
                     "fixed inset-0 z-[10000] bg-black/40 transition-opacity duration-300 md:hidden",
                     isCategoriesSidebarOpen ? "opacity-100 visible" : "opacity-0 invisible"
                 )}
-                onClick={() => setIsCategoriesSidebarOpen(false)}
+                onClick={() => {
+                    setIsCategoriesSidebarOpen(false);
+                    setIsCategoriesExpanded(false);
+                }}
             >
                 <div
                     className={cn(
-                        "fixed bottom-0 left-0 right-0 bg-white rounded-t-[30px] transition-transform duration-500 ease-out p-6 max-h-[85vh] overflow-y-auto",
+                        "fixed bottom-0 left-0 right-0 bg-white rounded-t-[30px] transition-transform duration-500 ease-out p-6 max-h-[85vh] overflow-y-auto pb-[90px]",
                         isCategoriesSidebarOpen ? "translate-y-0" : "translate-y-full"
                     )}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
-                    <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-[20px] font-black text-[#181725]">All Categories</h2>
-                        <button onClick={() => setIsCategoriesSidebarOpen(false)} className="p-2 bg-gray-50 rounded-full">
+                    <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4" />
+                    
+                    {/* Header Row */}
+                    <div className="flex justify-end mb-2">
+                        <button 
+                            onClick={() => {
+                                setIsCategoriesSidebarOpen(false);
+                                setIsCategoriesExpanded(false);
+                            }}
+                            className="p-1"
+                        >
                             <X size={20} className="text-gray-400" />
                         </button>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-y-8 gap-x-4">
-                        {categories.map((item, idx) => (
+                    <div className="flex items-center justify-between mb-6 px-1">
+                        <h2 className="text-[17px] font-black text-[#181725]">Shop By Category</h2>
+                        <button 
+                            onClick={() => setIsCategoriesExpanded(!isCategoriesExpanded)}
+                            className="text-[#53B175] text-[14px] font-bold"
+                        >
+                            {isCategoriesExpanded ? 'Collapse' : 'See All'}
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-y-6 gap-x-3">
+                        {(isCategoriesExpanded ? categories : categories.slice(0, 8)).map((item, idx) => (
                             <Link
                                 key={idx}
                                 href={`/category/${item.name.toLowerCase().replace(/\s+/g, '-')}`}
                                 className="flex flex-col items-center gap-2 group"
-                                onClick={() => setIsCategoriesSidebarOpen(false)}
+                                onClick={() => {
+                                    setIsCategoriesSidebarOpen(false);
+                                    setIsCategoriesExpanded(false);
+                                }}
                             >
-                                <div className="w-full aspect-square bg-[#F7F8FA] rounded-2xl flex items-center justify-center p-2 transition-transform active:scale-95">
-                                    <img
-                                        src={item.image}
-                                        alt={item.name}
-                                        className="w-[75%] h-[75%] object-contain"
-                                    />
+                                <div 
+                                    className="w-full aspect-square rounded-[18px] flex items-center justify-center p-2 transition-transform active:scale-95 shadow-sm border border-gray-50 overflow-hidden"
+                                    style={{ 
+                                        backgroundColor: (item as any).bgColor || '#F7F8FA',
+                                        aspectRatio: '1 / 1'
+                                    }}
+                                >
+                                    <div className="relative w-[75%] h-[75%]">
+                                        <img
+                                            src={item.image}
+                                            alt={item.name}
+                                            className="w-full h-full object-contain"
+                                        />
+                                    </div>
                                 </div>
-                                <span className="text-[11px] font-bold text-center text-[#181725] leading-tight line-clamp-2">
+                                <span className="text-[10px] font-extrabold text-center text-[#181725] leading-tight px-0.5 line-clamp-2">
                                     {item.name}
                                 </span>
                             </Link>

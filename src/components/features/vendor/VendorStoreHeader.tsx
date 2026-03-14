@@ -85,9 +85,15 @@ export function VendorStoreHeader({ vendor }: VendorStoreHeaderProps) {
                         );
                         const image = global?.image || '/images/category/vegitable.png';
                         
+                        const slugify = (text: string) => text.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                        
                         return (
-                            <div key={idx} className="flex flex-col items-center gap-2 shrink-0">
-                                <div className="w-[70px] h-[70px] rounded-[18px] bg-[#F7F8FA] border border-gray-50 flex items-center justify-center overflow-hidden">
+                            <Link 
+                                key={idx} 
+                                href={`/category/${vendor.id}/${slugify(catName)}`}
+                                className="flex flex-col items-center gap-2 shrink-0 active:scale-95 transition-transform group"
+                            >
+                                <div className="w-[70px] h-[70px] rounded-[18px] bg-[#F7F8FA] border border-gray-50 flex items-center justify-center overflow-hidden group-hover:bg-[#F2F3F2] transition-colors">
                                     <div className="relative w-[70%] h-[70%]">
                                         <Image
                                             src={image}
@@ -97,10 +103,10 @@ export function VendorStoreHeader({ vendor }: VendorStoreHeaderProps) {
                                         />
                                     </div>
                                 </div>
-                                <span className="text-[11px] font-bold text-[#181725] text-center leading-tight max-w-[70px] line-clamp-2">
+                                <span className="text-[11px] font-bold text-[#181725] text-center leading-tight max-w-[70px] line-clamp-2 group-hover:text-[#53B175] transition-colors">
                                     {catName}
                                 </span>
-                            </div>
+                            </Link>
                         );
                     })}
                 </div>

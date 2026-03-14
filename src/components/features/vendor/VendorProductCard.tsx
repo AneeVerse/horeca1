@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import type { VendorProduct } from '@/types';
 import { useCart } from '@/context/CartContext';
+import { cn } from '@/lib/utils';
 
 interface VendorProductCardProps {
     product: VendorProduct;
@@ -39,8 +40,12 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
 
     return (
         <Link 
-            href={`/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`}
-            className="bg-white rounded-[16px] md:rounded-[24px] border border-gray-100 overflow-hidden hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group p-3 min-[340px]:p-4 relative block"
+            href={product.stock > 0 ? `/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}` : '#'}
+            onClick={(e) => product.stock <= 0 && e.preventDefault()}
+            className={cn(
+                "bg-white rounded-[16px] md:rounded-[24px] border border-gray-100 overflow-hidden hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group p-3 min-[340px]:p-4 relative block",
+                product.stock <= 0 && "opacity-75 grayscale-[0.3]"
+            )}
             style={{
                 display: 'grid',
                 gridTemplateRows: 'auto 42px 18px 28px 28px 30px 42px',
@@ -76,6 +81,11 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
                     {product.frequentlyOrdered && (
                         <span className="bg-[#FBC02D] text-white text-[8px] min-[340px]:text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
                             POPULAR
+                        </span>
+                    )}
+                    {product.stock <= 0 && (
+                        <span className="bg-gray-800 text-white text-[8px] min-[340px]:text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                            OUT OF STOCK
                         </span>
                     )}
                 </div>
@@ -152,11 +162,23 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
             {/* ── ROW 7: ADD TO CART ── */}
             <div className="overflow-hidden flex items-end">
                 <button
-                    onClick={(e) => handleAdd(e, 1)}
-                    className="w-full bg-[#F1F9F4] hover:bg-[#E1F2E8] text-[#299E60] h-full rounded-[10px] min-[340px]:rounded-[14px] md:rounded-[18px] font-extrabold text-[11px] min-[340px]:text-[13px] md:text-[15px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] border border-[#E1F2E8]"
+                    onClick={(e) => product.stock > 0 && handleAdd(e, 1)}
+                    disabled={product.stock <= 0}
+                    className={cn(
+                        "w-full h-full rounded-[10px] min-[340px]:rounded-[14px] md:rounded-[18px] font-extrabold text-[11px] min-[340px]:text-[13px] md:text-[15px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] border shadow-sm",
+                        product.stock > 0 
+                            ? "bg-[#F1F9F4] hover:bg-[#E1F2E8] text-[#299E60] border-[#E1F2E8]" 
+                            : "bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed"
+                    )}
                 >
-                    Add To Cart
-                    <ShoppingCart size={14} className="shrink-0" />
+                    {product.stock > 0 ? (
+                        <>
+                            Add To Cart
+                            <ShoppingCart size={14} className="shrink-0" />
+                        </>
+                    ) : (
+                        "Out of Stock"
+                    )}
                 </button>
             </div>
         </Link>

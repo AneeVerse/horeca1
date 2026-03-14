@@ -43,7 +43,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
 
     const [userData, setUserData] = useState({
         fullName: 'Alex Mordoti',
-        phone: '88678 68776',
+        phone: '7777777777',
         businessName: 'XYZ FoodTi',
         address: 'S60, Fz. Chowk, Thane',
         address2: 'New Mumbai, aharashtra',
