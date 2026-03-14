@@ -69,7 +69,10 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
         localStorage.removeItem('isLoggedIn');
         localStorage.removeItem('userPhone');
         onClose();
-        window.location.reload(); // Optional, but good to refresh state
+        router.push('/');
+        setTimeout(() => {
+             window.location.reload(); 
+        }, 100);
     };
 
     const topActions = [

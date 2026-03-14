@@ -144,7 +144,8 @@ export function Navbar() {
                 onLoginSuccess={() => {
                     setIsLoginOverlayOpen(false);
                     setIsLoggedIn(true);
-                    router.push('/profile');
+                    router.push('/');
+                    setTimeout(() => window.location.reload(), 100);
                 }}
             />
 
