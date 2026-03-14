@@ -1,59 +1,46 @@
 'use client';
 
-import React from 'react';
-import { ChevronLeft, Heart, ShoppingCart, Store } from 'lucide-react';
+import { ChevronLeft, Heart, ShoppingCart, Store, ShoppingBag } from 'lucide-react';
+import Link from 'next/link';
+import { useWishlist } from '@/context/WishlistContext';
+import { useCart } from '@/context/CartContext';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import type { VendorProduct } from '@/types';
 
 interface WishlistOverlayProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-const wishlistItems = [
-    {
-        id: 1,
-        name: 'Desi Fresh Tomato 1 kg',
-        image: '/images/product/product-img3.png',
-        price: 49,
-        originalPrice: 65,
-        inStock: false,
-        soldBy: '12 vendors',
-    },
-    {
-        id: 2,
-        name: 'Ladies Finger 1 kg',
-        image: '/images/product/brokali.png',
-        price: 39,
-        originalPrice: 55,
-        inStock: false,
-        soldBy: '6 vendors',
-    },
-    {
-        id: 3,
-        name: 'Orange Nagpur 1 kg',
-        image: '/images/category/fruits.png',
-        price: 89,
-        originalPrice: 120,
-        inStock: false,
-        soldBy: '6 vendors',
-    },
-    {
-        id: 4,
-        name: 'Amul Butter: 100 gms',
-        image: '/images/dairy/amul-butter.png',
-        price: 56,
-        originalPrice: 60,
-        inStock: false,
-        soldBy: '12 vendors',
-    },
-];
-
 export function WishlistOverlay({ isOpen, onClose }: WishlistOverlayProps) {
+    const { wishlist, toggleWishlist } = useWishlist();
+    const { addToCart, groups, updateQuantity } = useCart();
+    const totalInCart = groups.reduce((acc, g) => acc + g.items.length, 0);
+
+    const handleAddToCart = (item: VendorProduct) => {
+        const vendorGroup = groups.find(g => g.vendorId === item.vendorId);
+        const cartItem = vendorGroup?.items.find(i => i.productId === item.id);
+        const currentQty = cartItem?.quantity || 0;
+
+        if (currentQty > 0) {
+            updateQuantity(item.id, currentQty + 1);
+        } else {
+            addToCart(item, 1);
+        }
+
+        toast.success(`${item.name} added to cart!`, {
+            description: `Added from wishlist`,
+            duration: 2000,
+        });
+    };
+
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[13500] bg-white flex flex-col animate-in slide-in-from-right duration-300">
+        <div className="fixed inset-0 z-[13500] bg-white flex flex-col animate-in slide-in-from-right duration-300 font-inter">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50 bg-white sticky top-0 z-10">
                 <button
                     onClick={onClose}
                     className="p-1 hover:bg-gray-50 rounded-full transition-colors"
@@ -61,67 +48,89 @@ export function WishlistOverlay({ isOpen, onClose }: WishlistOverlayProps) {
                     <ChevronLeft size={22} className="text-[#181725]" />
                 </button>
                 <h2 className="text-[17px] font-[800] text-[#181725]">Your Wishlist</h2>
-                <button className="relative p-2">
+                <Link 
+                    href="/cart"
+                    onClick={onClose}
+                    className="relative p-2"
+                >
                     <ShoppingCart size={22} className="text-[#181725]" />
                     <span className="absolute top-1.5 right-1.5 bg-[#53B175] text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold border border-white">
-                        0
+                        {totalInCart}
                     </span>
-                </button>
+                </Link>
             </div>
 
             {/* Product Grid */}
-            <div className="flex-1 overflow-y-auto px-4 pt-3 pb-24">
-                <div className="grid grid-cols-2 gap-4">
-                    {wishlistItems.map((item) => (
-                        <div
-                            key={item.id}
-                            className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm flex flex-col h-full"
-                        >
-                            {/* Product Image Area */}
-                            <div className="relative pt-3 px-3">
-                                <button className="absolute top-3 right-3 z-10 transition-transform active:scale-90">
-                                    <Heart size={18} className="text-red-500 fill-red-500" />
-                                </button>
-
-                                <div className="w-full aspect-[1.1/1] bg-white flex items-center justify-center p-2">
-                                    <img
-                                        src={item.image}
-                                        alt={item.name}
-                                        className="max-w-full max-h-full object-contain"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Product Info */}
-                            <div className="p-3 flex flex-col flex-1">
-                                <h3 className="text-[13px] font-bold text-[#181725] leading-tight mb-1.5 line-clamp-2 h-[34px]">
-                                    {item.name}
-                                </h3>
-                                
-                                <div className="flex items-center gap-1.5 mb-3">
-                                    <div className="bg-[#53B175] rounded-[2px] p-0.5">
-                                        <Store size={8} className="text-white" />
-                                    </div>
-                                    <p className="text-[10px] text-gray-400 font-medium">
-                                        Sold by: {item.soldBy}
-                                    </p>
-                                </div>
-
-                                {/* Price & Button */}
-                                <div className="mt-auto space-y-3">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[15px] font-[900] text-[#181725]">₹{item.price}</span>
-                                        <span className="text-[11px] text-gray-400 line-through font-medium">₹{item.originalPrice}</span>
-                                    </div>
-
-                                    <button className="w-full py-2.5 rounded-xl text-[12px] font-bold bg-[#E8F5EE] text-[#53B175] transition-all hover:bg-[#D4EDDE] active:scale-[0.97]">
-                                        Notify Me
-                                    </button>
-                                </div>
-                            </div>
+            <div className="flex-1 overflow-y-auto px-4 pt-3 pb-24 bg-gray-50/30">
+                {wishlist.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-[60vh] text-center px-8">
+                        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                            <Heart size={32} className="text-gray-300" />
                         </div>
-                    ))}
-                </div>
+                        <h3 className="text-[18px] font-bold text-[#181725] mb-2">Empty Wishlist</h3>
+                        <p className="text-[14px] text-gray-400">Items you heart will appear here. Start shopping to add favorites!</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 gap-3 min-[340px]:gap-4">
+                        {wishlist.map((item) => (
+                            <div
+                                key={item.id}
+                                className="bg-white border border-gray-100 rounded-[20px] overflow-hidden shadow-sm flex flex-col h-full group"
+                            >
+                                {/* Product Image Area */}
+                                <div className="relative pt-3 px-3">
+                                    <button 
+                                        onClick={() => toggleWishlist(item)}
+                                        className="absolute top-3 right-3 z-10 p-1.5 rounded-full bg-white/80 shadow-sm transition-transform active:scale-90"
+                                    >
+                                        <Heart size={16} className="text-red-500 fill-red-500" />
+                                    </button>
+
+                                    <div className="w-full aspect-square bg-white flex items-center justify-center p-2">
+                                        <img
+                                            src={item.images[0]}
+                                            alt={item.name}
+                                            className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Product Info */}
+                                <div className="p-3 flex flex-col flex-1">
+                                    <h3 className="text-[12px] min-[340px]:text-[13px] font-bold text-[#181725] leading-tight mb-2 line-clamp-2 h-[32px] min-[340px]:h-[34px]">
+                                        {item.name}
+                                    </h3>
+                                    
+                                    <div className="flex items-center gap-1.5 mb-3">
+                                        <div className="bg-[#53B175] rounded-[4px] p-0.5">
+                                            <Store size={8} className="text-white" />
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 font-medium truncate">
+                                            {item.vendorName}
+                                        </p>
+                                    </div>
+
+                                    {/* Price & Button */}
+                                    <div className="mt-auto space-y-3">
+                                        <div className="flex items-baseline gap-1.5">
+                                            <span className="text-[15px] min-[340px]:text-[16px] font-[900] text-[#181725]">₹{item.price}</span>
+                                            {item.originalPrice && (
+                                                <span className="text-[10px] min-[340px]:text-[11px] text-gray-300 line-through font-medium">₹{item.originalPrice}</span>
+                                            )}
+                                        </div>
+
+                                        <button 
+                                            onClick={() => handleAddToCart(item)}
+                                            className="w-full py-2 rounded-xl text-[12px] font-bold bg-[#F1F9F4] text-[#299E60] transition-all hover:bg-[#E1F2E8] active:scale-[0.97] border border-[#53B175]/10"
+                                        >
+                                            Add to Cart
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

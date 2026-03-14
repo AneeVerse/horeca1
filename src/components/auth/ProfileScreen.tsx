@@ -8,6 +8,9 @@ import {
     HelpCircle,
     Heart,
     Pencil,
+    RotateCcw,
+    ListOrdered,
+    Store,
     MapPin,
     Gift,
     CreditCard,
@@ -16,6 +19,7 @@ import {
     Settings,
     LogOut,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { EditProfileOverlay } from './EditProfileOverlay';
 import { WishlistOverlay } from './WishlistOverlay';
@@ -32,6 +36,7 @@ interface ProfileScreenProps {
 }
 
 export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
+    const router = useRouter();
     const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
     const [isWishlistOpen, setIsWishlistOpen] = useState(false);
     const [isSavedAddressesOpen, setIsSavedAddressesOpen] = useState(false);
@@ -57,6 +62,12 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
         onClose();
     };
 
+    const topActions = [
+        { id: 'reorder', label: 'Reorder', sub: 'From last order', icon: RotateCcw, color: 'bg-blue-50 text-blue-600', onClick: () => { onClose(); router.push('/orders'); } },
+        { id: 'quick-order', label: 'Quick Order', sub: 'Order lists', icon: ListOrdered, color: 'bg-purple-50 text-purple-600', onClick: () => { onClose(); router.push('/order-lists'); } },
+        { id: 'my-vendors', label: 'My Vendors', sub: 'Saved vendors', icon: Store, color: 'bg-orange-50 text-orange-600', onClick: () => { onClose(); router.push('/vendors'); } },
+    ];
+
     const quickActions = [
         {
             id: 'orders',
@@ -72,7 +83,10 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
             id: 'wishlist',
             label: 'Your\nWishlist',
             icon: Heart,
-            onClick: () => setIsWishlistOpen(true),
+            onClick: () => {
+                onClose();
+                router.push('/wishlist');
+            },
         },
     ];
 
@@ -122,8 +136,30 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                         <p className="text-[12px] text-gray-400 font-medium">+91 {userData.phone}</p>
                     </div>
 
-                    {/* Quick Actions */}
-                    <div className="grid grid-cols-3 gap-3 mb-6">
+                    {/* Top Top Actions (Reorder, etc) */}
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                        {topActions.map((action) => {
+                            const Icon = action.icon;
+                            return (
+                                <button
+                                    key={action.id}
+                                    onClick={action.onClick}
+                                    className="flex flex-col items-center bg-white border border-gray-100 rounded-[15px] py-3 px-1 shadow-sm active:scale-[0.98] transition-all"
+                                >
+                                    <div className={cn("w-9 h-9 rounded-full flex items-center justify-center mb-1.5", action.color)}>
+                                        <Icon size={16} strokeWidth={2.5} />
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-[11px] font-[700] text-[#181725] leading-tight mb-0.5">{action.label}</p>
+                                        <p className="text-[8px] text-gray-400 font-medium whitespace-nowrap uppercase tracking-tighter">{action.sub}</p>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Quick Utility Actions */}
+                    <div className="grid grid-cols-3 gap-3 mb-8">
                         {quickActions.map((action) => {
                             const Icon = action.icon;
                             return (

@@ -7,17 +7,7 @@ import { ArrowLeft, Search, ChevronRight, ChevronDown, Plus, Minus, X, Percent, 
 import { useCart } from '@/context/CartContext';
 import { cn } from '@/lib/utils';
 
-// --- DEMO DATA ---
-const DEMO_SHIPMENTS = [
-    {
-        id: 's1',
-        vendor: 'G Mart Store',
-        items: [
-            { id: 'd1', name: 'Kissan - Tomato Ketchup', size: '2 kg', pcs: 1, price: 188, image: '/images/product/product-img1.png' },
-            { id: 'd2', name: 'Fortune - Sunflower Refined Oil, 5 L', size: '5 Litre', pcs: 1, price: 550, image: '/images/category/milk.png' },
-        ]
-    }
-];
+// --- DEMO DATA REMOVED ---
 
 export default function CartPage() {
     const [screen, setScreen] = useState<'cart' | 'payment' | 'success'>('cart');
@@ -26,14 +16,17 @@ export default function CartPage() {
 
     // Grouping shipments logic (Simplified for flat cart)
     const shipments = useMemo(() => {
-        if (cart.length === 0) return DEMO_SHIPMENTS;
+        if (cart.length === 0) return [];
 
         // Group items by vendor
-        const grouped: Record<string, any[]> = {};
+        const grouped: Record<string, { vendor: string, vendorId: string, items: any[] }> = {};
         cart.forEach(item => {
+            const vId = item.product.vendorId || 'general';
             const vName = item.product.vendorName || 'General Store';
-            if (!grouped[vName]) grouped[vName] = [];
-            grouped[vName].push({
+            if (!grouped[vId]) {
+                grouped[vId] = { vendor: vName, vendorId: vId, items: [] };
+            }
+            grouped[vId].items.push({
                 id: String(item.productId),
                 name: item.product.name,
                 size: item.product.packSize || '1 pc',
@@ -43,10 +36,10 @@ export default function CartPage() {
             });
         });
 
-        return Object.entries(grouped).map(([vendor, items], idx) => ({
-            id: `shipment-${idx}`,
-            vendor,
-            items
+        return Object.values(grouped).map(group => ({
+            id: group.vendorId,
+            vendor: group.vendor,
+            items: group.items
         }));
     }, [cart]);
 
@@ -133,7 +126,31 @@ export default function CartPage() {
 
                 <div className="fixed bottom-0 left-0 right-0 px-5 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50">
                     <button
-                        onClick={() => setScreen('success')}
+                        onClick={() => {
+                            // Save to Orders History
+                            const newOrders = shipments.map((shipment, idx) => ({
+                                id: `ORD-${Date.now()}-${idx}`,
+                                status: 'Order Placed',
+                                date: `Placed at ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
+                                price: getShipmentTotal(shipment.items),
+                                    items: shipment.items.map((item: any) => ({
+                                        id: item.id,
+                                        image: item.image,
+                                        fullProduct: cart.find(ci => String(ci.productId) === String(item.id))?.product
+                                    })),
+                                canRate: false
+                            }));
+
+                            try {
+                                const existingOrders = JSON.parse(localStorage.getItem('horeca_orders') || '[]');
+                                localStorage.setItem('horeca_orders', JSON.stringify([...newOrders, ...existingOrders]));
+                            } catch (e) {
+                                console.error('Failed to save orders:', e);
+                            }
+
+                            clearCart();
+                            setScreen('success');
+                        }}
                         className="w-full bg-[#53B175] text-white py-[18px] rounded-[16px] font-bold text-[18px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20"
                     >
                         Confirm Payment
@@ -144,12 +161,12 @@ export default function CartPage() {
     }
 
     // --- EMPTY STATE ---
-    if (cart.length === 0 && shipments.length === 0) {
+    if (cart.length === 0) {
         return (
             <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
                 <img src="/images/empty-cart.png" alt="Empty Cart" className="w-[180px] mb-8 opacity-20" />
-                <h2 className="text-[20px] font-bold text-[#181725] mb-2">Oops! Your cart is empty</h2>
-                <p className="text-[#7C7C7C] text-center mb-8">Look like you haven't added anything to your cart yet</p>
+                <h2 className="text-[20px] font-bold text-[#181725] mb-2">No items in cart</h2>
+                <p className="text-[#7C7C7C] text-center mb-8">Your cart is currently empty. Start adding some products!</p>
                 <button onClick={() => router.push('/')} className="bg-[#53B175] text-white px-12 py-4 rounded-xl font-bold">
                     Start Shopping
                 </button>

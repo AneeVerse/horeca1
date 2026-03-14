@@ -1,11 +1,13 @@
 'use client';
 
 import React from 'react';
-import { Plus, CreditCard, Share2, ShoppingCart } from 'lucide-react';
+import { Plus, CreditCard, Share2, ShoppingCart, Heart } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import type { VendorProduct } from '@/types';
 import { useCart } from '@/context/CartContext';
+import { useWishlist } from '@/context/WishlistContext';
 
 interface VendorProductCardProps {
     product: VendorProduct;
@@ -13,6 +15,8 @@ interface VendorProductCardProps {
 
 export function VendorProductCard({ product }: VendorProductCardProps) {
     const { addToCart, groups, updateQuantity } = useCart();
+    const { isInWishlist, toggleWishlist } = useWishlist();
+    const isLiked = isInWishlist(product.id);
 
     const vendorGroup = groups.find(g => g.vendorId === product.vendorId);
     const cartItem = vendorGroup?.items.find(i => i.productId === product.id);
@@ -47,16 +51,30 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
                 gap: '8px',
             }}
         >
-            {/* Top Share Icon */}
-            <div className="absolute top-2 right-2 z-10">
+            {/* Top Icons: Wishlist & Share */}
+            <div className="absolute top-3 right-3 z-10 flex items-center gap-2.5">
                 <button
-                    className="p-1 rounded-full hover:bg-gray-50 transition-colors"
+                    className="p-1 rounded-full hover:bg-gray-50 transition-colors shadow-sm bg-white/80"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleWishlist(product);
+                    }}
+                >
+                    <Heart 
+                        size={13} 
+                        className={cn("transition-colors", isLiked ? "text-red-500 fill-red-500" : "text-gray-400")} 
+                        strokeWidth={1.5} 
+                    />
+                </button>
+                <button
+                    className="p-1 rounded-full hover:bg-gray-50 transition-colors shadow-sm bg-white/80"
                     onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                     }}
                 >
-                    <Share2 size={14} className="text-gray-400" strokeWidth={1.5} />
+                    <Share2 size={13} className="text-gray-400" strokeWidth={1.5} />
                 </button>
             </div>
 

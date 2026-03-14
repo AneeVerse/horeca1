@@ -16,8 +16,8 @@ interface MobileBottomNavProps {
 export function MobileBottomNav({ onCategoriesClick, onStoreClick, onAccountClick, isCategoriesOpen }: MobileBottomNavProps) {
     const pathname = usePathname();
 
-    // Hide on cart and shipment detail pages (they have their own fixed CTA buttons)
-    if (pathname === '/cart' || pathname?.includes('/cart/shipment/')) return null;
+    // Hide on cart, shipment, and order list detail pages (they have their own fixed CTA buttons)
+    if (pathname === '/cart' || pathname?.includes('/cart/shipment/') || pathname?.includes('/order-lists/')) return null;
 
 
     const navItems = [

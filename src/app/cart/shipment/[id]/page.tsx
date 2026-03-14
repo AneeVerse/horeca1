@@ -7,18 +7,7 @@ import { useCart } from '@/context/CartContext';
 
 const SavingsDemo = 131;
 
-// Redefining demo data for the detail page
-const DEMO_SHIPMENTS = [
-    {
-        id: 's1',
-        vendor: 'G Mart Store',
-        vendorId: 'demo-vendor',
-        items: [
-            { id: 'd1', name: 'Kissan - Tomato Ketchup', size: '2 kg', pcs: 1, price: 188, image: '/images/product/product-img1.png' },
-            { id: 'd2', name: 'Fortune - Sunflower Refined Oil, 5 L', size: '5 Litre', pcs: 1, price: 550, image: '/images/category/milk.png' },
-        ]
-    }
-];
+// --- DEMO DATA REMOVED ---
 
 export default function ShipmentDetailPage() {
     const router = useRouter();
@@ -28,8 +17,8 @@ export default function ShipmentDetailPage() {
 
     // Find shipment data
     const shipment = React.useMemo(() => {
+        // Option 1: View all items (unified cart shipment)
         if (id === 'cart-shipment') {
-            // Flatten all vendor groups for the shipment view
             const allItems = groups.flatMap(g =>
                 g.items
                     .filter(item => !!item.product)
@@ -51,30 +40,39 @@ export default function ShipmentDetailPage() {
             };
         }
 
-        const baseShipment = DEMO_SHIPMENTS.find(s => s.id === id) || DEMO_SHIPMENTS[0];
+        // Option 2: View specific vendor shipment
+        const targetGroup = groups.find(g => g.vendorId === id);
+        if (targetGroup) {
+            return {
+                id: targetGroup.vendorId,
+                vendor: targetGroup.vendorName,
+                vendorId: targetGroup.vendorId,
+                items: targetGroup.items.map(item => ({
+                    id: String(item.productId),
+                    vendorId: targetGroup.vendorId,
+                    name: item.product.name,
+                    size: item.product.packSize || '1 pc',
+                    pcs: item.quantity,
+                    price: item.product.price || 0,
+                    image: item.product.images[0] || '/images/recom-product/product-img10.png',
+                }))
+            };
+        }
+
         return {
-            ...baseShipment,
-            items: baseShipment.items.map(item => ({
-                ...item,
-                vendorId: baseShipment.vendorId,
-                pcs: demoQuantities[item.id] ?? item.pcs
-            })).filter(item => item.pcs > 0)
+            id: 'unknown',
+            vendor: 'Unknown Vendor',
+            vendorId: 'unknown',
+            items: []
         };
-    }, [id, groups, demoQuantities]);
+    }, [id, groups]);
 
     const handleQuantityChange = (itemId: string, vendorId: string, delta: number, currentPcs: number) => {
-        if (id === 'cart-shipment') {
-            const newQty = currentPcs + delta;
-            if (newQty <= 0) {
-                removeFromCart(itemId);
-            } else {
-                updateQuantity(itemId, newQty);
-            }
+        const newQty = currentPcs + delta;
+        if (newQty <= 0) {
+            removeFromCart(itemId);
         } else {
-            setDemoQuantities(prev => ({
-                ...prev,
-                [itemId]: Math.max(0, (prev[itemId] ?? currentPcs) + delta)
-            }));
+            updateQuantity(itemId, newQty);
         }
     };
 
@@ -85,6 +83,21 @@ export default function ShipmentDetailPage() {
     const minOrder = 600;
     const shortfall = minOrder - itemTotal;
     const isDemo = id !== 'cart-shipment';
+
+    // --- EMPTY STATE ---
+    if (shipment.items.length === 0) {
+        return (
+            <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
+                <div className="w-full h-[12px] bg-[#53B175] fixed top-0" />
+                <img src="/images/empty-cart.png" alt="Empty Cart" className="w-[180px] mb-8 opacity-20" />
+                <h2 className="text-[20px] font-bold text-[#181725] mb-2">No items in this shipment</h2>
+                <p className="text-[#7C7C7C] text-center mb-8">This vendor's shipment is empty. Start adding some products!</p>
+                <button onClick={() => router.push('/')} className="bg-[#53B175] text-white px-12 py-4 rounded-xl font-bold">
+                    Start Shopping
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-[#F9F9F9] flex flex-col pb-28 font-sans">
@@ -119,8 +132,7 @@ export default function ShipmentDetailPage() {
                 </div>
 
                 {/* Main Shipment Card */}
-                {shipment.items.length > 0 ? (
-                    <div className="bg-white rounded-[12px] border border-[#E2E2E2] overflow-hidden">
+                <div className="bg-white rounded-[12px] border border-[#E2E2E2] overflow-hidden">
                         <div className="divide-y divide-[#F2F3F2]">
                             {shipment.items.map((item) => (
                                 <div key={item.id} className="p-4 flex items-start gap-4">
@@ -164,17 +176,6 @@ export default function ShipmentDetailPage() {
                             ))}
                         </div>
                     </div>
-                ) : (
-                    <div className="bg-white rounded-[12px] border border-[#E2E2E2] p-10 text-center">
-                        <p className="text-[#181725] font-bold">No items in this shipment</p>
-                        <button
-                            onClick={() => router.push('/cart')}
-                            className="text-[#53B175] font-bold mt-2 underline"
-                        >
-                            Back to cart
-                        </button>
-                    </div>
-                )}
 
                 {/* Minimum Order Warning Box */}
                 <div className="bg-white rounded-[10px] border border-[#E2E2E2] px-4 py-3 flex items-center gap-3">

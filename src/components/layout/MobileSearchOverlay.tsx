@@ -2,10 +2,12 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Search, X, Star } from 'lucide-react';
+import { ArrowLeft, Search, X, Star, Heart, ShoppingCart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { vendors } from '@/data/vendorData';
 import type { VendorProduct } from '@/types';
+import { useWishlist } from '@/context/WishlistContext';
+import { useCart } from '@/context/CartContext';
 
 interface MobileSearchOverlayProps {
     isOpen: boolean;
@@ -17,6 +19,8 @@ interface MobileSearchOverlayProps {
 export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', initialQuery = '' }: MobileSearchOverlayProps) {
     const [searchQuery, setSearchQuery] = useState(initialQuery);
     const [activeTab, setActiveTab] = useState<'items' | 'vendors'>(initialTab as 'items' | 'vendors');
+    const { wishlist } = useWishlist();
+    const { totalItems } = useCart();
 
     // Sync search query when overlay opens
     React.useEffect(() => {
@@ -148,6 +152,24 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                                 </button>
                             )}
                         </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Link href="/wishlist" onClick={onClose} className="relative p-1">
+                            <Heart size={20} className="text-[#181725]" />
+                            {wishlist.length > 0 && (
+                                <span className="absolute -top-0.5 -right-0.5 bg-[#FF4B4B] text-white text-[8px] w-3.5 h-3.5 flex items-center justify-center rounded-full font-extrabold border-[1.5px] border-white">
+                                    {wishlist.length}
+                                </span>
+                            )}
+                        </Link>
+                        <Link href="/cart" onClick={onClose} className="relative p-1">
+                            <ShoppingCart size={20} className="text-[#181725]" />
+                            {totalItems > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-[#53B175] text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold border border-white">
+                                    {totalItems}
+                                </span>
+                            )}
+                        </Link>
                     </div>
                 </div>
 

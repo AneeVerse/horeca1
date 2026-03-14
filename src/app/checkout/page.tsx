@@ -16,9 +16,44 @@ const PAYMENT_OPTIONS = [
 ];
 
 export default function CheckoutPage() {
-    const { groups, totalAmount, totalItems, vendorCount } = useCart();
+    const { groups, totalAmount, totalItems, vendorCount, clearCart } = useCart();
     const [step, setStep] = useState<CheckoutStep>('review');
     const [selectedPayment, setSelectedPayment] = useState('');
+    const [orderSnapshot, setOrderSnapshot] = useState<{ groups: any[], total: number, count: number } | null>(null);
+
+    const handlePlaceOrder = () => {
+        // Capture a snapshot of the current cart before clearing
+        setOrderSnapshot({
+            groups: [...groups],
+            total: totalAmount,
+            count: vendorCount
+        });
+
+        // Save to Orders History in LocalStorage
+        const newOrders = groups.map((group, idx) => ({
+            id: `ORD-${Date.now()}-${idx}`,
+            status: 'Order Placed',
+            date: `Placed at ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
+            price: group.subtotal,
+            items: group.items.map(item => ({
+                id: item.productId,
+                image: item.product.images[0] || '/images/recom-product/product-img10.png',
+                fullProduct: item.product
+            })),
+            canRate: false
+        }));
+
+        try {
+            const existingOrders = JSON.parse(localStorage.getItem('horeca_orders') || '[]');
+            localStorage.setItem('horeca_orders', JSON.stringify([...newOrders, ...existingOrders]));
+        } catch (e) {
+            console.error('Failed to save orders:', e);
+        }
+        
+        setStep('confirmation');
+        // Clear the cart immediately as requested
+        clearCart();
+    };
 
     if (groups.length === 0) {
         return (
@@ -203,7 +238,7 @@ export default function CheckoutPage() {
                         </div>
 
                         <button
-                            onClick={() => setStep('confirmation')}
+                            onClick={handlePlaceOrder}
                             disabled={!selectedPayment}
                             className={`w-full py-3.5 text-[14px] font-bold rounded-xl shadow-lg transition-all ${
                                 selectedPayment
@@ -224,12 +259,12 @@ export default function CheckoutPage() {
                         </div>
                         <h2 className="text-[22px] font-bold text-[#181725] mb-1">Order Placed!</h2>
                         <p className="text-[14px] text-gray-500 mb-6">
-                            Your purchase order{vendorCount > 1 ? 's have' : ' has'} been sent to the vendor{vendorCount > 1 ? 's' : ''}.
+                            Your purchase order{(orderSnapshot?.count || 0) > 1 ? 's have' : ' has'} been sent to the vendor{(orderSnapshot?.count || 0) > 1 ? 's' : ''}.
                         </p>
 
                         {/* PO Summaries */}
                         <div className="space-y-3 text-left max-w-md mx-auto mb-6">
-                            {groups.map((group, idx) => (
+                            {(orderSnapshot?.groups || []).map((group, idx) => (
                                 <div key={group.vendorId} className="bg-white rounded-2xl border border-gray-100 p-4">
                                     <div className="flex items-center justify-between mb-2">
                                         <span className="text-[12px] font-bold text-gray-400">PO-2026-{String(idx + 3).padStart(3, '0')}</span>

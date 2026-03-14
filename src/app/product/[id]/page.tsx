@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { PromotionBanners } from '@/components/features/PromotionBanners';
 import { DeliveryPoster } from '@/components/features/DeliveryPoster';
 import { useCart } from '@/context/CartContext';
+import { useWishlist } from '@/context/WishlistContext';
 import { toast } from 'sonner';
 import type { VendorProduct } from '@/types';
 
@@ -205,6 +206,32 @@ export default function ProductDetailPage() {
 
     const [isDetailsExpanded, setIsDetailsExpanded] = useState(true);
     const { addToCart, groups, updateQuantity } = useCart();
+    const { isInWishlist, toggleWishlist } = useWishlist();
+
+    const vendorProductForContext: VendorProduct = useMemo(() => ({
+        id: product.id.toString(),
+        vendorId: product.vendors?.[0]?.id.toString() || '0',
+        vendorName: vendorName,
+        name: product.name,
+        description: product.description,
+        category: product.category,
+        price: product.price || 0,
+        images: [product.image],
+        packSize: product.weight || '1 kg',
+        unit: product.weight || '1 kg',
+        stock: product.vendors?.[0]?.stock || 10,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        bulkPrices: [
+            { minQty: 3, price: 147 },
+            { minQty: 5, price: 245 }
+        ],
+        creditBadge: false,
+        minOrderQuantity: 1,
+    }), [product, vendorName]);
+
+    const isLiked = isInWishlist(vendorProductForContext.id);
 
     const handleAdd = (qty: number = 1) => {
         // Find if item already in cart to update quantity
@@ -311,10 +338,6 @@ export default function ProductDetailPage() {
                 <div className="mx-0 bg-white pt-2 pb-8 px-5 rounded-b-[30px] shadow-sm">
                     {/* Image Section */}
                     <div className="relative flex flex-col items-center pt-4">
-                        <button className="absolute top-0 right-0 p-1.5 text-[#181725] hover:bg-gray-100 rounded-full z-10">
-                            <Share2 size={20} strokeWidth={1.5} />
-                        </button>
-
                         <div className="w-[240px] h-[240px] flex items-center justify-center p-4">
                             <img
                                 src={product.image}
@@ -342,9 +365,21 @@ export default function ProductDetailPage() {
                             <h1 className="text-[24px] font-extrabold text-[#181725] leading-tight flex-1">
                                 {product.name}
                             </h1>
-                            <button className="text-[#181725] pt-1">
-                                <Heart size={24} strokeWidth={1.5} />
-                            </button>
+                            <div className="flex items-center gap-2 pt-1.5">
+                                <button 
+                                    onClick={() => toggleWishlist(vendorProductForContext)}
+                                    className="text-[#181725] active:scale-90 transition-transform"
+                                >
+                                    <Heart 
+                                        size={21} 
+                                        className={cn("transition-colors", isLiked ? "text-red-500 fill-red-500" : "text-[#181725]")} 
+                                        strokeWidth={1.5} 
+                                    />
+                                </button>
+                                <button className="text-[#181725]">
+                                    <Share2 size={21} strokeWidth={1.5} />
+                                </button>
+                            </div>
                         </div>
                         <p className="text-[15px] font-medium text-[#7C7C7C] mb-6">{product.weight || '1 kg'}</p>
 

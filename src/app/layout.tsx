@@ -8,6 +8,7 @@ import { Inter } from "next/font/google";
 import { CartProvider } from "@/context/CartContext";
 import { GoogleMapsProvider } from "@/components/providers/GoogleMapsProvider";
 import { AddressProvider } from "@/context/AddressContext";
+import { WishlistProvider } from "@/context/WishlistContext";
 import { Toaster } from 'sonner';
 
 const quicksand = Quicksand({
@@ -43,15 +44,17 @@ export default function RootLayout({
       <body className={`${quicksand.variable} ${inter.variable} ${poppins.variable} font-sans antialiased bg-background`}>
         <GoogleMapsProvider>
           <AddressProvider>
-            <CartProvider>
-              <Toaster position="top-center" richColors />
+            <WishlistProvider>
+              <CartProvider>
+                <Toaster position="top-center" richColors />
               <Navbar />
               <main className="w-full min-h-screen pb-20 md:pb-0">
                 {children}
               </main>
               <Footer />
             </CartProvider>
-          </AddressProvider>
+          </WishlistProvider>
+        </AddressProvider>
         </GoogleMapsProvider>
       </body>
     </html>

@@ -26,6 +26,7 @@ import { AuthScreen } from '../auth/AuthScreen';
 import { ProfileScreen } from '../auth/ProfileScreen';
 import { InitialPincodeOverlay } from './InitialPincodeOverlay';
 import { WishlistOverlay } from '../auth/WishlistOverlay';
+import { useWishlist } from '@/context/WishlistContext';
 
 export function Navbar() {
     const router = useRouter();
@@ -42,6 +43,7 @@ export function Navbar() {
     const [navSearchQuery, setNavSearchQuery] = React.useState('');
     const [isWishlistOpen, setIsWishlistOpen] = React.useState(false);
     const { totalItems } = useCart();
+    const { wishlist } = useWishlist();
     const { selectedAddress, setSelectedAddress } = useAddress();
 
     const [lastTrigger, setLastTrigger] = React.useState<string>('');
@@ -109,25 +111,27 @@ export function Navbar() {
             <React.Suspense fallback={null}>
                 <SearchURLSync />
             </React.Suspense>
-            <InitialPincodeOverlay 
-                onComplete={(pincode) => {
-                    if (pincode) {
-                        setSelectedAddress({
-                            id: `init_${Date.now()}`,
-                            label: 'Other',
-                            fullAddress: `Airoli, Navi Mumbai - ${pincode}`,
-                            shortAddress: 'Airoli',
-                            latitude: 19.1579, // Approx lat for Airoli
-                            longitude: 72.9935, // Approx lng for Airoli
-                            pincode: pincode
-                        });
-                    } else {
-                        // Clear pincode if user goes without
-                        localStorage.removeItem('user_pincode');
-                        setSelectedAddress(null);
-                    }
-                }}
-            />
+            {pathname === '/' && (
+                <InitialPincodeOverlay 
+                    onComplete={(pincode) => {
+                        if (pincode) {
+                            setSelectedAddress({
+                                id: `init_${Date.now()}`,
+                                label: 'Other',
+                                fullAddress: `Airoli, Navi Mumbai - ${pincode}`,
+                                shortAddress: 'Airoli',
+                                latitude: 19.1579, // Approx lat for Airoli
+                                longitude: 72.9935, // Approx lng for Airoli
+                                pincode: pincode
+                            });
+                        } else {
+                            // Clear pincode if user goes without
+                            localStorage.removeItem('user_pincode');
+                            setSelectedAddress(null);
+                        }
+                    }}
+                />
+            )}
             {/* Auth Screen (Login/Register) */}
             <AuthScreen
                 isOpen={isLoginOverlayOpen}
@@ -147,7 +151,7 @@ export function Navbar() {
             {/* Top Header - Scrolls Away */}
             <header className={cn(
                 "w-full bg-white relative z-[1000]",
-                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/') || pathname === '/cart' || pathname === '/orders' || pathname === '/profile') && "hidden md:block"
+                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/')) && "hidden md:block"
             )}>
                 <div className="w-full py-3 px-4 md:px-[var(--container-padding)]">
                     <div className="max-w-[var(--container-max)] mx-auto">
@@ -181,18 +185,19 @@ export function Navbar() {
 
                                 {/* Wishlist & Cart (Right) */}
                                 <div className="flex-1 flex justify-end items-center gap-2">
-                                    <button 
-                                        onClick={() => setIsWishlistOpen(true)}
+                                    <Link 
+                                        href="/wishlist"
                                         className="relative p-1"
                                     >
                                         <Heart size={20} className="text-[#181725]" />
-                                    </button>
+                                        {wishlist.length > 0 && (
+                                            <span className="absolute -top-0.5 -right-0.5 bg-[#FF4B4B] text-white text-[8px] w-3.5 h-3.5 flex items-center justify-center rounded-full font-extrabold border-[1.5px] border-white">
+                                                {wishlist.length}
+                                            </span>
+                                        )}
+                                    </Link>
                                     <Link href="/cart" className="relative p-1">
-                                        <img
-                                            src="/images/mobile-nav/cart.svg"
-                                            alt="Cart"
-                                            className="w-5 h-5"
-                                        />
+                                        <ShoppingCart size={20} className="text-[#181725]" />
                                         <span className="absolute -top-1 -right-1 bg-[#53B175] text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold border border-white">
                                             {totalItems}
                                         </span>
@@ -201,7 +206,12 @@ export function Navbar() {
                             </div>
 
                             {/* Row 3: Search Bar */}
-                            {!pathname?.startsWith('/vendor/') && (
+                            {!pathname?.startsWith('/vendor/') && 
+                             !pathname?.startsWith('/order-lists') && 
+                             pathname !== '/orders' && 
+                             pathname !== '/wishlist' && 
+                             pathname !== '/cart' && 
+                             pathname !== '/profile' && (
                                 <div className="px-1">
                                     <div
                                         className={cn(
@@ -261,9 +271,13 @@ export function Navbar() {
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <Link href="/wishlist" className="p-2 hover:bg-gray-50 rounded-full transition-all relative group">
-                                        <Heart size={24} className="text-text group-hover:text-primary transition-colors" />
-                                        <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold border-2 border-white">0</span>
-                                    </Link>
+                                         <Heart size={24} className="text-text group-hover:text-primary transition-colors" />
+                                         {wishlist.length > 0 && (
+                                             <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold border-2 border-white">
+                                                 {wishlist.length}
+                                             </span>
+                                         )}
+                                     </Link>
                                     <Link href="/cart" className="p-2 hover:bg-gray-50 rounded-full transition-all relative group">
                                         <ShoppingCart size={24} className="text-text group-hover:text-primary transition-colors" />
                                         <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold border-2 border-white">

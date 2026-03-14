@@ -4,10 +4,16 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, Heart, ShoppingCart, Star } from 'lucide-react';
 import Link from 'next/link';
+import { useCart } from '@/context/CartContext';
+import { toast } from 'sonner';
+import { ALL_MOCK_PRODUCTS } from '@/lib/mockData';
+import { vendors } from '@/data/vendorData';
+import { useWishlist } from '@/context/WishlistContext';
 
 interface OrderItem {
     id: string;
     image: string;
+    fullProduct?: any; // To store the complete product data if available
 }
 
 interface Order {
@@ -55,6 +61,90 @@ const MOCK_ORDERS: Order[] = [
 
 export default function OrderHistoryPage() {
     const router = useRouter();
+    const { totalItems, addToCart } = useCart();
+    const { wishlist } = useWishlist();
+    const [orders, setOrders] = React.useState<Order[]>(MOCK_ORDERS);
+
+    React.useEffect(() => {
+        const saved = localStorage.getItem('horeca_orders');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                // Combine saved orders with mock orders, putting new ones first
+                setOrders([...parsed, ...MOCK_ORDERS]);
+            } catch (e) {
+                console.error('Failed to load orders:', e);
+            }
+        }
+    }, []);
+
+    const handleOrderAgain = (order: Order) => {
+        let itemsAdded = 0;
+        
+        order.items.forEach(item => {
+            // 1. Check if the full product was already saved in the order (Robustness)
+            if (item.fullProduct) {
+                addToCart(item.fullProduct, 1);
+                itemsAdded++;
+                return;
+            }
+
+            // 2. Fallback: Search in static mock products
+            let product = ALL_MOCK_PRODUCTS.find(p => p.id === item.id);
+            
+            // 3. Fallback: Search in vendors data (Swiggy model)
+            if (!product) {
+                for (const v of vendors) {
+                    for (const cat of v.catalog) {
+                        const found = cat.products.find(p => p.id === item.id);
+                        if (found) {
+                            // Map it to the VendorProduct type expected by addToCart
+                            product = {
+                                ...found,
+                                id: found.id,
+                                name: found.name,
+                                description: '',
+                                price: found.price,
+                                originalPrice: found.originalPrice,
+                                images: [found.image],
+                                category: cat.name,
+                                packSize: found.unit,
+                                unit: found.unit,
+                                stock: found.inStock ? 100 : 0,
+                                isActive: true,
+                                createdAt: new Date(),
+                                updatedAt: new Date(),
+                                vendorId: v.id,
+                                vendorName: v.name,
+                                bulkPrices: [],
+                                creditBadge: v.creditEnabled,
+                                minOrderQuantity: 1
+                            } as any;
+                            break;
+                        }
+                    }
+                    if (product) break;
+                }
+            }
+
+            if (product) {
+                addToCart(product, 1);
+                itemsAdded++;
+            }
+        });
+
+        if (itemsAdded > 0) {
+            toast.success(`Order #${order.id.slice(-6)} items added to cart!`, {
+                description: `Successfully added ${itemsAdded} items back to your cart.`,
+                duration: 2500,
+            });
+            router.push('/cart');
+        } else {
+            toast.error("Could not add items to cart", {
+                description: "Sorry, we couldn't find these products in our current catalog. Please find them via search."
+            });
+        }
+    };
 
     return (
         <div className="min-h-screen bg-[#F2F3F2]">
@@ -68,21 +158,13 @@ export default function OrderHistoryPage() {
                     Your Orders
                 </h1>
                 <div className="flex items-center gap-1 min-[340px]:gap-4 flex-shrink-0">
-                    <button className="p-1.5 grayscale-[0.5] opacity-80">
-                        <Heart size={20} className="text-[#181725]" />
-                    </button>
-                    <Link href="/cart" className="relative p-1.5 flex items-center justify-center">
-                        <ShoppingCart size={20} className="text-[#181725]" />
-                        <span className="absolute top-0 right-0 bg-[#53B175] text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold border-2 border-white translate-x-1 -translate-y-1">
-                            0
-                        </span>
-                    </Link>
+                    <div className="w-10 h-10" /> {/* Spacer to keep title centered */}
                 </div>
             </div>
 
             {/* Orders List */}
             <div className="p-4 space-y-4 pb-24 max-w-[600px] mx-auto">
-                {MOCK_ORDERS.map((order) => (
+                {orders.map((order) => (
                     <div key={order.id} className="bg-white rounded-[18px] border border-[#CFCECE] overflow-hidden">
                         <div className="p-5 md:p-6">
                             <div className="flex justify-between items-center mb-1">
@@ -116,7 +198,10 @@ export default function OrderHistoryPage() {
                                         </div>
                                     </div>
                                     <div className="w-full flex justify-center pt-2">
-                                        <button className="text-[#FF4B4B] font-bold text-[16px] hover:opacity-80 transition-opacity">
+                                        <button 
+                                            onClick={() => handleOrderAgain(order)}
+                                            className="text-[#FF4B4B] font-bold text-[16px] hover:opacity-80 transition-opacity"
+                                        >
                                             Order Again
                                         </button>
                                     </div>
@@ -131,7 +216,10 @@ export default function OrderHistoryPage() {
                                     Rate Order
                                 </button>
                                 <div className="w-[1px] h-8 bg-[#F2F3F2]" />
-                                <button className="flex-1 py-4.5 text-center font-bold text-[#FF4B4B] text-[16px] active:bg-gray-50 transition-colors">
+                                <button 
+                                    onClick={() => handleOrderAgain(order)}
+                                    className="flex-1 py-4.5 text-center font-bold text-[#FF4B4B] text-[16px] active:bg-gray-50 transition-colors"
+                                >
                                     Order Again
                                 </button>
                             </div>

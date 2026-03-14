@@ -8,7 +8,7 @@ interface InitialPincodeOverlayProps {
     onComplete: (pincode?: string) => void;
 }
 
-// Track if shown in current session (resets on refresh)
+// Track if shown since last page reload
 let hasBeenShownInSession = false;
 
 export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps) {
@@ -19,16 +19,8 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
 
     useEffect(() => {
         setIsMounted(true);
-        // Check if pincode already exists in localStorage
-        const savedPincode = typeof window !== 'undefined' ? localStorage.getItem('user_pincode') : null;
         
-        if (savedPincode) {
-            onComplete(savedPincode);
-            setIsVisible(false);
-            hasBeenShownInSession = true;
-            return;
-        }
-
+        // Only show if it hasn't been shown in this session (since last refresh)
         if (!hasBeenShownInSession) {
             setIsVisible(true);
             hasBeenShownInSession = true;
@@ -41,7 +33,7 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
         if (e) e.preventDefault();
         
         if (pincode === '400708') {
-            // localStorage.setItem('pincode_checked', 'true');
+            localStorage.setItem('pincode_interacted', 'true');
             localStorage.setItem('user_pincode', pincode);
             setIsVisible(false);
             onComplete(pincode);
@@ -51,7 +43,7 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
     };
 
     const handleSkip = () => {
-        // localStorage.setItem('pincode_checked', 'true');
+        localStorage.setItem('pincode_interacted', 'true');
         setIsVisible(false);
         onComplete();
     };

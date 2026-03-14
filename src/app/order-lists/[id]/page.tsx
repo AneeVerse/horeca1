@@ -1,24 +1,51 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronLeft, Plus, Minus, ShoppingCart } from 'lucide-react';
-import { MOCK_ORDER_LISTS } from '@/lib/mockData';
+import { ChevronLeft, Plus, Minus, ShoppingCart, ListOrdered, Heart, Clock, ChevronRight, Trash2, Edit2 } from 'lucide-react';
+import { MOCK_ORDER_LISTS, MOCK_VENDORS, MOCK_VENDOR_PRODUCTS } from '@/lib/mockData';
 import { useCart } from '@/context/CartContext';
+import { useWishlist } from '@/context/WishlistContext';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
+import { toast } from 'sonner';
+import type { OrderList } from '@/types';
 
 export default function OrderListDetailPage() {
+    const router = useRouter();
     const params = useParams();
     const listId = params.id as string;
-    const { addToCart } = useCart();
+    const { addToCart, totalItems } = useCart();
+    const { wishlist } = useWishlist();
+    const [orderList, setOrderList] = useState<OrderList | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const orderList = MOCK_ORDER_LISTS.find(l => l.id === listId);
-    const [quantities, setQuantities] = useState<Record<string, number>>(() => {
-        if (!orderList) return {};
-        // All quantities start at 0 per spec
-        return Object.fromEntries(orderList.items.map(item => [item.productId, 0]));
-    });
+    const [quantities, setQuantities] = useState<Record<string, number>>({});
+
+    React.useEffect(() => {
+        // 1. Check Mock Data
+        let found = MOCK_ORDER_LISTS.find(l => l.id === listId);
+
+        // 2. Check Local Storage if not found in mock
+        if (!found) {
+            const saved = localStorage.getItem('custom_order_lists');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    found = parsed.find((l: any) => l.id === listId);
+                } catch (e) {
+                    console.error('Failed to parse custom lists', e);
+                }
+            }
+        }
+
+        if (found) {
+            setOrderList(found);
+            // All quantities start at 0 per spec
+            setQuantities(Object.fromEntries(found.items.map(item => [item.productId, 0])));
+        }
+        setIsLoading(false);
+    }, [listId]);
 
     const updateQty = (productId: string, delta: number) => {
         setQuantities(prev => ({
@@ -43,20 +70,70 @@ export default function OrderListDetailPage() {
         }, 0);
     }, [activeItems, orderList]);
 
+    const handleFillLastQty = () => {
+        if (!orderList) return;
+        const newQtys = Object.fromEntries(
+            orderList.items.map(item => [item.productId, item.lastOrderedQty || item.defaultQty || 1])
+        );
+        setQuantities(newQtys);
+        toast.info("Quantities filled based on last order", { duration: 1500 });
+    };
+
     const handleAddAllToCart = () => {
         if (!orderList) return;
-        activeItems.forEach(([pid, qty]) => {
+        
+        // If nothing selected, show warning
+        if (activeItems.length === 0) {
+            toast.error("No items selected", {
+                description: "Please select quantities for items or use 'Re-fill Last Qty' to add products.",
+                duration: 3000,
+            });
+            return;
+        }
+
+        const itemsToProcess = activeItems;
+
+        let itemsAdded = 0;
+        itemsToProcess.forEach(([pid, qty]) => {
             const item = orderList.items.find(i => i.productId === pid);
-            if (item) addToCart(item.product, qty);
+            if (item && qty > 0) {
+                addToCart(item.product, qty);
+                itemsAdded++;
+            }
         });
+
+        if (itemsAdded > 0) {
+            toast.success(`${orderList.name} added to cart!`, {
+                description: `Successfully added ${itemsAdded} items to your cart.`,
+                duration: 2500,
+            });
+            router.push('/cart');
+        }
     };
+
+    if (isLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                <div className="w-10 h-10 border-4 border-[#299e60] border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     if (!orderList) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="text-center">
-                    <p className="text-[20px] font-bold text-gray-800 mb-2">List not found</p>
-                    <Link href="/order-lists" className="text-[14px] text-[#299e60] font-semibold">Back to lists</Link>
+            <div className="min-h-screen flex items-center justify-center bg-white p-6">
+                <div className="text-center max-w-xs">
+                    <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <ListOrdered size={40} className="text-gray-200" />
+                    </div>
+                    <h2 className="text-[20px] font-bold text-[#181725] mb-2">List not found</h2>
+                    <p className="text-[14px] text-gray-400 font-medium mb-8">This list might have been deleted or is no longer available.</p>
+                    <Link 
+                        href="/order-lists" 
+                        className="inline-block w-full bg-[#53B175] text-white py-4 rounded-2xl font-bold shadow-lg shadow-green-100"
+                    >
+                        Back to lists
+                    </Link>
                 </div>
             </div>
         );
@@ -65,15 +142,31 @@ export default function OrderListDetailPage() {
     return (
         <div className="min-h-screen bg-gray-50/50 pb-32">
             {/* Header */}
-            <div className="bg-white border-b border-gray-100">
+            <div className="bg-white border-b border-gray-100 sticky top-0 z-50">
                 <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-4">
-                    <Link href="/order-lists" className="flex items-center gap-1 text-[13px] text-gray-500 hover:text-gray-700 mb-2">
-                        <ChevronLeft size={16} />
-                        Back to lists
-                    </Link>
-                    <h1 className="text-[18px] md:text-[22px] font-bold text-[#181725]">{orderList.name}</h1>
-                    <p className="text-[12px] text-[#299e60] font-semibold mt-0.5">{orderList.vendorName}</p>
-                    <p className="text-[11px] text-gray-400 font-medium mt-0.5">{orderList.items.length} items in this list</p>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1 min-w-0">
+                            <button 
+                                onClick={() => router.push('/order-lists')} 
+                                className="p-1 -ml-1 hover:bg-gray-50 rounded-full transition-colors shrink-0"
+                            >
+                                <ChevronLeft size={22} className="text-[#181725]" />
+                            </button>
+                            <div className="min-w-0">
+                                <h1 className="text-[16px] min-[340px]:text-[18px] md:text-[22px] font-bold text-[#181725] truncate">{orderList.name}</h1>
+                                <p className="text-[10px] min-[340px]:text-[12px] text-[#299e60] font-semibold mt-0.5 truncate">{orderList.vendorName}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 px-1">
+                            <button 
+                                onClick={handleFillLastQty}
+                                className="text-[12px] font-bold text-[#299e60] px-3 py-1.5 border border-[#299e60]/20 rounded-lg hover:bg-[#299e60]/5 transition-colors"
+                            >
+                                Re-fill Last Qty
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -81,11 +174,11 @@ export default function OrderListDetailPage() {
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-4">
                 <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                     {/* Column Headers */}
-                    <div className="grid grid-cols-[1fr_80px_80px_90px] md:grid-cols-[1fr_100px_100px_120px] gap-2 px-4 py-3 bg-gray-50 border-b border-gray-100">
-                        <span className="text-[11px] font-bold text-gray-500 uppercase">Item</span>
-                        <span className="text-[11px] font-bold text-gray-500 uppercase text-center">Last Qty</span>
-                        <span className="text-[11px] font-bold text-gray-500 uppercase text-center">Qty</span>
-                        <span className="text-[11px] font-bold text-gray-500 uppercase text-right">Total</span>
+                    <div className="grid grid-cols-[1fr_35px_75px_55px] min-[400px]:grid-cols-[1fr_45px_90px_70px] md:grid-cols-[1fr_100px_100px_120px] gap-1 min-[400px]:gap-2 px-2 min-[400px]:px-4 py-3 bg-gray-50 border-b border-gray-100 uppercase tracking-tighter">
+                        <span className="text-[9px] min-[400px]:text-[11px] font-bold text-gray-500">Item</span>
+                        <span className="text-[9px] min-[400px]:text-[11px] font-bold text-gray-500 text-center">Last</span>
+                        <span className="text-[9px] min-[400px]:text-[11px] font-bold text-gray-500 text-center">Qty</span>
+                        <span className="text-[9px] min-[400px]:text-[11px] font-bold text-gray-500 text-right">Total</span>
                     </div>
 
                     {/* Items */}
@@ -94,47 +187,47 @@ export default function OrderListDetailPage() {
                         const itemTotal = item.product.price * qty;
 
                         return (
-                            <div key={item.productId} className="grid grid-cols-[1fr_80px_80px_90px] md:grid-cols-[1fr_100px_100px_120px] gap-2 px-4 py-3 border-b border-gray-50 items-center hover:bg-gray-50/50 transition-colors">
+                            <div key={item.productId} className="grid grid-cols-[1fr_35px_75px_55px] min-[400px]:grid-cols-[1fr_45px_90px_70px] md:grid-cols-[1fr_100px_100px_120px] gap-1 min-[400px]:gap-2 px-2 min-[400px]:px-4 py-3 border-b border-gray-50 items-center hover:bg-gray-50/50 transition-colors">
                                 {/* Product Info */}
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center shrink-0 p-1">
+                                <div className="flex items-center gap-1.5 min-[400px]:gap-3 min-w-0">
+                                    <div className="w-8 h-8 min-[400px]:w-10 min-[400px]:h-10 bg-gray-50 rounded-lg flex items-center justify-center shrink-0 p-1">
                                         <img src={item.product.images[0] || '/images/recom-product/product-img10.png'} alt={item.product.name} className="w-full h-full object-contain" />
                                     </div>
                                     <div className="min-w-0">
-                                        <p className="text-[12px] md:text-[13px] font-bold text-[#181725] line-clamp-1">{item.product.name}</p>
-                                        <p className="text-[10px] text-gray-400">{item.product.packSize} • ₹{item.product.price}</p>
+                                        <p className="text-[11px] min-[400px]:text-[13px] font-bold text-[#181725] leading-tight line-clamp-2 min-[400px]:line-clamp-none">{item.product.name}</p>
+                                        <p className="text-[9px] min-[400px]:text-[10px] text-gray-400 mt-0.5">₹{item.product.price}</p>
                                     </div>
                                 </div>
 
                                 {/* Last Ordered Qty */}
                                 <div className="text-center">
-                                    <span className="text-[12px] text-gray-400 font-medium">
+                                    <span className="text-[11px] min-[400px]:text-[12px] text-gray-400 font-bold">
                                         {item.lastOrderedQty || '-'}
                                     </span>
                                 </div>
 
                                 {/* Quantity Selector */}
                                 <div className="flex items-center justify-center">
-                                    <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                                        <button onClick={() => updateQty(item.productId, -1)} className="w-7 h-7 flex items-center justify-center hover:bg-gray-50 transition-colors">
-                                            <Minus size={12} className="text-gray-500" />
+                                    <div className="flex items-center border border-gray-100 rounded-lg overflow-hidden bg-white">
+                                        <button onClick={() => updateQty(item.productId, -1)} className="w-6 h-6 min-[400px]:w-7 min-[400px]:h-7 flex items-center justify-center hover:bg-gray-50 active:bg-gray-100">
+                                            <Minus size={10} className="text-gray-400" />
                                         </button>
                                         <input
                                             type="number"
                                             min="0"
                                             value={qty}
                                             onChange={(e) => setQty(item.productId, parseInt(e.target.value) || 0)}
-                                            className="w-8 h-7 text-center text-[12px] font-bold text-[#181725] border-x border-gray-200 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                            className="w-6 h-6 min-[400px]:w-8 min-[400px]:h-7 text-center text-[11px] min-[400px]:text-[12px] font-bold text-[#181725] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-transparent"
                                         />
-                                        <button onClick={() => updateQty(item.productId, 1)} className="w-7 h-7 flex items-center justify-center hover:bg-gray-50 transition-colors">
-                                            <Plus size={12} className="text-gray-500" />
+                                        <button onClick={() => updateQty(item.productId, 1)} className="w-6 h-6 min-[400px]:w-7 min-[400px]:h-7 flex items-center justify-center hover:bg-gray-50 active:bg-gray-100">
+                                            <Plus size={10} className="text-[#53B175]" />
                                         </button>
                                     </div>
                                 </div>
 
                                 {/* Total */}
                                 <div className="text-right">
-                                    <span className={`text-[13px] font-bold ${qty > 0 ? 'text-[#181725]' : 'text-gray-300'}`}>
+                                    <span className={`text-[11px] min-[400px]:text-[13px] font-black ${qty > 0 ? 'text-[#181725]' : 'text-gray-200'}`}>
                                         {qty > 0 ? `₹${itemTotal.toLocaleString('en-IN')}` : '—'}
                                     </span>
                                 </div>
@@ -144,32 +237,28 @@ export default function OrderListDetailPage() {
                 </div>
             </div>
 
-            {/* Bottom CTA */}
-            {activeItems.length > 0 && (
-                <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100 shadow-[-4px_0_20px_rgba(0,0,0,0.08)]">
-                    <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-3">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-[14px] font-bold text-[#181725]">
-                                    {activeItems.length} item{activeItems.length > 1 ? 's' : ''} selected
-                                </p>
-                                <p className="text-[12px] text-[#299e60] font-bold">
-                                    ₹{totalAmount.toLocaleString('en-IN')}
-                                </p>
-                            </div>
-                            <button
-                                onClick={handleAddAllToCart}
-                                className="flex items-center gap-2 bg-[#299e60] text-white px-6 py-3 rounded-xl text-[13px] font-bold shadow-lg shadow-green-200/50 hover:bg-[#22844f] active:scale-[0.98] transition-all"
-                            >
-                                <ShoppingCart size={16} />
-                                Add to Cart
-                            </button>
-                        </div>
+            {/* Fixed Bottom CTA Bar */}
+            <div className="fixed bottom-0 left-0 right-0 z-[100] bg-[#299E60] shadow-[0_-4px_20px_rgba(0,0,0,0.15)] md:bottom-4 md:left-auto md:right-4 md:max-w-[420px] md:rounded-2xl">
+                <div className="px-5 py-4 flex items-center justify-between">
+                    <div className="flex flex-col">
+                        <span className="text-white text-[14px] font-bold">
+                            {activeItems.length > 0 ? `${activeItems.length} items selected` : 'Add all items'}
+                        </span>
+                        <span className="text-green-100 text-[12px] font-medium">
+                            {activeItems.length > 0 ? `₹${totalAmount.toLocaleString('en-IN')}` : 'Ready to restock list'}
+                        </span>
                     </div>
+                    <button
+                        onClick={handleAddAllToCart}
+                        className="bg-white text-[#299E60] px-6 py-2.5 rounded-xl text-[14px] font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.98] flex items-center gap-2"
+                    >
+                        <ShoppingCart size={18} />
+                        ADD TO CART
+                    </button>
                 </div>
-            )}
+            </div>
 
-            <StickyCartBar />
+            {/* General StickyCartBar hidden here as we have the local Add to Cart bar */}
         </div>
     );
 }
