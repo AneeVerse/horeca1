@@ -1,3 +1,4 @@
+import React, { Suspense } from 'react';
 import type { Metadata } from "next";
 import { Quicksand, Poppins } from "next/font/google";
 import "./globals.css";
@@ -7,6 +8,7 @@ import { Inter } from "next/font/google";
 import { CartProvider } from "@/context/CartContext";
 import { GoogleMapsProvider } from "@/components/providers/GoogleMapsProvider";
 import { AddressProvider } from "@/context/AddressContext";
+import { Toaster } from 'sonner';
 
 const quicksand = Quicksand({
   subsets: ["latin"],
@@ -42,6 +44,7 @@ export default function RootLayout({
         <GoogleMapsProvider>
           <AddressProvider>
             <CartProvider>
+              <Toaster position="top-center" richColors />
               <Navbar />
               <main className="w-full min-h-screen pb-20 md:pb-0">
                 {children}

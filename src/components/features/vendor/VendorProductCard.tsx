@@ -2,6 +2,8 @@
 
 import React from 'react';
 import { Plus, CreditCard, Share2, ShoppingCart } from 'lucide-react';
+import Link from 'next/link';
+import { toast } from 'sonner';
 import type { VendorProduct } from '@/types';
 import { useCart } from '@/context/CartContext';
 
@@ -16,31 +18,29 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
     const cartItem = vendorGroup?.items.find(i => i.productId === product.id);
     const currentQty = cartItem?.quantity || 0;
 
-    const handleAdd = (qty: number = 1) => {
+    const handleAdd = (e: React.MouseEvent, qty: number = 1) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
         if (currentQty > 0) {
             updateQuantity(product.id, currentQty + qty);
         } else {
             addToCart(product, qty);
         }
+        
+        toast.success(`${product.name} added to cart!`, {
+            description: `Quantity: ${currentQty + qty} ${product.packSize || ''}`,
+            duration: 2000,
+        });
     };
 
     const bulk1 = product.bulkPrices?.[0] ?? null;
     const bulk2 = product.bulkPrices?.[1] ?? null;
 
-    /*  
-     *  CSS Grid with 8 explicit rows:
-     *  Row 1 – Image        (auto, aspect-ratio keeps them equal)
-     *  Row 2 – Title         (40px)
-     *  Row 3 – Pack size     (18px)
-     *  Row 4 – Bulk tier 1   (26px) ← separate container
-     *  Row 5 – Bulk tier 2   (26px) ← separate container
-     *  Row 6 – Price          (28px)
-     *  Row 7 – Button         (38px)
-     */
-
     return (
-        <div
-            className="bg-white rounded-[16px] md:rounded-[24px] border border-gray-100 overflow-hidden hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group p-3 min-[340px]:p-4 relative"
+        <Link 
+            href={`/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`}
+            className="bg-white rounded-[16px] md:rounded-[24px] border border-gray-100 overflow-hidden hover:shadow-xl hover:shadow-gray-200/40 transition-all duration-500 group p-3 min-[340px]:p-4 relative block"
             style={{
                 display: 'grid',
                 gridTemplateRows: 'auto 42px 18px 28px 28px 30px 42px',
@@ -49,7 +49,13 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
         >
             {/* Top Share Icon */}
             <div className="absolute top-2 right-2 z-10">
-                <button className="p-1 rounded-full hover:bg-gray-50 transition-colors">
+                <button 
+                    className="p-1 rounded-full hover:bg-gray-50 transition-colors"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }}
+                >
                     <Share2 size={14} className="text-gray-400" strokeWidth={1.5} />
                 </button>
             </div>
@@ -103,7 +109,7 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
                             ₹{bulk1.price} ({bulk1.minQty}+)
                         </span>
                         <button 
-                            onClick={() => handleAdd(bulk1.minQty)}
+                            onClick={(e) => handleAdd(e, bulk1.minQty)}
                             className="bg-white border border-[#299E60]/20 text-[#299E60] font-bold text-[7px] min-[340px]:text-[9px] md:text-[11px] px-1 min-[340px]:px-1.5 py-0.5 rounded-full hover:bg-gray-50 hover:border-[#299E60] transition-all flex items-center gap-0.5 shrink-0 whitespace-nowrap"
                         >
                             + ADD
@@ -122,7 +128,7 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
                             ₹{bulk2.price} ({bulk2.minQty}+)
                         </span>
                         <button 
-                            onClick={() => handleAdd(bulk2.minQty)}
+                            onClick={(e) => handleAdd(e, bulk2.minQty)}
                             className="bg-white border border-[#299E60]/20 text-[#299E60] font-bold text-[7px] min-[340px]:text-[9px] md:text-[11px] px-1 min-[340px]:px-1.5 py-0.5 rounded-full hover:bg-gray-50 hover:border-[#299E60] transition-all flex items-center gap-0.5 shrink-0 whitespace-nowrap"
                         >
                             + ADD
@@ -146,13 +152,13 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
             {/* ── ROW 7: ADD TO CART ── */}
             <div className="overflow-hidden flex items-end">
                 <button
-                    onClick={() => handleAdd(1)}
+                    onClick={(e) => handleAdd(e, 1)}
                     className="w-full bg-[#F1F9F4] hover:bg-[#E1F2E8] text-[#299E60] h-full rounded-[10px] min-[340px]:rounded-[14px] md:rounded-[18px] font-extrabold text-[11px] min-[340px]:text-[13px] md:text-[15px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] border border-[#E1F2E8]"
                 >
                     Add To Cart
                     <ShoppingCart size={14} className="shrink-0" />
                 </button>
             </div>
-        </div>
+        </Link>
     );
 }

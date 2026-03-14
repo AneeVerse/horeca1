@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
     ArrowLeft,
@@ -13,10 +13,13 @@ import {
     X,
     Share2
 } from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { PromotionBanners } from '@/components/features/PromotionBanners';
 import { DeliveryPoster } from '@/components/features/DeliveryPoster';
+import { useCart } from '@/context/CartContext';
+import { toast } from 'sonner';
+import type { VendorProduct } from '@/types';
 
 // --- Types ---
 interface Vendor {
@@ -36,6 +39,7 @@ interface Product {
     vendors: Vendor[];
     sideBanner?: string;
     weight?: string;
+    price?: number;
 }
 
 interface SimilarProduct {
@@ -177,9 +181,71 @@ export default function ProductDetailPage() {
     const params = useParams();
     const router = useRouter();
     const id = params.id as string;
-    const product = PRODUCTS_DATA[id] || PRODUCTS_DATA['default'];
+    const searchParams = useSearchParams();
+    
+    // Get real data from search params
+    const vendorName = searchParams.get('v') || 'emarket';
+    const productName = searchParams.get('n') || 'Fresh Organic Product';
+    const productPrice = searchParams.get('p') || '49';
+    const productImage = searchParams.get('i') || '/images/product/product-img3.png';
+    const productCategory = searchParams.get('c') || 'Organic Store';
+    const productUnit = searchParams.get('u') || '1 kg';
+
+    const product = useMemo(() => {
+        const base = PRODUCTS_DATA[id] || PRODUCTS_DATA['default'];
+        return {
+            ...base,
+            name: productName,
+            price: parseFloat(productPrice) || base.price,
+            image: productImage,
+            category: productCategory,
+            weight: productUnit
+        };
+    }, [id, productName, productPrice, productImage, productCategory, productUnit]);
 
     const [isDetailsExpanded, setIsDetailsExpanded] = useState(true);
+    const { addToCart, groups, updateQuantity } = useCart();
+
+    const handleAdd = (qty: number = 1) => {
+        // Find if item already in cart to update quantity
+        const vendorGroup = groups.find(g => g.vendorName === vendorName || g.vendorId === product.vendors?.[0]?.id.toString());
+        const cartItem = vendorGroup?.items.find(i => i.productId === product.id.toString());
+        const currentQty = cartItem?.quantity || 0;
+
+        const vendorProduct: VendorProduct = {
+            id: product.id.toString(),
+            vendorId: product.vendors?.[0]?.id.toString() || '0',
+            vendorName: vendorName,
+            name: product.name,
+            description: product.description,
+            category: product.category,
+            price: parseFloat(product.vendors?.[0]?.price.replace('₹', '').split('/')[0]) || 0,
+            images: [product.image],
+            packSize: product.weight || '1 kg',
+            unit: product.weight || '1 kg',
+            stock: product.vendors?.[0]?.stock || 10,
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            bulkPrices: [
+                { minQty: 3, price: 147 },
+                { minQty: 5, price: 245 }
+            ],
+            creditBadge: false,
+            minOrderQuantity: 1,
+        };
+
+        if (currentQty > 0) {
+            updateQuantity(vendorProduct.id, currentQty + qty);
+        } else {
+            addToCart(vendorProduct, qty);
+        }
+
+        toast.success(`${product.name} added to cart!`, {
+            description: `Quantity: ${currentQty + qty} ${product.weight || ''}`,
+            duration: 2000,
+        });
+    };
 
     // Dynamic similar items based on category
     let similarItemsList = Object.values(PRODUCTS_DATA)
@@ -231,30 +297,15 @@ export default function ProductDetailPage() {
                 <button onClick={() => router.back()} className="p-1">
                     <ArrowLeft size={22} className="text-[#181725]" strokeWidth={2} />
                 </button>
-                <div className="absolute left-1/2 -translate-x-1/2 text-[18px] font-extrabold text-[#181725] tracking-tight">
-                    emarket
+                <div className="absolute left-1/2 -translate-x-1/2 text-[18px] font-extrabold text-[#181725] tracking-tight whitespace-nowrap">
+                    {vendorName}
                 </div>
-                <button className="p-1">
-                    <Search size={22} className="text-[#181725]" strokeWidth={2} />
-                </button>
+                <div className="w-8" />
             </header>
 
             {/* Mobile View */}
             <div className="md:hidden pb-10 bg-[#F8F9FB]/30">
-                {/* Search Bar */}
-                <div className="px-4 py-3 bg-white">
-                    <div className="relative flex items-center">
-                        <Search size={18} className="absolute left-4 text-gray-400" />
-                        <input
-                            type="text"
-                            defaultValue="Ketchup"
-                            className="w-full bg-[#F2F3F2] rounded-full py-2.5 pl-11 pr-10 text-[14px] font-medium text-[#181725] outline-none border-none focus:ring-1 focus:ring-[#53B175]/30"
-                        />
-                        <button className="absolute right-4 text-gray-400">
-                            <X size={16} />
-                        </button>
-                    </div>
-                </div>
+
 
                 {/* Main Product Section - White Card */}
                 <div className="mx-0 bg-white pt-2 pb-8 px-5 rounded-b-[30px] shadow-sm">
@@ -301,13 +352,19 @@ export default function ProductDetailPage() {
                         <div className="bg-[#F1FBF4]/40 border border-[#53B175]/15 rounded-[22px] overflow-hidden mb-6">
                             <div className="flex items-center justify-between px-4 py-3 border-b border-[#53B175]/10">
                                 <span className="text-[15px] font-bold text-[#53B175]">₹ 147/kg for 3 kg</span>
-                                <button className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm">
+                                <button 
+                                    onClick={() => handleAdd(3)}
+                                    className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm"
+                                >
                                     <Plus size={16} strokeWidth={3.5} /> ADD
                                 </button>
                             </div>
                             <div className="flex items-center justify-between px-4 py-3">
                                 <span className="text-[15px] font-bold text-[#53B175]">₹ 245/kg for 5 kg</span>
-                                <button className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm">
+                                <button 
+                                    onClick={() => handleAdd(5)}
+                                    className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm"
+                                >
                                     <Plus size={16} strokeWidth={3.5} /> ADD
                                 </button>
                             </div>
@@ -320,7 +377,10 @@ export default function ProductDetailPage() {
                         </div>
 
                         {/* Add to Cart Button */}
-                        <button className="w-full py-4 bg-[#EAF7EF] rounded-[20px] border border-[#53B175]/30 flex items-center justify-center gap-3 text-[#53B175] text-[16px] font-bold transition-all active:scale-95 hover:bg-[#E2F2E8]">
+                        <button 
+                            onClick={() => handleAdd(1)}
+                            className="w-full py-4 bg-[#EAF7EF] rounded-[20px] border border-[#53B175]/30 flex items-center justify-center gap-3 text-[#53B175] text-[16px] font-bold transition-all active:scale-95 hover:bg-[#E2F2E8]"
+                        >
                             <span>Add To Cart</span>
                             <ShoppingCart size={20} />
                         </button>

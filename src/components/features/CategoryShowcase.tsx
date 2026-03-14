@@ -65,7 +65,7 @@ export function CategoryShowcase() {
                     {visibleCategories.map((cat, idx) => (
                         <Link
                             key={idx}
-                            href={`/category/${cat.name.toLowerCase().replace(/\s+/g, '-')}`}
+                            href={`/?searchOpen=true&q=${encodeURIComponent(cat.name)}&tab=vendors`}
                             className={cn(
                                 "flex flex-col items-center group transition-transform active:scale-95 snap-start w-full"
                             )}

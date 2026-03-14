@@ -16,7 +16,7 @@ import {
     X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileSearchOverlay } from './MobileSearchOverlay';
 import { LocationSelectionOverlay } from './LocationSelectionOverlay';
@@ -43,11 +43,40 @@ export function Navbar() {
     const { totalItems } = useCart();
     const { selectedAddress, setSelectedAddress } = useAddress();
 
-    const openSearch = (tab: 'items' | 'stores' = 'items', initialQuery = '') => {
-        setSearchTab(tab);
+    const [lastTrigger, setLastTrigger] = React.useState<string>('');
+
+    const openSearch = (tab: 'items' | 'stores' | 'vendors' = 'items', initialQuery = '') => {
+        setSearchTab(tab === 'vendors' ? 'stores' : tab as 'items' | 'stores');
         setNavSearchQuery(initialQuery);
         setIsSearchOverlayOpen(true);
     };
+
+    // Sub-component to handle URL sync without unmounting the whole Navbar
+    function SearchURLSync() {
+        const searchParams = useSearchParams();
+        
+        React.useEffect(() => {
+            if (!searchParams) return;
+            const searchOpen = searchParams.get('searchOpen');
+            const q = searchParams.get('q');
+            const tab = searchParams.get('tab');
+            const triggerId = `${searchOpen}-${q}-${tab}`;
+
+            if (searchOpen === 'true' && triggerId !== lastTrigger) {
+                setLastTrigger(triggerId);
+                openSearch(tab as 'items' | 'stores' | 'vendors' || 'items', q || '');
+                
+                // Clean up URL
+                const url = new URL(window.location.href);
+                url.searchParams.delete('searchOpen');
+                url.searchParams.delete('q');
+                url.searchParams.delete('tab');
+                router.replace(url.pathname + url.search, { scroll: false });
+            }
+        }, [searchParams]);
+
+        return null;
+    }
 
     const categories = [
         { name: 'Fruits & Vegetables', image: '/images/category/vegitable.png' },
@@ -77,6 +106,9 @@ export function Navbar() {
 
     return (
         <>
+            <React.Suspense fallback={null}>
+                <SearchURLSync />
+            </React.Suspense>
             <InitialPincodeOverlay 
                 onComplete={(pincode) => {
                     if (pincode) {

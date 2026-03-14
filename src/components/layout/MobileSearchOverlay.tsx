@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Search, X, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { vendors } from '@/data/vendorData';
+import type { VendorProduct } from '@/types';
 
 interface MobileSearchOverlayProps {
     isOpen: boolean;
@@ -12,47 +14,94 @@ interface MobileSearchOverlayProps {
     initialQuery?: string;
 }
 
-const VENDORS = [
-    { id: 1, name: 'emarket', logo: '/images/top vendors/emarket.png', category: 'Grocery & Vegetables', rating: 4.8 },
-    { id: 2, name: 'Whole Foods Market', logo: '/images/top vendors/whole-foods-market.png', category: 'Grocery, Fruits & Vegetables', rating: 4.4 },
-    { id: 3, name: 'M Mart', logo: '/images/top vendors/m-mart.png', category: 'Grocery', rating: 4.9 },
-    { id: 4, name: 'Groceri', logo: '/images/top vendors/groceri.png', category: 'Grocery & Fruits', rating: 4.4 },
-    { id: 5, name: 'Bee mart', logo: '/images/top vendors/bee-mart.png', category: 'Grocery & Vegetables', rating: 4.6 },
-    { id: 6, name: 'Family Supermarket', logo: '/images/top vendors/family-supermarket.png', category: 'Grocery, Fruits & Vegetables', rating: 4.4 },
-];
-
-export function MobileSearchOverlay({ isOpen, onClose, initialQuery = '' }: MobileSearchOverlayProps) {
+export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'items', initialQuery = '' }: MobileSearchOverlayProps) {
     const [searchQuery, setSearchQuery] = useState(initialQuery);
-    const [activeTab, setActiveTab] = useState<'items' | 'vendors'>('items');
+    const [activeTab, setActiveTab] = useState<'items' | 'vendors'>(initialTab as 'items' | 'vendors');
 
     // Sync search query when overlay opens
     React.useEffect(() => {
-        if (isOpen && initialQuery) {
+        if (isOpen) {
             setSearchQuery(initialQuery);
+            setActiveTab(initialTab === 'stores' ? 'vendors' : initialTab);
         }
-    }, [isOpen, initialQuery]);
+    }, [isOpen, initialQuery, initialTab]);
 
-    const ALL_RESULTS = [
-        { id: 1, name: 'Kissan Fresh Tomato Ketchup 750 gms', image: '/images/product/product-img1.png', category: 'Sauces & Seasoning' },
-        { id: 102, name: 'Del Monte Tomato Ketchup Pouch 1 kg', image: '/images/product/product-img1.png', category: 'Sauces & Seasoning' },
-        { id: 103, name: 'Maggi Tomato Ketchup Bottle 450 gms', image: '/images/product/product-img1.png', category: 'Sauces & Seasoning' },
-        { id: 104, name: 'Heinz Tomato Ketchup Bottle 750 gms', image: '/images/product/product-img1.png', category: 'Sauces & Seasoning' },
-        { id: 4001, name: 'Banana Robusta', image: '/images/fruits-vegetables/banana.png', category: 'Fruits' },
-        { id: 202, name: 'Banana Yelakki', image: '/images/fruits-vegetables/banana.png', category: 'Fruits' },
-        { id: 1001, name: 'Fresh Onion 1kg', image: '/images/fruits-vegetables/onion.png', category: 'Vegetables' },
-        { id: 1003, name: 'Amul Butter 500g', image: '/images/dairy/amul-butter.png', category: 'Dairy' },
-    ];
+    const allProducts = useMemo(() => {
+        const mapped: VendorProduct[] = [];
+        vendors.forEach(v => {
+            v.catalog.forEach(cat => {
+                cat.products.forEach(p => {
+                    mapped.push({
+                        id: p.id,
+                        vendorId: v.id,
+                        vendorName: v.name,
+                        name: p.name,
+                        description: '',
+                        category: cat.name,
+                        subcategory: '',
+                        price: p.price,
+                        stock: p.inStock ? 100 : 0,
+                        images: [p.image],
+                        packSize: p.unit,
+                        unit: p.unit,
+                        bulkPrices: [],
+                        isDeal: !!p.discount,
+                        frequentlyOrdered: false,
+                        creditBadge: v.acceptsCredit,
+                        minOrderQuantity: 1,
+                        isActive: true,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    } as unknown as VendorProduct);
+                });
+            });
+        });
+        return mapped;
+    }, []);
 
-    const filteredItems = searchQuery.length > 0
-        ? ALL_RESULTS.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
-        : [];
+    const filteredItems = useMemo(() => {
+        if (!searchQuery.trim()) return [];
+        const q = searchQuery.toLowerCase();
+        return allProducts.filter(item => 
+            item.name.toLowerCase().includes(q) || 
+            item.category.toLowerCase().includes(q)
+        );
+    }, [searchQuery, allProducts]);
 
-    const filteredVendors = searchQuery.length > 0
-        ? VENDORS.filter(v =>
-            v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            v.category.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        : VENDORS;
+    const filteredVendors = useMemo(() => {
+        const q = searchQuery.toLowerCase().trim();
+        if (!q) return vendors;
+        
+        // Normalize search term (e.g. "fruits & vegetables" -> "fruits vegetables")
+        const normalizedQ = q.replace(/&/g, 'and').replace(/\s+/g, ' ');
+        const searchTerms = normalizedQ.split(' ').filter(term => term.length > 1);
+
+        return vendors.filter(v => {
+            const vendorName = v.name.toLowerCase();
+            const vendorTags = v.categories.map(c => c.toLowerCase());
+            const catalogCats = v.catalog.map(cat => cat.name.toLowerCase());
+
+            // 1. Direct match on name or tags
+            if (vendorName.includes(q)) return true;
+            if (vendorTags.some(tag => tag.includes(q))) return true;
+
+            // 2. Match on catalog category name
+            if (catalogCats.some(catName => {
+                const normalizedCat = catName.replace(/&/g, 'and').replace(/\s+/g, ' ');
+                return normalizedCat.includes(normalizedQ) || normalizedQ.includes(normalizedCat);
+            })) return true;
+
+            // 3. Optional: keyword match if search query is long
+            if (searchTerms.length > 0) {
+                return searchTerms.some(term => 
+                    vendorName.includes(term) || 
+                    catalogCats.some(cat => cat.includes(term))
+                );
+            }
+
+            return false;
+        });
+    }, [searchQuery]);
 
     if (!isOpen) return null;
 
@@ -76,10 +125,10 @@ export function MobileSearchOverlay({ isOpen, onClose, initialQuery = '' }: Mobi
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 placeholder="search for product or brand,store..."
-                                className="flex-1 bg-transparent text-[15px] text-[#181725] outline-none placeholder:text-gray-400 font-medium"
+                                className="flex-1 bg-transparent text-[15px] text-[#181725] outline-none placeholder:text-gray-400 font-medium w-full"
                             />
                             {searchQuery && (
-                                <button onClick={() => setSearchQuery('')} className="text-gray-400 hover:text-gray-600">
+                                <button onClick={() => setSearchQuery('')} className="text-gray-400 hover:text-gray-600 shrink-0">
                                     <X size={20} />
                                 </button>
                             )}
@@ -134,7 +183,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialQuery = '' }: Mobi
                                 {/* Search in Category Card */}
                                 <div className="bg-white rounded-[16px] p-4 flex items-center gap-4 shadow-sm border border-gray-50">
                                     <div className="w-[58px] h-[58px] border border-[#EEEEEE] rounded-full flex items-center justify-center p-2.5 overflow-hidden">
-                                        <img src={filteredItems[0].image} alt="suggestion" className="w-full h-full object-contain" />
+                                        <img src={filteredItems[0].images[0]} alt="suggestion" className="w-full h-full object-contain" />
                                     </div>
                                     <div className="text-[16px] font-medium text-[#181725]">
                                         {searchQuery} in <span className="text-[#53B175] font-bold">{filteredItems[0].category}</span>
@@ -153,7 +202,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialQuery = '' }: Mobi
                                                 className="flex items-center gap-4 p-2 border border-[#EEEEEE] rounded-[14px] active:scale-[0.98] transition-all hover:border-[#53B175]/30 group"
                                             >
                                                 <div className="w-[48px] h-[58px] flex items-center justify-center p-1 shrink-0 overflow-hidden">
-                                                    <img src={item.image} alt={item.name} className="max-w-full max-h-full object-contain" />
+                                                    <img src={item.images[0]} alt={item.name} className="max-w-full max-h-full object-contain" />
                                                 </div>
                                                 <div className="text-[14px] font-semibold text-[#181725] leading-tight group-hover:text-[#53B175] transition-colors">
                                                     {item.name}
@@ -171,7 +220,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialQuery = '' }: Mobi
                                     <Search size={32} className="text-gray-400" />
                                 </div>
                                 <p className="text-[#181725] font-bold text-lg">No items found</p>
-                                <p className="text-gray-400 text-sm mt-1">Try searching for something else like &quot;Banana&quot; or &quot;Ketchup&quot;</p>
+                                <p className="text-gray-400 text-sm mt-1">Try searching for something else like "Banana" or "Ketchup"</p>
                             </div>
                         )}
                     </>
@@ -183,12 +232,14 @@ export function MobileSearchOverlay({ isOpen, onClose, initialQuery = '' }: Mobi
                             filteredVendors.map((vendor) => (
                                 <Link
                                     key={vendor.id}
-                                    href={`/vendor/${vendor.id}`}
+                                    href={searchQuery 
+                                        ? `/category/${vendor.id}/${searchQuery.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')}` 
+                                        : `/vendor/${vendor.id}`}
                                     onClick={onClose}
                                     className="flex items-center gap-4 p-4 bg-white rounded-[16px] border border-[#EEEEEE] active:scale-[0.98] transition-all hover:border-[#53B175]/30 group"
                                 >
                                     {/* Vendor Logo */}
-                                    <div className="w-[60px] h-[60px] min-w-[60px] rounded-[14px] border border-[#E2E2E2] flex items-center justify-center p-2 bg-white overflow-hidden">
+                                    <div className="w-[60px] h-[60px] min-w-[60px] rounded-[14px] border border-[#E2E2E2] flex items-center justify-center p-2 bg-white overflow-hidden relative">
                                         <img
                                             src={vendor.logo}
                                             alt={vendor.name}
@@ -202,7 +253,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialQuery = '' }: Mobi
                                             {vendor.name}
                                         </h3>
                                         <p className="text-[13px] text-[#7C7C7C] font-medium truncate">
-                                            {vendor.category}
+                                            {vendor.categories.join(', ')}
                                         </p>
                                     </div>
 
