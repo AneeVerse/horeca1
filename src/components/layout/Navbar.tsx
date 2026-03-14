@@ -36,7 +36,7 @@ export function Navbar() {
     const [isLoginOverlayOpen, setIsLoginOverlayOpen] = React.useState(false);
     const [isLoggedIn, setIsLoggedIn] = React.useState(false);
     const [selectedRole, setSelectedRole] = React.useState<'customer' | 'vendor'>('customer');
-    const [searchTab, setSearchTab] = React.useState<'items' | 'stores'>('items');
+    const [searchTab, setSearchTab] = React.useState<'items' | 'stores'>('stores');
     const [isNavSearchFocused, setIsNavSearchFocused] = React.useState(false);
     const [navSearchQuery, setNavSearchQuery] = React.useState('');
     const [isWishlistOpen, setIsWishlistOpen] = React.useState(false);
@@ -45,7 +45,7 @@ export function Navbar() {
 
     const [lastTrigger, setLastTrigger] = React.useState<string>('');
 
-    const openSearch = (tab: 'items' | 'stores' | 'vendors' = 'items', initialQuery = '') => {
+    const openSearch = (tab: 'items' | 'stores' | 'vendors' = 'vendors', initialQuery = '') => {
         setSearchTab(tab === 'vendors' ? 'stores' : tab as 'items' | 'stores');
         setNavSearchQuery(initialQuery);
         setIsSearchOverlayOpen(true);
@@ -54,26 +54,25 @@ export function Navbar() {
     // Sub-component to handle URL sync without unmounting the whole Navbar
     function SearchURLSync() {
         const searchParams = useSearchParams();
+        const router = useRouter();
         
         React.useEffect(() => {
             if (!searchParams) return;
             const searchOpen = searchParams.get('searchOpen');
             const q = searchParams.get('q');
             const tab = searchParams.get('tab');
-            const triggerId = `${searchOpen}-${q}-${tab}`;
 
-            if (searchOpen === 'true' && triggerId !== lastTrigger) {
-                setLastTrigger(triggerId);
+            if (searchOpen === 'true') {
                 openSearch(tab as 'items' | 'stores' | 'vendors' || 'items', q || '');
                 
-                // Clean up URL
+                // Clean up URL immediately to allow re-triggering
                 const url = new URL(window.location.href);
                 url.searchParams.delete('searchOpen');
                 url.searchParams.delete('q');
                 url.searchParams.delete('tab');
                 router.replace(url.pathname + url.search, { scroll: false });
             }
-        }, [searchParams]);
+        }, [searchParams, router]);
 
         return null;
     }

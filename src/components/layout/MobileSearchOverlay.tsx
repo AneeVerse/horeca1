@@ -14,7 +14,7 @@ interface MobileSearchOverlayProps {
     initialQuery?: string;
 }
 
-export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'items', initialQuery = '' }: MobileSearchOverlayProps) {
+export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', initialQuery = '' }: MobileSearchOverlayProps) {
     const [searchQuery, setSearchQuery] = useState(initialQuery);
     const [activeTab, setActiveTab] = useState<'items' | 'vendors'>(initialTab as 'items' | 'vendors');
 
@@ -72,31 +72,46 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'items', ini
         const q = searchQuery.toLowerCase().trim();
         if (!q) return vendors;
         
-        // Normalize search term (e.g. "fruits & vegetables" -> "fruits vegetables")
-        const normalizedQ = q.replace(/&/g, 'and').replace(/\s+/g, ' ');
-        const searchTerms = normalizedQ.split(' ').filter(term => term.length > 1);
+        const cleanQuery = q.replace(/&/g, 'and').replace(/\s+/g, ' ');
+        const STOP_WORDS = ['and', 'for', 'with', 'the', 'item', 'list', 'page'];
+        const queryKeywords = cleanQuery.split(' ')
+            .filter(word => word.length > 2 && !STOP_WORDS.includes(word));
+
+        // Major category terms that should strictly require a catalog match
+        const MAJOR_CATEGORIES = ['fruits', 'vegetables', 'dairy', 'oils', 'masala', 'chicken', 'meat', 'pulses', 'rice', 'bakery', 'frozen'];
+        const isCategorySearch = queryKeywords.some(word => MAJOR_CATEGORIES.includes(word));
 
         return vendors.filter(v => {
             const vendorName = v.name.toLowerCase();
-            const vendorTags = v.categories.map(c => c.toLowerCase());
-            const catalogCats = v.catalog.map(cat => cat.name.toLowerCase());
+            const catalogCatNames = v.catalog.map(cat => cat.name.toLowerCase().replace(/&/g, 'and'));
+            const vendorTags = v.categories.map(tag => tag.toLowerCase().replace(/&/g, 'and'));
 
-            // 1. Direct match on name or tags
+            // 1. Highest Priority: Store Name Match
             if (vendorName.includes(q)) return true;
-            if (vendorTags.some(tag => tag.includes(q))) return true;
 
-            // 2. Match on catalog category name
-            if (catalogCats.some(catName => {
-                const normalizedCat = catName.replace(/&/g, 'and').replace(/\s+/g, ' ');
-                return normalizedCat.includes(normalizedQ) || normalizedQ.includes(normalizedCat);
-            })) return true;
+            // 2. High Priority: Catalog Category Match (Source of Truth)
+            // If the vendor has the category in their catalog, they definitely sell it.
+            const hasCatalogMatch = catalogCatNames.some(cat => 
+                cat.includes(cleanQuery) || 
+                (queryKeywords.length > 0 && queryKeywords.some(word => cat.includes(word)))
+            );
+            if (hasCatalogMatch) return true;
 
-            // 3. Optional: keyword match if search query is long
-            if (searchTerms.length > 0) {
-                return searchTerms.some(term => 
-                    vendorName.includes(term) || 
-                    catalogCats.some(cat => cat.includes(term))
+            // 3. High Priority: Product match (Does the store sell an item with this name?)
+            const hasProductMatch = v.catalog.some(cat => 
+                cat.products.some(p => p.name.toLowerCase().includes(q))
+            );
+            if (hasProductMatch) return true;
+
+            // 4. Low Priority: Display Tag Match (Only for non-categorical searches)
+            // If user searches "Fruits", we don't want to match a vendor just because they have a "Vegetables" tag.
+            // We only use tags for general attributes like "Organic", "Fast", "Wholesale", etc.
+            if (!isCategorySearch) {
+                const hasTagMatch = vendorTags.some(tag => 
+                    tag.includes(cleanQuery) || 
+                    (queryKeywords.length > 0 && queryKeywords.some(word => tag.includes(word)))
                 );
+                if (hasTagMatch) return true;
             }
 
             return false;
@@ -181,25 +196,33 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'items', ini
                         {filteredItems.length > 0 && (
                             <>
                                 {/* Search in Category Card */}
-                                <div className="bg-white rounded-[16px] p-4 flex items-center gap-4 shadow-sm border border-gray-50">
+                                <button 
+                                    onClick={() => {
+                                        setSearchQuery(filteredItems[0].name);
+                                        setActiveTab('vendors');
+                                    }}
+                                    className="bg-white rounded-[16px] p-4 flex items-center gap-4 shadow-sm border border-gray-50 text-left w-full active:scale-[0.98] transition-all"
+                                >
                                     <div className="w-[58px] h-[58px] border border-[#EEEEEE] rounded-full flex items-center justify-center p-2.5 overflow-hidden">
                                         <img src={filteredItems[0].images[0]} alt="suggestion" className="w-full h-full object-contain" />
                                     </div>
                                     <div className="text-[16px] font-medium text-[#181725]">
-                                        {searchQuery} in <span className="text-[#53B175] font-bold">{filteredItems[0].category}</span>
+                                        See vendors for <span className="text-[#53B175] font-bold">{filteredItems[0].name}</span>
                                     </div>
-                                </div>
+                                </button>
 
                                 {/* Products Section */}
                                 <div className="bg-white rounded-[16px] p-5 shadow-sm border border-gray-50">
                                     <h2 className="text-[16px] font-bold text-[#181725] mb-4">Products</h2>
                                     <div className="space-y-3">
                                         {filteredItems.map((item) => (
-                                            <Link
+                                            <button
                                                 key={item.id}
-                                                href={`/product/${item.id}`}
-                                                onClick={onClose}
-                                                className="flex items-center gap-4 p-2 border border-[#EEEEEE] rounded-[14px] active:scale-[0.98] transition-all hover:border-[#53B175]/30 group"
+                                                onClick={() => {
+                                                    setSearchQuery(item.name);
+                                                    setActiveTab('vendors');
+                                                }}
+                                                className="flex items-center gap-4 p-2 border border-[#EEEEEE] rounded-[14px] active:scale-[0.98] transition-all hover:border-[#53B175]/30 group w-full text-left"
                                             >
                                                 <div className="w-[48px] h-[58px] flex items-center justify-center p-1 shrink-0 overflow-hidden">
                                                     <img src={item.images[0]} alt={item.name} className="max-w-full max-h-full object-contain" />
@@ -207,7 +230,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'items', ini
                                                 <div className="text-[14px] font-semibold text-[#181725] leading-tight group-hover:text-[#53B175] transition-colors">
                                                     {item.name}
                                                 </div>
-                                            </Link>
+                                            </button>
                                         ))}
                                     </div>
                                 </div>
