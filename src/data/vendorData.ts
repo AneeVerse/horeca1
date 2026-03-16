@@ -93,7 +93,7 @@ export const vendors: Vendor[] = [
         name: 'Dairy',
         image: '/images/category/milk.png',
         products: [
-          { id: 'am-d1', name: 'Amul Gold Full Cream Milk 1L', image: '/images/dairy/amul-butter.png', price: 72, originalPrice: 78, unit: '1 L', inStock: true, discount: 8 },
+          { id: 'am-d1', name: 'Amul Gold Full Cream Milk 1L', image: '/images/dairy/amul-butter.png', price: 72, originalPrice: 78, unit: '1 L', inStock: false, discount: 8 },
           { id: 'am-d2', name: 'Mother Dairy Toned Milk 500ml', image: '/images/dairy/amul-cheese.png', price: 30, originalPrice: 32, unit: '500 ml', inStock: true },
         ],
       },
@@ -149,7 +149,7 @@ export const vendors: Vendor[] = [
         image: '/images/edible-oil/ediable-oil-logo.png',
         products: [
           { id: 'mf-o1', name: 'Fortune Sunflower Oil 1L', image: '/images/edible-oil/ediable-oil-logo.png', price: 165, originalPrice: 185, unit: '1 L', inStock: true },
-          { id: 'mf-o2', name: 'Saffola Gold 1L', image: '/images/edible-oil/ediable-oil-logo.png', price: 210, originalPrice: 240, unit: '1 L', inStock: true, discount: 12 },
+          { id: 'mf-o2', name: 'Saffola Gold 1L', image: '/images/edible-oil/ediable-oil-logo.png', price: 210, originalPrice: 240, unit: '1 L', inStock: false, discount: 12 },
         ],
       },
     ],
@@ -178,7 +178,7 @@ export const vendors: Vendor[] = [
         image: '/images/category/vegitable.png',
         products: [
           { id: 'fh-1', name: 'Fresh Tomato 1kg', image: '/images/product/product-img3.png', price: 35, originalPrice: 50, unit: '1 kg', inStock: true, discount: 30 },
-          { id: 'fh-2', name: 'Onion 1kg', image: '/images/category/vegitable.png', price: 40, originalPrice: 60, unit: '1 kg', inStock: true, discount: 33 },
+          { id: 'fh-2', name: 'Onion 1kg', image: '/images/category/vegitable.png', price: 40, originalPrice: 60, unit: '1 kg', inStock: false, discount: 33 },
         ],
       },
       {
@@ -346,7 +346,7 @@ export const vendors: Vendor[] = [
         name: 'Bakery & Chocolates',
         image: '/images/category/candy.png',
         products: [
-          { id: 'em-bc1', name: 'Dark Chocolate chips 500g', image: '/images/category/candy.png', price: 210, originalPrice: 250, unit: '500 g', inStock: true },
+          { id: 'em-bc1', name: 'Dark Chocolate chips 500g', image: '/images/category/candy.png', price: 210, originalPrice: 250, unit: '500 g', inStock: false },
         ],
       },
     ],
