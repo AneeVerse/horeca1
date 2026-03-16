@@ -35,7 +35,7 @@ export default function VendorStorePage() {
                 bulkPrices: [],
                 creditBadge: vendor.creditEnabled,
                 minOrderQuantity: 1,
-                isActive: true,
+                isActive: p.inStock,
                 createdAt: new Date(),
                 updatedAt: new Date(),
                 isDeal: !!p.discount,

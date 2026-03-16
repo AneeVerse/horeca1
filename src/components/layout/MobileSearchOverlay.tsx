@@ -53,7 +53,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                         frequentlyOrdered: false,
                         creditBadge: v.creditEnabled,
                         minOrderQuantity: 1,
-                        isActive: true,
+                        isActive: p.inStock,
                         createdAt: new Date(),
                         updatedAt: new Date(),
                     } as unknown as VendorProduct);
@@ -220,7 +220,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                                 {/* Search in Category Card */}
                                 <button
                                     onClick={() => {
-                                        setSearchQuery(filteredItems[0].name);
+                                        setSearchQuery(filteredItems[0].category);
                                         setActiveTab('vendors');
                                     }}
                                     className="bg-white rounded-[16px] p-4 flex items-center gap-4 shadow-sm border border-gray-50 text-left w-full active:scale-[0.98] transition-all"
@@ -229,7 +229,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                                         <img src={filteredItems[0].images[0]} alt="suggestion" className="w-full h-full object-contain" />
                                     </div>
                                     <div className="text-[16px] font-medium text-[#181725]">
-                                        See vendors for <span className="text-[#53B175] font-bold">{filteredItems[0].name}</span>
+                                        See vendors for <span className="text-[#53B175] font-bold">{filteredItems[0].category}</span>
                                     </div>
                                 </button>
 

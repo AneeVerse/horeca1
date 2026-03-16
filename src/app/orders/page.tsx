@@ -111,7 +111,7 @@ export default function OrderHistoryPage() {
                                 packSize: found.unit,
                                 unit: found.unit,
                                 stock: found.inStock ? 100 : 0,
-                                isActive: true,
+                                isActive: found.inStock,
                                 createdAt: new Date(),
                                 updatedAt: new Date(),
                                 vendorId: v.id,

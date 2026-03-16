@@ -187,7 +187,8 @@ function VendorCategoryPageContent() {
                                                 category: activeCategory.name,
                                                 images: [product.image],
                                                 packSize: product.unit,
-                                                stock: product.inStock ? 100 : 0
+                                                stock: product.inStock ? 100 : 0,
+                                                isActive: product.inStock
                                             } as any}
                                         />
                                     );
