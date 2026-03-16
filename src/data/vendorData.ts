@@ -80,11 +80,11 @@ export const globalCategories: GlobalCategory[] = [
 // ─── 10 Vendors with Catalog ─────────────────────────────────────────────────
 
 export const vendors: Vendor[] = [
-  // ── 1. Bakers Hub ───────────────────────────────────────────────────────
+  // ── 1. Cartomart ───────────────────────────────────────────────────────
   {
     id: 'v6',
-    name: 'Bakers Hub',
-    slug: 'bakers-hub',
+    name: 'Cartomart',
+    slug: 'cartomart',
     logo: '/images/top vendors/39a5dd37096e44eb8b72e053055e32896d63c44a.png',
     tagline: 'Fresh grocery delivered daily',
     categories: ['Dairy', 'Flours', 'Chicken & Eggs'],
@@ -202,11 +202,11 @@ export const vendors: Vendor[] = [
     ],
   },
 
-  // 4. Walmart ────────────────────────────────────────────────────────
+  // 4. Arisha Mart ────────────────────────────────────────────────────────
   {
     id: 'v8',
-    name: 'Walmart',
-    slug: 'walmart',
+    name: 'Arisha Mart',
+    slug: 'arisha-mart',
     logo: '/images/top vendors/ecommerce-logo-template_658705-117 3.png',
     tagline: 'Grocery, Electronics and more',
     categories: ['Dairy', 'Custom Packaging'],
@@ -278,11 +278,11 @@ export const vendors: Vendor[] = [
     ],
   },
 
-  // ── 6. Cartomart ───────────────────────────────────────────────────────
+  // ── 6. Walmart ───────────────────────────────────────────────────────
   {
     id: 'v10',
-    name: 'Cartomart',
-    slug: 'cartomart',
+    name: 'Walmart',
+    slug: 'walmart',
     logo: '/images/top vendors/m-mart-grocery-store-brands-logo-238132857 3.png',
     tagline: 'Grocery and dry fruits center',
     categories: ['Bakery & Chocolates', 'Packaging Material'],
@@ -315,11 +315,11 @@ export const vendors: Vendor[] = [
     ],
   },
 
-  // ── 7. Sharad Dairy ──────────────────────────────────────────────────────
+  // ── 7. Emarket ──────────────────────────────────────────────────────
   {
     id: 'v1',
-    name: 'Sharad Dairy',
-    slug: 'sharad-dairy',
+    name: 'Emarket',
+    slug: 'emarket',
     logo: '/images/top vendors/emarket.png',
     tagline: 'Your everyday grocery and household needs',
     categories: ['Fruits & Vegetables', 'Cleaning & Consumables', 'Bakery & Chocolates'],
@@ -458,11 +458,11 @@ export const vendors: Vendor[] = [
     ],
   },
 
-  // ── 10. Gokul Dairy ──────────────────────────────────────────────────────
+  // ── 10. Groceri ──────────────────────────────────────────────────────
   {
     id: 'v4',
-    name: 'Gokul Dairy',
-    slug: 'gokul-dairy',
+    name: 'Groceri',
+    slug: 'groceri',
     logo: '/images/top vendors/groceri.png',
     tagline: 'Complete grocery and daily essentials',
     categories: ['Pulses', 'Dairy'],

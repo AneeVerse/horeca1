@@ -17,10 +17,10 @@ interface Vendor {
 const VENDORS: Vendor[] = [
     {
         id: 1,
-        name: 'Organic Market',
-        logo: '/images/top vendors/vendor-logo1.png',
-        deliveryTime: 'Delivery by 6:15am',
-        offer: '$5 off Snack & Candy',
+        name: 'Emarket',
+        logo: '/images/top vendors/emarket.png',
+        deliveryTime: 'Delivery by 7:00am',
+        offer: '₹50 off first order',
         bgColor: 'bg-[#f0f9ea]',
         productImages: [
             '/images/recom-product/product-img11.png',
@@ -32,10 +32,10 @@ const VENDORS: Vendor[] = [
     },
     {
         id: 2,
-        name: 'Safeway',
-        logo: '/images/top vendors/vendor-logo2.png',
-        deliveryTime: 'Delivery by 6:15am',
-        offer: '$5 off Snack & Candy',
+        name: 'Whole Food Market',
+        logo: '/images/top vendors/whole-foods-market.png',
+        deliveryTime: 'Delivery by 4:00pm',
+        offer: '₹100 off bulk orders',
         bgColor: 'bg-[#e7f6f8]',
         productImages: [
             '/images/recom-product/product-img11.png',
@@ -47,10 +47,10 @@ const VENDORS: Vendor[] = [
     },
     {
         id: 3,
-        name: 'Food Max',
-        logo: '/images/top vendors/vendor-logo3.png',
-        deliveryTime: 'Delivery by 6:15am',
-        offer: '$5 off Snack & Candy',
+        name: 'M Mart',
+        logo: '/images/top vendors/m-mart.png',
+        deliveryTime: 'Delivery by 6:00am',
+        offer: '₹200 off imported items',
         bgColor: 'bg-[#f5eeff]',
         productImages: [
             '/images/recom-product/product-img11.png',
@@ -62,10 +62,10 @@ const VENDORS: Vendor[] = [
     },
     {
         id: 4,
-        name: 'HRmart',
-        logo: '/images/top vendors/vendor-logo4.png',
-        deliveryTime: 'Delivery by 6:15am',
-        offer: '$5 off Snack & Candy',
+        name: 'Groceri',
+        logo: '/images/top vendors/groceri.png',
+        deliveryTime: 'Delivery by 5:30am',
+        offer: '₹50 off dairy items',
         bgColor: 'bg-[#faefe6]',
         productImages: [
             '/images/recom-product/product-img11.png',
@@ -77,10 +77,10 @@ const VENDORS: Vendor[] = [
     },
     {
         id: 5,
-        name: 'Lucky Supermarket',
-        logo: '/images/top vendors/vendor-logo5.png',
-        deliveryTime: 'Delivery by 6:15am',
-        offer: '$5 off Snack & Candy',
+        name: 'Borcelle',
+        logo: '/images/top vendors/961d17c25868145dd167df9f88ca0d40a7c057d1.png',
+        deliveryTime: 'Delivery by 8:00am',
+        offer: '₹150 off organic items',
         bgColor: 'bg-[#faefe6]',
         productImages: [
             '/images/recom-product/product-img11.png',
@@ -92,10 +92,10 @@ const VENDORS: Vendor[] = [
     },
     {
         id: 6,
-        name: 'Arico Farmer',
-        logo: '/images/top vendors/vendor-logo6.png',
-        deliveryTime: 'Delivery by 6:15am',
-        offer: '$5 off Snack & Candy',
+        name: 'Cartomart',
+        logo: '/images/top vendors/39a5dd37096e44eb8b72e053055e32896d63c44a.png',
+        deliveryTime: 'Delivery by 10:00am',
+        offer: '₹50 off bakery items',
         bgColor: 'bg-[#e7eff8]',
         productImages: [
             '/images/recom-product/product-img11.png',
@@ -107,10 +107,10 @@ const VENDORS: Vendor[] = [
     },
     {
         id: 7,
-        name: 'Farmer Market',
-        logo: '/images/top vendors/vendor-logo7.png',
-        deliveryTime: 'Delivery by 6:15am',
-        offer: '$5 off Snack & Candy',
+        name: 'Mentari Mart',
+        logo: '/images/top vendors/658b597eb627e280b99c0cf10e482793 2.png',
+        deliveryTime: 'Delivery by 9:00am',
+        offer: '₹75 off vegetable order',
         bgColor: 'bg-[#eaf9eb]',
         productImages: [
             '/images/recom-product/product-img11.png',
@@ -122,10 +122,10 @@ const VENDORS: Vendor[] = [
     },
     {
         id: 8,
-        name: 'Foodsco',
-        logo: '/images/top vendors/vendor-logo8.png',
-        deliveryTime: 'Delivery by 6:15am',
-        offer: '$5 off Snack & Candy',
+        name: 'Arisha Mart',
+        logo: '/images/top vendors/ecommerce-logo-template_658705-117 3.png',
+        deliveryTime: 'Delivery by 8:00pm',
+        offer: '₹200 off gadgets',
         bgColor: 'bg-[#f1f9ea]',
         productImages: [
             '/images/recom-product/product-img11.png',

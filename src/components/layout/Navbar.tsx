@@ -42,6 +42,16 @@ export function Navbar() {
         setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
     }, []);
 
+    const [isScrolled, setIsScrolled] = React.useState(false);
+
+    React.useEffect(() => {
+        const handleScroll = () => {
+            setIsScrolled(window.scrollY > 50);
+        };
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
     const [selectedRole, setSelectedRole] = React.useState<'customer' | 'vendor'>('customer');
     const [searchTab, setSearchTab] = React.useState<'items' | 'stores'>('stores');
     const [isNavSearchFocused, setIsNavSearchFocused] = React.useState(false);
@@ -63,7 +73,7 @@ export function Navbar() {
     function SearchURLSync() {
         const searchParams = useSearchParams();
         const router = useRouter();
-        
+
         React.useEffect(() => {
             if (!searchParams) return;
             const searchOpen = searchParams.get('searchOpen');
@@ -72,7 +82,7 @@ export function Navbar() {
 
             if (searchOpen === 'true') {
                 openSearch(tab as 'items' | 'stores' | 'vendors' || 'items', q || '');
-                
+
                 // Clean up URL immediately to allow re-triggering
                 const url = new URL(window.location.href);
                 url.searchParams.delete('searchOpen');
@@ -117,7 +127,7 @@ export function Navbar() {
                 <SearchURLSync />
             </React.Suspense>
             {pathname === '/' && (
-                <InitialPincodeOverlay 
+                <InitialPincodeOverlay
                     onComplete={(pincode) => {
                         if (pincode) {
                             setSelectedAddress({
@@ -152,7 +162,10 @@ export function Navbar() {
 
 
             {/* Persistent 12px Top Green Bar - Now part of Navbar for easy toggling */}
-            <div className="w-full h-[12px] bg-[#53B175] sticky top-0 z-[10000]" />
+            <div className={cn(
+                "w-full h-[12px] bg-[#53B175] sticky top-0 z-[10000] transition-transform duration-300",
+                isScrolled && "-translate-y-full"
+            )} />
 
             {/* Top Header - Scrolls Away */}
             <header className={cn(
@@ -191,7 +204,7 @@ export function Navbar() {
 
                                 {/* Wishlist & Cart (Right) */}
                                 <div className="flex-1 flex justify-end items-center gap-2">
-                                    <Link 
+                                    <Link
                                         href="/wishlist"
                                         className="relative p-1"
                                     >
@@ -212,37 +225,37 @@ export function Navbar() {
                             </div>
 
                             {/* Row 3: Search Bar */}
-                            {!pathname?.startsWith('/vendor/') && 
-                             !pathname?.startsWith('/order-lists') && 
-                             pathname !== '/orders' && 
-                             pathname !== '/wishlist' && 
-                             pathname !== '/cart' && 
-                             pathname !== '/profile' && (
-                                <div className="px-1">
-                                    <div
-                                        className={cn(
-                                            "flex items-center gap-3 px-4 py-3 bg-[#F7F7F7] border rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all duration-300",
-                                            isNavSearchFocused ? "border-[#53B175] bg-white ring-1 ring-[#53B175]/10" : "border-gray-100"
-                                        )}
-                                    >
-                                        <Search size={20} className={cn("transition-colors", isNavSearchFocused ? "text-[#53B175]" : "text-gray-400")} />
-                                        <input
-                                            type="text"
-                                            placeholder="search for product or brand,store..."
-                                            className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 font-medium"
-                                            onFocus={() => setIsNavSearchFocused(true)}
-                                            onBlur={() => setIsNavSearchFocused(false)}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                if (val.length > 0) {
-                                                    openSearch('items', val);
-                                                    e.target.value = '';
-                                                }
-                                            }}
-                                        />
+                            {!pathname?.startsWith('/vendor/') &&
+                                !pathname?.startsWith('/order-lists') &&
+                                pathname !== '/orders' &&
+                                pathname !== '/wishlist' &&
+                                pathname !== '/cart' &&
+                                pathname !== '/profile' && (
+                                    <div className="px-1">
+                                        <div
+                                            className={cn(
+                                                "flex items-center gap-3 px-4 py-3 bg-[#F7F7F7] border rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all duration-300",
+                                                isNavSearchFocused ? "border-[#53B175] bg-white ring-1 ring-[#53B175]/10" : "border-gray-100"
+                                            )}
+                                        >
+                                            <Search size={20} className={cn("transition-colors", isNavSearchFocused ? "text-[#53B175]" : "text-gray-400")} />
+                                            <input
+                                                type="text"
+                                                placeholder="search for product or brand,store..."
+                                                className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 font-medium"
+                                                onFocus={() => setIsNavSearchFocused(true)}
+                                                onBlur={() => setIsNavSearchFocused(false)}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    if (val.length > 0) {
+                                                        openSearch('items', val);
+                                                        e.target.value = '';
+                                                    }
+                                                }}
+                                            />
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
                         </div>
 
                         {/* Desktop Header Content (Hidden on Mobile) */}
@@ -254,9 +267,9 @@ export function Navbar() {
                             {!pathname?.startsWith('/vendor/') && (
                                 <div className="flex flex-1 max-w-2xl items-center relative group">
                                     <div className="flex items-center gap-3 px-5 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-xl w-full focus-within:border-primary/50 transition-all duration-300 shadow-sm">
-                                        <div className="flex items-center gap-1 text-[var(--text-sm)] text-text-muted border-r-2 border-gray-100 pr-4 cursor-pointer hover:text-primary font-semibold">
-                                            <span>Ice Cream</span>
-                                            <ChevronDown size={16} />
+                                        <div className="flex items-center gap-1 text-[var(--text-sm)] text-text-muted border-r-2 border-gray-100 pr-4 cursor-pointer hover:text-primary font-semibold select-none group/cat">
+                                            <span>Categories</span>
+                                            <ChevronDown size={16} className="group-hover/cat:translate-y-0.5 transition-transform" />
                                         </div>
                                         <input
                                             type="text"
@@ -293,13 +306,13 @@ export function Navbar() {
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <Link href="/wishlist" className="p-2 hover:bg-gray-50 rounded-full transition-all relative group">
-                                         <Heart size={24} className="text-text group-hover:text-primary transition-colors" />
-                                         {wishlist.length > 0 && (
-                                             <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold border-2 border-white">
-                                                 {wishlist.length}
-                                             </span>
-                                         )}
-                                     </Link>
+                                        <Heart size={24} className="text-text group-hover:text-primary transition-colors" />
+                                        {wishlist.length > 0 && (
+                                            <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold border-2 border-white">
+                                                {wishlist.length}
+                                            </span>
+                                        )}
+                                    </Link>
                                     <Link href="/cart" className="p-2 hover:bg-gray-50 rounded-full transition-all relative group">
                                         <ShoppingCart size={24} className="text-text group-hover:text-primary transition-colors" />
                                         <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold border-2 border-white">
@@ -326,11 +339,14 @@ export function Navbar() {
             </header>
 
             {/* Main Navigation - Desktop Only */}
-            <nav className="hidden md:block w-full border-b border-gray-100 bg-white sticky top-[12px] z-[900]">
-                <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] flex items-center justify-between">
+            <nav className={cn(
+                "hidden md:block w-full border-b border-gray-100 bg-white sticky z-[900] transition-all duration-300",
+                isScrolled ? "top-0 shadow-md" : "top-[12px]"
+            )}>
+                <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-3 flex items-center justify-between">
                     <div className="flex items-center gap-8">
                         <div className="relative group/main">
-                            <button className="bg-primary text-white px-6 py-4 flex items-center gap-3 font-bold text-[var(--text-sm)] rounded-t-lg">
+                            <button className="bg-primary text-white px-6 py-4 flex items-center gap-3 font-bold text-[var(--text-sm)] rounded-lg">
                                 <Menu size={20} />
                                 <span>Browse All Categories</span>
                                 <ChevronDown size={14} className="group-hover/main:rotate-180 transition-transform" />
@@ -360,7 +376,7 @@ export function Navbar() {
                         </div>
                     </div>
 
-                    <div className="bg-primary hover:bg-primary-dark transition-all text-white px-6 py-3 flex items-center gap-3 cursor-pointer rounded-lg shadow-lg shadow-primary/20">
+                    <div className="bg-primary hover:bg-primary-dark transition-all text-white px-6 py-4 flex items-center gap-3 cursor-pointer rounded-lg shadow-lg shadow-primary/20">
                         <PhoneCall size={20} />
                         <span className="font-bold text-[var(--text-sm)]">01- 234 567 890</span>
                     </div>
@@ -386,10 +402,10 @@ export function Navbar() {
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4" />
-                    
+
                     {/* Header Row */}
                     <div className="flex justify-end mb-2">
-                        <button 
+                        <button
                             onClick={() => {
                                 setIsCategoriesSidebarOpen(false);
                                 setIsCategoriesExpanded(false);
@@ -402,7 +418,7 @@ export function Navbar() {
 
                     <div className="flex items-center justify-between mb-6 px-1">
                         <h2 className="text-[17px] font-black text-[#181725]">Shop By Category</h2>
-                        <button 
+                        <button
                             onClick={() => setIsCategoriesExpanded(!isCategoriesExpanded)}
                             className="text-[#53B175] text-[14px] font-bold"
                         >
@@ -421,9 +437,9 @@ export function Navbar() {
                                     setIsCategoriesExpanded(false);
                                 }}
                             >
-                                <div 
+                                <div
                                     className="w-full aspect-square rounded-[18px] flex items-center justify-center p-2 transition-transform active:scale-95 shadow-sm border border-gray-50 overflow-hidden"
-                                    style={{ 
+                                    style={{
                                         backgroundColor: (item as any).bgColor || '#F7F8FA',
                                         aspectRatio: '1 / 1'
                                     }}

@@ -9,8 +9,8 @@ import type { Vendor, VendorProduct, Category, OrderList, PurchaseOrder, VendorS
 export const MOCK_VENDORS: Vendor[] = [
     {
         id: 'v1',
-        name: 'Sharad Dairy',
-        slug: 'sharad-dairy',
+        name: 'Emarket',
+        slug: 'emarket',
         logo: '/images/top vendors/emarket.png',
         rating: 4.6,
         totalRatings: 234,
@@ -56,8 +56,8 @@ export const MOCK_VENDORS: Vendor[] = [
     },
     {
         id: 'v4',
-        name: 'Gokul Dairy',
-        slug: 'gokul-dairy',
+        name: 'Groceri',
+        slug: 'groceri',
         logo: '/images/top vendors/groceri.png',
         rating: 4.2,
         totalRatings: 156,
@@ -88,8 +88,8 @@ export const MOCK_VENDORS: Vendor[] = [
     },
     {
         id: 'v6',
-        name: 'Bakers Hub',
-        slug: 'bakers-hub',
+        name: 'Cartomart',
+        slug: 'cartomart',
         logo: '/images/top vendors/39a5dd37096e44eb8b72e053055e32896d63c44a.png',
         rating: 4.4,
         totalRatings: 98,
@@ -118,8 +118,8 @@ export const MOCK_VENDORS: Vendor[] = [
     },
     {
         id: 'v8',
-        name: 'Walmart',
-        slug: 'walmart',
+        name: 'Arisha Mart',
+        slug: 'arisha-mart',
         logo: '/images/top vendors/ecommerce-logo-template_658705-117 3.png',
         rating: 4.9,
         totalRatings: 1200,
@@ -148,8 +148,8 @@ export const MOCK_VENDORS: Vendor[] = [
     },
     {
         id: 'v10',
-        name: 'Cartomart',
-        slug: 'cartomart',
+        name: 'Walmart',
+        slug: 'walmart',
         logo: '/images/top vendors/m-mart-grocery-store-brands-logo-238132857 3.png',
         rating: 4.3,
         totalRatings: 85,
@@ -187,40 +187,40 @@ const productBase = {
 
 export const MOCK_VENDOR_PRODUCTS: Record<string, VendorProduct[]> = {
     v1: [
-        { ...productBase, id: 'p1', images: ['/images/category/milk.png'], name: 'Amul Butter', description: 'Pure salted butter', price: 420, originalPrice: 450, category: 'Dairy', subcategory: 'Butter', packSize: '1 kg', unit: 'kg', vendorId: 'v1', vendorName: 'Sharad Dairy', bulkPrices: [{ minQty: 5, price: 410 }, { minQty: 10, price: 400 }], creditBadge: true, minOrderQuantity: 1, frequentlyOrdered: true },
-        { ...productBase, id: 'p2', images: ['/images/category/dairy.png'], name: 'Amul Cheese Block', description: 'Processed cheese block', price: 380, category: 'Dairy', subcategory: 'Cheese', packSize: '1 kg', unit: 'kg', vendorId: 'v1', vendorName: 'Sharad Dairy', bulkPrices: [{ minQty: 5, price: 365 }, { minQty: 10, price: 350 }], creditBadge: true, minOrderQuantity: 1, frequentlyOrdered: true },
-        { ...productBase, id: 'p3', images: ['/images/category/milk.png'], name: 'Fresh Paneer', description: 'Farm fresh paneer', price: 320, category: 'Dairy', subcategory: 'Paneer', packSize: '1 kg', unit: 'kg', vendorId: 'v1', vendorName: 'Sharad Dairy', bulkPrices: [{ minQty: 5, price: 310 }], creditBadge: true, minOrderQuantity: 1, stock: 0, isActive: false },
-        { ...productBase, id: 'p4', images: ['/images/category/milk.png'], name: 'Full Cream Milk', description: 'Full cream pasteurized milk', price: 56, category: 'Dairy', subcategory: 'Milk', packSize: '1 L', unit: 'L', vendorId: 'v1', vendorName: 'Sharad Dairy', bulkPrices: [{ minQty: 10, price: 52 }, { minQty: 20, price: 50 }], creditBadge: false, minOrderQuantity: 5 },
-        { ...productBase, id: 'p5', images: ['/images/category/dairy.png'], name: 'Mozzarella Cheese', description: 'Shredded mozzarella for pizza', price: 490, category: 'Dairy', subcategory: 'Cheese', packSize: '1 kg', unit: 'kg', vendorId: 'v1', vendorName: 'Sharad Dairy', bulkPrices: [{ minQty: 3, price: 470 }], creditBadge: true, minOrderQuantity: 1, isDeal: true },
-        { ...productBase, id: 'p6', images: ['/images/category/milk.png'], name: 'Salted Butter Pats', description: 'Individual butter portions', price: 180, category: 'Dairy', subcategory: 'Butter', packSize: '500 g', unit: 'g', vendorId: 'v1', vendorName: 'Sharad Dairy', bulkPrices: [], creditBadge: false, minOrderQuantity: 2 },
+        { ...productBase, id: 'p1', images: ['/images/category/milk.png'], name: 'Amul Butter', description: 'Pure salted butter', price: 420, originalPrice: 450, category: 'Dairy', subcategory: 'Butter', packSize: '1 kg', unit: 'kg', vendorId: 'v1', vendorName: 'Emarket', bulkPrices: [{ minQty: 5, price: 410 }, { minQty: 10, price: 400 }], creditBadge: true, minOrderQuantity: 1, frequentlyOrdered: true },
+        { ...productBase, id: 'p2', images: ['/images/category/dairy.png'], name: 'Amul Cheese Block', description: 'Processed cheese block', price: 380, category: 'Dairy', subcategory: 'Cheese', packSize: '1 kg', unit: 'kg', vendorId: 'v1', vendorName: 'Emarket', bulkPrices: [{ minQty: 5, price: 365 }, { minQty: 10, price: 350 }], creditBadge: true, minOrderQuantity: 1, frequentlyOrdered: true },
+        { ...productBase, id: 'p3', images: ['/images/category/milk.png'], name: 'Fresh Paneer', description: 'Farm fresh paneer', price: 320, category: 'Dairy', subcategory: 'Paneer', packSize: '1 kg', unit: 'kg', vendorId: 'v1', vendorName: 'Emarket', bulkPrices: [{ minQty: 5, price: 310 }], creditBadge: true, minOrderQuantity: 1, stock: 0, isActive: false },
+        { ...productBase, id: 'p4', images: ['/images/category/milk.png'], name: 'Full Cream Milk', description: 'Full cream pasteurized milk', price: 56, category: 'Dairy', subcategory: 'Milk', packSize: '1 L', unit: 'L', vendorId: 'v1', vendorName: 'Emarket', bulkPrices: [{ minQty: 10, price: 52 }, { minQty: 20, price: 50 }], creditBadge: false, minOrderQuantity: 5 },
+        { ...productBase, id: 'p5', images: ['/images/category/dairy.png'], name: 'Mozzarella Cheese', description: 'Shredded mozzarella for pizza', price: 490, category: 'Dairy', subcategory: 'Cheese', packSize: '1 kg', unit: 'kg', vendorId: 'v1', vendorName: 'Emarket', bulkPrices: [{ minQty: 3, price: 470 }], creditBadge: true, minOrderQuantity: 1, isDeal: true },
+        { ...productBase, id: 'p6', images: ['/images/category/milk.png'], name: 'Salted Butter Pats', description: 'Individual butter portions', price: 180, category: 'Dairy', subcategory: 'Butter', packSize: '500 g', unit: 'g', vendorId: 'v1', vendorName: 'Emarket', bulkPrices: [], creditBadge: false, minOrderQuantity: 2 },
     ],
     v2: [
-        { ...productBase, id: 'p7', images: ['/images/product/product-img1.png'], name: 'Kissan Tomato Ketchup', description: 'Classic tomato ketchup', price: 145, category: 'Sauces', subcategory: 'Ketchup', packSize: '1 kg', unit: 'kg', vendorId: 'v2', vendorName: 'Metro Foods', bulkPrices: [{ minQty: 5, price: 135 }], creditBadge: true, minOrderQuantity: 1, frequentlyOrdered: true },
-        { ...productBase, id: 'p8', images: ['/images/category/oils.png'], name: 'Saffola Gold Oil', description: 'Refined cooking oil', price: 210, category: 'Oils', subcategory: 'Cooking Oil', packSize: '1 L', unit: 'L', vendorId: 'v2', vendorName: 'Metro Foods', bulkPrices: [{ minQty: 5, price: 200 }, { minQty: 10, price: 190 }], creditBadge: true, minOrderQuantity: 1 },
-        { ...productBase, id: 'p9', images: ['/images/category/grains.png'], name: 'Basmati Rice', description: 'Premium long grain basmati', price: 1200, category: 'Grains', subcategory: 'Rice', packSize: '10 kg', unit: 'kg', vendorId: 'v2', vendorName: 'Metro Foods', bulkPrices: [{ minQty: 3, price: 1150 }], creditBadge: false, minOrderQuantity: 1, frequentlyOrdered: true },
-        { ...productBase, id: 'p10', images: ['/images/category/drink-juice.png'], name: 'Soya Sauce', description: 'Dark soya sauce', price: 95, category: 'Sauces', subcategory: 'Asian', packSize: '500 ml', unit: 'ml', vendorId: 'v2', vendorName: 'Metro Foods', bulkPrices: [], creditBadge: true, minOrderQuantity: 2 },
-        { ...productBase, id: 'p11', images: ['/images/category/oils.png'], name: 'Olive Oil Extra Virgin', description: 'Cold pressed olive oil', price: 650, category: 'Oils', subcategory: 'Olive Oil', packSize: '1 L', unit: 'L', vendorId: 'v2', vendorName: 'Metro Foods', bulkPrices: [{ minQty: 3, price: 620 }], creditBadge: false, minOrderQuantity: 1, isDeal: true, stock: 0, isActive: false },
-        { ...productBase, id: 'p12', images: ['/images/category/snacks.png'], name: 'Atta Whole Wheat', description: 'Chakki fresh atta', price: 480, category: 'Grains', subcategory: 'Flour', packSize: '10 kg', unit: 'kg', vendorId: 'v2', vendorName: 'Metro Foods', bulkPrices: [{ minQty: 5, price: 460 }], creditBadge: true, minOrderQuantity: 1 },
+        { ...productBase, id: 'p7', images: ['/images/product/product-img1.png'], name: 'Kissan Tomato Ketchup', description: 'Classic tomato ketchup', price: 145, category: 'Sauces', subcategory: 'Ketchup', packSize: '1 kg', unit: 'kg', vendorId: 'v2', vendorName: 'Whole Food Market', bulkPrices: [{ minQty: 5, price: 135 }], creditBadge: true, minOrderQuantity: 1, frequentlyOrdered: true },
+        { ...productBase, id: 'p8', images: ['/images/category/oils.png'], name: 'Saffola Gold Oil', description: 'Refined cooking oil', price: 210, category: 'Oils', subcategory: 'Cooking Oil', packSize: '1 L', unit: 'L', vendorId: 'v2', vendorName: 'Whole Food Market', bulkPrices: [{ minQty: 5, price: 200 }, { minQty: 10, price: 190 }], creditBadge: true, minOrderQuantity: 1 },
+        { ...productBase, id: 'p9', images: ['/images/category/grains.png'], name: 'Basmati Rice', description: 'Premium long grain basmati', price: 1200, category: 'Grains', subcategory: 'Rice', packSize: '10 kg', unit: 'kg', vendorId: 'v2', vendorName: 'Whole Food Market', bulkPrices: [{ minQty: 3, price: 1150 }], creditBadge: false, minOrderQuantity: 1, frequentlyOrdered: true },
+        { ...productBase, id: 'p10', images: ['/images/category/drink-juice.png'], name: 'Soya Sauce', description: 'Dark soya sauce', price: 95, category: 'Sauces', subcategory: 'Asian', packSize: '500 ml', unit: 'ml', vendorId: 'v2', vendorName: 'Whole Food Market', bulkPrices: [], creditBadge: true, minOrderQuantity: 2 },
+        { ...productBase, id: 'p11', images: ['/images/category/oils.png'], name: 'Olive Oil Extra Virgin', description: 'Cold pressed olive oil', price: 650, category: 'Oils', subcategory: 'Olive Oil', packSize: '1 L', unit: 'L', vendorId: 'v2', vendorName: 'Whole Food Market', bulkPrices: [{ minQty: 3, price: 620 }], creditBadge: false, minOrderQuantity: 1, isDeal: true, stock: 0, isActive: false },
+        { ...productBase, id: 'p12', images: ['/images/category/snacks.png'], name: 'Atta Whole Wheat', description: 'Chakki fresh atta', price: 480, category: 'Grains', subcategory: 'Flour', packSize: '10 kg', unit: 'kg', vendorId: 'v2', vendorName: 'Whole Food Market', bulkPrices: [{ minQty: 5, price: 460 }], creditBadge: true, minOrderQuantity: 1 },
     ],
     v3: [
-        { ...productBase, id: 'p13', images: ['/images/product/product-img3.png'], name: 'Fresh Tomatoes', description: 'Farm fresh red tomatoes', price: 40, category: 'Vegetables', subcategory: 'Tomato', packSize: '1 kg', unit: 'kg', vendorId: 'v3', vendorName: 'Fresh Harvest', bulkPrices: [{ minQty: 10, price: 35 }], creditBadge: false, minOrderQuantity: 2, frequentlyOrdered: true },
-        { ...productBase, id: 'p14', images: ['/images/product/product-img5.png'], name: 'Onions', description: 'Premium quality onions', price: 35, category: 'Vegetables', subcategory: 'Onion', packSize: '1 kg', unit: 'kg', vendorId: 'v3', vendorName: 'Fresh Harvest', bulkPrices: [{ minQty: 10, price: 30 }], creditBadge: false, minOrderQuantity: 5, stock: 0, isActive: false },
-        { ...productBase, id: 'p15', images: ['/images/recom-product/product-img10.png'], name: 'Green Capsicum', description: 'Fresh green bell peppers', price: 80, category: 'Vegetables', subcategory: 'Capsicum', packSize: '1 kg', unit: 'kg', vendorId: 'v3', vendorName: 'Fresh Harvest', bulkPrices: [], creditBadge: false, minOrderQuantity: 1, frequentlyOrdered: true },
-        { ...productBase, id: 'p16', images: ['/images/product/brokali.png'], name: 'Fresh Coriander', description: 'Bunch of fresh coriander', price: 15, category: 'Herbs', subcategory: 'Coriander', packSize: '100 g', unit: 'g', vendorId: 'v3', vendorName: 'Fresh Harvest', bulkPrices: [], creditBadge: false, minOrderQuantity: 5 },
+        { ...productBase, id: 'p13', images: ['/images/product/product-img3.png'], name: 'Fresh Tomatoes', description: 'Farm fresh red tomatoes', price: 40, category: 'Vegetables', subcategory: 'Tomato', packSize: '1 kg', unit: 'kg', vendorId: 'v3', vendorName: 'M Mart', bulkPrices: [{ minQty: 10, price: 35 }], creditBadge: false, minOrderQuantity: 2, frequentlyOrdered: true },
+        { ...productBase, id: 'p14', images: ['/images/product/product-img5.png'], name: 'Onions', description: 'Premium quality onions', price: 35, category: 'Vegetables', subcategory: 'Onion', packSize: '1 kg', unit: 'kg', vendorId: 'v3', vendorName: 'M Mart', bulkPrices: [{ minQty: 10, price: 30 }], creditBadge: false, minOrderQuantity: 5, stock: 0, isActive: false },
+        { ...productBase, id: 'p15', images: ['/images/recom-product/product-img10.png'], name: 'Green Capsicum', description: 'Fresh green bell peppers', price: 80, category: 'Vegetables', subcategory: 'Capsicum', packSize: '1 kg', unit: 'kg', vendorId: 'v3', vendorName: 'M Mart', bulkPrices: [], creditBadge: false, minOrderQuantity: 1, frequentlyOrdered: true },
+        { ...productBase, id: 'p16', images: ['/images/product/brokali.png'], name: 'Fresh Coriander', description: 'Bunch of fresh coriander', price: 15, category: 'Herbs', subcategory: 'Coriander', packSize: '100 g', unit: 'g', vendorId: 'v3', vendorName: 'M Mart', bulkPrices: [], creditBadge: false, minOrderQuantity: 5 },
     ],
     v4: [
-        { ...productBase, id: 'p17', images: ['/images/category/milk.png'], name: 'Gokul Paneer', description: 'Soft fresh paneer', price: 300, category: 'Dairy', subcategory: 'Paneer', packSize: '1 kg', unit: 'kg', vendorId: 'v4', vendorName: 'Gokul Dairy', bulkPrices: [{ minQty: 5, price: 285 }], creditBadge: true, minOrderQuantity: 1, frequentlyOrdered: true },
-        { ...productBase, id: 'p18', images: ['/images/category/dairy.png'], name: 'Gokul Curd', description: 'Fresh set curd', price: 45, category: 'Dairy', subcategory: 'Curd', packSize: '1 kg', unit: 'kg', vendorId: 'v4', vendorName: 'Gokul Dairy', bulkPrices: [{ minQty: 10, price: 40 }], creditBadge: true, minOrderQuantity: 2 },
+        { ...productBase, id: 'p17', images: ['/images/category/milk.png'], name: 'Gokul Paneer', description: 'Soft fresh paneer', price: 300, category: 'Dairy', subcategory: 'Paneer', packSize: '1 kg', unit: 'kg', vendorId: 'v4', vendorName: 'Groceri', bulkPrices: [{ minQty: 5, price: 285 }], creditBadge: true, minOrderQuantity: 1, frequentlyOrdered: true },
+        { ...productBase, id: 'p18', images: ['/images/category/dairy.png'], name: 'Gokul Curd', description: 'Fresh set curd', price: 45, category: 'Dairy', subcategory: 'Curd', packSize: '1 kg', unit: 'kg', vendorId: 'v4', vendorName: 'Groceri', bulkPrices: [{ minQty: 10, price: 40 }], creditBadge: true, minOrderQuantity: 2 },
     ],
     v5: [
-        { ...productBase, id: 'p19', images: ['/images/category/spices.png'], name: 'Red Chilli Powder', description: 'Kashmiri red chilli', price: 350, category: 'Spices', subcategory: 'Chilli', packSize: '500 g', unit: 'g', vendorId: 'v5', vendorName: 'Spice Kingdom', bulkPrices: [{ minQty: 5, price: 330 }], creditBadge: false, minOrderQuantity: 1, frequentlyOrdered: true },
-        { ...productBase, id: 'p20', images: ['/images/category/grains.png'], name: 'Turmeric Powder', description: 'Pure haldi powder', price: 280, category: 'Spices', subcategory: 'Turmeric', packSize: '500 g', unit: 'g', vendorId: 'v5', vendorName: 'Spice Kingdom', bulkPrices: [{ minQty: 5, price: 265 }], creditBadge: false, minOrderQuantity: 1 },
-        { ...productBase, id: 'p21', images: ['/images/category/drink-juice.png'], name: 'Garam Masala', description: 'Whole spice blend', price: 420, category: 'Masalas', subcategory: 'Blends', packSize: '500 g', unit: 'g', vendorId: 'v5', vendorName: 'Spice Kingdom', bulkPrices: [], creditBadge: false, minOrderQuantity: 1, isDeal: true },
+        { ...productBase, id: 'p19', images: ['/images/category/spices.png'], name: 'Red Chilli Powder', description: 'Kashmiri red chilli', price: 350, category: 'Spices', subcategory: 'Chilli', packSize: '500 g', unit: 'g', vendorId: 'v5', vendorName: 'Borcelle', bulkPrices: [{ minQty: 5, price: 330 }], creditBadge: false, minOrderQuantity: 1, frequentlyOrdered: true },
+        { ...productBase, id: 'p20', images: ['/images/category/grains.png'], name: 'Turmeric Powder', description: 'Pure haldi powder', price: 280, category: 'Spices', subcategory: 'Turmeric', packSize: '500 g', unit: 'g', vendorId: 'v5', vendorName: 'Borcelle', bulkPrices: [{ minQty: 5, price: 265 }], creditBadge: false, minOrderQuantity: 1 },
+        { ...productBase, id: 'p21', images: ['/images/category/drink-juice.png'], name: 'Garam Masala', description: 'Whole spice blend', price: 420, category: 'Masalas', subcategory: 'Blends', packSize: '500 g', unit: 'g', vendorId: 'v5', vendorName: 'Borcelle', bulkPrices: [], creditBadge: false, minOrderQuantity: 1, isDeal: true },
     ],
     v6: [
-        { ...productBase, id: 'p22', images: ['/images/category/snacks.png'], name: 'Maida (Refined Flour)', description: 'Fine maida for baking', price: 320, category: 'Bakery', subcategory: 'Flour', packSize: '10 kg', unit: 'kg', vendorId: 'v6', vendorName: 'Bakers Hub', bulkPrices: [{ minQty: 5, price: 300 }], creditBadge: true, minOrderQuantity: 1, frequentlyOrdered: true },
-        { ...productBase, id: 'p23', images: ['/images/category/candy.png'], name: 'Dark Chocolate Couverture', description: '70% dark chocolate', price: 850, category: 'Bakery', subcategory: 'Chocolate', packSize: '1 kg', unit: 'kg', vendorId: 'v6', vendorName: 'Bakers Hub', bulkPrices: [{ minQty: 3, price: 810 }], creditBadge: true, minOrderQuantity: 1, isDeal: true, stock: 0, isActive: false },
-        { ...productBase, id: 'p24', images: ['/images/category/desset.png'], name: 'Vanilla Essence', description: 'Pure vanilla extract', price: 180, category: 'Bakery', subcategory: 'Essences', packSize: '500 ml', unit: 'ml', vendorId: 'v6', vendorName: 'Bakers Hub', bulkPrices: [], creditBadge: false, minOrderQuantity: 1 },
+        { ...productBase, id: 'p22', images: ['/images/category/snacks.png'], name: 'Maida (Refined Flour)', description: 'Fine maida for baking', price: 320, category: 'Bakery', subcategory: 'Flour', packSize: '10 kg', unit: 'kg', vendorId: 'v6', vendorName: 'Cartomart', bulkPrices: [{ minQty: 5, price: 300 }], creditBadge: true, minOrderQuantity: 1, frequentlyOrdered: true },
+        { ...productBase, id: 'p23', images: ['/images/category/candy.png'], name: 'Dark Chocolate Couverture', description: '70% dark chocolate', price: 850, category: 'Bakery', subcategory: 'Chocolate', packSize: '1 kg', unit: 'kg', vendorId: 'v6', vendorName: 'Cartomart', bulkPrices: [{ minQty: 3, price: 810 }], creditBadge: true, minOrderQuantity: 1, isDeal: true, stock: 0, isActive: false },
+        { ...productBase, id: 'p24', images: ['/images/category/desset.png'], name: 'Vanilla Essence', description: 'Pure vanilla extract', price: 180, category: 'Bakery', subcategory: 'Essences', packSize: '500 ml', unit: 'ml', vendorId: 'v6', vendorName: 'Cartomart', bulkPrices: [], creditBadge: false, minOrderQuantity: 1 },
     ],
 };
 
@@ -252,7 +252,7 @@ export const MOCK_ORDER_LISTS: OrderList[] = [
         name: 'Daily Kitchen Supplies',
         userId: 'u1',
         vendorId: 'v6',
-        vendorName: 'Bakers Hub',
+        vendorName: 'Cartomart',
         vendorLogo: '/images/top vendors/39a5dd37096e44eb8b72e053055e32896d63c44a.png',
         items: [
             { productId: 'p22', product: MOCK_VENDOR_PRODUCTS.v6[0], defaultQty: 5, lastOrderedQty: 5 },
@@ -267,7 +267,7 @@ export const MOCK_ORDER_LISTS: OrderList[] = [
         name: 'Weekly Grocery',
         userId: 'u1',
         vendorId: 'v4',
-        vendorName: 'Gokul Dairy',
+        vendorName: 'Groceri',
         vendorLogo: '/images/top vendors/groceri.png',
         items: [
             { productId: 'p17', product: MOCK_VENDOR_PRODUCTS.v4[0], defaultQty: 3, lastOrderedQty: 3 },
@@ -282,7 +282,7 @@ export const MOCK_ORDER_LISTS: OrderList[] = [
         name: 'Inventory Restock',
         userId: 'u1',
         vendorId: 'v1',
-        vendorName: 'Sharad Dairy',
+        vendorName: 'Emarket',
         vendorLogo: '/images/top vendors/emarket.png',
         items: [
             { productId: 'p1', product: MOCK_VENDOR_PRODUCTS.v1[0], defaultQty: 10, lastOrderedQty: 10 },
@@ -300,7 +300,7 @@ export const MOCK_PAST_ORDERS: PurchaseOrder[] = [
     {
         id: 'PO-2026-001',
         vendorId: 'v1',
-        vendorName: 'Sharad Dairy',
+        vendorName: 'Emarket',
         vendorLogo: '/images/top vendors/vendor-logo1.png',
         userId: 'u1',
         items: [
@@ -322,7 +322,7 @@ export const MOCK_PAST_ORDERS: PurchaseOrder[] = [
     {
         id: 'PO-2026-002',
         vendorId: 'v2',
-        vendorName: 'Metro Foods',
+        vendorName: 'Whole Food Market',
         vendorLogo: '/images/top vendors/vendor-logo2.png',
         userId: 'u1',
         items: [
