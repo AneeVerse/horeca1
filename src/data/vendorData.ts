@@ -80,11 +80,11 @@ export const globalCategories: GlobalCategory[] = [
 // ─── 10 Vendors with Catalog ─────────────────────────────────────────────────
 
 export const vendors: Vendor[] = [
-  // ── 1. Arisha Mart ──────────────────────────────────────────────────────
+  // ── 1. Bakers Hub ───────────────────────────────────────────────────────
   {
     id: 'v6',
-    name: 'Arisha Mart',
-    slug: 'arisha-mart',
+    name: 'Bakers Hub',
+    slug: 'bakers-hub',
     logo: '/images/top vendors/39a5dd37096e44eb8b72e053055e32896d63c44a.png',
     tagline: 'Fresh grocery delivered daily',
     categories: ['Dairy', 'Flours', 'Chicken & Eggs'],
@@ -315,11 +315,11 @@ export const vendors: Vendor[] = [
     ],
   },
 
-  // ── 7. emarket ───────────────────────────────────────────────────────────
+  // ── 7. Sharad Dairy ──────────────────────────────────────────────────────
   {
     id: 'v1',
-    name: 'emarket',
-    slug: 'emarket',
+    name: 'Sharad Dairy',
+    slug: 'sharad-dairy',
     logo: '/images/top vendors/emarket.png',
     tagline: 'Your everyday grocery and household needs',
     categories: ['Fruits & Vegetables', 'Cleaning & Consumables', 'Bakery & Chocolates'],
@@ -458,11 +458,11 @@ export const vendors: Vendor[] = [
     ],
   },
 
-  // ── 10. Groceri ──────────────────────────────────────────────────────────
+  // ── 10. Gokul Dairy ──────────────────────────────────────────────────────
   {
     id: 'v4',
-    name: 'Groceri',
-    slug: 'groceri',
+    name: 'Gokul Dairy',
+    slug: 'gokul-dairy',
     logo: '/images/top vendors/groceri.png',
     tagline: 'Complete grocery and daily essentials',
     categories: ['Pulses', 'Dairy'],
