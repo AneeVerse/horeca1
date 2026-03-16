@@ -2,6 +2,11 @@
 // Flow: Search >> Vendor >> Vendor Catalog >> Order (Swiggy Model)
 // Customers buy FROM vendors, not from a universal product pool.
 
+export interface BulkPriceTier {
+  minQty: number;
+  price: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -11,6 +16,10 @@ export interface Product {
   unit: string;
   inStock: boolean;
   discount?: number;
+  bulkPrices?: BulkPriceTier[];
+  isDeal?: boolean;
+  frequentlyOrdered?: boolean;
+  creditBadge?: boolean;
 }
 
 export interface VendorCategory {
@@ -93,8 +102,8 @@ export const vendors: Vendor[] = [
         name: 'Dairy',
         image: '/images/category/milk.png',
         products: [
-          { id: 'am-d1', name: 'Amul Gold Full Cream Milk 1L', image: '/images/dairy/amul-butter.png', price: 72, originalPrice: 78, unit: '1 L', inStock: false, discount: 8 },
-          { id: 'am-d2', name: 'Mother Dairy Toned Milk 500ml', image: '/images/dairy/amul-cheese.png', price: 30, originalPrice: 32, unit: '500 ml', inStock: true },
+          { id: 'am-d1', name: 'Amul Gold Full Cream Milk 1L', image: '/images/dairy/amul-butter.png', price: 72, originalPrice: 78, unit: '1 L', inStock: false, discount: 8, bulkPrices: [{ minQty: 12, price: 68 }, { minQty: 24, price: 65 }] },
+          { id: 'am-d2', name: 'Mother Dairy Toned Milk 500ml', image: '/images/dairy/amul-cheese.png', price: 30, originalPrice: 32, unit: '500 ml', inStock: true, bulkPrices: [{ minQty: 12, price: 28 }], frequentlyOrdered: true },
         ],
       },
       {
@@ -102,8 +111,8 @@ export const vendors: Vendor[] = [
         name: 'Flours',
         image: '/images/category/snacks.png',
         products: [
-          { id: 'am-f1', name: 'Aashirvaad Atta 5kg', image: '/images/category/snacks.png', price: 245, originalPrice: 280, unit: '5 kg', inStock: true, discount: 12 },
-          { id: 'am-f2', name: 'Maida 1kg', image: '/images/category/snacks.png', price: 45, originalPrice: 55, unit: '1 kg', inStock: true },
+          { id: 'am-f1', name: 'Aashirvaad Atta 5kg', image: '/images/daily-best-sell/best-sell1.png', price: 245, originalPrice: 280, unit: '5 kg', inStock: true, discount: 12, isDeal: true, bulkPrices: [{ minQty: 5, price: 230 }, { minQty: 10, price: 215 }] },
+          { id: 'am-f2', name: 'Maida 1kg', image: '/images/daily-best-sell/best-sell2.png', price: 45, originalPrice: 55, unit: '1 kg', inStock: true, bulkPrices: [{ minQty: 10, price: 40 }] },
         ],
       },
       {
@@ -111,7 +120,7 @@ export const vendors: Vendor[] = [
         name: 'Chicken & Eggs',
         image: '/images/category/animal food.png',
         products: [
-          { id: 'am-ce1', name: 'Farm Fresh Eggs 12pcs', image: '/images/category/animal food.png', price: 84, originalPrice: 100, unit: '12 pcs', inStock: true, discount: 16 },
+          { id: 'am-ce1', name: 'Farm Fresh Eggs 12pcs', image: '/images/category/animal food.png', price: 84, originalPrice: 100, unit: '12 pcs', inStock: true, discount: 16, isDeal: true, bulkPrices: [{ minQty: 5, price: 78 }, { minQty: 10, price: 72 }], frequentlyOrdered: true },
         ],
       },
     ],
@@ -139,8 +148,8 @@ export const vendors: Vendor[] = [
         name: 'Pulses',
         image: '/images/category/snacks.png',
         products: [
-          { id: 'mf-1', name: 'Toor Dal 1kg', image: '/images/organic/product-img20.png', price: 155, originalPrice: 180, unit: '1 kg', inStock: true, discount: 14 },
-          { id: 'mf-2', name: 'Moong Dal 1kg', image: '/images/organic/product-img21.png', price: 140, originalPrice: 160, unit: '1 kg', inStock: true },
+          { id: 'mf-1', name: 'Toor Dal 1kg', image: '/images/organic/product-img20.png', price: 155, originalPrice: 180, unit: '1 kg', inStock: true, discount: 14, isDeal: true, bulkPrices: [{ minQty: 5, price: 145 }, { minQty: 10, price: 135 }] },
+          { id: 'mf-2', name: 'Moong Dal 1kg', image: '/images/organic/product-img21.png', price: 140, originalPrice: 160, unit: '1 kg', inStock: true, bulkPrices: [{ minQty: 5, price: 130 }] },
         ],
       },
       {
@@ -148,8 +157,8 @@ export const vendors: Vendor[] = [
         name: 'Edible Oils',
         image: '/images/edible-oil/ediable-oil-logo.png',
         products: [
-          { id: 'mf-o1', name: 'Fortune Sunflower Oil 1L', image: '/images/edible-oil/ediable-oil-logo.png', price: 165, originalPrice: 185, unit: '1 L', inStock: true },
-          { id: 'mf-o2', name: 'Saffola Gold 1L', image: '/images/edible-oil/ediable-oil-logo.png', price: 210, originalPrice: 240, unit: '1 L', inStock: false, discount: 12 },
+          { id: 'mf-o1', name: 'Fortune Sunflower Oil 1L', image: '/images/edible-oil/ediable-oil-logo.png', price: 165, originalPrice: 185, unit: '1 L', inStock: true, bulkPrices: [{ minQty: 6, price: 155 }, { minQty: 12, price: 145 }], frequentlyOrdered: true },
+          { id: 'mf-o2', name: 'Saffola Gold 1L', image: '/images/edible-oil/ediable-oil-logo.png', price: 210, originalPrice: 240, unit: '1 L', inStock: false, discount: 12, isDeal: true, bulkPrices: [{ minQty: 6, price: 195 }] },
         ],
       },
     ],
@@ -177,8 +186,8 @@ export const vendors: Vendor[] = [
         name: 'Fruits & Vegetables',
         image: '/images/category/vegitable.png',
         products: [
-          { id: 'fh-1', name: 'Fresh Tomato 1kg', image: '/images/product/product-img3.png', price: 35, originalPrice: 50, unit: '1 kg', inStock: true, discount: 30 },
-          { id: 'fh-2', name: 'Onion 1kg', image: '/images/category/vegitable.png', price: 40, originalPrice: 60, unit: '1 kg', inStock: false, discount: 33 },
+          { id: 'fh-1', name: 'Fresh Tomato 1kg', image: '/images/product/product-img3.png', price: 35, originalPrice: 50, unit: '1 kg', inStock: true, discount: 30, isDeal: true, bulkPrices: [{ minQty: 5, price: 30 }, { minQty: 10, price: 27 }] },
+          { id: 'fh-2', name: 'Onion 1kg', image: '/images/category/vegitable.png', price: 40, originalPrice: 60, unit: '1 kg', inStock: false, discount: 33, isDeal: true },
         ],
       },
       {
@@ -186,8 +195,8 @@ export const vendors: Vendor[] = [
         name: 'Dry Fruits & Nuts',
         image: '/images/category/fruits.png',
         products: [
-          { id: 'fh-df1', name: 'California Almonds 500g', image: '/images/category/fruits.png', price: 450, originalPrice: 550, unit: '500 g', inStock: true, discount: 18 },
-          { id: 'fh-df2', name: 'W240 Cashews 500g', image: '/images/category/fruits.png', price: 480, originalPrice: 600, unit: '500 g', inStock: true, discount: 20 },
+          { id: 'fh-df1', name: 'California Almonds 500g', image: '/images/category/fruits.png', price: 450, originalPrice: 550, unit: '500 g', inStock: true, discount: 18, isDeal: true, bulkPrices: [{ minQty: 3, price: 420 }, { minQty: 5, price: 400 }] },
+          { id: 'fh-df2', name: 'W240 Cashews 500g', image: '/images/category/fruits.png', price: 480, originalPrice: 600, unit: '500 g', inStock: true, discount: 20, isDeal: true, bulkPrices: [{ minQty: 3, price: 450 }] },
         ],
       },
     ],
@@ -253,8 +262,8 @@ export const vendors: Vendor[] = [
         name: 'Masala, Salt & Sugar',
         image: '/images/masala-salt/masala-salt-logo.png',
         products: [
-          { id: 'sk-1', name: 'Everest Turmeric Powder 200g', image: '/images/masala-salt/everest-masala.png', price: 55, originalPrice: 65, unit: '200 g', inStock: true, discount: 15 },
-          { id: 'sk-2', name: 'Tata Salt 1kg', image: '/images/masala-salt/masala-salt-logo.png', price: 25, originalPrice: 28, unit: '1 kg', inStock: true },
+          { id: 'sk-1', name: 'Everest Turmeric Powder 200g', image: '/images/masala-salt/everest-masala.png', price: 55, originalPrice: 65, unit: '200 g', inStock: true, discount: 15, isDeal: true, bulkPrices: [{ minQty: 6, price: 50 }, { minQty: 12, price: 45 }] },
+          { id: 'sk-2', name: 'Tata Salt 1kg', image: '/images/masala-salt/masala-salt-logo.png', price: 25, originalPrice: 28, unit: '1 kg', inStock: true, bulkPrices: [{ minQty: 10, price: 22 }], frequentlyOrdered: true },
         ],
       },
       {
@@ -291,8 +300,8 @@ export const vendors: Vendor[] = [
         name: 'Bakery & Chocolates',
         image: '/images/category/candy.png',
         products: [
-          { id: 'bh-1', name: 'Chocolate Compound 500g', image: '/images/daily-best-sell/best-sell3.png', price: 165, originalPrice: 195, unit: '500 g', inStock: true, discount: 15 },
-          { id: 'bh-2', name: 'Baking Powder 100g', image: '/images/category/candy.png', price: 45, originalPrice: 55, unit: '100 g', inStock: true },
+          { id: 'bh-1', name: 'Chocolate Compound 500g', image: '/images/daily-best-sell/best-sell3.png', price: 165, originalPrice: 195, unit: '500 g', inStock: true, discount: 15, isDeal: true, bulkPrices: [{ minQty: 4, price: 155 }, { minQty: 8, price: 145 }] },
+          { id: 'bh-2', name: 'Baking Powder 100g', image: '/images/category/candy.png', price: 45, originalPrice: 55, unit: '100 g', inStock: true, bulkPrices: [{ minQty: 6, price: 40 }] },
         ],
       },
       {
@@ -328,7 +337,7 @@ export const vendors: Vendor[] = [
         name: 'Fruits & Vegetables',
         image: '/images/category/vegitable.png',
         products: [
-          { id: 'em-1', name: 'Mixed Vegetable Pack 1kg', image: '/images/category/vegitable.png', price: 65, originalPrice: 80, unit: '1 kg', inStock: true, discount: 19 },
+          { id: 'em-1', name: 'Mixed Vegetable Pack 1kg', image: '/images/category/vegitable.png', price: 65, originalPrice: 80, unit: '1 kg', inStock: true, discount: 19, isDeal: true, bulkPrices: [{ minQty: 5, price: 58 }, { minQty: 10, price: 52 }], frequentlyOrdered: true },
           { id: 'em-2', name: 'Carrot 500g', image: '/images/organic/product-img20.png', price: 22, originalPrice: 28, unit: '500 g', inStock: true },
         ],
       },
@@ -337,8 +346,8 @@ export const vendors: Vendor[] = [
         name: 'Cleaning & Consumables',
         image: '/images/category/snacks.png',
         products: [
-          { id: 'em-5', name: 'Vim Dishwash Bar 500g', image: '/images/product/product-img1.png', price: 42, originalPrice: 48, unit: '500 g', inStock: true },
-          { id: 'em-9', name: 'Surf Excel Quick Wash 1kg', image: '/images/product/product-img1.png', price: 110, originalPrice: 130, unit: '1 kg', inStock: true },
+          { id: 'em-5', name: 'Vim Dishwash Bar 500g', image: '/images/product/product-img1.png', price: 42, originalPrice: 48, unit: '500 g', inStock: true, bulkPrices: [{ minQty: 6, price: 38 }, { minQty: 12, price: 35 }] },
+          { id: 'em-9', name: 'Surf Excel Quick Wash 1kg', image: '/images/product/product-img1.png', price: 110, originalPrice: 130, unit: '1 kg', inStock: true, bulkPrices: [{ minQty: 4, price: 100 }], frequentlyOrdered: true },
         ],
       },
       {
@@ -374,8 +383,8 @@ export const vendors: Vendor[] = [
         name: 'Fruits & Vegetables',
         image: '/images/category/vegitable.png',
         products: [
-          { id: 'wf-1', name: 'Organic Spinach 200g', image: '/images/fruits-vegetables/corriander.png', price: 35, originalPrice: 45, unit: '200 g', inStock: true, discount: 22 },
-          { id: 'wf-2', name: 'Avocado 2pcs', image: '/images/category/fruits.png', price: 180, originalPrice: 220, unit: '2 pcs', inStock: true },
+          { id: 'wf-1', name: 'Organic Spinach 200g', image: '/images/fruits-vegetables/corriander.png', price: 35, originalPrice: 45, unit: '200 g', inStock: true, discount: 22, isDeal: true, bulkPrices: [{ minQty: 5, price: 30 }] },
+          { id: 'wf-2', name: 'Avocado 2pcs', image: '/images/category/fruits.png', price: 180, originalPrice: 220, unit: '2 pcs', inStock: true, bulkPrices: [{ minQty: 4, price: 165 }, { minQty: 8, price: 155 }] },
         ],
       },
       {
@@ -479,7 +488,7 @@ export const vendors: Vendor[] = [
         name: 'Dairy',
         image: '/images/category/milk.png',
         products: [
-          { id: 'gr-6', name: 'Nestle Milk 1L', image: '/images/dairy/amul-butter.png', price: 72, originalPrice: 80, unit: '1 L', inStock: true },
+          { id: 'gr-6', name: 'Nestle Milk 1L', image: '/images/dairy/amul-butter.png', price: 72, originalPrice: 80, unit: '1 L', inStock: true, bulkPrices: [{ minQty: 12, price: 68 }, { minQty: 24, price: 64 }], frequentlyOrdered: true },
         ],
       },
     ],

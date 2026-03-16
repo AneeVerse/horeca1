@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Plus, CreditCard, Share2, ShoppingCart, Heart } from 'lucide-react';
+import { CreditCard, Share2, ShoppingCart, Heart } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -47,14 +47,9 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
         <Link
             href={isOutOfStock ? '#' : `/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`}
             className={cn(
-                "bg-white rounded-[16px] md:rounded-[24px] border border-gray-100 overflow-hidden transition-all duration-500 group p-3 min-[340px]:p-4 relative block",
+                "bg-white rounded-[16px] md:rounded-[24px] border border-gray-100 overflow-hidden transition-all duration-500 group p-3 min-[340px]:p-4 relative flex flex-col gap-2 h-full",
                 isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-xl hover:shadow-gray-200/40"
             )}
-            style={{
-                display: 'grid',
-                gridTemplateRows: 'auto 42px 18px 28px 28px 30px 42px',
-                gap: '8px',
-            }}
             onClick={(e) => {
                 if (isOutOfStock) {
                     e.preventDefault();
@@ -128,7 +123,7 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
             </div>
 
             {/* ── ROW 2: TITLE ── */}
-            <div className="overflow-hidden">
+            <div className="overflow-hidden min-h-[42px]">
                 <h3 className={cn(
                     "text-[12px] min-[340px]:text-[14px] md:text-[17px] font-bold leading-tight line-clamp-2",
                     isOutOfStock ? "text-gray-400" : "text-[#181725]"
@@ -138,15 +133,15 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
             </div>
 
             {/* ── ROW 3: PACK SIZE ── */}
-            <div className="overflow-hidden flex items-start">
+            <div className="overflow-hidden flex items-start min-h-[18px]">
                 <p className="text-[10px] min-[340px]:text-[12px] md:text-[14px] text-gray-400 font-medium truncate w-full">
                     {product.packSize}
                 </p>
             </div>
 
             {/* ── ROW 4: BULK TIER 1 ── */}
-            <div className="overflow-hidden flex items-center">
-                {bulk1 ? (
+            {bulk1 && (
+                <div className="overflow-hidden flex items-center min-h-[28px]">
                     <div className={cn(
                         "rounded-[8px] border px-1.5 min-[340px]:px-2 py-0.5 flex items-center justify-between gap-0.5 w-full h-full",
                         isOutOfStock ? "bg-gray-50 border-gray-100" : "bg-[#F1F9F4] border-[#E1F2E8]"
@@ -166,14 +161,12 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
                             </button>
                         )}
                     </div>
-                ) : (
-                    <div className="w-full h-full" />
-                )}
-            </div>
+                </div>
+            )}
 
             {/* ── ROW 5: BULK TIER 2 ── */}
-            <div className="overflow-hidden flex items-center">
-                {bulk2 ? (
+            {bulk2 && (
+                <div className="overflow-hidden flex items-center min-h-[28px]">
                     <div className={cn(
                         "rounded-[8px] border px-1.5 min-[340px]:px-2 py-0.5 flex items-center justify-between gap-0.5 w-full h-full",
                         isOutOfStock ? "bg-gray-50 border-gray-100" : "bg-[#F1F9F4] border-[#E1F2E8]"
@@ -193,13 +186,14 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
                             </button>
                         )}
                     </div>
-                ) : (
-                    <div className="w-full h-full" />
-                )}
-            </div>
+                </div>
+            )}
+
+            {/* ── SPACER: pushes price + cart to bottom ── */}
+            <div className="flex-1" />
 
             {/* ── ROW 6: PRICE ── */}
-            <div className="overflow-hidden flex items-center">
+            <div className="overflow-hidden flex items-center min-h-[30px]">
                 <div className="flex items-baseline gap-0.5">
                     <span className={cn(
                         "text-[15px] min-[340px]:text-[18px] md:text-[22px] font-black",
@@ -212,7 +206,7 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
             </div>
 
             {/* ── ROW 7: ADD TO CART ── */}
-            <div className="overflow-hidden flex items-end">
+            <div className="overflow-hidden flex items-end min-h-[42px]">
                 <button
                     disabled={isOutOfStock}
                     onClick={(e) => handleAdd(e, 1)}

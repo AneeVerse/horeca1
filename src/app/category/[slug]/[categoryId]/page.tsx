@@ -1,16 +1,8 @@
 'use client';
 
-import React, { useState, useMemo, Suspense } from 'react';
+import { useMemo, Suspense } from 'react';
 import Link from 'next/link';
-import {
-    ChevronRight,
-    Search,
-    Star,
-    ArrowLeft,
-    LayoutGrid,
-    List,
-    ChevronDown
-} from 'lucide-react';
+import { Search, Star, ArrowLeft, ChevronDown } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { vendors } from '@/data/vendorData';
@@ -173,9 +165,10 @@ function VendorCategoryPageContent() {
                         </div>
 
                         {/* Product Feed */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
                             {filteredProducts.length > 0 ? (
-                                filteredProducts.map((product: any) => {
+                                <div className="grid grid-cols-1 gap-4">
+                                {filteredProducts.map((product: any) => {
                                     if (!activeCategory) return null;
                                     return (
                                         <VendorProductCard
@@ -188,11 +181,17 @@ function VendorCategoryPageContent() {
                                                 images: [product.image],
                                                 packSize: product.unit,
                                                 stock: product.inStock ? 100 : 0,
-                                                isActive: product.inStock
+                                                isActive: product.inStock,
+                                                bulkPrices: product.bulkPrices || [],
+                                                creditBadge: product.creditBadge ?? vendor.creditEnabled,
+                                                minOrderQuantity: 1,
+                                                isDeal: product.isDeal ?? !!product.discount,
+                                                frequentlyOrdered: product.frequentlyOrdered ?? false,
                                             } as any}
                                         />
                                     );
-                                })
+                                })}
+                                </div>
                             ) : (
                                 <div className="text-center py-20 flex flex-col items-center">
                                     <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">

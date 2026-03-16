@@ -32,14 +32,14 @@ export default function VendorStorePage() {
                 originalPrice: p.originalPrice,
                 stock: p.inStock ? 100 : 0,
                 images: [p.image],
-                bulkPrices: [],
-                creditBadge: vendor.creditEnabled,
+                bulkPrices: p.bulkPrices || [],
+                creditBadge: p.creditBadge ?? vendor.creditEnabled,
                 minOrderQuantity: 1,
                 isActive: p.inStock,
                 createdAt: new Date(),
                 updatedAt: new Date(),
-                isDeal: !!p.discount,
-                frequentlyOrdered: false
+                isDeal: p.isDeal ?? !!p.discount,
+                frequentlyOrdered: p.frequentlyOrdered ?? false
             } as VendorProduct))
         );
     }, [vendor]);
