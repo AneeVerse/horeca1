@@ -103,10 +103,10 @@ export function ShopByStore() {
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-[16px] font-[700] text-[#181725]">Shop By Store</h2>
-                    <button 
+                    <h2 className="text-[16px] md:text-[20px] lg:text-[22px] font-[700] text-[#181725]">Shop By Store</h2>
+                    <button
                         onClick={() => setIsExpanded(!isExpanded)}
-                        className="text-[13px] md:text-[15px] font-semibold text-[#53B175] hover:opacity-80 transition-opacity flex items-center gap-1"
+                        className="text-[13px] md:text-[15px] font-semibold text-[#53B175] hover:opacity-80 transition-opacity flex items-center gap-1 md:hidden"
                     >
                         {isExpanded ? "Show Less" : "See All"}
                     </button>
@@ -116,8 +116,8 @@ export function ShopByStore() {
                 <div className={cn(
                     "gap-x-4 gap-y-6 no-scrollbar transition-all duration-300",
                     isExpanded
-                        ? "grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 pb-4"
-                        : "grid grid-rows-2 grid-flow-col overflow-x-auto auto-cols-[90px] md:auto-cols-[110px] gap-x-3 md:gap-x-4 pb-4"
+                        ? "grid grid-cols-4 sm:grid-cols-5 md:grid-cols-5 lg:grid-cols-10 pb-4"
+                        : "grid grid-rows-2 grid-flow-col overflow-x-auto auto-cols-[90px] gap-x-3 pb-4 md:grid-rows-none md:grid-flow-row md:overflow-x-visible md:auto-cols-auto md:grid-cols-5 md:gap-x-4 lg:grid-cols-10"
                 )}>
                     {visibleStores.map((store, index) => (
                         <div key={`${store.id}-${index}`} className={cn(

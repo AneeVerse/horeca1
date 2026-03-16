@@ -43,23 +43,23 @@ export function CategoryShowcase() {
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-5">
-                    <h2 className="text-[16px] font-bold text-[#181725]">Shop By Category</h2>
+                    <h2 className="text-[16px] md:text-[20px] lg:text-[22px] font-bold text-[#181725]">Shop By Category</h2>
                     <button
                         onClick={() => setIsExpanded(!isExpanded)}
-                        className="text-[#53B175] font-bold text-sm flex items-center gap-1 transition-opacity hover:opacity-80"
+                        className="text-[#53B175] font-bold text-sm flex items-center gap-1 transition-opacity hover:opacity-80 md:hidden"
                     >
                         {isExpanded ? "Show Less" : "See All"}
                     </button>
                 </div>
 
                 {/* Categories Container */}
-                <div 
+                <div
                     ref={scrollRef}
                     className={cn(
                         "gap-x-4 gap-y-6 no-scrollbar transition-all duration-300",
-                        isExpanded 
-                            ? "grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 pb-4" 
-                            : "grid grid-rows-2 grid-flow-col overflow-x-auto auto-cols-[90px] md:auto-cols-[110px] gap-x-3 md:gap-x-4 pb-4 scroll-smooth snap-x"
+                        isExpanded
+                            ? "grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 pb-4"
+                            : "grid grid-rows-2 grid-flow-col overflow-x-auto auto-cols-[90px] gap-x-3 pb-4 scroll-smooth snap-x md:grid-rows-none md:grid-flow-row md:overflow-x-visible md:auto-cols-auto md:grid-cols-6 md:gap-x-4 lg:grid-cols-8 xl:grid-cols-10"
                     )}
                 >
                     {visibleCategories.map((cat, idx) => (

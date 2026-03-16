@@ -35,7 +35,7 @@ export function NewsletterBanner() {
                     <div className="relative z-10 flex flex-col md:flex-row items-end justify-between min-h-[280px] md:min-h-[320px] px-6 md:px-12 pb-10 md:pb-12">
 
                         {/* Left Content */}
-                        <div className="flex flex-col max-w-lg text-center md:text-left w-full md:w-auto pt-16 md:pt-24">
+                        <div className="flex flex-col max-w-lg text-center md:text-left w-full md:w-auto md:max-w-[460px] lg:max-w-lg pt-16 md:pt-24">
                             <h2 className="text-[28px] md:text-[50px] font-bold text-white leading-tight mb-0">
                                 Don&apos;t Miss Out on<br />
                                 Grocery Deals
@@ -64,7 +64,7 @@ export function NewsletterBanner() {
                         </div>
 
                         {/* Right Image */}
-                        <div className="hidden md:block absolute right-4 bottom-6 w-[350px] lg:w-[420px]">
+                        <div className="hidden md:block absolute right-4 bottom-6 w-[180px] lg:w-[350px] xl:w-[420px]">
                             <img
                                 src="/images/poster2/poster-right-img.png"
                                 alt="Grocery basket"

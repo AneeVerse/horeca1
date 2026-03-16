@@ -9,7 +9,7 @@ export function Collections() {
         <section className="w-full py-4 bg-white">
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-[16px] md:text-[18px] font-bold text-[#181725]">Collections</h2>
+                    <h2 className="text-[16px] md:text-[18px] lg:text-[22px] font-bold text-[#181725]">Collections</h2>
                     <span className="text-[12px] font-semibold text-[#299e60]">See all</span>
                 </div>
 

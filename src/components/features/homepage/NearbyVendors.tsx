@@ -13,13 +13,13 @@ export function NearbyVendors() {
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
                 <div className="flex items-center justify-between mb-4">
                     <div>
-                        <h2 className="text-[16px] md:text-[18px] font-bold text-[#181725]">Vendors Near You</h2>
+                        <h2 className="text-[16px] md:text-[18px] lg:text-[22px] font-bold text-[#181725]">Vendors Near You</h2>
                         <p className="text-[11px] md:text-[12px] text-gray-400 font-medium mt-0.5">Delivering to your area</p>
                     </div>
                     <span className="text-[12px] font-semibold text-[#299e60]">See all</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
                     {vendors.map((vendor) => (
                         <Link
                             key={vendor.id}

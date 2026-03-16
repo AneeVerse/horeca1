@@ -260,10 +260,26 @@ export function Navbar() {
                                         </div>
                                         <input
                                             type="text"
+                                            value={navSearchQuery}
+                                            onChange={(e) => setNavSearchQuery(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && navSearchQuery.trim()) {
+                                                    router.push(`/search?q=${encodeURIComponent(navSearchQuery.trim())}`);
+                                                    setNavSearchQuery('');
+                                                }
+                                            }}
                                             placeholder="Search for a product or brand"
                                             className="flex-1 bg-transparent text-[var(--text-base)] outline-none px-3 placeholder:text-gray-400"
                                         />
-                                        <button className="bg-primary p-2.5 rounded-full text-white hover:bg-primary-dark transition-all shadow-md">
+                                        <button
+                                            onClick={() => {
+                                                if (navSearchQuery.trim()) {
+                                                    router.push(`/search?q=${encodeURIComponent(navSearchQuery.trim())}`);
+                                                    setNavSearchQuery('');
+                                                }
+                                            }}
+                                            className="bg-primary p-2.5 rounded-full text-white hover:bg-primary-dark transition-all shadow-md"
+                                        >
                                             <Search size={20} />
                                         </button>
                                     </div>
@@ -271,7 +287,7 @@ export function Navbar() {
                             )}
 
                             <div className="flex items-center gap-6">
-                                <div className="flex flex-col items-end">
+                                <div className="hidden lg:flex flex-col items-end">
                                     <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Support</span>
                                     <Link href="/contact" className="text-[15px] font-black text-text hover:text-primary transition-colors">+91-1234567890</Link>
                                 </div>
