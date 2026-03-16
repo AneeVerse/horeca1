@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronLeft, Plus, Minus, ShoppingCart, ListOrdered, Heart, Clock, ChevronRight, Trash2, Edit2 } from 'lucide-react';
+import { ChevronLeft, Plus, Minus, ShoppingCart, ListOrdered, Store } from 'lucide-react';
 import { MOCK_ORDER_LISTS, MOCK_VENDORS, MOCK_VENDOR_PRODUCTS } from '@/lib/mockData';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
@@ -170,71 +170,115 @@ export default function OrderListDetailPage() {
                 </div>
             </div>
 
-            {/* Items Table */}
+            {/* Items Table — grouped by vendor when multi-vendor */}
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-4">
-                <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                    {/* Column Headers */}
-                    <div className="grid grid-cols-[1fr_35px_75px_55px] min-[400px]:grid-cols-[1fr_45px_90px_70px] md:grid-cols-[1fr_100px_100px_120px] gap-1 min-[400px]:gap-2 px-2 min-[400px]:px-4 py-3 bg-gray-50 border-b border-gray-100 uppercase tracking-tighter">
-                        <span className="text-[9px] min-[400px]:text-[11px] font-bold text-gray-500">Item</span>
-                        <span className="text-[9px] min-[400px]:text-[11px] font-bold text-gray-500 text-center">Last</span>
-                        <span className="text-[9px] min-[400px]:text-[11px] font-bold text-gray-500 text-center">Qty</span>
-                        <span className="text-[9px] min-[400px]:text-[11px] font-bold text-gray-500 text-right">Total</span>
-                    </div>
+                {(() => {
+                    // Group items by vendorId (from the product)
+                    const vendorGroups: { vendorId: string; vendorName: string; vendorLogo?: string; items: typeof orderList.items }[] = [];
+                    const seen = new Set<string>();
+                    orderList.items.forEach(item => {
+                        const vid = item.product?.vendorId || orderList.vendorId;
+                        if (!seen.has(vid)) {
+                            seen.add(vid);
+                            vendorGroups.push({
+                                vendorId: vid,
+                                vendorName: item.product?.vendorName || orderList.vendorName,
+                                vendorLogo: item.product?.vendorLogo || orderList.vendorLogo,
+                                items: []
+                            });
+                        }
+                        vendorGroups.find(g => g.vendorId === vid)!.items.push(item);
+                    });
 
-                    {/* Items */}
-                    {orderList.items.map((item) => {
-                        const qty = quantities[item.productId] || 0;
-                        const itemTotal = item.product.price * qty;
+                    const isMultiVendor = vendorGroups.length > 1;
 
-                        return (
-                            <div key={item.productId} className="grid grid-cols-[1fr_35px_75px_55px] min-[400px]:grid-cols-[1fr_45px_90px_70px] md:grid-cols-[1fr_100px_100px_120px] gap-1 min-[400px]:gap-2 px-2 min-[400px]:px-4 py-3 border-b border-gray-50 items-center hover:bg-gray-50/50 transition-colors">
-                                {/* Product Info */}
-                                <div className="flex items-center gap-1.5 min-[400px]:gap-3 min-w-0">
-                                    <div className="w-8 h-8 min-[400px]:w-10 min-[400px]:h-10 bg-gray-50 rounded-lg flex items-center justify-center shrink-0 p-1">
-                                        <img src={item.product.images[0] || '/images/recom-product/product-img10.png'} alt={item.product.name} className="w-full h-full object-contain" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-[11px] min-[400px]:text-[13px] font-bold text-[#181725] leading-tight line-clamp-2 min-[400px]:line-clamp-none">{item.product.name}</p>
-                                        <p className="text-[9px] min-[400px]:text-[10px] text-gray-400 mt-0.5">₹{item.product.price}</p>
-                                    </div>
-                                </div>
-
-                                {/* Last Ordered Qty */}
-                                <div className="text-center">
-                                    <span className="text-[11px] min-[400px]:text-[12px] text-gray-400 font-bold">
-                                        {item.lastOrderedQty || '-'}
-                                    </span>
-                                </div>
-
-                                {/* Quantity Selector */}
-                                <div className="flex items-center justify-center">
-                                    <div className="flex items-center border border-gray-100 rounded-lg overflow-hidden bg-white">
-                                        <button onClick={() => updateQty(item.productId, -1)} className="w-6 h-6 min-[400px]:w-7 min-[400px]:h-7 flex items-center justify-center hover:bg-gray-50 active:bg-gray-100">
-                                            <Minus size={10} className="text-gray-400" />
-                                        </button>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            value={qty}
-                                            onChange={(e) => setQty(item.productId, parseInt(e.target.value) || 0)}
-                                            className="w-6 h-6 min-[400px]:w-8 min-[400px]:h-7 text-center text-[11px] min-[400px]:text-[12px] font-bold text-[#181725] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-transparent"
-                                        />
-                                        <button onClick={() => updateQty(item.productId, 1)} className="w-6 h-6 min-[400px]:w-7 min-[400px]:h-7 flex items-center justify-center hover:bg-gray-50 active:bg-gray-100">
-                                            <Plus size={10} className="text-[#53B175]" />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Total */}
-                                <div className="text-right">
-                                    <span className={`text-[11px] min-[400px]:text-[13px] font-black ${qty > 0 ? 'text-[#181725]' : 'text-gray-200'}`}>
-                                        {qty > 0 ? `₹${itemTotal.toLocaleString('en-IN')}` : '—'}
-                                    </span>
-                                </div>
+                    const ItemTable = ({ items }: { items: typeof orderList.items }) => (
+                        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                            {/* Column Headers */}
+                            <div className="grid grid-cols-[1fr_35px_75px_55px] min-[400px]:grid-cols-[1fr_45px_90px_70px] md:grid-cols-[1fr_100px_100px_120px] gap-1 min-[400px]:gap-2 px-2 min-[400px]:px-4 py-3 bg-gray-50 border-b border-gray-100 uppercase tracking-tighter">
+                                <span className="text-[9px] min-[400px]:text-[11px] font-bold text-gray-500">Item</span>
+                                <span className="text-[9px] min-[400px]:text-[11px] font-bold text-gray-500 text-center">Last</span>
+                                <span className="text-[9px] min-[400px]:text-[11px] font-bold text-gray-500 text-center">Qty</span>
+                                <span className="text-[9px] min-[400px]:text-[11px] font-bold text-gray-500 text-right">Total</span>
                             </div>
-                        );
-                    })}
-                </div>
+                            {items.map((item) => {
+                                const qty = quantities[item.productId] || 0;
+                                const itemTotal = item.product.price * qty;
+                                return (
+                                    <div key={item.productId} className="grid grid-cols-[1fr_35px_75px_55px] min-[400px]:grid-cols-[1fr_45px_90px_70px] md:grid-cols-[1fr_100px_100px_120px] gap-1 min-[400px]:gap-2 px-2 min-[400px]:px-4 py-3 border-b border-gray-50 items-center hover:bg-gray-50/50 transition-colors">
+                                        {/* Product Info */}
+                                        <div className="flex items-center gap-1.5 min-[400px]:gap-3 min-w-0">
+                                            <div className="w-8 h-8 min-[400px]:w-10 min-[400px]:h-10 bg-gray-50 rounded-lg flex items-center justify-center shrink-0 p-1">
+                                                <img src={item.product.images[0] || '/images/recom-product/product-img10.png'} alt={item.product.name} className="w-full h-full object-contain" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-[11px] min-[400px]:text-[13px] font-bold text-[#181725] leading-tight line-clamp-2 min-[400px]:line-clamp-none">{item.product.name}</p>
+                                                <p className="text-[9px] min-[400px]:text-[10px] text-gray-400 mt-0.5">₹{item.product.price}</p>
+                                            </div>
+                                        </div>
+                                        {/* Last Ordered Qty */}
+                                        <div className="text-center">
+                                            <span className="text-[11px] min-[400px]:text-[12px] text-gray-400 font-bold">
+                                                {item.lastOrderedQty || '-'}
+                                            </span>
+                                        </div>
+                                        {/* Quantity Selector */}
+                                        <div className="flex items-center justify-center">
+                                            <div className="flex items-center border border-gray-100 rounded-lg overflow-hidden bg-white">
+                                                <button onClick={() => updateQty(item.productId, -1)} className="w-6 h-6 min-[400px]:w-7 min-[400px]:h-7 flex items-center justify-center hover:bg-gray-50 active:bg-gray-100">
+                                                    <Minus size={10} className="text-gray-400" />
+                                                </button>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={qty}
+                                                    onChange={(e) => setQty(item.productId, parseInt(e.target.value) || 0)}
+                                                    className="w-6 h-6 min-[400px]:w-8 min-[400px]:h-7 text-center text-[11px] min-[400px]:text-[12px] font-bold text-[#181725] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-transparent"
+                                                />
+                                                <button onClick={() => updateQty(item.productId, 1)} className="w-6 h-6 min-[400px]:w-7 min-[400px]:h-7 flex items-center justify-center hover:bg-gray-50 active:bg-gray-100">
+                                                    <Plus size={10} className="text-[#53B175]" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {/* Total */}
+                                        <div className="text-right">
+                                            <span className={`text-[11px] min-[400px]:text-[13px] font-black ${qty > 0 ? 'text-[#181725]' : 'text-gray-200'}`}>
+                                                {qty > 0 ? `₹${itemTotal.toLocaleString('en-IN')}` : '—'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    );
+
+                    if (!isMultiVendor) {
+                        return <ItemTable items={vendorGroups[0]?.items || orderList.items} />;
+                    }
+
+                    // Multi-vendor: render each vendor group with a header
+                    return (
+                        <div className="space-y-4">
+                            {vendorGroups.map(group => (
+                                <div key={group.vendorId}>
+                                    {/* Vendor section header */}
+                                    <div className="flex items-center gap-2.5 mb-2 px-1">
+                                        <div className="w-7 h-7 rounded-lg border border-gray-100 p-0.5 bg-white shrink-0 overflow-hidden">
+                                            {group.vendorLogo ? (
+                                                <img src={group.vendorLogo} alt={group.vendorName} className="w-full h-full object-contain" />
+                                            ) : (
+                                                <Store size={16} className="text-gray-400 m-auto" />
+                                            )}
+                                        </div>
+                                        <span className="text-[13px] font-extrabold text-[#181725]">{group.vendorName}</span>
+                                        <span className="text-[11px] text-gray-400 font-medium">{group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
+                                    </div>
+                                    <ItemTable items={group.items} />
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* Fixed Bottom CTA Bar */}

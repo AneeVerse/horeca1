@@ -57,9 +57,34 @@ export default function OrderListsPage() {
         localStorage.setItem('horeca_order_lists_all', JSON.stringify(merged));
     }, []);
 
-    const handleCreateList = (data: { name: string; vendorId: string; items: { productId: string; quantity: number }[] }) => {
-        const vendor = MOCK_VENDORS.find(v => v.id === data.vendorId);
-        if (!vendor) return;
+    const handleCreateList = (data: { name: string; items: { productId: string; quantity: number; vendorId: string }[] }) => {
+        // Derive unique vendors from the items
+        const vendorIds = [...new Set(data.items.map(i => i.vendorId))];
+        const vendors = vendorIds
+            .map(id => MOCK_VENDORS.find(v => v.id === id))
+            .filter((v): v is NonNullable<typeof v> => !!v);
+
+        if (vendors.length === 0) return;
+
+        const primaryVendor = vendors[0];
+        // Display name: single vendor name OR "VendorName +N more"
+        const vendorName = vendors.length === 1
+            ? vendors[0].name
+            : `${vendors[0].name} +${vendors.length - 1} more`;
+
+        // Map each item to its product using per-item vendorId
+        const mappedItems = data.items
+            .map(item => {
+                const product = (MOCK_VENDOR_PRODUCTS[item.vendorId] || []).find(p => p.id === item.productId);
+                if (!product) return null;
+                return {
+                    productId: item.productId,
+                    product,
+                    defaultQty: item.quantity,
+                    lastOrderedQty: item.quantity
+                };
+            })
+            .filter((item): item is NonNullable<typeof item> => item !== null);
 
         let updated: OrderList[];
 
@@ -67,20 +92,12 @@ export default function OrderListsPage() {
             const updatedList: OrderList = {
                 ...editingList,
                 name: data.name,
-                vendorName: vendor.name,
-                vendorLogo: vendor.logo,
-                items: data.items.map(item => {
-                    const product = (MOCK_VENDOR_PRODUCTS[data.vendorId] || []).find(p => p.id === item.productId);
-                    return {
-                        productId: item.productId,
-                        product: product!,
-                        defaultQty: item.quantity,
-                        lastOrderedQty: item.quantity
-                    };
-                }),
+                vendorId: primaryVendor.id,
+                vendorName,
+                vendorLogo: primaryVendor.logo,
+                items: mappedItems,
                 updatedAt: new Date()
             };
-
             updated = allLists.map(l => l.id === editingList.id ? updatedList : l);
             toast.success(`List "${data.name}" updated!`);
             setEditingList(null);
@@ -89,23 +106,14 @@ export default function OrderListsPage() {
                 id: `custom-${Date.now()}`,
                 name: data.name,
                 userId: 'u1',
-                vendorId: data.vendorId,
-                vendorName: vendor.name,
-                vendorLogo: vendor.logo,
-                items: data.items.map(item => {
-                    const product = (MOCK_VENDOR_PRODUCTS[data.vendorId] || []).find(p => p.id === item.productId);
-                    return {
-                        productId: item.productId,
-                        product: product!,
-                        defaultQty: item.quantity,
-                        lastOrderedQty: item.quantity
-                    };
-                }),
+                vendorId: primaryVendor.id,
+                vendorName,
+                vendorLogo: primaryVendor.logo,
+                items: mappedItems,
                 createdAt: new Date(),
                 updatedAt: new Date(),
                 lastUsed: new Date()
             };
-
             updated = [...allLists, newList];
             toast.success(`List "${data.name}" created!`);
         }
@@ -185,12 +193,20 @@ export default function OrderListsPage() {
                                 href={`/order-lists/${list.id}`}
                                 className="flex items-center gap-2 min-[340px]:gap-4 bg-white rounded-2xl p-3 min-[340px]:p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all group"
                             >
-                                {/* Vendor Logo */}
-                                <div className="w-10 h-10 min-[340px]:w-12 min-[340px]:h-12 bg-gray-50 rounded-xl flex items-center justify-center p-1.5 shrink-0 border border-gray-100">
-                                    {list.vendorLogo ? (
-                                        <img src={list.vendorLogo} alt={list.vendorName} className="w-full h-full object-contain" />
-                                    ) : (
-                                        <ListOrdered size={20} className="text-gray-400" />
+                                {/* Vendor Logo — stacked for multi-vendor lists */}
+                                <div className="relative w-10 h-10 min-[340px]:w-12 min-[340px]:h-12 shrink-0">
+                                    <div className="w-full h-full bg-gray-50 rounded-xl flex items-center justify-center p-1.5 border border-gray-100">
+                                        {list.vendorLogo ? (
+                                            <img src={list.vendorLogo} alt={list.vendorName} className="w-full h-full object-contain" />
+                                        ) : (
+                                            <ListOrdered size={20} className="text-gray-400" />
+                                        )}
+                                    </div>
+                                    {/* Badge for multi-vendor */}
+                                    {list.vendorName.includes(' +') && (
+                                        <span className="absolute -top-1 -right-1 bg-[#53B175] text-white text-[8px] font-black px-1 py-0.5 rounded-full leading-none">
+                                            {list.vendorName.match(/\+(\d+)/)?.[1] ? `+${list.vendorName.match(/\+(\d+)/)![1]}` : ''}
+                                        </span>
                                     )}
                                 </div>
 
