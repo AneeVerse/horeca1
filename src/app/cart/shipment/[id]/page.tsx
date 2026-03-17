@@ -2,22 +2,20 @@
 
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, Search, ChevronRight, Plus, Minus, FileText, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Search, ChevronRight, Plus, Minus, FileText, AlertTriangle, Home, Check } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
+import Link from 'next/link';
 
 const SavingsDemo = 131;
-
-// --- DEMO DATA REMOVED ---
 
 export default function ShipmentDetailPage() {
     const router = useRouter();
     const { id } = useParams();
-    const { groups, removeFromCart, updateQuantity } = useCart();
+    const { cart, groups, removeFromCart, updateQuantity } = useCart();
     const [demoQuantities, setDemoQuantities] = React.useState<Record<string, number>>({});
+    const [orderPlaced, setOrderPlaced] = React.useState(false);
 
-    // Find shipment data
     const shipment = React.useMemo(() => {
-        // Option 1: View all items (unified cart shipment)
         if (id === 'cart-shipment') {
             const allItems = groups.flatMap(g =>
                 g.items
@@ -40,7 +38,6 @@ export default function ShipmentDetailPage() {
             };
         }
 
-        // Option 2: View specific vendor shipment
         const targetGroup = groups.find(g => g.vendorId === id);
         if (targetGroup) {
             return {
@@ -84,7 +81,73 @@ export default function ShipmentDetailPage() {
     const shortfall = minOrder - itemTotal;
     const isDemo = id !== 'cart-shipment';
 
-    // --- EMPTY STATE ---
+    const handleProceedToPay = () => {
+        // Create order for only this vendor's items
+        const newOrder = {
+            id: `ORD-${Date.now()}-${shipment.vendorId}`,
+            status: 'Order Placed',
+            date: `Placed at ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
+            price: totalPay,
+            items: shipment.items.map((item) => ({
+                id: item.id,
+                image: item.image,
+                fullProduct: cart.find(ci => String(ci.productId) === String(item.id))?.product
+            })),
+            canRate: false,
+            vendor: shipment.vendor,
+        };
+
+        // Save to localStorage
+        try {
+            const existingOrders = JSON.parse(localStorage.getItem('horeca_orders') || '[]');
+            localStorage.setItem('horeca_orders', JSON.stringify([newOrder, ...existingOrders]));
+        } catch (e) {
+            console.error('Failed to save order:', e);
+        }
+
+        // Remove only this vendor's items from cart
+        shipment.items.forEach(item => {
+            removeFromCart(item.id);
+        });
+
+        setOrderPlaced(true);
+    };
+
+    // --- ORDER SUCCESS SCREEN ---
+    if (orderPlaced) {
+        return (
+            <div className="min-h-screen bg-white flex flex-col items-center justify-center px-8 text-center animate-in fade-in duration-500">
+                <div className="w-[120px] h-[120px] md:w-[150px] md:h-[150px] bg-[#53B175]/10 rounded-full flex items-center justify-center mb-8 md:mb-10 relative">
+                    <div className="absolute inset-0 bg-[#53B175]/5 rounded-full animate-ping duration-[2000ms]" />
+                    <Check size={60} className="text-[#53B175] relative z-10 md:!w-20 md:!h-20" strokeWidth={3} />
+                </div>
+                <h1 className="text-[28px] md:text-[40px] font-black text-[#181725] leading-tight mb-4 tracking-tight">
+                    Order Placed!
+                </h1>
+                <p className="text-[16px] md:text-[18px] text-[#7C7C7C] font-medium mb-3 max-w-[450px]">
+                    Your order from <span className="font-bold text-[#181725]">{shipment.vendor}</span> has been placed successfully.
+                </p>
+                <p className="text-[14px] text-primary font-bold mb-12">
+                    Total: ₹{totalPay.toFixed(2)}
+                </p>
+                <div className="w-full max-w-[400px] flex flex-col gap-4">
+                    <button
+                        onClick={() => router.push('/orders')}
+                        className="w-full bg-[#53B175] text-white py-[18px] md:py-[22px] rounded-[18px] font-black text-[18px] shadow-xl shadow-green-100/80 hover:bg-[#48a068] transition-all hover:-translate-y-0.5"
+                    >
+                        Track Your Order
+                    </button>
+                    <button
+                        onClick={() => router.push('/cart')}
+                        className="w-full text-[#181725] font-black text-[18px] py-4 hover:bg-gray-50 rounded-xl transition-colors"
+                    >
+                        Back to Cart
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (shipment.items.length === 0) {
         return (
             <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
@@ -92,7 +155,7 @@ export default function ShipmentDetailPage() {
                 <img src="/images/empty-cart.png" alt="Empty Cart" className="w-[180px] mb-8 opacity-20" />
                 <h2 className="text-[20px] font-bold text-[#181725] mb-2">No items in this shipment</h2>
                 <p className="text-[#7C7C7C] text-center mb-8">This vendor's shipment is empty. Start adding some products!</p>
-                <button onClick={() => router.push('/')} className="bg-[#53B175] text-white px-12 py-4 rounded-xl font-bold">
+                <button onClick={() => router.push('/')} className="bg-[#53B175] text-white px-12 py-4 rounded-xl font-bold hover:bg-[#48a068] transition-colors">
                     Start Shopping
                 </button>
             </div>
@@ -100,12 +163,12 @@ export default function ShipmentDetailPage() {
     }
 
     return (
-        <div className="min-h-screen bg-[#F9F9F9] flex flex-col pb-28 font-sans">
+        <div className="min-h-screen bg-[#F9F9F9] flex flex-col pb-28 md:pb-16 font-sans">
             {/* Top Branding Bar */}
-            <div className="w-full h-[12px] bg-[#53B175] sticky top-0 z-[110]" />
+            <div className="w-full h-[12px] bg-[#53B175] sticky top-0 z-[110] md:hidden" />
 
-            {/* Header */}
-            <header className="flex items-center justify-between px-4 h-[60px] bg-white border-b border-[#EEEEEE] sticky top-[12px] z-[100]">
+            {/* Mobile Header */}
+            <header className="md:hidden flex items-center justify-between px-4 h-[60px] bg-white border-b border-[#EEEEEE] sticky top-[12px] z-[100]">
                 <button onClick={() => router.back()} className="p-2 -ml-2">
                     <ArrowLeft size={24} className="text-[#181725]" />
                 </button>
@@ -115,85 +178,198 @@ export default function ShipmentDetailPage() {
                 </button>
             </header>
 
-            {/* Content Container */}
-            <div className="flex-1 px-4 py-4 space-y-4">
-
-                {/* Store Header Card */}
-                <div className="bg-white rounded-[12px] border border-[#E2E2E2] p-4 flex items-start justify-between">
-                    <div className="flex-1 pr-4">
-                        <h3 className="text-[17px] font-bold text-[#181725] leading-tight">{shipment.vendor}</h3>
-                        <p className="text-[12px] text-[#7C7C7C] font-medium mt-1 leading-tight">
-                            Items from this vendor will be packed separately
-                        </p>
+            {/* Desktop Header */}
+            <div className="hidden md:block bg-[#F7F8FA] border-b border-gray-100">
+                <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-5">
+                    <div className="flex items-center gap-2 text-[13px] text-text-muted mb-3">
+                        <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1"><Home size={14} /><span>Home</span></Link>
+                        <ChevronRight size={12} />
+                        <Link href="/cart" className="hover:text-primary transition-colors">Cart</Link>
+                        <ChevronRight size={12} />
+                        <span className="text-text font-semibold">{shipment.vendor}</span>
                     </div>
-                    <button className="flex items-center gap-1.5 border border-[#EEEEEE] px-3 py-1 rounded-full text-[11px] font-bold text-[#181725] bg-white whitespace-nowrap shadow-sm active:scale-95 transition-transform">
-                        Visit store <ChevronRight size={13} strokeWidth={3} />
-                    </button>
+                    <h1 className="text-[28px] font-black text-text tracking-tight">Shipment Details</h1>
                 </div>
+            </div>
 
-                {/* Main Shipment Card */}
-                <div className="bg-white rounded-[12px] border border-[#E2E2E2] overflow-hidden">
-                        <div className="divide-y divide-[#F2F3F2]">
-                            {shipment.items.map((item) => (
-                                <div key={item.id} className="p-4 flex items-start gap-4">
-                                    <div className="flex items-center">
-                                        <div className="w-[68px] h-[68px] rounded-full bg-white flex items-center justify-center shrink-0">
+            {/* Content Container */}
+            <div className="flex-1 px-4 py-4 space-y-4 md:max-w-[var(--container-max)] md:mx-auto md:px-[var(--container-padding)] md:pt-8 md:w-full">
+                <div className="md:grid md:grid-cols-[1fr_400px] md:gap-10 md:items-start">
+                    {/* Left Column - Items */}
+                    <div className="space-y-4 md:space-y-5">
+                        {/* Store Header Card */}
+                        <div className="bg-white rounded-[12px] md:rounded-2xl border border-[#E2E2E2] p-4 md:px-7 md:py-5 flex items-start justify-between">
+                            <div className="flex-1 pr-4">
+                                <h3 className="text-[17px] md:text-[20px] font-bold text-[#181725] leading-tight">{shipment.vendor}</h3>
+                                <p className="text-[12px] md:text-[13px] text-[#7C7C7C] font-medium mt-1 leading-tight">
+                                    Items from this vendor will be packed separately
+                                </p>
+                            </div>
+                            <button className="flex items-center gap-1.5 border border-[#EEEEEE] px-3 py-1 rounded-full text-[11px] md:text-[12px] font-bold text-[#181725] bg-white whitespace-nowrap shadow-sm active:scale-95 hover:border-primary/30 hover:text-primary transition-all">
+                                Visit store <ChevronRight size={13} strokeWidth={3} />
+                            </button>
+                        </div>
+
+                        {/* Mobile Items Card */}
+                        <div className="md:hidden bg-white rounded-[12px] border border-[#E2E2E2] overflow-hidden">
+                            <div className="divide-y divide-[#F2F3F2]">
+                                {shipment.items.map((item) => (
+                                    <div key={item.id} className="p-4 flex items-start gap-4">
+                                        <div className="flex items-center">
+                                            <div className="w-[68px] h-[68px] rounded-full bg-white flex items-center justify-center shrink-0">
+                                                <img src={item.image} alt={item.name} className="max-w-full max-h-full object-contain" />
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between">
+                                                <div className="min-w-0 flex-1">
+                                                    <h4 className="text-[16px] font-bold text-[#181725] leading-tight">{item.name}</h4>
+                                                    <p className="text-[12px] text-[#7C7C7C] font-medium mt-1">{item.size} * {item.pcs} pc</p>
+                                                    <p className="text-[11px] text-[#53B175] font-bold mt-1">From {shipment.vendor}</p>
+                                                </div>
+                                                <div className="text-right pl-2 shrink-0">
+                                                    <span className="text-[15px] font-bold text-[#181725]">₹{item.price}/pc</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center justify-end mt-2">
+                                                <div className="flex items-center border border-[#E2E2E2] rounded-full px-2 py-0.5 bg-white scale-90 origin-right">
+                                                    <button
+                                                        onClick={() => handleQuantityChange(item.id, item.vendorId, -1, item.pcs)}
+                                                        className="w-[28px] h-[28px] flex items-center justify-center text-[#53B175] active:scale-75 transition-transform"
+                                                    >
+                                                        <Minus size={16} strokeWidth={3} />
+                                                    </button>
+                                                    <div className="w-[24px] flex items-center justify-center">
+                                                        <span className="text-[14px] font-bold text-[#181725]">{item.pcs}</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleQuantityChange(item.id, item.vendorId, 1, item.pcs)}
+                                                        className="w-[28px] h-[28px] flex items-center justify-center text-[#53B175] active:scale-75 transition-transform"
+                                                    >
+                                                        <Plus size={16} strokeWidth={3} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Desktop Items - Full Width Inline Layout */}
+                        <div className="hidden md:block bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
+                            <div className="divide-y divide-[#F5F5F5]">
+                                {shipment.items.map((item) => (
+                                    <div key={item.id} className="px-7 py-5 flex items-center gap-5 hover:bg-gray-50/40 transition-colors group">
+                                        {/* Product Image */}
+                                        <div className="w-[72px] h-[72px] rounded-2xl bg-[#F7F8F7] flex items-center justify-center shrink-0 border border-gray-100 p-2 group-hover:border-primary/10 transition-colors">
                                             <img src={item.image} alt={item.name} className="max-w-full max-h-full object-contain" />
                                         </div>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-start justify-between">
-                                            <div className="min-w-0 flex-1">
-                                                <h4 className="text-[16px] font-bold text-[#181725] leading-tight">{item.name}</h4>
-                                                <p className="text-[12px] text-[#7C7C7C] font-medium mt-1">{item.size} * {item.pcs} pc</p>
-                                                <p className="text-[11px] text-[#53B175] font-bold mt-1">From {shipment.vendor}</p>
-                                            </div>
-                                            <div className="text-right pl-2 shrink-0">
-                                                <span className="text-[15px] font-bold text-[#181725]">₹{item.price}/pc</span>
-                                            </div>
+
+                                        {/* Product Info */}
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="text-[15px] font-bold text-[#181725] leading-snug line-clamp-1">{item.name}</h4>
+                                            <p className="text-[13px] text-gray-400 font-medium mt-0.5">{item.size} · {item.pcs} pc</p>
+                                            <p className="text-[12px] text-primary font-bold mt-0.5">From {shipment.vendor}</p>
                                         </div>
-                                        <div className="flex items-center justify-end mt-2">
-                                            <div className="flex items-center border border-[#E2E2E2] rounded-full px-2 py-0.5 bg-white scale-90 origin-right">
-                                                <button
-                                                    onClick={() => handleQuantityChange(item.id, item.vendorId, -1, item.pcs)}
-                                                    className="w-[28px] h-[28px] flex items-center justify-center text-[#53B175] active:scale-75 transition-transform"
-                                                >
-                                                    <Minus size={16} strokeWidth={3} />
-                                                </button>
-                                                <div className="w-[24px] flex items-center justify-center">
-                                                    <span className="text-[14px] font-bold text-[#181725]">{item.pcs}</span>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleQuantityChange(item.id, item.vendorId, 1, item.pcs)}
-                                                    className="w-[28px] h-[28px] flex items-center justify-center text-[#53B175] active:scale-75 transition-transform"
-                                                >
-                                                    <Plus size={16} strokeWidth={3} />
-                                                </button>
+
+                                        {/* Quantity Controls */}
+                                        <div className="flex items-center gap-0 border border-gray-200 rounded-xl overflow-hidden shrink-0">
+                                            <button
+                                                onClick={() => handleQuantityChange(item.id, item.vendorId, -1, item.pcs)}
+                                                className="w-10 h-10 flex items-center justify-center text-red-400 hover:bg-red-50 transition-colors"
+                                            >
+                                                <Minus size={16} strokeWidth={2.5} />
+                                            </button>
+                                            <div className="w-10 h-10 flex items-center justify-center border-x border-gray-200">
+                                                <span className="text-[15px] font-bold text-[#181725]">{item.pcs}</span>
                                             </div>
+                                            <button
+                                                onClick={() => handleQuantityChange(item.id, item.vendorId, 1, item.pcs)}
+                                                className="w-10 h-10 flex items-center justify-center text-primary hover:bg-green-50 transition-colors"
+                                            >
+                                                <Plus size={16} strokeWidth={2.5} />
+                                            </button>
+                                        </div>
+
+                                        {/* Price */}
+                                        <div className="text-right shrink-0 w-[80px]">
+                                            <span className="text-[16px] font-black text-[#181725]">₹{(item.price * item.pcs).toFixed(0)}</span>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Minimum Order Warning - Mobile */}
+                        <div className="md:hidden bg-white rounded-[10px] border border-[#E2E2E2] px-4 py-3 flex items-center gap-3">
+                            <AlertTriangle size={24} className="text-[#555555] shrink-0" fill="#555555" stroke="white" strokeWidth={2.5} />
+                            <p className="text-[12px] text-[#181725] font-bold leading-snug">
+                                Minimum order for selected items is ₹600. Add <span className="text-[#181725] font-black">₹{Math.max(0, Math.round(shortfall))}</span> more to proceed.
+                            </p>
                         </div>
                     </div>
 
-                {/* Minimum Order Warning Box */}
-                <div className="bg-white rounded-[10px] border border-[#E2E2E2] px-4 py-3 flex items-center gap-3">
-                    <AlertTriangle size={24} className="text-[#555555] shrink-0" fill="#555555" stroke="white" strokeWidth={2.5} />
-                    <p className="text-[12px] text-[#181725] font-bold leading-snug">
-                        Minimum order for selected items is ₹600. Add <span className="text-[#181725] font-black">₹{Math.max(0, Math.round(shortfall))}</span> more to proceed.
-                    </p>
+                    {/* Right Column - Bill Summary (Desktop) */}
+                    <div className="hidden md:block sticky top-[80px] space-y-5">
+                        <div className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
+                            <div className="px-7 py-5 flex items-center gap-3 border-b border-[#F0F0F0]">
+                                <div className="w-[38px] h-[38px] rounded-xl border border-[#E2E2E2] flex items-center justify-center shrink-0 bg-gray-50">
+                                    <FileText size={18} className="text-[#181725]" />
+                                </div>
+                                <span className="text-[17px] font-bold text-[#181725]">Bill Summary</span>
+                            </div>
+                            <div className="px-7 py-6 space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[15px] text-[#4C4F4D] font-medium">Item Total</span>
+                                    <span className="text-[15px] font-bold text-[#181725]">₹ {itemTotal}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[15px] text-[#4C4F4D] font-medium">Delivery Fee</span>
+                                    <span className="text-[15px] font-bold text-[#181725]">₹ {deliveryFee}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[15px] text-[#4C4F4D] font-medium">Handling Fee</span>
+                                    <span className="text-[15px] font-bold text-[#181725]">₹ {handlingFee}</span>
+                                </div>
+                            </div>
+                            <div className="px-7 pb-6">
+                                <div className="border-t border-dashed border-[#D0D0D0] pt-5">
+                                    <div className="flex justify-between items-baseline">
+                                        <span className="text-[18px] font-bold text-[#181725]">To Pay</span>
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-[24px] font-black text-[#181725]">₹ {totalPay.toFixed(2)}</span>
+                                            <span className="text-[12px] text-[#7C7C7C] font-semibold line-through">₹{(totalPay + SavingsDemo).toFixed(0)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={handleProceedToPay}
+                            className="w-full bg-[#53B175] text-white py-5 rounded-2xl font-bold text-[18px] transition-all hover:bg-[#48a068] active:scale-[0.98] shadow-lg shadow-[#53B175]/20 flex items-center justify-center gap-2"
+                        >
+                            Proceed to pay · ₹{totalPay.toFixed(0)}
+                        </button>
+
+                        <div className="bg-white rounded-2xl border border-[#E2E2E2] px-6 py-4 flex items-center gap-4">
+                            <AlertTriangle size={24} className="text-[#555555] shrink-0" fill="#555555" stroke="white" strokeWidth={2.5} />
+                            <p className="text-[13px] text-[#181725] font-bold leading-snug">
+                                Minimum order for selected items is ₹600. Add <span className="text-[#181725] font-black">₹{Math.max(0, Math.round(shortfall))}</span> more to proceed.
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
-                {/* Bill Summary */}
-                <div className="bg-white rounded-[12px] border border-[#E2E2E2] shadow-sm">
+                {/* Mobile Bill Summary */}
+                <div className="md:hidden bg-white rounded-[12px] border border-[#E2E2E2] shadow-sm">
                     <div className="px-4 py-4 flex items-center gap-3 border-b border-[#F2F3F2]">
                         <div className="w-[38px] h-[38px] border border-[#EEEEEE] rounded-[10px] flex items-center justify-center bg-white">
                             <FileText size={20} className="text-[#181725]" strokeWidth={2} />
                         </div>
                         <h3 className="text-[17px] font-bold text-[#181725]">Bill Summary</h3>
                     </div>
-
                     <div className="px-5 py-4 space-y-3.5">
                         <div className="flex justify-between items-center text-[14px] font-medium text-[#7C7C7C]">
                             <span>Item Total</span>
@@ -207,11 +383,9 @@ export default function ShipmentDetailPage() {
                             <span>Handling Fee</span>
                             <span className="text-[#181725] font-bold">₹ {handlingFee}</span>
                         </div>
-
                         <div className="pt-2">
                             <div className="border-t border-dashed border-[#CFCECE] w-full" />
                         </div>
-
                         <div className="flex justify-between items-center">
                             <span className="text-[16px] font-bold text-[#181725]">To Pay</span>
                             <div className="text-right">
@@ -221,18 +395,15 @@ export default function ShipmentDetailPage() {
                         </div>
                     </div>
                 </div>
-
-
-
             </div>
 
-            {/* Sticky Bottom Action */}
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-[#F2F3F2] z-[100]">
+            {/* Sticky Bottom Action - Mobile */}
+            <div className="md:hidden fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-[#F2F3F2] z-[100]">
                 <button
-                    onClick={() => router.push('/cart')}
+                    onClick={handleProceedToPay}
                     className="w-full bg-[#53B175] text-white py-[18px] rounded-[18px] font-bold text-[18px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20"
                 >
-                    Proceed to pay
+                    Proceed to pay · ₹{totalPay.toFixed(0)}
                 </button>
             </div>
         </div>

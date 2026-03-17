@@ -2,18 +2,19 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Heart, ShoppingCart, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Heart, ShoppingCart, Star, Home, Package } from 'lucide-react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'sonner';
 import { ALL_MOCK_PRODUCTS } from '@/lib/mockData';
 import { vendors } from '@/data/vendorData';
 import { useWishlist } from '@/context/WishlistContext';
+import { cn } from '@/lib/utils';
 
 interface OrderItem {
     id: string;
     image: string;
-    fullProduct?: any; // To store the complete product data if available
+    fullProduct?: any;
 }
 
 interface Order {
@@ -70,7 +71,6 @@ export default function OrderHistoryPage() {
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
-                // Combine saved orders with mock orders, putting new ones first
                 setOrders([...parsed, ...MOCK_ORDERS]);
             } catch (e) {
                 console.error('Failed to load orders:', e);
@@ -82,23 +82,19 @@ export default function OrderHistoryPage() {
         let itemsAdded = 0;
         
         order.items.forEach(item => {
-            // 1. Check if the full product was already saved in the order (Robustness)
             if (item.fullProduct) {
                 addToCart(item.fullProduct, 1);
                 itemsAdded++;
                 return;
             }
 
-            // 2. Fallback: Search in static mock products
             let product = ALL_MOCK_PRODUCTS.find(p => p.id === item.id);
             
-            // 3. Fallback: Search in vendors data (Swiggy model)
             if (!product) {
                 for (const v of vendors) {
                     for (const cat of v.catalog) {
                         const found = cat.products.find(p => p.id === item.id);
                         if (found) {
-                            // Map it to the VendorProduct type expected by addToCart
                             product = {
                                 ...found,
                                 id: found.id,
@@ -149,8 +145,8 @@ export default function OrderHistoryPage() {
     return (
         <div className="min-h-screen bg-[#F2F3F2]">
 
-            {/* Header */}
-            <div className="sticky top-[12px] z-50 bg-[#F2F3F2] px-2 min-[340px]:px-4 h-16 flex items-center justify-between">
+            {/* Mobile Header */}
+            <div className="md:hidden sticky top-[12px] z-50 bg-[#F2F3F2] px-2 min-[340px]:px-4 h-16 flex items-center justify-between">
                 <button onClick={() => router.back()} className="p-2 -ml-1 flex-shrink-0">
                     <ChevronLeft size={22} className="text-[#181725]" />
                 </button>
@@ -158,74 +154,128 @@ export default function OrderHistoryPage() {
                     Your Orders
                 </h1>
                 <div className="flex items-center gap-1 min-[340px]:gap-4 flex-shrink-0">
-                    <div className="w-10 h-10" /> {/* Spacer to keep title centered */}
+                    <div className="w-10 h-10" />
+                </div>
+            </div>
+
+            {/* Desktop Header */}
+            <div className="hidden md:block bg-[#F7F8FA] border-b border-gray-100">
+                <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-5">
+                    <div className="flex items-center gap-2 text-[13px] text-text-muted mb-3">
+                        <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1">
+                            <Home size={14} />
+                            <span>Home</span>
+                        </Link>
+                        <ChevronRight size={12} />
+                        <span className="text-text font-semibold">Orders</span>
+                    </div>
+                    <h1 className="text-[28px] font-black text-text tracking-tight">
+                        <Package size={28} className="inline-block mr-3 -mt-1 text-primary" />
+                        Your Orders
+                    </h1>
                 </div>
             </div>
 
             {/* Orders List */}
-            <div className="p-4 space-y-4 pb-24 max-w-[600px] mx-auto">
-                {orders.map((order) => (
-                    <div key={order.id} className="bg-white rounded-[18px] border border-[#CFCECE] overflow-hidden">
-                        <div className="p-5 md:p-6">
-                            <div className="flex justify-between items-center mb-1">
-                                <h2 className="text-[18px] font-bold text-[#181725]">{order.status}</h2>
-                                <span className="text-[18px] font-bold text-[#181725]">₹ {order.price}</span>
-                            </div>
-                            <p className="text-[13px] text-[#7C7C7C] mb-5">{order.date}</p>
-
-                            {/* Product Images */}
-                            <div className="flex gap-2 overflow-x-auto no-scrollbar mb-6 py-0.5">
-                                {order.items.map((item, idx) => (
-                                    <div key={idx} className="w-[50px] h-[50px] min-w-[50px] rounded-[8px] border border-[#CFCECE] flex items-center justify-center p-1 bg-white">
-                                        <img src={item.image} alt="product" className="max-w-[85%] max-h-[85%] object-contain" />
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Rating Area (for rated orders) */}
-                            {order.rating !== undefined ? (
-                                <div className="flex flex-col gap-5">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[14px] text-[#1a2b4b] font-medium leading-tight opacity-90">Your delevery experience rating:</span>
-                                        <div className="flex gap-0.5">
-                                            {[1, 2, 3, 4, 5].map((s) => (
-                                                <Star 
-                                                    key={s} 
-                                                    size={18} 
-                                                    className={s <= (order.rating || 0) ? "fill-[#53B175] text-[#53B175]" : "text-[#D3D3D3] fill-none"} 
-                                                />
-                                            ))}
+            <div className="p-4 space-y-4 pb-24 md:pb-16 max-w-[600px] md:max-w-[var(--container-max)] mx-auto md:px-[var(--container-padding)] md:pt-8 flex-1">
+                {orders.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <div className="w-24 h-24 bg-gray-100/80 rounded-full flex items-center justify-center mb-6">
+                            <Package size={40} className="text-gray-300" strokeWidth={1.5} />
+                        </div>
+                        <h2 className="text-[20px] font-bold text-[#181725] mb-2">No orders yet</h2>
+                        <p className="text-[14px] text-gray-400 font-medium max-w-[200px] mx-auto">
+                            You haven't placed any orders yet. Start shopping to see them here!
+                        </p>
+                        <button 
+                            onClick={() => router.push('/')}
+                            className="mt-8 px-8 py-3 bg-[#53B175] text-white font-bold rounded-2xl transition-all shadow-lg shadow-green-100 hover:bg-[#48a068]"
+                        >
+                            Start Shopping
+                        </button>
+                    </div>
+                ) : (
+                    <div className="md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-7">
+                        {orders.map((order) => (
+                            <div key={order.id} className="bg-white rounded-[24px] md:rounded-3xl border border-[#E2E2E2] overflow-hidden shadow-sm md:shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-xl hover:border-primary/20 transition-all duration-300 mb-5 md:mb-0 flex flex-col group h-full">
+                                <div className="p-5 md:p-7 flex-1">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="space-y-1">
+                                            <div className={cn(
+                                                "px-3 py-1 rounded-full text-[10px] md:text-[11px] font-black uppercase tracking-wider mb-2 inline-block",
+                                                order.status.toLowerCase().includes('delivered') ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"
+                                            )}>
+                                                {order.status}
+                                            </div>
+                                            <h3 className="text-[17px] md:text-[19px] font-black text-[#181725]">Order #{order.id.slice(-6).toUpperCase()}</h3>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-[18px] md:text-[20px] font-black text-primary">₹{order.price}</span>
                                         </div>
                                     </div>
-                                    <div className="w-full flex justify-center pt-2">
+                                    
+                                    <p className="text-[12px] md:text-[13px] text-[#7C7C7C] font-medium mb-6 flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                                        {order.date}
+                                    </p>
+
+                                    {/* Product Images */}
+                                    <div className="flex gap-3 overflow-x-auto no-scrollbar mb-7 py-1 px-0.5">
+                                        {order.items.map((item, idx) => (
+                                            <div key={idx} className="w-[55px] h-[55px] md:w-[68px] md:h-[68px] min-w-[55px] md:min-w-[68px] rounded-2xl border border-[#F0F0F0] flex items-center justify-center p-2 bg-white shadow-sm group-hover:border-primary/10 transition-colors">
+                                                <img src={item.image} alt="product" className="max-w-full max-h-full object-contain" />
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Rating Area */}
+                                    {order.rating !== undefined && (
+                                        <div className="bg-gray-50/50 rounded-2xl p-4 md:p-5 mt-auto">
+                                            <div className="flex flex-col gap-3">
+                                                <div className="flex flex-col gap-1.5">
+                                                    <span className="text-[12px] md:text-[13px] text-gray-500 font-bold opacity-90 uppercase tracking-tight">Your delivery rating</span>
+                                                    <div className="flex gap-1">
+                                                        {[1, 2, 3, 4, 5].map((s) => (
+                                                            <Star 
+                                                                key={s} 
+                                                                size={18} 
+                                                                className={s <= (order.rating || 0) ? "fill-yellow-400 text-yellow-400" : "text-[#D3D3D3] fill-none"} 
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="pt-2">
+                                                    <button 
+                                                        onClick={() => handleOrderAgain(order)}
+                                                        className="text-primary font-black text-[14px] md:text-[15px] hover:underline underline-offset-4 decoration-2"
+                                                    >
+                                                        Order Again
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Footer Split Actions (for unrated orders) */}
+                                {order.rating === undefined && (
+                                    <div className="flex items-center border-t border-[#F2F3F2] mt-auto">
+                                        <button className="flex-1 py-4 md:py-5 text-center font-black text-[#4C4F4D] text-[14px] md:text-[15px] active:bg-gray-50 transition-colors md:hover:bg-gray-50 uppercase tracking-wider">
+                                            Rate Order
+                                        </button>
+                                        <div className="w-[1px] h-10 bg-[#F2F3F2]" />
                                         <button 
                                             onClick={() => handleOrderAgain(order)}
-                                            className="text-[#FF4B4B] font-bold text-[16px] hover:opacity-80 transition-opacity"
+                                            className="flex-1 py-4 md:py-5 text-center font-black text-red-500 text-[14px] md:text-[15px] active:bg-red-50/50 transition-colors md:hover:bg-red-50 uppercase tracking-wider"
                                         >
                                             Order Again
                                         </button>
                                     </div>
-                                </div>
-                            ) : null}
-                        </div>
-
-                        {/* Footer Split Actions (for unrated orders) */}
-                        {order.rating === undefined && (
-                            <div className="flex items-center border-t border-[#F2F3F2]">
-                                <button className="flex-1 py-4.5 text-center font-bold text-[#4C4F4D] text-[16px] active:bg-gray-50 transition-colors">
-                                    Rate Order
-                                </button>
-                                <div className="w-[1px] h-8 bg-[#F2F3F2]" />
-                                <button 
-                                    onClick={() => handleOrderAgain(order)}
-                                    className="flex-1 py-4.5 text-center font-bold text-[#FF4B4B] text-[16px] active:bg-gray-50 transition-colors"
-                                >
-                                    Order Again
-                                </button>
+                                )}
                             </div>
-                        )}
+                        ))}
                     </div>
-                ))}
+                )}
             </div>
 
             <style jsx global>{`
