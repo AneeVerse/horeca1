@@ -289,7 +289,11 @@ export function Navbar() {
                                             className="flex-1 bg-transparent text-[var(--text-base)] outline-none px-3 placeholder:text-gray-400"
                                         />
                                         <button
-                                            onClick={() => openSearch('items', navSearchQuery)}
+                                            onClick={() => {
+                                                if (navSearchQuery.trim()) {
+                                                    openSearch('items', navSearchQuery);
+                                                }
+                                            }}
                                             className="bg-primary p-2.5 rounded-full text-white hover:bg-primary-dark transition-all shadow-md cursor-pointer"
                                         >
                                             <Search size={20} />
