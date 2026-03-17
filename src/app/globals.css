@@ -65,6 +65,11 @@
     max-width: 100vw;
     width: 100%;
   }
+
+  a, button, [role="button"], select, label[for],
+  input[type="submit"], input[type="button"], input[type="reset"] {
+    cursor: pointer;
+  }
 }
 
 
