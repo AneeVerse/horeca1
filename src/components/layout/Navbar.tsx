@@ -176,10 +176,7 @@ export function Navbar() {
             )} />
 
             {/* Top Header - Scrolls Away */}
-            <header className={cn(
-                "w-full bg-white relative z-[1000]",
-                (pathname?.startsWith('/category/') || pathname?.startsWith('/product/') || pathname === '/cart' || pathname === '/orders' || pathname === '/wishlist' || pathname === '/profile') && "hidden md:block"
-            )}>
+            <header className="w-full bg-white relative z-[1000]">
                 <div className="w-full py-3 px-4 md:px-[var(--container-padding)]">
                     <div className="max-w-[var(--container-max)] mx-auto">
 
@@ -235,6 +232,8 @@ export function Navbar() {
                             {/* Row 3: Search Bar */}
                             {!pathname?.startsWith('/vendor/') &&
                                 !pathname?.startsWith('/order-lists') &&
+                                !pathname?.startsWith('/category/') &&
+                                !pathname?.startsWith('/product/') &&
                                 pathname !== '/orders' &&
                                 pathname !== '/wishlist' &&
                                 pathname !== '/cart' &&
