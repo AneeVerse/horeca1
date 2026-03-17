@@ -50,7 +50,7 @@ export function PromotionBanners() {
                     {BANNERS.map((banner, idx) => (
                         <div
                             key={idx}
-                            className="relative min-w-[147px] w-[147px] h-[117.52px] md:min-w-0 md:w-full md:h-[200px] lg:h-[240px] flex-shrink-0 rounded-[18px] p-3 md:p-6 lg:p-8 overflow-hidden snap-start transition-transform duration-300 md:hover:shadow-lg flex flex-col justify-between"
+                            className="relative min-w-[147px] w-[147px] h-[117.52px] md:min-w-0 md:w-full md:h-[180px] lg:h-[240px] flex-shrink-0 rounded-[18px] p-3 md:p-6 lg:p-8 overflow-hidden snap-start transition-transform duration-300 md:hover:shadow-lg flex flex-col justify-between"
                             style={{ backgroundColor: banner.bgColor }}
                         >
                             {/* Main Banner Image (Top-right asset) */}
@@ -61,7 +61,7 @@ export function PromotionBanners() {
 
                             {/* Content */}
                             <div className="relative z-20 flex flex-col items-start h-full">
-                                <h3 className="text-[11px] md:text-[22px] lg:text-[26px] font-[800] text-[#1e293b] leading-[1.2] max-w-[85px] md:max-w-[220px]" style={{ color: banner.textColor }}>
+                                <h3 className="text-[11px] md:text-[20px] lg:text-[26px] font-[800] text-[#1e293b] leading-[1.2] max-w-[85px] md:max-w-[180px] lg:max-w-[220px]" style={{ color: banner.textColor }}>
                                     <span className="md:hidden">
                                         {banner.title.split(' ')[0]}<br />
                                         {banner.title.split(' ').slice(1).join(' ')}

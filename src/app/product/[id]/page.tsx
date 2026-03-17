@@ -330,8 +330,8 @@ export default function ProductDetailPage() {
                 <div className="w-8" />
             </header>
 
-            {/* Mobile View */}
-            <div className="md:hidden pb-10 bg-[#F8F9FB]/30">
+            {/* Mobile + Tablet View */}
+            <div className="lg:hidden pb-10 bg-[#F8F9FB]/30">
 
 
                 {/* Main Product Section - White Card */}
@@ -471,7 +471,7 @@ export default function ProductDetailPage() {
             </div>
 
             {/* Desktop View (Placeholder/Idea) */}
-            <div className="hidden md:block max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-12">
+            <div className="hidden lg:block max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-12">
                 <p className="text-center text-gray-400">Please switch to mobile view or resize the screen for the best experience.</p>
             </div>
         </div>

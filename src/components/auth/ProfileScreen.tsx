@@ -79,9 +79,9 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
     };
 
     const topActions = [
-        { id: 'reorder', label: 'Reorder', sub: 'From last order', icon: RotateCcw, color: 'bg-blue-50 text-blue-600', onClick: () => { onClose(); router.push('/orders'); } },
-        { id: 'quick-order', label: 'Quick Order', sub: 'Order lists', icon: ListOrdered, color: 'bg-purple-50 text-purple-600', onClick: () => { onClose(); router.push('/order-lists'); } },
-        { id: 'my-vendors', label: 'My Vendors', sub: 'Saved vendors', icon: Store, color: 'bg-orange-50 text-orange-600', onClick: () => { onClose(); router.push('/vendors'); } },
+        { id: 'reorder', label: 'Reorder', sub: 'From last order', icon: RotateCcw, color: 'bg-blue-50 text-blue-600', onClick: () => { router.push('/orders'); } },
+        { id: 'quick-order', label: 'Quick Order', sub: 'Order lists', icon: ListOrdered, color: 'bg-purple-50 text-purple-600', onClick: () => { router.push('/order-lists'); } },
+        { id: 'my-vendors', label: 'My Vendors', sub: 'Saved vendors', icon: Store, color: 'bg-orange-50 text-orange-600', onClick: () => { router.push('/vendors'); } },
     ];
 
     const quickActions = [
@@ -89,18 +89,19 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
             id: 'orders',
             label: 'Your\nOrder',
             icon: ShoppingBag,
+            onClick: () => { router.push('/orders'); }
         },
         {
             id: 'support',
             label: 'Help &\nSupports',
             icon: HelpCircle,
+            onClick: () => { router.push('/contact'); }
         },
         {
             id: 'wishlist',
             label: 'Your\nWishlist',
             icon: Heart,
             onClick: () => {
-                onClose();
                 router.push('/wishlist');
             },
         },
@@ -162,7 +163,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                     <div className="w-[82px] h-[82px] rounded-full overflow-hidden border-[2px] border-[#53B175] bg-white">
                                         <img src="/images/profile/sample-profile.png" alt="Profile" className="w-full h-full object-cover" />
                                     </div>
-                                    <button className="absolute bottom-0.5 right-0.5 w-6 h-6 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm">
+                                    <button className="absolute bottom-0.5 right-0.5 w-6 h-6 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm cursor-pointer">
                                         <Pencil size={11} className="text-gray-400" />
                                     </button>
                                 </div>
@@ -175,7 +176,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                 {topActions.map((action) => {
                                     const Icon = action.icon;
                                     return (
-                                        <button key={action.id} onClick={action.onClick} className="flex flex-col items-center bg-white border border-gray-100 rounded-[15px] py-3 px-1 shadow-sm active:scale-[0.98] transition-all">
+                                        <button key={action.id} onClick={action.onClick} className="flex flex-col items-center bg-white border border-gray-100 rounded-[15px] py-3 px-1 shadow-sm active:scale-[0.98] transition-all cursor-pointer">
                                             <div className={cn("w-9 h-9 rounded-full flex items-center justify-center mb-1.5", action.color)}>
                                                 <Icon size={16} strokeWidth={2.5} />
                                             </div>
@@ -191,7 +192,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                 {quickActions.map((action) => {
                                     const Icon = action.icon;
                                     return (
-                                        <button key={action.id} onClick={action.onClick} className="flex flex-col items-center bg-white border border-gray-100 rounded-[12px] py-4 px-1 shadow-sm active:scale-[0.98] transition-all">
+                                        <button key={action.id} onClick={action.onClick} className="flex flex-col items-center bg-white border border-gray-100 rounded-[12px] py-4 px-1 shadow-sm active:scale-[0.98] transition-all cursor-pointer">
                                             <div className="mb-3"><Icon size={20} className="text-[#181725]" strokeWidth={2} /></div>
                                             <span className="text-[11px] font-[600] text-[#181725] text-center leading-tight whitespace-pre-line px-1">{action.label}</span>
                                         </button>
@@ -206,7 +207,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                     {yourInfoItems.map((item, idx) => {
                                         const Icon = item.icon;
                                         return (
-                                            <button key={item.id} onClick={item.onClick} className={cn("w-full flex items-center justify-between px-4 py-3.5 active:bg-gray-50 transition-colors text-left", idx < yourInfoItems.length - 1 && "border-b border-gray-50/80")}>
+                                            <button key={item.id} onClick={item.onClick} className={cn("w-full flex items-center justify-between px-4 py-3.5 active:bg-gray-50 transition-colors text-left cursor-pointer", idx < yourInfoItems.length - 1 && "border-b border-gray-50/80")}>
                                                 <span className="text-[13px] font-[600] text-[#181725]">{item.label}</span>
                                                 <ChevronRight size={16} className="text-gray-400/60" />
                                             </button>
@@ -222,7 +223,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                     {otherInfoItems.map((item, idx) => {
                                         const Icon = item.icon;
                                         return (
-                                            <button key={item.id} onClick={item.onClick} className={cn("w-full flex items-center justify-between px-4 py-3.5 active:bg-gray-50 transition-colors text-left", idx < otherInfoItems.length - 1 && "border-b border-gray-50/80")}>
+                                            <button key={item.id} onClick={item.onClick} className={cn("w-full flex items-center justify-between px-4 py-3.5 active:bg-gray-50 transition-colors text-left cursor-pointer", idx < otherInfoItems.length - 1 && "border-b border-gray-50/80")}>
                                                 <span className="text-[13px] font-[600] text-[#181725]">{item.label}</span>
                                                 <ChevronRight size={16} className="text-gray-400/60" />
                                             </button>
@@ -233,29 +234,29 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
 
                             {/* Logout - Mobile */}
                             <div className="bg-white border border-gray-100 rounded-[12px] overflow-hidden shadow-sm mb-12">
-                                <button onClick={handleLogout} className="w-full py-3.5 text-center text-red-500 font-[700] text-[15px] active:bg-red-50/30 transition-colors">
+                                <button onClick={handleLogout} className="w-full py-3.5 text-center text-red-500 font-[700] text-[15px] active:bg-red-50/30 transition-colors cursor-pointer">
                                     Logout
                                 </button>
                             </div>
                         </div>
 
                         {/* === DESKTOP LAYOUT === */}
-                        <div className="hidden md:grid md:grid-cols-[340px_1fr] lg:grid-cols-[360px_1fr] md:gap-8 lg:gap-10 md:items-start">
+                        <div className="hidden md:grid md:grid-cols-[280px_1fr] lg:grid-cols-[340px_1fr] xl:grid-cols-[360px_1fr] md:gap-6 lg:gap-10 md:items-start">
                             
                             {/* LEFT COLUMN: Profile Card + Your Information */}
                             <div className="space-y-6">
                                 {/* Profile Card */}
-                                <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_16px_rgba(0,0,0,0.06)] p-8 pb-8">
+                                <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_16px_rgba(0,0,0,0.06)] p-6 md:p-6 lg:p-8 pb-8">
                                     <div className="flex flex-col items-center">
-                                        <div className="relative mb-5">
-                                            <div className="w-[120px] h-[120px] rounded-full overflow-hidden border-[3px] border-[#53B175] bg-white">
+                                        <div className="relative mb-4 lg:mb-5">
+                                            <div className="w-[100px] h-[100px] lg:w-[120px] lg:h-[120px] rounded-full overflow-hidden border-[3px] border-[#53B175] bg-white transition-all">
                                                 <img src="/images/profile/sample-profile.png" alt="Profile" className="w-full h-full object-cover" />
                                             </div>
-                                            <button className="absolute bottom-1 right-1 w-8 h-8 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors">
-                                                <Pencil size={14} className="text-gray-400" />
+                                            <button className="absolute bottom-1 right-1 w-7 h-7 lg:w-8 lg:h-8 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors cursor-pointer">
+                                                <Pencil size={12} className="text-gray-400 lg:!w-3.5 lg:!h-3.5" />
                                             </button>
                                         </div>
-                                        <h3 className="text-[24px] font-[700] text-[#181725] mb-0.5">{userData.fullName}</h3>
+                                        <h3 className="text-[20px] lg:text-[24px] font-[700] text-[#181725] mb-0.5">{userData.fullName}</h3>
                                         <p className="text-[14px] text-gray-400 font-medium">+91 {userData.phone}</p>
                                         <p className="text-[13px] text-gray-400 font-medium mt-1.5">{userData.businessName}</p>
                                         <p className="text-[12px] text-gray-300 font-medium mt-1">{userData.address}, {userData.city}</p>
@@ -264,7 +265,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
 
                                 {/* Logout Button */}
                                 <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-                                    <button onClick={handleLogout} className="w-full py-4 text-center text-red-500 font-[700] text-[15px] hover:bg-red-50/30 transition-colors flex items-center justify-center gap-2">
+                                    <button onClick={handleLogout} className="w-full py-4 text-center text-red-500 font-[700] text-[15px] hover:bg-red-50/30 transition-colors flex items-center justify-center gap-2 cursor-pointer">
                                         <LogOut size={18} />
                                         Logout
                                     </button>
@@ -281,7 +282,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                                     key={item.id}
                                                     onClick={item.onClick}
                                                     className={cn(
-                                                        "w-full flex items-center justify-between px-5 py-4 group active:bg-gray-50 transition-colors text-left hover:bg-gray-50/50",
+                                                        "w-full flex items-center justify-between px-4 lg:px-5 py-3 lg:py-4 group active:bg-gray-50 transition-colors text-left hover:bg-gray-50/50 cursor-pointer",
                                                         idx < yourInfoItems.length - 1 && "border-b border-gray-50/80"
                                                     )}
                                                 >
@@ -305,14 +306,14 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                             {/* RIGHT COLUMN: Action Cards + Other Information */}
                             <div className="space-y-6">
                                 {/* Top Actions (Reorder, Quick Order, My Vendors) */}
-                                <div className="grid grid-cols-3 gap-5">
+                                <div className="grid grid-cols-3 gap-3 lg:gap-5">
                                     {topActions.map((action) => {
                                         const Icon = action.icon;
                                         return (
                                             <button
                                                 key={action.id}
                                                 onClick={action.onClick}
-                                                className="flex flex-col items-center bg-white border border-gray-100 rounded-2xl py-7 px-3 shadow-sm active:scale-[0.98] transition-all hover:shadow-lg hover:border-primary/20 hover:-translate-y-0.5"
+                                                className="flex flex-col items-center bg-white border border-gray-100 rounded-2xl py-5 lg:py-7 px-2 lg:px-3 shadow-sm active:scale-[0.98] transition-all hover:shadow-lg hover:border-primary/20 hover:-translate-y-0.5 cursor-pointer"
                                             >
                                                 <div className={cn("w-14 h-14 rounded-full flex items-center justify-center mb-3", action.color)}>
                                                     <Icon size={22} strokeWidth={2.5} />
@@ -325,14 +326,14 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                 </div>
 
                                 {/* Quick Utility Actions (Your Order, Help, Wishlist) */}
-                                <div className="grid grid-cols-3 gap-5">
+                                <div className="grid grid-cols-3 gap-3 lg:gap-5">
                                     {quickActions.map((action) => {
                                         const Icon = action.icon;
                                         return (
                                             <button
                                                 key={action.id}
                                                 onClick={action.onClick}
-                                                className="flex flex-col items-center bg-white border border-gray-100 rounded-2xl py-8 px-3 shadow-sm group active:scale-[0.98] transition-all hover:shadow-lg hover:border-primary/20 hover:-translate-y-0.5"
+                                                className="flex flex-col items-center bg-white border border-gray-100 rounded-2xl py-6 lg:py-8 px-2 lg:px-3 shadow-sm group active:scale-[0.98] transition-all hover:shadow-lg hover:border-primary/20 hover:-translate-y-0.5 cursor-pointer"
                                             >
                                                 <div className="mb-4">
                                                     <Icon size={26} className="text-[#181725]" strokeWidth={2} />
@@ -354,7 +355,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                                     key={item.id}
                                                     onClick={item.onClick}
                                                     className={cn(
-                                                        "w-full flex items-center justify-between px-5 py-4 group active:bg-gray-50 transition-colors text-left hover:bg-gray-50/50",
+                                                        "w-full flex items-center justify-between px-5 py-4 group active:bg-gray-50 transition-colors text-left hover:bg-gray-50/50 cursor-pointer",
                                                         idx < otherInfoItems.length - 1 && "border-b border-gray-50/80"
                                                     )}
                                                 >

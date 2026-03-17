@@ -30,7 +30,7 @@ export function FeatureBar() {
     return (
         <section className="w-full py-4 md:py-8 bg-white overflow-hidden">
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 lg:gap-6">
                     {FEATURES.map((feature, idx) => (
                         <div
                             key={idx}

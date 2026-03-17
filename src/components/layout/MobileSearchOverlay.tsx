@@ -161,7 +161,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                                     className="flex-1 bg-transparent text-[15px] md:text-[16px] text-[#181725] outline-none placeholder:text-gray-400 font-medium w-full"
                                 />
                                 {searchQuery && (
-                                    <button onClick={() => setSearchQuery('')} className="text-gray-400 hover:text-gray-600 shrink-0">
+                                    <button onClick={() => setSearchQuery('')} className="text-gray-400 hover:text-gray-600 shrink-0 cursor-pointer">
                                         <X size={20} />
                                     </button>
                                 )}
@@ -192,7 +192,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                     <button
                         onClick={() => setActiveTab('items')}
                         className={cn(
-                            "flex items-center gap-2 pb-3.5 px-1 transition-all relative",
+                            "flex items-center gap-2 pb-3.5 px-1 transition-all relative cursor-pointer",
                             activeTab === 'items' ? "text-[#53B175]" : "text-[#181725]"
                         )}
                     >
@@ -207,7 +207,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                     <button
                         onClick={() => setActiveTab('vendors')}
                         className={cn(
-                            "flex items-center gap-2 pb-3.5 px-1 transition-all relative",
+                            "flex items-center gap-2 pb-3.5 px-1 transition-all relative cursor-pointer",
                             activeTab === 'vendors' ? "text-[#53B175]" : "text-[#181725]"
                         )}
                     >
@@ -258,7 +258,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                                                     setSearchQuery(item.name);
                                                     setActiveTab('vendors');
                                                 }}
-                                                className="flex items-center gap-4 p-4 border border-[#EEEEEE] rounded-[20px] active:scale-[0.98] transition-all hover:border-[#53B175]/30 hover:bg-gray-50/50 group w-full text-left"
+                                                className="flex items-center gap-4 p-4 border border-[#EEEEEE] rounded-[20px] active:scale-[0.98] transition-all hover:border-[#53B175]/30 hover:bg-gray-50/50 group w-full text-left cursor-pointer"
                                             >
                                                 <div className="w-[50px] h-[60px] flex items-center justify-center p-1 shrink-0 overflow-hidden bg-white rounded-lg">
                                                     <img src={item.images[0]} alt={item.name} className="max-w-full max-h-full object-contain group-hover:scale-110 transition-transform" />
@@ -291,7 +291,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                 )}
 
                 {activeTab === 'vendors' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 md:gap-6 w-full">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6 w-full">
                         {filteredVendors.length > 0 ? (
                             filteredVendors.map((vendor) => {
                                 const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');

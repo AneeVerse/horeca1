@@ -147,7 +147,7 @@ export default function OrderHistoryPage() {
 
             {/* Mobile Header */}
             <div className="md:hidden sticky top-[12px] z-50 bg-[#F2F3F2] px-2 min-[340px]:px-4 h-16 flex items-center justify-between">
-                <button onClick={() => router.back()} className="p-2 -ml-1 flex-shrink-0">
+                <button onClick={() => router.push('/')} className="p-2 -ml-1 flex-shrink-0">
                     <ChevronLeft size={22} className="text-[#181725]" />
                 </button>
                 <h1 className="text-[16px] min-[340px]:text-[20px] font-bold text-[#181725] absolute left-1/2 -translate-x-1/2 whitespace-nowrap">

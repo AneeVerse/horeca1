@@ -36,7 +36,7 @@ export default function WishlistPage() {
             {/* Mobile Header */}
             <header className="md:hidden bg-white px-4 h-16 flex items-center justify-between sticky top-0 z-[100] border-b border-gray-100/50">
                 <button 
-                    onClick={() => router.back()} 
+                    onClick={() => router.push('/')} 
                     className="p-2 -ml-2 hover:bg-gray-50 rounded-full transition-colors"
                 >
                     <ChevronLeft size={24} className="text-[#181725]" strokeWidth={2} />

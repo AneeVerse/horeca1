@@ -62,7 +62,7 @@ export function ShopByStore() {
                     {/* Mobile toggle */}
                     <button
                         onClick={() => setIsMobileExpanded(!isMobileExpanded)}
-                        className="text-[13px] font-semibold text-[#53B175] hover:opacity-80 transition-opacity md:hidden"
+                        className="text-[13px] font-semibold text-[#53B175] hover:opacity-80 transition-opacity md:hidden cursor-pointer"
                     >
                         {isMobileExpanded ? "Show Less" : "See All"}
                     </button>

@@ -114,7 +114,7 @@ export default function CartPage() {
                 </div>
 
                 <div className="flex-1 px-4 pt-4 md:max-w-[var(--container-max)] md:mx-auto md:px-[var(--container-padding)] md:pt-8">
-                    <div className="md:grid md:grid-cols-[1fr_380px] md:gap-8 md:items-start">
+                    <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 lg:gap-8 items-start">
                         {/* Left Column - Payment Selection */}
                         <div className="space-y-4">
                             <div className="bg-white rounded-[18px] md:rounded-2xl border border-[#CFCECE] p-5 md:p-8 shadow-sm">
@@ -148,7 +148,7 @@ export default function CartPage() {
                         </div>
 
                         {/* Right Column - Bill Summary & Actions */}
-                        <div className="hidden md:block sticky top-[80px] space-y-4">
+                        <div className="hidden lg:block sticky top-[80px] space-y-4">
                             <div className="bg-white rounded-[16px] border border-[#CFCECE] overflow-hidden shadow-sm">
                                 <div className="p-4 flex items-center gap-3 border-b border-[#F0F0F0]">
                                     <div className="w-[34px] h-[34px] rounded-[8px] border border-[#E2E2E2] flex items-center justify-center shrink-0">
@@ -204,8 +204,8 @@ export default function CartPage() {
                             </button>
                         </div>
 
-                        {/* Mobile Summary */}
-                        <div className="md:hidden mt-6 bg-white rounded-[16px] border border-[#CFCECE] p-5 space-y-4">
+                        {/* Mobile + Tablet Summary */}
+                        <div className="lg:hidden mt-6 bg-white rounded-[16px] border border-[#CFCECE] p-5 space-y-4">
                             <div className="flex justify-between font-bold">
                                 <span className="text-gray-500">Amount to Pay</span>
                                 <span className="text-[#181725]">₹ {totalPay.toFixed(2)}</span>
@@ -214,7 +214,7 @@ export default function CartPage() {
                     </div>
                 </div>
 
-                <div className="fixed bottom-0 left-0 right-0 px-5 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50 md:hidden">
+                <div className="fixed bottom-0 left-0 right-0 px-5 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50 lg:hidden">
                     <button
                         onClick={() => {
                             const newOrders = shipments.map((shipment, idx) => ({
@@ -322,13 +322,13 @@ export default function CartPage() {
 
             {/* Content */}
             <div className="flex-1 px-4 space-y-3 pt-2 md:max-w-[var(--container-max)] md:mx-auto md:px-[var(--container-padding)] md:pt-8 md:w-full">
-                <div className="md:grid md:grid-cols-[1fr_400px] md:gap-10 md:items-start">
+                <div className="md:grid md:grid-cols-1 lg:grid-cols-[1fr_400px] lg:gap-10 md:items-start">
 
                     {/* ===== LEFT COLUMN ===== */}
                     <div className="space-y-3 md:space-y-6">
 
-                        {/* === MOBILE: Shipment Cards (unchanged) === */}
-                        <div className="md:hidden space-y-3">
+                        {/* === MOBILE + TABLET: Shipment Cards === */}
+                        <div className="lg:hidden space-y-3">
                             {shipments.map((shipment) => (
                                 <Link
                                     key={shipment.id}
@@ -367,7 +367,7 @@ export default function CartPage() {
                         </div>
 
                         {/* === DESKTOP: Full Item List grouped by vendor === */}
-                        <div className="hidden md:block space-y-5">
+                        <div className="hidden lg:block space-y-5">
                             {shipments.map((shipment) => (
                                 <div key={shipment.id} className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
                                     {/* Vendor Group Header */}
@@ -469,7 +469,7 @@ export default function CartPage() {
                     </div>
 
                     {/* ===== RIGHT COLUMN - Bill Summary (desktop sidebar) ===== */}
-                    <div className="hidden md:block sticky top-[80px] space-y-5">
+                    <div className="hidden lg:block sticky top-[80px] space-y-5">
                         <div className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
                             {/* Header */}
                             <div className="px-7 py-5 flex items-center gap-3 border-b border-[#F0F0F0]">
@@ -535,8 +535,8 @@ export default function CartPage() {
                     </div>
                 </div>
 
-                {/* === Mobile BILL SUMMARY === */}
-                <div className="md:hidden bg-white rounded-[16px] border border-[#CFCECE] overflow-hidden mt-1">
+                {/* === Mobile + Tablet BILL SUMMARY === */}
+                <div className="lg:hidden bg-white rounded-[16px] border border-[#CFCECE] overflow-hidden mt-1">
                     <div className="p-4 flex items-center gap-3 border-b border-[#F0F0F0]">
                         <div className="w-[34px] h-[34px] rounded-[8px] border border-[#E2E2E2] flex items-center justify-center shrink-0">
                             <FileText size={16} className="text-[#181725]" />
@@ -571,8 +571,8 @@ export default function CartPage() {
                 </div>
             </div>
 
-            {/* Fixed Checkout Bar - Mobile Only */}
-            <div className="md:hidden fixed bottom-0 left-0 right-0 px-5 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50">
+            {/* Fixed Checkout Bar - Mobile + Tablet */}
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 px-5 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50">
                 <button
                     onClick={() => setScreen('payment')}
                     className="w-full bg-[#53B175] text-white py-[18px] rounded-[16px] font-bold text-[18px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20"

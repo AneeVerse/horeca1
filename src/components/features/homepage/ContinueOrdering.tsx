@@ -24,7 +24,7 @@ export function ContinueOrdering() {
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
                 <div className="flex items-center justify-between mb-3">
                     <h2 className="text-[15px] md:text-[16px] font-bold text-[#181725]">Continue Ordering</h2>
-                    <Link href="/orders" className="text-[12px] font-semibold text-[#299e60] hover:opacity-80">View all</Link>
+                    <Link href="/orders" className="text-[12px] font-semibold text-[#299e60] hover:opacity-80 cursor-pointer">View all</Link>
                 </div>
 
                 <div className="flex gap-3 overflow-x-auto no-scrollbar -mx-[var(--container-padding)] px-[var(--container-padding)] pb-1">

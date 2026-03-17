@@ -194,7 +194,7 @@ export default function ShipmentDetailPage() {
 
             {/* Content Container */}
             <div className="flex-1 px-4 py-4 space-y-4 md:max-w-[var(--container-max)] md:mx-auto md:px-[var(--container-padding)] md:pt-8 md:w-full">
-                <div className="md:grid md:grid-cols-[1fr_400px] md:gap-10 md:items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6 lg:gap-10 items-start">
                     {/* Left Column - Items */}
                     <div className="space-y-4 md:space-y-5">
                         {/* Store Header Card */}
@@ -210,8 +210,8 @@ export default function ShipmentDetailPage() {
                             </button>
                         </div>
 
-                        {/* Mobile Items Card */}
-                        <div className="md:hidden bg-white rounded-[12px] border border-[#E2E2E2] overflow-hidden">
+                        {/* Mobile + Tablet Items Card */}
+                        <div className="lg:hidden bg-white rounded-[12px] border border-[#E2E2E2] overflow-hidden">
                             <div className="divide-y divide-[#F2F3F2]">
                                 {shipment.items.map((item) => (
                                     <div key={item.id} className="p-4 flex items-start gap-4">
@@ -257,7 +257,7 @@ export default function ShipmentDetailPage() {
                         </div>
 
                         {/* Desktop Items - Full Width Inline Layout */}
-                        <div className="hidden md:block bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
+                        <div className="hidden lg:block bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
                             <div className="divide-y divide-[#F5F5F5]">
                                 {shipment.items.map((item) => (
                                     <div key={item.id} className="px-7 py-5 flex items-center gap-5 hover:bg-gray-50/40 transition-colors group">
@@ -301,8 +301,8 @@ export default function ShipmentDetailPage() {
                             </div>
                         </div>
 
-                        {/* Minimum Order Warning - Mobile */}
-                        <div className="md:hidden bg-white rounded-[10px] border border-[#E2E2E2] px-4 py-3 flex items-center gap-3">
+                        {/* Minimum Order Warning - Mobile + Tablet */}
+                        <div className="lg:hidden bg-white rounded-[10px] border border-[#E2E2E2] px-4 py-3 flex items-center gap-3">
                             <AlertTriangle size={24} className="text-[#555555] shrink-0" fill="#555555" stroke="white" strokeWidth={2.5} />
                             <p className="text-[12px] text-[#181725] font-bold leading-snug">
                                 Minimum order for selected items is ₹600. Add <span className="text-[#181725] font-black">₹{Math.max(0, Math.round(shortfall))}</span> more to proceed.
@@ -311,7 +311,7 @@ export default function ShipmentDetailPage() {
                     </div>
 
                     {/* Right Column - Bill Summary (Desktop) */}
-                    <div className="hidden md:block sticky top-[80px] space-y-5">
+                    <div className="hidden lg:block sticky top-[80px] space-y-5">
                         <div className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
                             <div className="px-7 py-5 flex items-center gap-3 border-b border-[#F0F0F0]">
                                 <div className="w-[38px] h-[38px] rounded-xl border border-[#E2E2E2] flex items-center justify-center shrink-0 bg-gray-50">
@@ -362,8 +362,8 @@ export default function ShipmentDetailPage() {
                     </div>
                 </div>
 
-                {/* Mobile Bill Summary */}
-                <div className="md:hidden bg-white rounded-[12px] border border-[#E2E2E2] shadow-sm">
+                {/* Mobile + Tablet Bill Summary */}
+                <div className="lg:hidden bg-white rounded-[12px] border border-[#E2E2E2] shadow-sm">
                     <div className="px-4 py-4 flex items-center gap-3 border-b border-[#F2F3F2]">
                         <div className="w-[38px] h-[38px] border border-[#EEEEEE] rounded-[10px] flex items-center justify-center bg-white">
                             <FileText size={20} className="text-[#181725]" strokeWidth={2} />
@@ -397,8 +397,8 @@ export default function ShipmentDetailPage() {
                 </div>
             </div>
 
-            {/* Sticky Bottom Action - Mobile */}
-            <div className="md:hidden fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-[#F2F3F2] z-[100]">
+            {/* Sticky Bottom Action - Mobile + Tablet */}
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-[#F2F3F2] z-[100]">
                 <button
                     onClick={handleProceedToPay}
                     className="w-full bg-[#53B175] text-white py-[18px] rounded-[18px] font-bold text-[18px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20"

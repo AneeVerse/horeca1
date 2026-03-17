@@ -65,29 +65,29 @@ function VendorCategoryPageContent() {
             {/* Global Footer Hide for Mobile on this page */}
             <style dangerouslySetInnerHTML={{
                 __html: `
-                @media (max-width: 768px) {
+                @media (max-width: 1023px) {
                     footer, .bottom-nav { display: none !important; }
                 }
             `}} />
 
-            {/* ==================== MOBILE LAYOUT ==================== */}
-            <div className="md:hidden flex flex-col h-screen overflow-hidden">
+            {/* ==================== MOBILE/TABLET LAYOUT ==================== */}
+            <div className="lg:hidden flex flex-col h-screen overflow-hidden">
                 {/* Fixed Header */}
-                <header className="bg-white px-4 py-4 flex items-center justify-between border-b border-[#F2F3F2] shrink-0 relative">
+                <header className="bg-white px-4 md:px-8 py-4 flex items-center justify-between border-b border-[#F2F3F2] shrink-0 relative">
                     <button onClick={() => router.back()}>
-                        <ArrowLeft size={24} className="text-[#181725]" />
+                        <ArrowLeft size={24} className="text-[#181725] md:w-7 md:h-7" />
                     </button>
-                    <h1 className="absolute left-1/2 -translate-x-1/2 text-[18px] font-bold text-[#181725] whitespace-nowrap">
+                    <h1 className="absolute left-1/2 -translate-x-1/2 text-[18px] md:text-[22px] font-bold text-[#181725] whitespace-nowrap">
                         {vendor.name}
                     </h1>
                     <button className="p-1">
-                        <Search size={22} className="text-[#181725]" strokeWidth={2.5} />
+                        <Search size={22} className="text-[#181725] md:w-7 md:h-7" strokeWidth={2.5} />
                     </button>
                 </header>
 
                 <div className="flex flex-1 overflow-hidden">
                     {/* Left Sidebar: Categories */}
-                    <div className="w-[100px] bg-white overflow-y-auto no-scrollbar border-r border-[#D0D0D0] flex flex-col pt-2">
+                    <div className="w-[100px] md:w-[130px] bg-white overflow-y-auto no-scrollbar border-r border-[#D0D0D0] flex flex-col pt-2">
                         {/* "See All" or similar? The user's screenshot has several icons. 
                            Based on screenshot: See All, Dairy, Vegetables, Fruits, Grocery, Sauces & Condiments */}
                         
@@ -95,10 +95,10 @@ function VendorCategoryPageContent() {
                             href={`/vendor/${vendor.id}`}
                             className="flex flex-col items-center py-4 px-1 relative transition-all"
                         >
-                            <div className="w-[64px] h-[64px] rounded-full bg-[#F8F9FA] flex items-center justify-center mb-2 overflow-hidden border border-transparent">
-                                <span className="text-[28px]">🛒</span>
+                            <div className="w-[64px] h-[64px] md:w-[84px] md:h-[84px] rounded-full bg-[#F8F9FA] flex items-center justify-center mb-2 overflow-hidden border border-transparent transition-all">
+                                <span className="text-[28px] md:text-[36px]">🛒</span>
                             </div>
-                            <p className="text-[11px] text-center font-bold leading-tight px-1 text-[#181725]">
+                            <p className="text-[11px] md:text-[13px] text-center font-black leading-tight px-1 text-[#181725]">
                                 See All
                             </p>
                         </Link>
@@ -119,13 +119,13 @@ function VendorCategoryPageContent() {
                                     {isActive && <div className="absolute right-[-1px] top-[16px] h-[72px] w-[4px] bg-[#53B175] rounded-l-md z-20" />}
                                     <div className={cn(
                                         "flex items-center justify-center mb-2 overflow-hidden transition-all",
-                                        "w-[72px] h-[72px] rounded-[14px] bg-white p-2",
-                                        isActive ? "border-[1.5px] border-[#53B175]" : "border border-gray-100"
+                                        "w-[72px] h-[72px] md:w-[92px] md:h-[92px] rounded-[14px] md:rounded-[20px] bg-white p-2 md:p-3",
+                                        isActive ? "border-[2px] border-[#53B175]" : "border border-gray-100"
                                     )}>
                                         <img src={cat.image} alt="" className="w-full h-full object-contain" />
                                     </div>
                                     <p className={cn(
-                                        "text-[11px] text-center font-bold leading-tight px-1",
+                                        "text-[11px] md:text-[13px] text-center font-black leading-tight px-1",
                                         isActive ? "text-[#53B175]" : "text-[#181725]"
                                     )}>
                                         {cat.name}
@@ -147,7 +147,7 @@ function VendorCategoryPageContent() {
 
 
                         {/* Scrollable Filter Chips */}
-                        <div className="flex overflow-x-auto px-4 py-3 gap-2 no-scrollbar border-b border-[#F2F3F2]">
+                        <div className="flex overflow-x-auto px-4 md:px-8 py-3 md:py-4 gap-2 md:gap-3 no-scrollbar border-b border-[#F2F3F2]">
                             {[
                                 { label: 'Above 4.0+', icon: <Star size={14} className="fill-[#FFB800] text-[#FFB800] mr-1" /> },
                                 { label: 'Brand', hasArrow: true },
@@ -155,19 +155,19 @@ function VendorCategoryPageContent() {
                             ].map((chip, idx) => (
                                 <button
                                     key={idx}
-                                    className="flex items-center px-4 py-2 rounded-[12px] border border-[#E2E2E2] bg-white text-[13px] font-bold text-[#181725] whitespace-nowrap"
+                                    className="flex items-center px-4 md:px-6 py-2 md:py-3 rounded-[12px] md:rounded-xl border border-[#E2E2E2] bg-white text-[13px] md:text-[14px] font-extrabold text-[#181725] whitespace-nowrap transition-all active:scale-95"
                                 >
                                     {chip.icon}
                                     {chip.label}
-                                    {chip.hasArrow && <ChevronDown size={14} className="ml-1" />}
+                                    {chip.hasArrow && <ChevronDown size={14} className="ml-1" strokeWidth={3} />}
                                 </button>
                             ))}
                         </div>
 
                         {/* Product Feed */}
-                        <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-4 md:p-8 no-scrollbar">
                             {filteredProducts.length > 0 ? (
-                                <div className="grid grid-cols-1 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                                 {filteredProducts.map((product: any) => {
                                     if (!activeCategory) return null;
                                     return (
@@ -207,7 +207,7 @@ function VendorCategoryPageContent() {
             </div>
 
             {/* ==================== DESKTOP SECTION ==================== */}
-            <div className="hidden md:block bg-gray-50/50 min-h-screen">
+            <div className="hidden lg:block bg-gray-50/50 min-h-screen">
                 <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-6">
                     {/* Breadcrumbs */}
                     <nav className="flex items-center gap-2 mb-6 text-[13px] text-gray-500 font-medium">

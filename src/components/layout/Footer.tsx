@@ -106,8 +106,8 @@ export function Footer() {
                         </ul>
                     </div>
 
-                    {/* Links Columns - 2x2 Grid on Mobile, row on Desktop */}
-                    <div className="w-full lg:flex-1 grid grid-cols-2 lg:flex lg:flex-row lg:justify-around gap-x-4 gap-y-10 lg:gap-4 lg:px-6">
+                    {/* Links Columns - 2x2 Grid on Mobile, 4 columns on Tablet, row on Desktop */}
+                    <div className="w-full lg:flex-1 grid grid-cols-2 md:grid-cols-4 lg:flex lg:flex-row lg:justify-around gap-x-4 gap-y-10 lg:gap-4 lg:px-6">
                         <div className="min-w-fit">
                             <h4 className="text-[16px] md:text-[18px] font-bold text-[#181725] mb-5">Information</h4>
                             <ul className="space-y-4">

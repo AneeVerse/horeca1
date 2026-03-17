@@ -191,7 +191,7 @@ export function Navbar() {
                                 <div className="flex-1 flex justify-start">
                                     <button
                                         onClick={() => setIsLocationOverlayOpen(true)}
-                                        className="flex items-center gap-1 px-2.5 py-1 border border-gray-100 rounded-full bg-[#F7F7F7] shadow-sm hover:bg-gray-100 transition-colors"
+                                        className="flex items-center gap-1 px-2.5 py-1 border border-gray-100 rounded-full bg-[#F7F7F7] shadow-sm hover:bg-gray-100 transition-colors cursor-pointer"
                                     >
                                         <MapPin size={12} className="text-[#53B175]" />
                                         <span className="text-[11px] font-bold text-gray-500 truncate max-w-[60px]">
@@ -214,7 +214,7 @@ export function Navbar() {
                                 <div className="flex-1 flex justify-end items-center gap-2">
                                     <Link
                                         href="/wishlist"
-                                        className="relative p-1"
+                                        className="relative p-1 cursor-pointer"
                                     >
                                         <Heart size={20} className="text-[#181725]" />
                                         {wishlist.length > 0 && (
@@ -223,7 +223,7 @@ export function Navbar() {
                                             </span>
                                         )}
                                     </Link>
-                                    <Link href="/cart" className="relative p-1">
+                                    <Link href="/cart" className="relative p-1 cursor-pointer">
                                         <ShoppingCart size={20} className="text-[#181725]" />
                                         <span className="absolute -top-1 -right-1 bg-[#53B175] text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold border border-white">
                                             {totalItems}
@@ -232,7 +232,7 @@ export function Navbar() {
                                 </div>
                             </div>
 
-                            {/* Row 3: Search Bar */}
+                             {/* Row 3: Search Bar */}
                             {!pathname?.startsWith('/vendor/') &&
                                 !pathname?.startsWith('/order-lists') &&
                                 pathname !== '/orders' &&
@@ -267,19 +267,15 @@ export function Navbar() {
                         </div>
 
                         {/* Desktop Header Content (Hidden on Mobile) */}
-                        <div className="hidden md:flex items-center justify-between gap-6">
+                        <div className="hidden md:flex items-center justify-between gap-3 lg:gap-6">
                             <Link href="/" className="flex-shrink-0">
                                 <img src="/Horeca1.png" alt="Horeca1" className="h-[26px] w-auto object-contain" />
                             </Link>
 
                             {!pathname?.startsWith('/vendor/') && (
-                                <div className="flex flex-1 max-w-2xl items-center relative group">
-                                    <div className="flex items-center gap-3 px-5 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-xl w-full focus-within:border-primary/50 transition-all duration-300 shadow-sm">
-                                        <div className="flex items-center gap-1 text-[var(--text-sm)] text-text-muted border-r-2 border-gray-100 pr-4 cursor-pointer hover:text-primary font-semibold select-none group/cat">
-                                            <span>Categories</span>
-                                            <ChevronDown size={16} className="group-hover/cat:translate-y-0.5 transition-transform" />
-                                        </div>
-                                        <input
+                                <div className="flex flex-1 max-w-[320px] lg:max-w-[480px] items-center relative group">
+                                    <div className="flex items-center gap-2 lg:gap-3 px-3 lg:px-5 py-2.5 lg:py-3.5 bg-gray-50 border-2 border-gray-100 rounded-xl w-full focus-within:border-primary/50 transition-all duration-300 shadow-sm">
+                                         <input
                                             type="text"
                                             value={navSearchQuery}
                                             onChange={(e) => {
@@ -294,7 +290,7 @@ export function Navbar() {
                                         />
                                         <button
                                             onClick={() => openSearch('items', navSearchQuery)}
-                                            className="bg-primary p-2.5 rounded-full text-white hover:bg-primary-dark transition-all shadow-md"
+                                            className="bg-primary p-2.5 rounded-full text-white hover:bg-primary-dark transition-all shadow-md cursor-pointer"
                                         >
                                             <Search size={20} />
                                         </button>
@@ -302,13 +298,13 @@ export function Navbar() {
                                 </div>
                             )}
 
-                            <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-3 lg:gap-6">
                                 <div className="hidden lg:flex flex-col items-end">
                                     <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Support</span>
                                     <Link href="/contact" className="text-[15px] font-black text-text hover:text-primary transition-colors">+91-1234567890</Link>
                                 </div>
-                                <div className="flex items-center gap-4">
-                                    <Link href="/wishlist" className="p-2 hover:bg-gray-50 rounded-full transition-all relative group">
+                                <div className="flex items-center gap-2 lg:gap-4">
+                                    <Link href="/wishlist" className="p-2 hover:bg-gray-50 rounded-full transition-all relative group cursor-pointer">
                                         <Heart size={24} className="text-text group-hover:text-primary transition-colors" />
                                         {wishlist.length > 0 && (
                                             <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold border-2 border-white">
@@ -316,7 +312,7 @@ export function Navbar() {
                                             </span>
                                         )}
                                     </Link>
-                                    <Link href="/cart" className="p-2 hover:bg-gray-50 rounded-full transition-all relative group">
+                                    <Link href="/cart" className="p-2 hover:bg-gray-50 rounded-full transition-all relative group cursor-pointer">
                                         <ShoppingCart size={24} className="text-text group-hover:text-primary transition-colors" />
                                         <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold border-2 border-white">
                                             {totalItems}
@@ -330,7 +326,7 @@ export function Navbar() {
                                                 setIsLoginOverlayOpen(true);
                                             }
                                         }}
-                                        className="p-2 hover:bg-gray-50 rounded-full transition-all group"
+                                        className="p-2 hover:bg-gray-50 rounded-full transition-all group cursor-pointer"
                                     >
                                         <User size={24} className="text-text group-hover:text-primary transition-colors" />
                                     </button>
@@ -347,25 +343,30 @@ export function Navbar() {
                 isScrolled ? "top-0 shadow-md" : "top-[12px]"
             )}>
                 <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-8">
+                    <div className="flex items-center gap-4 lg:gap-8">
                         <div 
-                            className="relative group/main"
-                            onMouseEnter={() => setIsBrowseAllOpen(true)}
+                            className="relative"
                             onMouseLeave={() => {
                                 setIsBrowseAllOpen(false);
                                 setHoveredCategory(null);
                             }}
                         >
                             <button 
-                                className="bg-primary text-white px-6 py-4 flex items-center gap-3 font-bold text-[var(--text-sm)] rounded-lg"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsBrowseAllOpen(!isBrowseAllOpen);
+                                }}
+                                onMouseEnter={() => setIsBrowseAllOpen(true)}
+                                className="bg-primary text-white px-4 lg:px-6 py-3 lg:py-4 flex items-center gap-2 lg:gap-3 font-bold text-[13px] lg:text-[var(--text-sm)] rounded-lg transition-all active:scale-95 cursor-pointer"
                             >
-                                <Menu size={20} />
-                                <span>Browse All Categories</span>
-                                <ChevronDown size={14} className="group-hover/main:rotate-180 transition-transform" />
+                                <Menu size={20} className="w-4 h-4 lg:w-5 lg:h-5 text-white" />
+                                <span className="whitespace-nowrap text-white">Browse All Categories</span>
+                                <ChevronDown size={14} className={cn("transition-transform text-white", isBrowseAllOpen && "rotate-180")} />
                             </button>
 
                             <div className={cn(
-                                "absolute top-full left-0 bg-white shadow-[0_20px_50px_rgba(0,0,0,0.15)] transition-all duration-300 z-[110] rounded-b-2xl overflow-hidden flex min-h-[480px] opacity-0 invisible group-hover/main:opacity-100 group-hover/main:visible",
+                                "absolute top-full left-0 bg-white shadow-[0_32px_64px_rgba(0,0,0,0.15)] transition-all duration-300 z-[110] rounded-b-2xl overflow-hidden flex min-h-[480px] border border-gray-100 border-t-0",
+                                isBrowseAllOpen ? "opacity-100 visible translate-y-0" : "opacity-0 invisible -translate-y-2",
                                 !hoveredCategory ? "w-72" : "w-[calc(18rem+450px)]"
                             )}>
                                     {/* Categories List */}
@@ -403,15 +404,15 @@ export function Navbar() {
                                                 {vendors.filter(v => 
                                                     hoveredCategory && v.categories.some(c => c.toLowerCase() === hoveredCategory.toLowerCase())
                                                 ).slice(0, 6).map((vendor) => (
-                                                    <Link 
-                                                        key={vendor.id} 
-                                                        href={`/category/${vendor.slug || slugify(vendor.name)}/${slugify(hoveredCategory || '')}`}
-                                                        onClick={() => {
-                                                            setHoveredCategory(null);
-                                                            setIsBrowseAllOpen(false);
-                                                        }}
-                                                        className="flex items-center gap-4 p-4 bg-white rounded-lg border border-gray-100 hover:border-primary/30 hover:shadow-md transition-all group/vendor"
-                                                    >
+                                                        <Link 
+                                                            key={vendor.id} 
+                                                            href={`/category/${vendor.slug || slugify(vendor.name)}/${slugify(hoveredCategory || '')}`}
+                                                            onClick={() => {
+                                                                setHoveredCategory(null);
+                                                                setIsBrowseAllOpen(false);
+                                                            }}
+                                                            className="flex items-center gap-4 p-4 bg-white rounded-lg border border-gray-100 hover:border-primary/30 hover:shadow-md transition-all group/vendor cursor-pointer"
+                                                        >
                                                         <div className="w-12 h-12 rounded-lg border border-gray-50 flex items-center justify-center p-1.5 shrink-0 bg-white">
                                                             <img src={vendor.logo} alt="" className="max-w-full max-h-full object-contain group-hover/vendor:scale-110 transition-transform" />
                                                         </div>
@@ -441,17 +442,17 @@ export function Navbar() {
                                 </div>
                         </div>
 
-                        <div className="flex items-center gap-6 text-[var(--text-sm)] font-semibold text-text-muted">
-                            <Link href="/" className="hover:text-primary py-4">Home</Link>
-                            <Link href="/vendors" className="hover:text-primary">Vendors</Link>
-                            <Link href="/blog" className="hover:text-primary">Blog</Link>
-                            <Link href="/contact" className="hover:text-primary">Contact Us</Link>
+                        <div className="flex items-center gap-4 lg:gap-6 text-[var(--text-sm)] font-semibold text-text-muted">
+                            <Link href="/" className="hover:text-primary py-4 cursor-pointer">Home</Link>
+                            <Link href="/vendors" className="hover:text-primary cursor-pointer">Vendors</Link>
+                            <Link href="/blog" className="hover:text-primary cursor-pointer">Blog</Link>
+                            <Link href="/contact" className="hover:text-primary cursor-pointer">Contact Us</Link>
                         </div>
                     </div>
 
-                    <div className="bg-primary hover:bg-primary-dark transition-all text-white px-6 py-4 flex items-center gap-3 cursor-pointer rounded-lg shadow-lg shadow-primary/20">
-                        <PhoneCall size={20} />
-                        <span className="font-bold text-[var(--text-sm)]">01- 234 567 890</span>
+                    <div className="bg-primary hover:bg-primary-dark transition-all text-white px-4 lg:px-6 py-3 lg:py-4 flex items-center gap-2 lg:gap-3 rounded-lg shadow-lg shadow-primary/20 shrink-0">
+                        <PhoneCall size={18} className="lg:w-5 lg:h-5" />
+                        <span className="font-bold text-[13px] lg:text-[var(--text-sm)] whitespace-nowrap">01- 234 567 890</span>
                     </div>
                 </div>
             </nav>
@@ -483,7 +484,7 @@ export function Navbar() {
                                 setIsCategoriesSidebarOpen(false);
                                 setIsCategoriesExpanded(false);
                             }}
-                            className="p-1"
+                            className="p-1 cursor-pointer"
                         >
                             <X size={20} className="text-gray-400" />
                         </button>
@@ -493,7 +494,7 @@ export function Navbar() {
                         <h2 className="text-[17px] font-black text-[#181725]">Shop By Category</h2>
                         <button
                             onClick={() => setIsCategoriesExpanded(!isCategoriesExpanded)}
-                            className="text-[#53B175] text-[14px] font-bold"
+                            className="text-[#53B175] text-[14px] font-bold cursor-pointer"
                         >
                             {isCategoriesExpanded ? 'Collapse' : 'See All'}
                         </button>

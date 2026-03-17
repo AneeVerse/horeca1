@@ -13,7 +13,7 @@ export function Collections() {
                     <span className="text-[12px] font-semibold text-[#299e60]">See all</span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                     {MOCK_COLLECTIONS.map((col) => (
                         <Link
                             key={col.id}

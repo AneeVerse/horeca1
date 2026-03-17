@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Clock, ChevronRight, ListOrdered, ChevronLeft, Trash2, Edit2, Heart, ShoppingCart } from 'lucide-react';
+import { Plus, Clock, ChevronRight, ClipboardList, ChevronLeft, Trash2, Edit2, Heart, ShoppingCart, Home } from 'lucide-react';
 import { MOCK_ORDER_LISTS, MOCK_VENDORS, MOCK_VENDOR_PRODUCTS } from '@/lib/mockData';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { useCart } from '@/context/CartContext';
@@ -142,19 +142,46 @@ export default function OrderListsPage() {
 
     return (
         <div className="min-h-screen bg-gray-50/50 pb-24">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-100 sticky top-0 z-50">
+            {/* Desktop Header */}
+            <div className="hidden md:block bg-[#F7F8FA] border-b border-gray-100">
+                <div className="md:max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-6">
+                    <div className="flex items-center gap-2 text-[13px] text-text-muted mb-3">
+                        <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1">
+                            <Home size={14} />
+                            <span>Home</span>
+                        </Link>
+                        <ChevronRight size={12} />
+                        <span className="text-text font-semibold">Order Lists</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <h1 className="text-[32px] font-black text-text tracking-tight">
+                            <ClipboardList size={32} className="inline-block mr-3 -mt-1 text-primary" />
+                            Quick Order Lists
+                        </h1>
+                        <button 
+                            onClick={() => setIsCreateOverlayOpen(true)}
+                            className="flex items-center justify-center bg-[#299e60] text-white px-6 py-3 rounded-xl text-[14px] font-bold shadow-md shadow-green-100/50 hover:bg-[#22844f] transition-all cursor-pointer"
+                        >
+                            <Plus size={20} />
+                            <span className="ml-2">New List</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Mobile Header */}
+            <div className="md:hidden bg-white border-b border-gray-100 sticky top-0 z-50">
                 <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-3 min-[340px]:py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1 min-[340px]:gap-2 min-w-0">
                             <button 
-                                onClick={() => router.back()} 
-                                className="p-1 min-[340px]:p-2 -ml-1 min-[340px]:-ml-2 hover:bg-gray-50 rounded-full transition-colors shrink-0"
+                                onClick={() => router.push('/')} 
+                                className="p-1 min-[340px]:p-2 -ml-1 min-[340px]:-ml-2 hover:bg-gray-50 rounded-full transition-colors shrink-0 cursor-pointer"
                             >
                                 <ChevronLeft size={22} className="text-[#181725]" />
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-[18px] min-[340px]:text-[20px] md:text-[24px] font-bold text-[#181725] leading-tight truncate">
+                                <h1 className="text-[18px] min-[340px]:text-[20px] font-bold text-[#181725] leading-tight truncate">
                                     Quick Order Lists
                                 </h1>
                             </div>
@@ -163,7 +190,7 @@ export default function OrderListsPage() {
                         <div className="flex items-center gap-2 shrink-0">
                             <button 
                                 onClick={() => setIsCreateOverlayOpen(true)}
-                                className="flex items-center justify-center bg-[#299e60] text-white w-9 h-9 min-[340px]:w-10 min-[340px]:h-10 sm:w-auto sm:px-4 sm:py-2 rounded-full sm:rounded-xl text-[12px] font-bold shadow-md shadow-green-100/50 hover:bg-[#22844f] transition-all"
+                                className="flex items-center justify-center bg-[#299e60] text-white w-9 h-9 min-[340px]:w-10 min-[340px]:h-10 sm:w-auto sm:px-4 sm:py-2 rounded-full sm:rounded-xl text-[12px] font-bold shadow-md shadow-green-100/50 hover:bg-[#22844f] transition-all cursor-pointer"
                             >
                                 <Plus size={18} />
                                 <span className="hidden sm:inline ml-1.5">New List</span>
@@ -199,7 +226,7 @@ export default function OrderListsPage() {
                                         {list.vendorLogo ? (
                                             <img src={list.vendorLogo} alt={list.vendorName} className="w-full h-full object-contain" />
                                         ) : (
-                                            <ListOrdered size={20} className="text-gray-400" />
+                                            <ClipboardList size={20} className="text-gray-400" />
                                         )}
                                     </div>
                                     {/* Badge for multi-vendor */}
@@ -213,18 +240,18 @@ export default function OrderListsPage() {
                                 {/* Info */}
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
-                                        <p className="text-[13px] min-[340px]:text-[14px] font-bold text-[#181725] line-clamp-1">{list.name}</p>
+                                        <p className="text-[15px] min-[340px]:text-[16px] md:text-[18px] font-bold text-[#181725] line-clamp-1">{list.name}</p>
                                     </div>
-                                    <p className="text-[10px] min-[340px]:text-[11px] text-[#299e60] font-semibold mt-0.5">
+                                    <p className="text-[11px] min-[340px]:text-[12px] md:text-[14px] text-[#299e60] font-bold mt-0.5">
                                         {list.vendorName}
                                     </p>
-                                    <div className="flex flex-wrap items-center gap-2 min-[340px]:gap-3 mt-1">
-                                        <span className="text-[10px] min-[340px]:text-[11px] text-gray-400 font-medium">
+                                    <div className="flex flex-wrap items-center gap-2 min-[340px]:gap-3 mt-1.5">
+                                        <span className="text-[11px] min-[340px]:text-[12px] md:text-[13px] text-gray-400 font-semibold">
                                             {list.items.length} items
                                         </span>
                                         {list.lastUsed && (
-                                            <span className="flex items-center gap-0.5 text-[10px] min-[340px]:text-[11px] text-gray-400 font-medium">
-                                                <Clock size={10} />
+                                            <span className="flex items-center gap-0.5 text-[11px] min-[340px]:text-[12px] md:text-[13px] text-gray-400 font-semibold">
+                                                <Clock size={11} className="md:w-3.5 md:h-3.5" />
                                                 <span className="whitespace-nowrap">
                                                     Used {new Date(list.lastUsed).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                                                 </span>
@@ -233,20 +260,20 @@ export default function OrderListsPage() {
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-1 min-[340px]:gap-2 ml-auto shrink-0">
+                                <div className="flex items-center gap-1 min-[340px]:gap-2 md:gap-4 ml-auto shrink-0 transition-all">
                                     <button 
                                         onClick={(e) => handleEditClick(list, e)}
-                                        className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-[#53B175] transition-all active:scale-95"
+                                        className="p-2 md:p-3 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-[#53B175] transition-all active:scale-95 cursor-pointer"
                                     >
-                                        <Edit2 size={16} />
+                                        <Edit2 size={16} className="md:w-5 md:h-5" />
                                     </button>
                                     <button 
                                         onClick={(e) => handleDeleteList(list.id, e)}
-                                        className="p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition-all active:scale-95"
+                                        className="p-2 md:p-3 hover:bg-red-50 rounded-xl text-gray-400 hover:text-red-500 transition-all active:scale-95 cursor-pointer"
                                     >
-                                        <Trash2 size={16} />
+                                        <Trash2 size={16} className="md:w-5 md:h-5" />
                                     </button>
-                                    <ChevronRight size={18} className="text-gray-300 group-hover:text-gray-500 transition-colors ml-1" />
+                                    <ChevronRight size={18} className="text-gray-300 group-hover:text-gray-500 transition-colors ml-1 md:w-6 md:h-6" />
                                 </div>
                             </Link>
                         ))}

@@ -16,10 +16,10 @@ export function NearbyVendors() {
                         <h2 className="text-[16px] md:text-[18px] lg:text-[22px] font-bold text-[#181725]">Vendors Near You</h2>
                         <p className="text-[11px] md:text-[12px] text-gray-400 font-medium mt-0.5">Delivering to your area</p>
                     </div>
-                    <span className="text-[12px] font-semibold text-[#299e60]">See all</span>
+                    <span className="text-[12px] font-semibold text-[#299e60] cursor-pointer hover:underline transition-all">See all</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
+                <div className="grid grid-cols-1 xl:grid-cols-4 gap-3 md:gap-4">
                     {vendors.map((vendor) => (
                         <Link
                             key={vendor.id}

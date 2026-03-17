@@ -17,8 +17,8 @@ export default function VendorsPage() {
                 <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-3 min-[340px]:py-4">
                     <div className="flex items-center gap-2">
                         <button 
-                            onClick={() => router.back()} 
-                            className="p-1 min-[340px]:p-2 -ml-1 min-[340px]:-ml-2 hover:bg-gray-50 rounded-full transition-colors shrink-0"
+                            onClick={() => router.push('/')} 
+                            className="p-1 min-[340px]:p-2 -ml-1 min-[340px]:-ml-2 hover:bg-gray-50 rounded-full transition-colors shrink-0 cursor-pointer"
                         >
                             <ChevronLeft size={22} className="text-[#181725]" />
                         </button>
@@ -48,7 +48,7 @@ export default function VendorsPage() {
 
             {/* Vendor Grid */}
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-6 pb-24">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
                     {allVendors.map((vendor) => (
                         <Link
                             key={vendor.id}

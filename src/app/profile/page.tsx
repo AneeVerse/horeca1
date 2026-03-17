@@ -13,11 +13,7 @@ export default function ProfilePage() {
             <ProfileScreen 
                 isOpen={true} 
                 onClose={() => {
-                    if (window.history.length > 1) {
-                        router.back();
-                    } else {
-                        router.push('/');
-                    }
+                    router.push('/');
                 }} 
             />
         </main>
