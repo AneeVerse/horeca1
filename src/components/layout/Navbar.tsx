@@ -13,7 +13,8 @@ import {
     Menu,
     PhoneCall,
     User,
-    X
+    X,
+    Star
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -27,6 +28,26 @@ import { ProfileScreen } from '../auth/ProfileScreen';
 import { InitialPincodeOverlay } from './InitialPincodeOverlay';
 import { WishlistOverlay } from '../auth/WishlistOverlay';
 import { useWishlist } from '@/context/WishlistContext';
+import { vendors } from '@/data/vendorData';
+
+const categories = [
+    { name: 'Fruits & Vegetables', image: '/images/category/vegitable.png', bgColor: '#e8f9e9' },
+    { name: 'Dairy', image: '/images/category/milk.png', bgColor: '#eef2ff' },
+    { name: 'Canned & Imported', image: '/images/category/animal food.png', bgColor: '#fff7ed' },
+    { name: 'Flours', image: '/images/category/snacks.png', bgColor: '#fef2f2' },
+    { name: 'Sauces & Seasoning', image: '/images/category/drink-juice.png', bgColor: '#fdf4ff' },
+    { name: 'Masala, Salt & Sugar', image: '/images/category/candy.png', bgColor: '#eff6ff' },
+    { name: 'Chicken & Eggs', image: '/images/category/fish & meat.png', bgColor: '#fffbeb' },
+    { name: 'Edible Oils', image: '/images/category/fruits.png', bgColor: '#f0fdf4' },
+    { name: 'Custom Packaging', image: '/images/category/vegitable.png', bgColor: '#f8fafc' },
+    { name: 'Frozen & Instant Food', image: '/images/category/frozen foods.png', bgColor: '#f0f9ff' },
+    { name: 'Packaging Material', image: '/images/category/vegitable.png', bgColor: '#fdf2f8' },
+    { name: 'Bakery & Chocolates', image: '/images/category/candy.png', bgColor: '#fff1f2' },
+    { name: 'Beverages & Mixers', image: '/images/category/drink-juice.png', bgColor: '#ecfdf5' },
+    { name: 'Cleaning & Consumables', image: '/images/category/vegitable.png', bgColor: '#fafaf9' },
+    { name: 'Pulses', image: '/images/category/snacks.png', bgColor: '#f5f3ff' },
+    { name: 'Mutton, Duck & Meat', image: '/images/category/fish & meat.png', bgColor: '#fdfcf0' },
+];
 
 export function Navbar() {
     const router = useRouter();
@@ -60,6 +81,11 @@ export function Navbar() {
     const { totalItems } = useCart();
     const { wishlist } = useWishlist();
     const { selectedAddress, setSelectedAddress } = useAddress();
+
+    const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+
+    const [hoveredCategory, setHoveredCategory] = React.useState<string | null>(null);
+    const [isBrowseAllOpen, setIsBrowseAllOpen] = React.useState(false);
 
     const [lastTrigger, setLastTrigger] = React.useState<string>('');
 
@@ -95,24 +121,6 @@ export function Navbar() {
         return null;
     }
 
-    const categories = [
-        { name: 'Fruits & Vegetables', image: '/images/category/vegitable.png', bgColor: '#e8f9e9' },
-        { name: 'Dairy', image: '/images/category/milk.png', bgColor: '#eef2ff' },
-        { name: 'Canned & Imported', image: '/images/category/animal food.png', bgColor: '#fff7ed' },
-        { name: 'Flours', image: '/images/category/snacks.png', bgColor: '#fef2f2' },
-        { name: 'Sauces & Seasoning', image: '/images/category/drink-juice.png', bgColor: '#fdf4ff' },
-        { name: 'Masala, Salt & Sugar', image: '/images/category/candy.png', bgColor: '#eff6ff' },
-        { name: 'Chicken & Eggs', image: '/images/category/fish & meat.png', bgColor: '#fffbeb' },
-        { name: 'Edible Oils', image: '/images/category/fruits.png', bgColor: '#f0fdf4' },
-        { name: 'Custom Packaging', image: '/images/category/vegitable.png', bgColor: '#f8fafc' },
-        { name: 'Frozen & Instant Food', image: '/images/category/frozen foods.png', bgColor: '#f0f9ff' },
-        { name: 'Packaging Material', image: '/images/category/vegitable.png', bgColor: '#fdf2f8' },
-        { name: 'Bakery & Chocolates', image: '/images/category/candy.png', bgColor: '#fff1f2' },
-        { name: 'Beverages & Mixers', image: '/images/category/drink-juice.png', bgColor: '#ecfdf5' },
-        { name: 'Cleaning & Consumables', image: '/images/category/vegitable.png', bgColor: '#fafaf9' },
-        { name: 'Pulses', image: '/images/category/snacks.png', bgColor: '#f5f3ff' },
-        { name: 'Mutton, Duck & Meat', image: '/images/category/fish & meat.png', bgColor: '#fdfcf0' },
-    ];
 
     const pathname = usePathname();
     const isShipmentPage = pathname?.includes('/cart/shipment/');
@@ -340,31 +348,101 @@ export function Navbar() {
             )}>
                 <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-3 flex items-center justify-between">
                     <div className="flex items-center gap-8">
-                        <div className="relative group/main">
-                            <button className="bg-primary text-white px-6 py-4 flex items-center gap-3 font-bold text-[var(--text-sm)] rounded-lg">
+                        <div 
+                            className="relative group/main"
+                            onMouseEnter={() => setIsBrowseAllOpen(true)}
+                            onMouseLeave={() => {
+                                setIsBrowseAllOpen(false);
+                                setHoveredCategory(null);
+                            }}
+                        >
+                            <button 
+                                className="bg-primary text-white px-6 py-4 flex items-center gap-3 font-bold text-[var(--text-sm)] rounded-lg"
+                            >
                                 <Menu size={20} />
                                 <span>Browse All Categories</span>
                                 <ChevronDown size={14} className="group-hover/main:rotate-180 transition-transform" />
                             </button>
-                            <div className="absolute top-full left-0 w-64 bg-white shadow-2xl ring-1 ring-gray-100 opacity-0 invisible group-hover/main:opacity-100 group-hover/main:visible transition-all duration-300 z-[110] rounded-b-xl overflow-hidden py-2">
-                                {categories.slice(0, 10).map((item, idx) => (
-                                    <Link key={idx} href={`/category/${item.name.toLowerCase().replace(/\s+/g, '-')}`} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50 cursor-pointer group/item transition-colors">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-6 h-6 flex items-center justify-center">
-                                                <img src={item.image} alt="" className="max-w-full max-h-full object-contain opacity-70 group-hover:opacity-100 transition-opacity" />
+
+                            <div className={cn(
+                                "absolute top-full left-0 bg-white shadow-[0_20px_50px_rgba(0,0,0,0.15)] transition-all duration-300 z-[110] rounded-b-2xl overflow-hidden flex min-h-[480px] opacity-0 invisible group-hover/main:opacity-100 group-hover/main:visible",
+                                !hoveredCategory ? "w-72" : "w-[calc(18rem+450px)]"
+                            )}>
+                                    {/* Categories List */}
+                                    <div className="w-72 border-r border-gray-100 py-2 bg-white shrink-0">
+                                        {categories.slice(0, 10).map((item, idx) => (
+                                            <div 
+                                                key={idx} 
+                                                onMouseEnter={() => setHoveredCategory(item.name)}
+                                                className={cn(
+                                                    "flex items-center justify-between px-6 py-3.5 cursor-pointer group/item transition-all",
+                                                    hoveredCategory === item.name ? "bg-primary/5 text-primary" : "hover:bg-gray-50 text-text"
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-3.5">
+                                                    <div className="w-7 h-7 flex items-center justify-center transition-all">
+                                                        <img src={item.image} alt="" className="max-w-full max-h-full object-contain" />
+                                                    </div>
+                                                    <span className="text-[14px] font-bold">{item.name}</span>
+                                                </div>
+                                                <ChevronDown size={14} className={cn("-rotate-90 transition-colors", hoveredCategory === item.name ? "text-primary" : "text-gray-300")} />
                                             </div>
-                                            <span className="text-sm font-medium text-text">{item.name}</span>
+                                        ))}
+                                    </div>
+
+                                    {/* Vendors Side Panel */}
+                                    {hoveredCategory && (
+                                        <div className="w-[450px] bg-[#F9FAFB] p-6 overflow-y-auto max-h-[600px] animate-in fade-in slide-in-from-left-2 duration-200">
+                                            <div className="flex items-center justify-between mb-6">
+                                                <h4 className="text-[15px] font-black text-text uppercase tracking-tight">
+                                                    {hoveredCategory}
+                                                </h4>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-1 gap-3">
+                                                {vendors.filter(v => 
+                                                    hoveredCategory && v.categories.some(c => c.toLowerCase() === hoveredCategory.toLowerCase())
+                                                ).slice(0, 6).map((vendor) => (
+                                                    <Link 
+                                                        key={vendor.id} 
+                                                        href={`/category/${vendor.slug || slugify(vendor.name)}/${slugify(hoveredCategory || '')}`}
+                                                        onClick={() => {
+                                                            setHoveredCategory(null);
+                                                            setIsBrowseAllOpen(false);
+                                                        }}
+                                                        className="flex items-center gap-4 p-4 bg-white rounded-lg border border-gray-100 hover:border-primary/30 hover:shadow-md transition-all group/vendor"
+                                                    >
+                                                        <div className="w-12 h-12 rounded-lg border border-gray-50 flex items-center justify-center p-1.5 shrink-0 bg-white">
+                                                            <img src={vendor.logo} alt="" className="max-w-full max-h-full object-contain group-hover/vendor:scale-110 transition-transform" />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <h5 className="text-[14px] font-bold text-text truncate group-hover/vendor:text-primary transition-colors">{vendor.name}</h5>
+                                                            <p className="text-[11px] text-text-muted truncate font-medium">
+                                                                {vendor.categories.join(', ')}
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-lg shrink-0">
+                                                            <Star size={12} fill="currentColor" />
+                                                            <span className="text-[11px] font-bold">{vendor.rating}</span>
+                                                        </div>
+                                                    </Link>
+                                                ))}
+                                            </div>
+                                            
+                                            {vendors.filter(v => 
+                                                hoveredCategory && v.categories.some(c => c.toLowerCase() === hoveredCategory.toLowerCase())
+                                            ).length === 0 && (
+                                                <div className="text-center py-10">
+                                                    <p className="text-text-muted text-[13px] font-medium italic">No direct matches found. Try exploring the category.</p>
+                                                </div>
+                                            )}
                                         </div>
-                                        <ChevronDown size={14} className="-rotate-90 text-gray-300 group-hover/item:text-primary transition-colors" />
-                                    </Link>
-                                ))}
-                            </div>
+                                    )}
+                                </div>
                         </div>
 
                         <div className="flex items-center gap-6 text-[var(--text-sm)] font-semibold text-text-muted">
                             <Link href="/" className="hover:text-primary py-4">Home</Link>
-                            <Link href="/shop" className="hover:text-primary">Shop</Link>
-                            <Link href="/pages" className="hover:text-primary">Pages</Link>
                             <Link href="/vendors" className="hover:text-primary">Vendors</Link>
                             <Link href="/blog" className="hover:text-primary">Blog</Link>
                             <Link href="/contact" className="hover:text-primary">Contact Us</Link>
