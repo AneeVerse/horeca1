@@ -232,7 +232,7 @@ export function Navbar() {
                                 </div>
                             </div>
 
-                             {/* Row 3: Search Bar */}
+                            {/* Row 3: Search Bar */}
                             {!pathname?.startsWith('/vendor/') &&
                                 !pathname?.startsWith('/order-lists') &&
                                 pathname !== '/orders' &&
@@ -273,9 +273,9 @@ export function Navbar() {
                             </Link>
 
                             {!pathname?.startsWith('/vendor/') && (
-                                <div className="flex flex-1 max-w-[320px] lg:max-w-[480px] items-center relative group">
+                                <div className="flex flex-1 max-w-[320px] lg:max-w-[720px] items-center relative group">
                                     <div className="flex items-center gap-2 lg:gap-3 px-3 lg:px-5 py-2.5 lg:py-3.5 bg-gray-50 border-2 border-gray-100 rounded-xl w-full focus-within:border-primary/50 transition-all duration-300 shadow-sm">
-                                         <input
+                                        <input
                                             type="text"
                                             value={navSearchQuery}
                                             onChange={(e) => {
@@ -348,14 +348,14 @@ export function Navbar() {
             )}>
                 <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-3 flex items-center justify-between">
                     <div className="flex items-center gap-4 lg:gap-8">
-                        <div 
+                        <div
                             className="relative"
                             onMouseLeave={() => {
                                 setIsBrowseAllOpen(false);
                                 setHoveredCategory(null);
                             }}
                         >
-                            <button 
+                            <button
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setIsBrowseAllOpen(!isBrowseAllOpen);
@@ -373,77 +373,77 @@ export function Navbar() {
                                 isBrowseAllOpen ? "opacity-100 visible translate-y-0" : "opacity-0 invisible -translate-y-2",
                                 !hoveredCategory ? "w-72" : "w-[calc(18rem+450px)]"
                             )}>
-                                    {/* Categories List */}
-                                    <div className="w-72 border-r border-gray-100 py-2 bg-white shrink-0">
-                                        {categories.slice(0, 10).map((item, idx) => (
-                                            <div 
-                                                key={idx} 
-                                                onMouseEnter={() => setHoveredCategory(item.name)}
-                                                className={cn(
-                                                    "flex items-center justify-between px-6 py-3.5 cursor-pointer group/item transition-all",
-                                                    hoveredCategory === item.name ? "bg-primary/5 text-primary" : "hover:bg-gray-50 text-text"
-                                                )}
-                                            >
-                                                <div className="flex items-center gap-3.5">
-                                                    <div className="w-7 h-7 flex items-center justify-center transition-all">
-                                                        <img src={item.image} alt="" className="max-w-full max-h-full object-contain" />
-                                                    </div>
-                                                    <span className="text-[14px] font-bold">{item.name}</span>
+                                {/* Categories List */}
+                                <div className="w-72 border-r border-gray-100 py-2 bg-white shrink-0">
+                                    {categories.slice(0, 10).map((item, idx) => (
+                                        <div
+                                            key={idx}
+                                            onMouseEnter={() => setHoveredCategory(item.name)}
+                                            className={cn(
+                                                "flex items-center justify-between px-6 py-3.5 cursor-pointer group/item transition-all",
+                                                hoveredCategory === item.name ? "bg-primary/5 text-primary" : "hover:bg-gray-50 text-text"
+                                            )}
+                                        >
+                                            <div className="flex items-center gap-3.5">
+                                                <div className="w-7 h-7 flex items-center justify-center transition-all">
+                                                    <img src={item.image} alt="" className="max-w-full max-h-full object-contain" />
                                                 </div>
-                                                <ChevronDown size={14} className={cn("-rotate-90 transition-colors", hoveredCategory === item.name ? "text-primary" : "text-gray-300")} />
+                                                <span className="text-[14px] font-bold">{item.name}</span>
                                             </div>
-                                        ))}
-                                    </div>
+                                            <ChevronDown size={14} className={cn("-rotate-90 transition-colors", hoveredCategory === item.name ? "text-primary" : "text-gray-300")} />
+                                        </div>
+                                    ))}
+                                </div>
 
-                                    {/* Vendors Side Panel */}
-                                    {hoveredCategory && (
-                                        <div className="w-[450px] bg-[#F9FAFB] p-6 overflow-y-auto max-h-[600px] animate-in fade-in slide-in-from-left-2 duration-200">
-                                            <div className="flex items-center justify-between mb-6">
-                                                <h4 className="text-[15px] font-black text-text uppercase tracking-tight">
-                                                    {hoveredCategory}
-                                                </h4>
-                                            </div>
-                                            
-                                            <div className="grid grid-cols-1 gap-3">
-                                                {vendors.filter(v => 
-                                                    hoveredCategory && v.categories.some(c => c.toLowerCase() === hoveredCategory.toLowerCase())
-                                                ).slice(0, 6).map((vendor) => (
-                                                        <Link 
-                                                            key={vendor.id} 
-                                                            href={`/category/${vendor.slug || slugify(vendor.name)}/${slugify(hoveredCategory || '')}`}
-                                                            onClick={() => {
-                                                                setHoveredCategory(null);
-                                                                setIsBrowseAllOpen(false);
-                                                            }}
-                                                            className="flex items-center gap-4 p-4 bg-white rounded-lg border border-gray-100 hover:border-primary/30 hover:shadow-md transition-all group/vendor cursor-pointer"
-                                                        >
-                                                        <div className="w-12 h-12 rounded-lg border border-gray-50 flex items-center justify-center p-1.5 shrink-0 bg-white">
-                                                            <img src={vendor.logo} alt="" className="max-w-full max-h-full object-contain group-hover/vendor:scale-110 transition-transform" />
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <h5 className="text-[14px] font-bold text-text truncate group-hover/vendor:text-primary transition-colors">{vendor.name}</h5>
-                                                            <p className="text-[11px] text-text-muted truncate font-medium">
-                                                                {vendor.categories.join(', ')}
-                                                            </p>
-                                                        </div>
-                                                        <div className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-lg shrink-0">
-                                                            <Star size={12} fill="currentColor" />
-                                                            <span className="text-[11px] font-bold">{vendor.rating}</span>
-                                                        </div>
-                                                    </Link>
-                                                ))}
-                                            </div>
-                                            
-                                            {vendors.filter(v => 
+                                {/* Vendors Side Panel */}
+                                {hoveredCategory && (
+                                    <div className="w-[450px] bg-[#F9FAFB] p-6 overflow-y-auto max-h-[600px] animate-in fade-in slide-in-from-left-2 duration-200">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h4 className="text-[15px] font-black text-text uppercase tracking-tight">
+                                                {hoveredCategory}
+                                            </h4>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 gap-3">
+                                            {vendors.filter(v =>
                                                 hoveredCategory && v.categories.some(c => c.toLowerCase() === hoveredCategory.toLowerCase())
-                                            ).length === 0 && (
+                                            ).slice(0, 6).map((vendor) => (
+                                                <Link
+                                                    key={vendor.id}
+                                                    href={`/category/${vendor.slug || slugify(vendor.name)}/${slugify(hoveredCategory || '')}`}
+                                                    onClick={() => {
+                                                        setHoveredCategory(null);
+                                                        setIsBrowseAllOpen(false);
+                                                    }}
+                                                    className="flex items-center gap-4 p-4 bg-white rounded-lg border border-gray-100 hover:border-primary/30 hover:shadow-md transition-all group/vendor cursor-pointer"
+                                                >
+                                                    <div className="w-12 h-12 rounded-lg border border-gray-50 flex items-center justify-center p-1.5 shrink-0 bg-white">
+                                                        <img src={vendor.logo} alt="" className="max-w-full max-h-full object-contain group-hover/vendor:scale-110 transition-transform" />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <h5 className="text-[14px] font-bold text-text truncate group-hover/vendor:text-primary transition-colors">{vendor.name}</h5>
+                                                        <p className="text-[11px] text-text-muted truncate font-medium">
+                                                            {vendor.categories.join(', ')}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-lg shrink-0">
+                                                        <Star size={12} fill="currentColor" />
+                                                        <span className="text-[11px] font-bold">{vendor.rating}</span>
+                                                    </div>
+                                                </Link>
+                                            ))}
+                                        </div>
+
+                                        {vendors.filter(v =>
+                                            hoveredCategory && v.categories.some(c => c.toLowerCase() === hoveredCategory.toLowerCase())
+                                        ).length === 0 && (
                                                 <div className="text-center py-10">
                                                     <p className="text-text-muted text-[13px] font-medium italic">No direct matches found. Try exploring the category.</p>
                                                 </div>
                                             )}
-                                        </div>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         <div className="flex items-center gap-4 lg:gap-6 text-[var(--text-sm)] font-semibold text-text-muted">
