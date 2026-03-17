@@ -274,23 +274,18 @@ export function Navbar() {
                                         <input
                                             type="text"
                                             value={navSearchQuery}
-                                            onChange={(e) => setNavSearchQuery(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' && navSearchQuery.trim()) {
-                                                    router.push(`/search?q=${encodeURIComponent(navSearchQuery.trim())}`);
-                                                    setNavSearchQuery('');
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setNavSearchQuery(val);
+                                                if (val.trim()) {
+                                                    openSearch('items', val);
                                                 }
                                             }}
                                             placeholder="Search for a product or brand"
                                             className="flex-1 bg-transparent text-[var(--text-base)] outline-none px-3 placeholder:text-gray-400"
                                         />
                                         <button
-                                            onClick={() => {
-                                                if (navSearchQuery.trim()) {
-                                                    router.push(`/search?q=${encodeURIComponent(navSearchQuery.trim())}`);
-                                                    setNavSearchQuery('');
-                                                }
-                                            }}
+                                            onClick={() => openSearch('items', navSearchQuery)}
                                             className="bg-primary p-2.5 rounded-full text-white hover:bg-primary-dark transition-all shadow-md"
                                         >
                                             <Search size={20} />

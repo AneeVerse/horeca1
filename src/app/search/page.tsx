@@ -97,44 +97,52 @@ function SearchPageContent() {
                             <section>
                                 <h2 className="text-[15px] font-bold text-[#181725] mb-3">Vendors</h2>
                                 <div className="space-y-3">
-                                    {results.vendors.map((vendor) => (
-                                        <Link
-                                            key={vendor.id}
-                                            href={`/vendor/${vendor.id}`}
-                                            className="flex items-center gap-4 bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all group"
-                                        >
-                                            <div className="w-14 h-14 bg-gray-50 rounded-xl flex items-center justify-center p-2 shrink-0 border border-gray-100">
-                                                <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-[14px] font-bold text-[#181725]">{vendor.name}</p>
-                                                <p className="text-[11px] text-gray-400 font-medium mt-0.5 line-clamp-1">
-                                                    {vendor.categories.join(', ')}
-                                                </p>
-                                                <div className="flex items-center gap-2 mt-1.5">
-                                                    <div className="flex items-center gap-0.5 text-[10px] font-bold text-green-600">
-                                                        <Star size={10} fill="currentColor" />
-                                                        {vendor.rating}
-                                                    </div>
-                                                    <div className="flex items-center gap-0.5 text-[10px] font-semibold text-blue-600">
-                                                        <Clock size={10} />
-                                                        {vendor.deliveryTime}
-                                                    </div>
-                                                    <div className="flex items-center gap-0.5 text-[10px] font-semibold text-orange-600">
-                                                        <Package size={10} />
-                                                        Min ₹{vendor.minOrderValue}
-                                                    </div>
-                                                    {vendor.creditEnabled && (
-                                                        <div className="flex items-center gap-0.5 text-[10px] font-semibold text-purple-600">
-                                                            <CreditCard size={10} />
-                                                            Credit
-                                                        </div>
-                                                    )}
+                                    {results.vendors.map((vendor) => {
+                                        const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                                        const categoryMatch = vendor.categories.find(c => slugify(c) === slugify(query));
+                                        const vendorPath = categoryMatch 
+                                            ? `/category/${vendor.slug}/${slugify(categoryMatch)}`
+                                            : `/vendor/${vendor.id}`;
+                                            
+                                        return (
+                                            <Link
+                                                key={vendor.id}
+                                                href={vendorPath}
+                                                className="flex items-center gap-4 bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all group"
+                                            >
+                                                <div className="w-14 h-14 bg-gray-50 rounded-xl flex items-center justify-center p-2 shrink-0 border border-gray-100">
+                                                    <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform" />
                                                 </div>
-                                            </div>
-                                            <ChevronRight size={18} className="text-gray-300 shrink-0" />
-                                        </Link>
-                                    ))}
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-[14px] font-bold text-[#181725]">{vendor.name}</p>
+                                                    <p className="text-[11px] text-gray-400 font-medium mt-0.5 line-clamp-1">
+                                                        {vendor.categories.join(', ')}
+                                                    </p>
+                                                    <div className="flex items-center gap-2 mt-1.5">
+                                                        <div className="flex items-center gap-0.5 text-[10px] font-bold text-green-600">
+                                                            <Star size={10} fill="currentColor" />
+                                                            {vendor.rating}
+                                                        </div>
+                                                        <div className="flex items-center gap-0.5 text-[10px] font-semibold text-blue-600">
+                                                            <Clock size={10} />
+                                                            {vendor.deliveryTime}
+                                                        </div>
+                                                        <div className="flex items-center gap-0.5 text-[10px] font-semibold text-orange-600">
+                                                            <Package size={10} />
+                                                            Min ₹{vendor.minOrderValue}
+                                                        </div>
+                                                        {vendor.creditEnabled && (
+                                                            <div className="flex items-center gap-0.5 text-[10px] font-semibold text-purple-600">
+                                                                <CreditCard size={10} />
+                                                                Credit
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <ChevronRight size={18} className="text-gray-300 shrink-0" />
+                                            </Link>
+                                        );
+                                    })}
                                 </div>
                             </section>
                         )}

@@ -207,9 +207,144 @@ function VendorCategoryPageContent() {
             </div>
 
             {/* ==================== DESKTOP SECTION ==================== */}
-            <div className="hidden md:block">
-                <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-10">
-                    <p className="text-gray-400 mb-8">Desktop view for this route is under construction. Please use mobile view.</p>
+            <div className="hidden md:block bg-gray-50/50 min-h-screen">
+                <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-6">
+                    {/* Breadcrumbs */}
+                    <nav className="flex items-center gap-2 mb-6 text-[13px] text-gray-500 font-medium">
+                        <Link href="/" className="hover:text-[#53B175]">Home</Link>
+                        <span>/</span>
+                        <Link href="/vendors" className="hover:text-[#53B175]">Vendors</Link>
+                        <span>/</span>
+                        <span className="text-gray-900">{vendor.name}</span>
+                    </nav>
+
+                    <div className="flex gap-8 items-start">
+                        {/* Desktop Sidebar */}
+                        <aside className="w-[280px] shrink-0 sticky top-24">
+                            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm overflow-hidden">
+                                <div className="flex items-center gap-4 mb-8">
+                                    <div className="w-16 h-16 bg-gray-50 rounded-xl flex items-center justify-center p-2 shrink-0 border border-gray-100">
+                                        <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-contain" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-[18px] font-bold text-[#181725] leading-tight mb-1">{vendor.name}</h2>
+                                        <div className="flex items-center gap-1.5">
+                                            <Star size={14} fill="#53B175" className="text-[#53B175]" />
+                                            <span className="text-[13px] font-bold text-gray-700">{vendor.rating}</span>
+                                            <span className="text-[11px] text-gray-400">({vendor.totalRatings})</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <Link
+                                        href={`/vendor/${vendor.id}`}
+                                        className="flex items-center gap-3 w-full p-3 rounded-xl transition-all group hover:bg-gray-50"
+                                    >
+                                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center group-hover:bg-white border border-transparent group-hover:border-gray-100">
+                                            <span className="text-[18px]">✨</span>
+                                        </div>
+                                        <span className="text-[14px] font-bold text-[#181725]">All Products</span>
+                                    </Link>
+
+                                    {vendor.catalog.map((cat, idx) => {
+                                        const isActive = activeCategory?.id === cat.id;
+                                        const categorySlug = slugify(cat.name);
+                                        return (
+                                            <Link
+                                                key={idx}
+                                                href={`/category/${slug}/${categorySlug}`}
+                                                className={cn(
+                                                    "flex items-center justify-between w-full p-3 rounded-xl transition-all group",
+                                                    isActive ? "bg-[#53B175]/10" : "hover:bg-gray-50"
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className={cn(
+                                                        "w-8 h-8 rounded-lg flex items-center justify-center border transition-all",
+                                                        isActive ? "bg-white border-[#53B175]/20 shadow-sm" : "bg-gray-50 border-transparent group-hover:bg-white group-hover:border-gray-100"
+                                                    )}>
+                                                        <img src={cat.image} alt="" className="w-6 h-6 object-contain" />
+                                                    </div>
+                                                    <span className={cn(
+                                                        "text-[14px] font-bold transition-colors",
+                                                        isActive ? "text-[#53B175]" : "text-[#181725]"
+                                                    )}>
+                                                        {cat.name}
+                                                    </span>
+                                                </div>
+                                                <ChevronDown size={16} className={cn(
+                                                    "text-gray-300 transition-all",
+                                                    isActive ? "text-[#53B175] rotate-[-90deg]" : "group-hover:text-gray-400"
+                                                )} />
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </aside>
+
+                        {/* Desktop Main Feed */}
+                        <div className="flex-1 min-w-0">
+                            {/* Filter Bar */}
+                            <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-6 shadow-sm flex items-center justify-between">
+                                <h3 className="text-[18px] font-bold text-[#181725]">
+                                    {activeCategory?.name || 'Category'}
+                                    <span className="ml-2 text-[14px] text-gray-400 font-medium">({filteredProducts.length} items)</span>
+                                </h3>
+                                
+                                <div className="flex items-center gap-2">
+                                    {[
+                                        { label: 'Rating 4.0+', active: true },
+                                        { label: 'Price: Low to High' },
+                                        { label: 'Best Offers' },
+                                    ].map((f, i) => (
+                                        <button 
+                                            key={i}
+                                            className={cn(
+                                                "px-4 py-2 rounded-xl border text-[13px] font-bold transition-all",
+                                                f.active ? "bg-[#53B175] border-[#53B175] text-white" : "bg-white border-gray-200 text-gray-600 hover:border-[#53B175] hover:text-[#53B175]"
+                                            )}
+                                        >
+                                            {f.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Products Grid */}
+                            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                {filteredProducts.map((product: any) => (
+                                    <VendorProductCard
+                                        key={product.id}
+                                        product={{
+                                            ...product,
+                                            vendorId: vendor.id,
+                                            vendorName: vendor.name,
+                                            category: activeCategory?.name || '',
+                                            images: [product.image],
+                                            packSize: product.unit,
+                                            stock: product.inStock ? 100 : 0,
+                                            isActive: product.inStock,
+                                            bulkPrices: product.bulkPrices || [],
+                                            creditBadge: product.creditBadge ?? vendor.creditEnabled,
+                                            minOrderQuantity: 1,
+                                            isDeal: product.isDeal ?? !!product.discount,
+                                            frequentlyOrdered: product.frequentlyOrdered ?? false,
+                                        } as any}
+                                    />
+                                ))}
+                            </div>
+
+                            {filteredProducts.length === 0 && (
+                                <div className="text-center py-32 bg-white rounded-3xl border border-dashed border-gray-200">
+                                    <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 text-[40px]">🛍️</div>
+                                    <h3 className="text-[18px] font-bold text-[#181725] mb-1">No products in this category</h3>
+                                    <p className="text-gray-400">Try checking other categories from this vendor.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
             
