@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Search, ChevronRight, ChevronDown, ChevronUp, Plus, Minus, X, Percent, FileText, AlertTriangle, Check, Home, ShoppingCart, Truck, CreditCard, Trash2, Store } from 'lucide-react';
+import { ArrowLeft, Search, ChevronRight, ChevronDown, ChevronUp, Plus, Minus, X, Percent, FileText, AlertTriangle, Check, Home, ShoppingCart, Truck, CreditCard, Trash2, Store, Zap, FileCheck, Banknote, BadgePercent, Wallet } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { cn } from '@/lib/utils';
 
@@ -12,6 +12,7 @@ export default function CartPage() {
     const { cart, removeFromCart, updateQuantity, totalItems, subtotal, clearCart } = useCart();
     const router = useRouter();
     const [expandedVendors, setExpandedVendors] = useState<Record<string, boolean>>({});
+    const [paymentMethod, setPaymentMethod] = useState('razorpay');
 
     // Initialize all vendors as expanded by default
     const toggleVendor = (vendorId: string) => {
@@ -85,15 +86,84 @@ export default function CartPage() {
     }
 
     // --- PAYMENT SCREEN ---
+    const PAYMENT_METHODS = [
+        {
+            id: 'razorpay',
+            label: 'Razorpay',
+            sub: 'Cards, UPI, Netbanking & Wallets',
+            badge: <Zap size={18} strokeWidth={2.5} />,
+            badgeBg: 'bg-[#3395FF]',
+            badgeText: 'text-white',
+            tag: 'RECOMMENDED',
+        },
+        {
+            id: 'cheque',
+            label: 'Pay by Cheque',
+            sub: 'Business cheque, processed in 2–3 days',
+            badge: <FileCheck size={18} strokeWidth={2.5} />,
+            badgeBg: 'bg-amber-50',
+            badgeText: 'text-amber-600',
+        },
+        {
+            id: 'cod',
+            label: 'Cash on Delivery',
+            sub: 'Pay in cash when order arrives',
+            badge: <Banknote size={18} strokeWidth={2.5} />,
+            badgeBg: 'bg-green-50',
+            badgeText: 'text-green-600',
+        },
+        {
+            id: 'disco',
+            label: 'Credit (DISCO)',
+            sub: 'Buy now, pay later — up to 30 days',
+            badge: <BadgePercent size={18} strokeWidth={2.5} />,
+            badgeBg: 'bg-purple-50',
+            badgeText: 'text-purple-600',
+            tag: 'B2B CREDIT',
+        },
+        {
+            id: 'wallet',
+            label: 'H1 Wallet',
+            sub: 'Available balance: ₹0.00',
+            badge: <Wallet size={18} strokeWidth={2.5} />,
+            badgeBg: 'bg-orange-50',
+            badgeText: 'text-orange-500',
+        },
+    ] as const;
+
+    const confirmOrder = () => {
+        const newOrders = shipments.map((shipment, idx) => ({
+            id: `ORD-${Date.now()}-${idx}`,
+            status: 'Order Placed',
+            date: `Placed at ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
+            price: getShipmentTotal(shipment.items),
+            items: shipment.items.map((item: any) => ({
+                id: item.id,
+                image: item.image,
+                fullProduct: cart.find(ci => String(ci.productId) === String(item.id))?.product
+            })),
+            canRate: false
+        }));
+        try {
+            const existingOrders = JSON.parse(localStorage.getItem('horeca_orders') || '[]');
+            localStorage.setItem('horeca_orders', JSON.stringify([...newOrders, ...existingOrders]));
+        } catch (e) {
+            console.error('Failed to save orders:', e);
+        }
+        clearCart();
+        setScreen('success');
+    };
+
     if (screen === 'payment') {
+        const selected = PAYMENT_METHODS.find(m => m.id === paymentMethod) ?? PAYMENT_METHODS[0];
         return (
-            <div className="min-h-screen bg-[#F2F3F2] flex flex-col pb-24 md:pb-16">
+            <div className="min-h-screen bg-[#F2F3F2] flex flex-col pb-28 lg:pb-16">
                 {/* Mobile Header */}
-                <header className="md:hidden flex items-center px-4 h-14 bg-[#F2F3F2] sticky top-[12px] z-50">
+                <header className="md:hidden flex items-center px-4 h-14 bg-white border-b border-gray-100 sticky top-0 z-50">
                     <button onClick={() => setScreen('cart')} className="p-2 -ml-2">
                         <ArrowLeft size={22} className="text-[#181725]" />
                     </button>
-                    <h1 className="text-[20px] font-bold text-[#181725] absolute left-1/2 -translate-x-1/2">Payment</h1>
+                    <h1 className="text-[18px] font-bold text-[#181725] absolute left-1/2 -translate-x-1/2">Select Payment</h1>
                 </header>
 
                 {/* Desktop Header */}
@@ -113,62 +183,94 @@ export default function CartPage() {
                     </div>
                 </div>
 
-                <div className="flex-1 px-4 pt-4 md:max-w-[var(--container-max)] md:mx-auto md:px-[var(--container-padding)] md:pt-8">
+                <div className="flex-1 px-4 pt-4 md:max-w-[var(--container-max)] md:mx-auto md:px-[var(--container-padding)] md:pt-8 md:w-full">
                     <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 lg:gap-8 items-start">
-                        {/* Left Column - Payment Selection */}
-                        <div className="space-y-4">
-                            <div className="bg-white rounded-[18px] md:rounded-2xl border border-[#CFCECE] p-5 md:p-8 shadow-sm">
-                                <h3 className="text-[18px] md:text-[20px] font-bold text-[#181725] mb-5 md:mb-6">Select Payment Method</h3>
-                                <div className="space-y-4">
-                                    <label className="flex items-center justify-between p-4 md:p-5 border-2 rounded-xl md:rounded-2xl border-[#53B175] bg-[#53B175]/5 cursor-pointer hover:shadow-md transition-all group">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 md:w-14 md:h-14 bg-white rounded-xl flex items-center justify-center border-2 border-primary/20 font-black text-[#53B175] text-[16px] md:text-[18px] shadow-sm">UPI</div>
-                                            <div>
-                                                <span className="font-bold text-[#181725] md:text-[17px] block">Pay via UPI</span>
-                                                <span className="text-[12px] md:text-[13px] text-gray-400 font-medium">Google Pay, PhonePe, Paytm</span>
+
+                        {/* Left — Payment Methods */}
+                        <div className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
+                            <div className="px-5 md:px-7 py-5 border-b border-[#F0F0F0] bg-[#FAFAFA]">
+                                <h3 className="text-[17px] md:text-[19px] font-bold text-[#181725]">Select Payment Method</h3>
+                                <p className="text-[13px] text-gray-400 font-medium mt-0.5">Choose how you'd like to pay</p>
+                            </div>
+                            <div className="divide-y divide-[#F5F5F5]">
+                                {PAYMENT_METHODS.map((method) => {
+                                    const isSelected = paymentMethod === method.id;
+                                    return (
+                                        <button
+                                            key={method.id}
+                                            onClick={() => setPaymentMethod(method.id)}
+                                            className={`w-full px-5 md:px-7 py-4 md:py-5 flex items-center gap-4 text-left transition-all ${isSelected ? 'bg-[#53B175]/5' : 'hover:bg-gray-50/60'}`}
+                                        >
+                                            {/* Icon badge */}
+                                            <div className={`w-11 h-11 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 ${method.badgeBg} ${method.badgeText} border border-black/5`}>
+                                                {method.badge}
                                             </div>
-                                        </div>
-                                        <div className="w-6 h-6 rounded-full border-2 border-[#53B175] flex items-center justify-center">
-                                            <div className="w-3 h-3 rounded-full bg-[#53B175]" />
-                                        </div>
-                                    </label>
-                                    
-                                    <label className="flex items-center justify-between p-4 md:p-5 border-2 rounded-xl md:rounded-2xl border-gray-100 bg-gray-50/50 cursor-pointer hover:border-gray-200 hover:bg-gray-50/80 transition-all group">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 md:w-14 md:h-14 bg-white rounded-xl flex items-center justify-center border-2 border-gray-100 font-black text-gray-400 text-[16px] md:text-[18px] shadow-sm uppercase">COD</div>
-                                            <div>
-                                                <span className="font-bold text-[#181725] md:text-[17px] block">Cash on Delivery</span>
-                                                <span className="text-[12px] md:text-[13px] text-gray-400 font-medium">Pay after you receive</span>
+
+                                            {/* Label */}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className={`text-[15px] md:text-[16px] font-bold ${isSelected ? 'text-[#181725]' : 'text-[#181725]'}`}>
+                                                        {method.label}
+                                                    </span>
+                                                    {'tag' in method && method.tag && (
+                                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${method.id === 'razorpay' ? 'bg-[#3395FF]/10 text-[#3395FF]' : 'bg-purple-100 text-purple-600'}`}>
+                                                            {method.tag}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span className="text-[12px] md:text-[13px] text-gray-400 font-medium">{method.sub}</span>
                                             </div>
-                                        </div>
-                                        <div className="w-6 h-6 rounded-full border-2 border-gray-200" />
-                                    </label>
-                                </div>
+
+                                            {/* Radio */}
+                                            <div className={`w-5 h-5 md:w-6 md:h-6 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${isSelected ? 'border-[#53B175]' : 'border-gray-300'}`}>
+                                                {isSelected && <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-[#53B175]" />}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
 
-                        {/* Right Column - Bill Summary & Actions */}
+                        {/* Right — Bill Summary (desktop) */}
                         <div className="hidden lg:block sticky top-[80px] space-y-4">
-                            <div className="bg-white rounded-[16px] border border-[#CFCECE] overflow-hidden shadow-sm">
-                                <div className="p-4 flex items-center gap-3 border-b border-[#F0F0F0]">
-                                    <div className="w-[34px] h-[34px] rounded-[8px] border border-[#E2E2E2] flex items-center justify-center shrink-0">
-                                        <FileText size={16} className="text-[#181725]" />
-                                    </div>
-                                    <span className="text-[15px] font-bold text-[#181725]">Final Summary</span>
+                            {/* Selected method chip */}
+                            <div className="bg-white rounded-2xl border border-[#E2E2E2] px-6 py-4 flex items-center gap-3 shadow-sm">
+                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${selected.badgeBg} ${selected.badgeText} border border-black/5`}>
+                                    {selected.badge}
                                 </div>
-                                <div className="px-6 py-5 space-y-4">
-                                    <div className="flex justify-between items-center text-[15px]">
-                                        <span className="text-[#4C4F4D] font-medium">Subtotal</span>
-                                        <span className="font-bold text-[#181725]">₹ {itemTotal.toFixed(0)}</span>
+                                <div>
+                                    <p className="text-[13px] text-gray-400 font-medium">Paying via</p>
+                                    <p className="text-[15px] font-bold text-[#181725]">{selected.label}</p>
+                                </div>
+                            </div>
+
+                            {/* Summary card */}
+                            <div className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
+                                <div className="px-7 py-5 flex items-center gap-3 border-b border-[#F0F0F0]">
+                                    <div className="w-[38px] h-[38px] rounded-xl border border-[#E2E2E2] flex items-center justify-center shrink-0 bg-gray-50">
+                                        <FileText size={18} className="text-[#181725]" />
                                     </div>
-                                    <div className="flex justify-between items-center text-[15px]">
-                                        <span className="text-[#4C4F4D] font-medium">Total Charges</span>
-                                        <span className="font-bold text-[#181725]">₹ {deliveryFee + handlingFee}</span>
+                                    <span className="text-[17px] font-bold text-[#181725]">Final Summary</span>
+                                </div>
+                                <div className="px-7 py-6 space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[15px] text-[#4C4F4D] font-medium">Subtotal</span>
+                                        <span className="text-[15px] font-bold text-[#181725]">₹{itemTotal.toFixed(0)}</span>
                                     </div>
-                                    <div className="pt-4 border-t border-dashed border-gray-200">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[15px] text-[#4C4F4D] font-medium">Delivery</span>
+                                        <span className="text-[15px] font-bold text-primary">FREE</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[15px] text-[#4C4F4D] font-medium">Handling Fee</span>
+                                        <span className="text-[15px] font-bold text-[#181725]">₹{handlingFee}</span>
+                                    </div>
+                                </div>
+                                <div className="px-7 pb-6">
+                                    <div className="border-t border-dashed border-[#D0D0D0] pt-5">
                                         <div className="flex justify-between items-baseline mb-1">
-                                            <span className="text-[17px] font-bold text-[#181725]">Amount to Pay</span>
-                                            <span className="text-[24px] font-black text-primary">₹ {totalPay.toFixed(2)}</span>
+                                            <span className="text-[18px] font-bold text-[#181725]">Amount to Pay</span>
+                                            <span className="text-[26px] font-black text-primary">₹{totalPay.toFixed(2)}</span>
                                         </div>
                                         <p className="text-[12px] text-primary font-bold">Includes all taxes and fees</p>
                                     </div>
@@ -176,73 +278,51 @@ export default function CartPage() {
                             </div>
 
                             <button
-                                onClick={() => {
-                                    const newOrders = shipments.map((shipment, idx) => ({
-                                        id: `ORD-${Date.now()}-${idx}`,
-                                        status: 'Order Placed',
-                                        date: `Placed at ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
-                                        price: getShipmentTotal(shipment.items),
-                                        items: shipment.items.map((item: any) => ({
-                                            id: item.id,
-                                            image: item.image,
-                                            fullProduct: cart.find(ci => String(ci.productId) === String(item.id))?.product
-                                        })),
-                                        canRate: false
-                                    }));
-                                    try {
-                                        const existingOrders = JSON.parse(localStorage.getItem('horeca_orders') || '[]');
-                                        localStorage.setItem('horeca_orders', JSON.stringify([...newOrders, ...existingOrders]));
-                                    } catch (e) {
-                                        console.error('Failed to save orders:', e);
-                                    }
-                                    clearCart();
-                                    setScreen('success');
-                                }}
-                                className="w-full bg-[#53B175] text-white py-5 rounded-[18px] font-bold text-[18px] transition-all hover:bg-[#48a068] active:scale-[0.98] shadow-lg shadow-[#53B175]/20"
+                                onClick={confirmOrder}
+                                className="w-full bg-[#53B175] text-white py-5 rounded-2xl font-bold text-[18px] transition-all hover:bg-[#48a068] active:scale-[0.98] shadow-lg shadow-[#53B175]/20"
                             >
                                 Confirm Order
                             </button>
                         </div>
 
                         {/* Mobile + Tablet Summary */}
-                        <div className="lg:hidden mt-6 bg-white rounded-[16px] border border-[#CFCECE] p-5 space-y-4">
-                            <div className="flex justify-between font-bold">
-                                <span className="text-gray-500">Amount to Pay</span>
-                                <span className="text-[#181725]">₹ {totalPay.toFixed(2)}</span>
+                        <div className="lg:hidden bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
+                            {/* Selected method row */}
+                            <div className="px-5 py-4 flex items-center gap-3 bg-[#53B175]/5 border-b border-[#E8E8E8]">
+                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${selected.badgeBg} ${selected.badgeText} border border-black/5`}>
+                                    {selected.badge}
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-[12px] text-gray-400 font-medium">Paying via</p>
+                                    <p className="text-[14px] font-bold text-[#181725]">{selected.label}</p>
+                                </div>
+                            </div>
+                            {/* Amounts */}
+                            <div className="px-5 py-4 space-y-3">
+                                <div className="flex justify-between">
+                                    <span className="text-[14px] text-gray-500 font-medium">Subtotal</span>
+                                    <span className="text-[14px] font-bold text-[#181725]">₹{itemTotal.toFixed(0)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-[14px] text-gray-500 font-medium">Handling Fee</span>
+                                    <span className="text-[14px] font-bold text-[#181725]">₹{handlingFee}</span>
+                                </div>
+                                <div className="border-t border-dashed border-gray-200 pt-3 flex justify-between items-baseline">
+                                    <span className="text-[16px] font-bold text-[#181725]">Total</span>
+                                    <span className="text-[22px] font-black text-primary">₹{totalPay.toFixed(2)}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div className="fixed bottom-0 left-0 right-0 px-5 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50 lg:hidden">
+                {/* Fixed bottom bar — mobile + tablet */}
+                <div className="lg:hidden fixed bottom-0 left-0 right-0 px-4 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50">
                     <button
-                        onClick={() => {
-                            const newOrders = shipments.map((shipment, idx) => ({
-                                id: `ORD-${Date.now()}-${idx}`,
-                                status: 'Order Placed',
-                                date: `Placed at ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
-                                price: getShipmentTotal(shipment.items),
-                                    items: shipment.items.map((item: any) => ({
-                                        id: item.id,
-                                        image: item.image,
-                                        fullProduct: cart.find(ci => String(ci.productId) === String(item.id))?.product
-                                    })),
-                                canRate: false
-                            }));
-
-                            try {
-                                const existingOrders = JSON.parse(localStorage.getItem('horeca_orders') || '[]');
-                                localStorage.setItem('horeca_orders', JSON.stringify([...newOrders, ...existingOrders]));
-                            } catch (e) {
-                                console.error('Failed to save orders:', e);
-                            }
-
-                            clearCart();
-                            setScreen('success');
-                        }}
-                        className="w-full bg-[#53B175] text-white py-[18px] rounded-[16px] font-bold text-[18px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20 hover:bg-[#48a068]"
+                        onClick={confirmOrder}
+                        className="w-full bg-[#53B175] text-white py-[18px] rounded-[16px] font-bold text-[17px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20 hover:bg-[#48a068]"
                     >
-                        Confirm Payment
+                        Confirm & Pay ₹{totalPay.toFixed(2)}
                     </button>
                 </div>
             </div>
