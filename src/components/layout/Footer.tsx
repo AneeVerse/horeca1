@@ -106,8 +106,7 @@ export function Footer() {
                         </ul>
                     </div>
 
-                    {/* Links Columns - 2x2 Grid on Mobile, row on Desktop - Commented out as not in screenshot */}
-                    {/* 
+                    {/* Links Columns - 2x2 Grid on Mobile, row on Desktop */}
                     <div className="w-full lg:flex-1 grid grid-cols-2 lg:flex lg:flex-row lg:justify-around gap-x-4 gap-y-10 lg:gap-4 lg:px-6">
                         <div className="min-w-fit">
                             <h4 className="text-[16px] md:text-[18px] font-bold text-[#181725] mb-5">Information</h4>
@@ -161,7 +160,6 @@ export function Footer() {
                             </ul>
                         </div>
                     </div>
-                    */}
                 </div>
 
                 {/* Shop on The Go + Social Links */}
@@ -187,22 +185,12 @@ export function Footer() {
                     </div>
                 </div>
 
-                {/* Bottom Bar - Commented out as requested */}
-                {/* 
+                {/* Bottom Bar */}
                 <div className="py-6 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4">
                     <p className="text-[14px] text-[#7C7C7C] text-center md:text-left">
                         Horeca1 eCommerce © 2025. All Rights Reserved
                     </p>
-                    <div className="flex items-center gap-4">
-                        <span className="text-[14px] text-[#7C7C7C] font-medium">We Are Accepting</span>
-                        <img
-                            src="/images/recom-product/MarketPro - eCommerce Multivendor Tailwind CSS Template Multipurpose Preview - ThemeForest_files/payment-method.png"
-                            alt="Accepted Payments"
-                            className="h-8 object-contain"
-                        />
-                    </div>
                 </div>
-                */}
             </div>
         </footer>
     );
