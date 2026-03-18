@@ -138,8 +138,11 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[10001] bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-            <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[32px] max-h-[92vh] flex flex-col animate-in slide-in-from-bottom duration-500 ease-out">
+        <div className="fixed inset-0 z-[10001] bg-[#181725]/60 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-6 animate-in fade-in duration-300">
+            {/* Click to close (Desktop only) */}
+            <div className="absolute inset-0 cursor-pointer hidden md:block" onClick={onClose} />
+            
+            <div className="relative w-full max-w-[750px] bg-white rounded-t-[32px] md:rounded-[32px] max-h-[92vh] md:max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom md:zoom-in-95 duration-500 md:duration-300 ease-out overflow-hidden">
 
                 {/* Header */}
                 <div className="px-6 pt-6 pb-4 border-b border-gray-100 shrink-0">

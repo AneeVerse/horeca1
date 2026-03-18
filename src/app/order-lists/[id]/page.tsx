@@ -29,20 +29,22 @@ export default function OrderListDetailPage() {
     const isExpanded = (vendorId: string) => expandedVendors[vendorId] !== false;
 
     React.useEffect(() => {
-        // 1. Check Mock Data
-        let found = MOCK_ORDER_LISTS.find(l => l.id === listId);
+        let found: OrderList | null = null;
 
-        // 2. Check Merged Local Storage (Mock + Custom)
-        if (!found) {
-            const saved = localStorage.getItem('horeca_order_lists_all');
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    found = parsed.find((l: any) => l.id === listId);
-                } catch (e) {
-                    console.error('Failed to parse lists', e);
-                }
+        // 1. Check Merged Local Storage (Mock + Custom) - PRIORITY for updates
+        const saved = localStorage.getItem('horeca_order_lists_all');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                found = parsed.find((l: any) => l.id === listId);
+            } catch (e) {
+                console.error('Failed to parse lists', e);
             }
+        }
+
+        // 2. Check Mock Data - FALLBACK
+        if (!found) {
+            found = MOCK_ORDER_LISTS.find(l => l.id === listId) || null;
         }
 
         if (found) {
@@ -149,10 +151,12 @@ export default function OrderListDetailPage() {
         const vid = item.product?.vendorId || orderList.vendorId;
         if (!seen.has(vid)) {
             seen.add(vid);
+            // Lookup vendor details if missing from product
+            const vendorInfo = MOCK_VENDORS.find(v => v.id === vid);
             vendorGroups.push({
                 vendorId: vid,
-                vendorName: item.product?.vendorName || orderList.vendorName,
-                vendorLogo: item.product?.vendorLogo || orderList.vendorLogo,
+                vendorName: item.product?.vendorName || vendorInfo?.name || orderList.vendorName,
+                vendorLogo: item.product?.vendorLogo || vendorInfo?.logo || orderList.vendorLogo,
                 items: []
             });
         }
@@ -161,87 +165,30 @@ export default function OrderListDetailPage() {
 
     const isMultiVendor = vendorGroups.length > 1;
 
-    // Compact table for mobile
-    const MobileItemTable = ({ items }: { items: typeof orderList.items }) => (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            <div className="grid grid-cols-[1fr_35px_75px_55px] min-[400px]:grid-cols-[1fr_45px_90px_70px] gap-1 min-[400px]:gap-2 px-3 min-[400px]:px-5 py-4 bg-gray-50 border-b border-gray-100 uppercase tracking-tighter">
-                <span className="text-[9px] min-[400px]:text-[11px] font-black text-gray-500">Item</span>
-                <span className="text-[9px] min-[400px]:text-[11px] font-black text-gray-500 text-center">Last</span>
-                <span className="text-[9px] min-[400px]:text-[11px] font-black text-gray-500 text-center">Qty</span>
-                <span className="text-[9px] min-[400px]:text-[11px] font-black text-gray-500 text-right">Total</span>
-            </div>
-            {items.map((item) => {
-                const qty = quantities[item.productId] || 0;
-                const itemTotal = item.product.price * qty;
-                return (
-                    <div key={item.productId} className="grid grid-cols-[1fr_35px_75px_55px] min-[400px]:grid-cols-[1fr_45px_90px_70px] gap-1 min-[400px]:gap-2 px-3 min-[400px]:px-5 py-4 border-b border-gray-50 items-center hover:bg-gray-50/50 transition-colors">
-                        <div className="flex items-center gap-1.5 min-[400px]:gap-3 min-w-0">
-                            <div className="w-8 h-8 min-[400px]:w-10 min-[400px]:h-10 bg-gray-50 rounded-lg flex items-center justify-center shrink-0 p-1">
-                                <img src={item.product.images[0] || '/images/recom-product/product-img10.png'} alt={item.product.name} className="w-full h-full object-contain" />
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-[11px] min-[400px]:text-[13px] font-bold text-[#181725] leading-tight line-clamp-2 min-[400px]:line-clamp-none">{item.product.name}</p>
-                                <p className="text-[9px] min-[400px]:text-[10px] text-gray-400 mt-0.5 font-medium">₹{item.product.price}</p>
-                            </div>
-                        </div>
-                        <div className="text-center font-bold">
-                            <span className="text-[11px] min-[400px]:text-[12px] text-gray-400">{item.lastOrderedQty || '-'}</span>
-                        </div>
-                        <div className="flex items-center justify-center">
-                            <div className="flex items-center border border-gray-100 rounded-lg overflow-hidden bg-white shadow-sm">
-                                <button onClick={() => updateQty(item.productId, -1)} className="w-6 h-6 min-[400px]:w-7 min-[400px]:h-7 flex items-center justify-center hover:bg-gray-50 active:bg-gray-100">
-                                    <Minus size={10} className="text-gray-400" strokeWidth={3} />
-                                </button>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    value={qty}
-                                    onChange={(e) => setQty(item.productId, parseInt(e.target.value) || 0)}
-                                    className="w-6 h-6 min-[400px]:w-8 min-[400px]:h-7 text-center text-[11px] min-[400px]:text-[12px] font-bold text-[#181725] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-transparent"
-                                />
-                                <button onClick={() => updateQty(item.productId, 1)} className="w-6 h-6 min-[400px]:w-7 min-[400px]:h-7 flex items-center justify-center hover:bg-gray-50 active:bg-gray-100">
-                                    <Plus size={10} className="text-[#53B175]" strokeWidth={3} />
-                                </button>
-                            </div>
-                        </div>
-                        <div className="text-right">
-                            <span className={`text-[11px] min-[400px]:text-[13px] font-black ${qty > 0 ? 'text-[#181725]' : 'text-gray-200'}`}>
-                                {qty > 0 ? `₹${itemTotal.toLocaleString('en-IN')}` : '—'}
-                            </span>
-                        </div>
-                    </div>
-                );
-            })}
-        </div>
-    );
-
-    // Full desktop card layout (like cart) — with collapse + X per item
-    const DesktopVendorCard = ({ group }: { group: typeof vendorGroups[0] }) => {
+    // Responsive vendor card layout (collapsible) — used on all devices
+    const ResponsiveVendorCard = ({ group }: { group: typeof vendorGroups[0] }) => {
         const expanded = isExpanded(group.vendorId);
         return (
             <div className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
                 {/* Vendor Header */}
-                <div className="px-7 py-5 flex items-center justify-between bg-[#FAFAFA] border-b border-[#F0F0F0]">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                            {group.vendorLogo ? (
-                                <img src={group.vendorLogo} alt={group.vendorName} className="w-full h-full object-contain rounded-xl" />
-                            ) : (
-                                <Building2 size={18} className="text-primary" />
-                            )}
-                        </div>
+                <div className="px-4 py-3 min-[340px]:px-7 min-[340px]:py-5 flex items-center justify-between bg-[#FAFAFA] border-b border-[#F0F0F0] cursor-pointer" onClick={() => toggleVendor(group.vendorId)}>
+                    <div className="flex items-center gap-2 min-[340px]:gap-3 flex-1 min-w-0">
+                        {group.vendorLogo && (
+                            <div className="w-10 h-10 min-[340px]:w-14 min-[340px]:h-14 md:w-16 md:h-16 rounded-full overflow-hidden shrink-0 shadow-sm">
+                                <img src={group.vendorLogo} alt="" className="w-full h-full object-cover" />
+                            </div>
+                        )}
                         <div className="min-w-0">
-                            <h3 className="text-[17px] font-bold text-[#181725]">{group.vendorName}</h3>
-                            <p className="text-[13px] text-gray-400 font-medium">{group.items.length} item{group.items.length !== 1 ? 's' : ''}</p>
+                            <h3 className="text-[15px] min-[340px]:text-[17px] font-bold text-[#181725]">{group.vendorName}</h3>
+                            <p className="text-[11px] min-[340px]:text-[13px] text-gray-400 font-medium">{group.items.length} item{group.items.length !== 1 ? 's' : ''}</p>
                         </div>
                     </div>
                     <button
-                        onClick={() => toggleVendor(group.vendorId)}
-                        className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors shrink-0"
+                        className="w-8 h-8 min-[340px]:w-9 min-[340px]:h-9 rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors shrink-0"
                     >
                         {expanded
-                            ? <ChevronUp size={20} className="text-gray-500" strokeWidth={2.5} />
-                            : <ChevronDown size={20} className="text-gray-500" strokeWidth={2.5} />}
+                            ? <ChevronUp size={18} className="text-gray-500" strokeWidth={2.5} />
+                            : <ChevronDown size={18} className="text-gray-500" strokeWidth={2.5} />}
                     </button>
                 </div>
 
@@ -252,64 +199,64 @@ export default function OrderListDetailPage() {
                             const qty = quantities[item.productId] || 0;
                             const itemTotal = item.product.price * qty;
                             return (
-                                <div key={item.productId} className="px-7 py-5 flex items-center gap-5 hover:bg-gray-50/40 transition-colors group">
+                                <div key={item.productId} className="px-3 py-3 min-[340px]:px-5 min-[340px]:py-4 md:px-7 md:py-5 flex items-center gap-2 min-[340px]:gap-3 md:gap-5 hover:bg-gray-50/40 transition-colors group">
                                     {/* Image */}
-                                    <div className="w-[72px] h-[72px] rounded-2xl bg-[#F7F8F7] flex items-center justify-center shrink-0 border border-gray-100 p-2 group-hover:border-primary/10 transition-colors">
+                                    <div className="w-10 h-10 min-[340px]:w-14 min-[340px]:h-14 md:w-[72px] md:h-[72px] rounded-xl md:rounded-2xl bg-[#F7F8F7] flex items-center justify-center shrink-0 border border-gray-100 p-1 md:p-2 group-hover:border-primary/10 transition-colors">
                                         <img src={item.product.images[0] || '/images/recom-product/product-img10.png'} alt={item.product.name} className="max-w-full max-h-full object-contain" />
                                     </div>
 
                                     {/* Info */}
                                     <div className="flex-1 min-w-0">
-                                        <h4 className="text-[15px] font-bold text-[#181725] leading-snug line-clamp-1">{item.product.name}</h4>
-                                        <p className="text-[13px] text-gray-400 font-medium mt-0.5">{item.product.packSize || '1 pc'}</p>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <div className="w-[6px] h-[6px] rounded-full bg-primary" />
-                                            <span className="text-[12px] text-gray-400 font-medium">₹{item.product.price}/pc</span>
+                                        <h4 className="text-[12px] min-[340px]:text-[14px] md:text-[15px] font-bold text-[#181725] leading-snug line-clamp-2">{item.product.name}</h4>
+                                        <p className="text-[10px] min-[340px]:text-[12px] md:text-[13px] text-gray-400 font-medium mt-0.5">{item.product.packSize || '1 pc'}</p>
+                                        <div className="flex items-center gap-1.5 md:gap-2 mt-1">
+                                            <div className="w-[4px] h-[4px] md:w-[6px] md:h-[6px] rounded-full bg-primary" />
+                                            <span className="text-[9px] min-[340px]:text-[11px] md:text-[12px] text-gray-400 font-medium whitespace-nowrap">₹{item.product.price}/pc</span>
                                             {item.lastOrderedQty && (
-                                                <span className="text-[11px] text-gray-300 font-medium">· Last: {item.lastOrderedQty}</span>
+                                                <span className="text-[9px] min-[340px]:text-[11px] md:text-[11px] text-gray-400 font-bold whitespace-nowrap">· Last: {item.lastOrderedQty}</span>
                                             )}
                                         </div>
                                     </div>
 
                                     {/* Qty Controls */}
-                                    <div className="flex items-center gap-0 border border-gray-200 rounded-xl overflow-hidden shrink-0">
+                                    <div className="flex items-center gap-0 border border-gray-200 rounded-lg md:rounded-xl overflow-hidden shrink-0">
                                         <button
                                             onClick={() => updateQty(item.productId, -1)}
-                                            className="w-10 h-10 flex items-center justify-center text-red-400 hover:bg-red-50 transition-colors"
+                                            className="w-7 h-7 min-[340px]:w-8 min-[340px]:h-8 md:w-10 md:h-10 flex items-center justify-center text-red-400 hover:bg-red-50 transition-colors"
                                         >
-                                            <Minus size={16} strokeWidth={2.5} />
+                                            <Minus className="w-3 h-3 min-[340px]:w-3.5 min-[340px]:h-3.5 md:w-4 md:h-4" strokeWidth={3} />
                                         </button>
-                                        <div className="w-12 h-10 flex items-center justify-center border-x border-gray-200">
+                                        <div className="w-8 h-7 min-[340px]:w-10 min-[340px]:h-8 md:w-12 md:h-10 flex items-center justify-center border-x border-gray-200">
                                             <input
                                                 type="number"
                                                 min="0"
                                                 value={qty}
                                                 onChange={(e) => setQty(item.productId, parseInt(e.target.value) || 0)}
-                                                className="w-full text-center text-[15px] font-bold text-[#181725] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-transparent"
+                                                className="w-full text-center text-[12px] md:text-[15px] font-bold text-[#181725] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-transparent"
                                             />
                                         </div>
                                         <button
                                             onClick={() => updateQty(item.productId, 1)}
-                                            className="w-10 h-10 flex items-center justify-center text-primary hover:bg-green-50 transition-colors"
+                                            className="w-7 h-7 min-[340px]:w-8 min-[340px]:h-8 md:w-10 md:h-10 flex items-center justify-center text-primary hover:bg-green-50 transition-colors"
                                         >
-                                            <Plus size={16} strokeWidth={2.5} />
+                                            <Plus className="w-3 h-3 min-[340px]:w-3.5 min-[340px]:h-3.5 md:w-4 md:h-4" strokeWidth={2.5} />
                                         </button>
                                     </div>
 
-                                    {/* Total */}
-                                    <div className="text-right shrink-0 w-[90px]">
-                                        <span className={`text-[16px] font-black ${qty > 0 ? 'text-[#181725]' : 'text-gray-200'}`}>
+                                    {/* Total — hidden on mobile */}
+                                    <div className="hidden md:block text-right shrink-0 w-[90px]">
+                                        <span className={`text-[16px] font-black ${qty > 0 ? 'text-[#181725]' : 'text-gray-400'}`}>
                                             {qty > 0 ? `₹${itemTotal.toLocaleString('en-IN')}` : '—'}
                                         </span>
                                     </div>
 
-                                    {/* Clear qty button */}
+                                    {/* Clear qty button — hidden on mobile */}
                                     <button
                                         onClick={() => setQty(item.productId, 0)}
-                                        className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors shrink-0"
+                                        className="hidden md:flex w-8 h-8 rounded-lg items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
                                         title="Clear quantity"
                                     >
-                                        <X size={16} strokeWidth={2.5} />
+                                        <X size={16} strokeWidth={3} />
                                     </button>
                                 </div>
                             );
@@ -336,25 +283,27 @@ export default function OrderListDetailPage() {
                         <span className="text-text font-semibold truncate">{orderList.name}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <div className="w-16 h-16 bg-white rounded-2xl border border-gray-100 flex items-center justify-center p-3 shrink-0 shadow-sm">
-                                {orderList.vendorLogo ? (
-                                    <img src={orderList.vendorLogo} alt={orderList.vendorName} className="w-full h-full object-contain" />
-                                ) : (
-                                    <ClipboardList size={32} className="text-primary" />
-                                )}
-                            </div>
-                            <div>
-                                <h1 className="text-[32px] font-black text-text tracking-tight leading-none mb-2">{orderList.name}</h1>
-                                <p className="text-[16px] text-[#299e60] font-black flex items-center gap-2">
-                                    <Building2 size={18} />
-                                    {orderList.vendorName}
-                                </p>
-                            </div>
+                        <div>
+                            <h1 className="text-[32px] font-black text-text tracking-tight leading-none mb-2">{orderList.name}</h1>
+                            <p className="text-[16px] text-[#299e60] font-black flex items-center gap-2">
+                                <Building2 size={18} />
+                                {orderList.vendorName}
+                            </p>
+                        </div>
+                        {/* Tablet/Mid-range desktop button (becomes redundant on lg due to sidebar) */}
+                        <div className="lg:hidden">
+                            <button
+                                onClick={handleFillLastQty}
+                                className="bg-white text-[#299e60] px-5 py-3 border border-[#299e60]/20 rounded-xl text-[14px] font-bold shadow-sm hover:bg-[#299e60]/5 transition-all flex items-center gap-2"
+                            >
+                                <RotateCcw size={16} />
+                                Re-fill Last Qty
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
+
 
             {/* Mobile Header */}
             <div className="md:hidden bg-white border-b border-gray-100 sticky top-0 z-50">
@@ -369,16 +318,16 @@ export default function OrderListDetailPage() {
                             </button>
                             <div className="min-w-0">
                                 <h1 className="text-[17px] min-[340px]:text-[19px] font-bold text-[#181725] truncate">{orderList.name}</h1>
-                                <p className="text-[11px] min-[340px]:text-[13px] text-[#299e60] font-bold mt-0.5 truncate">{orderList.vendorName}</p>
+                                <p className="text-[11px] min-[340px]:text-[13px] text-[#299e60] font-black mt-0.5 truncate">{orderList.vendorName}</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0 px-1">
+                        <div className="flex items-center gap-2 shrink-0">
                             <button
                                 onClick={handleFillLastQty}
-                                className="text-[12px] font-bold text-[#299e60] px-3 py-1.5 border border-[#299e60]/20 rounded-lg hover:bg-[#299e60]/5 transition-colors flex items-center gap-1.5"
+                                className="text-[11px] min-[340px]:text-[12px] font-bold text-[#299e60] px-2 min-[340px]:px-3 py-1.5 border border-[#299e60]/20 rounded-lg hover:bg-[#299e60]/5 transition-colors flex items-center gap-1 min-[340px]:gap-1.5"
                             >
                                 <RotateCcw size={14} />
-                                Re-fill
+                                <span className="hidden min-[320px]:inline">Re-fill</span>
                             </button>
                         </div>
                     </div>
@@ -392,32 +341,10 @@ export default function OrderListDetailPage() {
                     {/* ===== LEFT COLUMN ===== */}
                     <div className="space-y-3 md:space-y-5">
 
-                        {/* Mobile: compact table layout */}
-                        <div className="lg:hidden space-y-4">
+                        {/* Responsive Vendor Cards (Collapsible) */}
+                        <div className="space-y-4 md:space-y-5">
                             {vendorGroups.map(group => (
-                                <div key={group.vendorId}>
-                                    {isMultiVendor && (
-                                        <div className="flex items-center gap-2.5 mb-2 px-1">
-                                            <div className="w-7 h-7 rounded-lg border border-gray-100 p-0.5 bg-white shrink-0 overflow-hidden">
-                                                {group.vendorLogo ? (
-                                                    <img src={group.vendorLogo} alt={group.vendorName} className="w-full h-full object-contain" />
-                                                ) : (
-                                                    <Building2 size={16} className="text-gray-400 m-auto" />
-                                                )}
-                                            </div>
-                                            <span className="text-[13px] font-extrabold text-[#181725]">{group.vendorName}</span>
-                                            <span className="text-[11px] text-gray-400 font-medium">{group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
-                                        </div>
-                                    )}
-                                    <MobileItemTable items={group.items} />
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Desktop: cart-style vendor cards */}
-                        <div className="hidden lg:block space-y-5">
-                            {vendorGroups.map(group => (
-                                <DesktopVendorCard key={group.vendorId} group={group} />
+                                <ResponsiveVendorCard key={group.vendorId} group={group} />
                             ))}
                         </div>
                     </div>
@@ -445,11 +372,11 @@ export default function OrderListDetailPage() {
                             <div className="px-7 py-6 space-y-4">
                                 <div className="flex justify-between items-center">
                                     <span className="text-[15px] text-[#4C4F4D] font-medium">Items in list</span>
-                                    <span className="text-[15px] font-bold text-[#181725]">{orderList.items.length}</span>
+                                    <span className="text-[15px] font-black text-[#181725]">{orderList.items.length}</span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="text-[15px] text-[#4C4F4D] font-medium">Selected</span>
-                                    <span className="text-[15px] font-bold text-[#181725]">{activeItems.length} item{activeItems.length !== 1 ? 's' : ''}</span>
+                                    <span className="text-[15px] font-black text-[#181725]">{activeItems.length} item{activeItems.length !== 1 ? 's' : ''}</span>
                                 </div>
                             </div>
 
@@ -500,11 +427,11 @@ export default function OrderListDetailPage() {
                     <div className="px-5 pt-5 pb-2 space-y-4">
                         <div className="flex justify-between items-center">
                             <span className="text-[14px] text-[#4C4F4D] font-medium">Items in list</span>
-                            <span className="text-[14px] font-bold text-[#181725]">{orderList.items.length}</span>
+                            <span className="text-[14px] font-black text-[#181725]">{orderList.items.length}</span>
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-[14px] text-[#4C4F4D] font-medium">Selected</span>
-                            <span className="text-[14px] font-bold text-[#181725]">{activeItems.length} item{activeItems.length !== 1 ? 's' : ''}</span>
+                            <span className="text-[14px] font-black text-[#181725]">{activeItems.length} item{activeItems.length !== 1 ? 's' : ''}</span>
                         </div>
                     </div>
                     <div className="px-5 pb-5 pt-2">

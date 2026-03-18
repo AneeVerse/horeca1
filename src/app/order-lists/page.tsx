@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Clock, ChevronRight, ClipboardList, ChevronLeft, Trash2, Edit2, Heart, ShoppingCart, Home } from 'lucide-react';
+import { Plus, Clock, ChevronRight, ClipboardList, ChevronLeft, Trash2, Edit2, Heart, ShoppingCart, Home, Building2 } from 'lucide-react';
 import { MOCK_ORDER_LISTS, MOCK_VENDORS, MOCK_VENDOR_PRODUCTS } from '@/lib/mockData';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { useCart } from '@/context/CartContext';
@@ -19,6 +19,7 @@ export default function OrderListsPage() {
     const [allLists, setAllLists] = React.useState<OrderList[]>([]);
     const [isCreateOverlayOpen, setIsCreateOverlayOpen] = React.useState(false);
     const [editingList, setEditingList] = React.useState<OrderList | null>(null);
+    const [listToDelete, setListToDelete] = React.useState<string | null>(null);
 
     // Initial load: Priority to merged storage, fallback to mock + custom
     React.useEffect(() => {
@@ -125,12 +126,16 @@ export default function OrderListsPage() {
     const handleDeleteList = (id: string, e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (window.confirm('Are you sure you want to delete this list?')) {
-            const updated = allLists.filter(l => l.id !== id);
-            setAllLists(updated);
-            localStorage.setItem('horeca_order_lists_all', JSON.stringify(updated));
-            toast.success('Order list deleted');
-        }
+        setListToDelete(id);
+    };
+
+    const confirmDelete = () => {
+        if (!listToDelete) return;
+        const updated = allLists.filter(l => l.id !== listToDelete);
+        setAllLists(updated);
+        localStorage.setItem('horeca_order_lists_all', JSON.stringify(updated));
+        toast.success('Order list deleted');
+        setListToDelete(null);
     };
 
     const handleEditClick = (list: OrderList, e: React.MouseEvent) => {
@@ -215,66 +220,98 @@ export default function OrderListsPage() {
                 {allLists.length > 0 ? (
                     <div className="space-y-3">
                         {allLists.map((list) => (
-                            <Link
-                                key={list.id}
-                                href={`/order-lists/${list.id}`}
-                                className="flex items-center gap-2 min-[340px]:gap-4 bg-white rounded-2xl p-3 min-[340px]:p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all group"
-                            >
-                                {/* Vendor Logo — stacked for multi-vendor lists */}
-                                <div className="relative w-10 h-10 min-[340px]:w-12 min-[340px]:h-12 shrink-0">
-                                    <div className="w-full h-full bg-gray-50 rounded-xl flex items-center justify-center p-1.5 border border-gray-100">
-                                        {list.vendorLogo ? (
-                                            <img src={list.vendorLogo} alt={list.vendorName} className="w-full h-full object-contain" />
-                                        ) : (
-                                            <ClipboardList size={20} className="text-gray-400" />
-                                        )}
-                                    </div>
-                                    {/* Badge for multi-vendor */}
-                                    {list.vendorName.includes(' +') && (
-                                        <span className="absolute -top-1 -right-1 bg-[#53B175] text-white text-[8px] font-black px-1 py-0.5 rounded-full leading-none">
-                                            {list.vendorName.match(/\+(\d+)/)?.[1] ? `+${list.vendorName.match(/\+(\d+)/)![1]}` : ''}
-                                        </span>
-                                    )}
-                                </div>
+                                <Link
+                                    key={list.id}
+                                    href={`/order-lists/${list.id}`}
+                                    className="flex items-center gap-2 min-[340px]:gap-4 bg-white rounded-2xl p-2.5 min-[340px]:p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all group"
+                                >
+                                {(() => {
+                                    // Extract all unique vendor IDs from the items
+                                    const itemsVendorIds = Array.from(new Set(list.items.map(i => i.product?.vendorId || list.vendorId)));
+                                    // Map them to their actual logos from MOCK_VENDORS
+                                    const logos = itemsVendorIds
+                                        .map(vid => MOCK_VENDORS.find(v => v.id === vid)?.logo)
+                                        .filter(Boolean);
 
-                                {/* Info */}
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <p className="text-[15px] min-[340px]:text-[16px] md:text-[18px] font-bold text-[#181725] line-clamp-1">{list.name}</p>
-                                    </div>
-                                    <p className="text-[11px] min-[340px]:text-[12px] md:text-[14px] text-[#299e60] font-bold mt-0.5">
-                                        {list.vendorName}
-                                    </p>
-                                    <div className="flex flex-wrap items-center gap-2 min-[340px]:gap-3 mt-1.5">
-                                        <span className="text-[11px] min-[340px]:text-[12px] md:text-[13px] text-gray-400 font-semibold">
-                                            {list.items.length} items
-                                        </span>
-                                        {list.lastUsed && (
-                                            <span className="flex items-center gap-0.5 text-[11px] min-[340px]:text-[12px] md:text-[13px] text-gray-400 font-semibold">
-                                                <Clock size={11} className="md:w-3.5 md:h-3.5" />
-                                                <span className="whitespace-nowrap">
-                                                    Used {new Date(list.lastUsed).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                                                </span>
+                                    const isStack = logos.length > 1;
+
+                                    if (isStack) {
+                                        return (
+                                            <div className="relative w-12 h-12 min-[340px]:w-14 min-[340px]:h-14 md:w-20 md:h-20 shrink-0 flex items-center justify-center">
+                                                {logos.slice(0, 4).map((logo, idx) => (
+                                                    <div
+                                                        key={idx}
+                                                        className="absolute rounded-full overflow-hidden aspect-square bg-transparent"
+                                                        style={{
+                                                            width: '60%',
+                                                            height: '60%',
+                                                            left: (idx === 1 || idx === 3) ? '40%' : '0%',
+                                                            top: (idx === 2 || idx === 3) ? '40%' : '0%',
+                                                            zIndex: 10 - idx
+                                                        }}
+                                                    >
+                                                        <img src={logo} alt="" className="w-full h-full object-cover rounded-full" />
+                                                    </div>
+                                                ))}
+                                                {logos.length > 4 && (
+                                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 md:w-6 md:h-6 rounded-full bg-primary text-white text-[9px] md:text-[10px] font-bold flex items-center justify-center border-[1.5px] border-white z-20 shadow-sm">
+                                                        +{logos.length - 4}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        /* Logo — Single */
+                                        <div className="w-12 h-12 min-[340px]:w-14 min-[340px]:h-14 md:w-20 md:h-20 rounded-full border border-gray-100 bg-white overflow-hidden shrink-0 flex items-center justify-center shadow-sm">
+                                            {list.vendorLogo ? (
+                                                <img src={list.vendorLogo} alt="" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <Building2 size={24} className="text-gray-200" />
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+
+                                    {/* Info */}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-[14px] min-[340px]:text-[16px] md:text-[18px] font-bold text-[#181725] line-clamp-1">{list.name}</p>
+                                        </div>
+                                        <p className="text-[10px] min-[340px]:text-[12px] md:text-[14px] text-[#299e60] font-bold mt-0.5 truncate">
+                                            {list.vendorName}
+                                        </p>
+                                        <div className="flex flex-wrap items-center gap-1.5 min-[340px]:gap-3 mt-1 min-[340px]:mt-1.5">
+                                            <span className="text-[10px] min-[340px]:text-[12px] md:text-[13px] text-gray-400 font-semibold">
+                                                {list.items.length} items
                                             </span>
-                                        )}
+                                            {list.lastUsed && (
+                                                <span className="flex items-center gap-0.5 text-[10px] min-[340px]:text-[12px] md:text-[13px] text-gray-500 font-bold whitespace-nowrap">
+                                                    <Clock size={10} className="md:w-3.5 md:h-3.5" />
+                                                    <span>
+                                                        Used {new Date(list.lastUsed).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                                    </span>
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
 
-                                <div className="flex items-center gap-1 min-[340px]:gap-2 md:gap-4 ml-auto shrink-0 transition-all">
-                                    <button 
-                                        onClick={(e) => handleEditClick(list, e)}
-                                        className="p-2 md:p-3 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-[#53B175] transition-all active:scale-95 cursor-pointer"
-                                    >
-                                        <Edit2 size={16} className="md:w-5 md:h-5" />
-                                    </button>
-                                    <button 
-                                        onClick={(e) => handleDeleteList(list.id, e)}
-                                        className="p-2 md:p-3 hover:bg-red-50 rounded-xl text-gray-400 hover:text-red-500 transition-all active:scale-95 cursor-pointer"
-                                    >
-                                        <Trash2 size={16} className="md:w-5 md:h-5" />
-                                    </button>
-                                    <ChevronRight size={18} className="text-gray-300 group-hover:text-gray-500 transition-colors ml-1 md:w-6 md:h-6" />
-                                </div>
+                                    <div className="flex items-center gap-0.5 min-[340px]:gap-2 md:gap-4 ml-auto shrink-0 transition-all">
+                                        <button 
+                                            onClick={(e) => handleEditClick(list, e)}
+                                            className="p-1.5 min-[340px]:p-2 md:p-3 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-[#53B175] transition-all active:scale-95 cursor-pointer"
+                                        >
+                                            <Edit2 size={15} className="md:w-5 md:h-5" />
+                                        </button>
+                                        <button 
+                                            onClick={(e) => handleDeleteList(list.id, e)}
+                                            className="p-1.5 min-[340px]:p-2 md:p-3 hover:bg-red-50 rounded-xl text-gray-400 hover:text-red-500 transition-all active:scale-95 cursor-pointer"
+                                        >
+                                            <Trash2 size={15} className="md:w-5 md:h-5" />
+                                        </button>
+                                        <ChevronRight size={18} className="text-gray-300 group-hover:text-gray-500 transition-colors ml-0.5 min-[340px]:ml-1 md:w-6 md:h-6" />
+                                    </div>
                             </Link>
                         ))}
                     </div>
@@ -292,6 +329,42 @@ export default function OrderListsPage() {
                     </div>
                 )}
             </div>
+
+            {/* Delete Confirmation Modal */}
+            {listToDelete && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+                    <div 
+                        className="absolute inset-0 bg-[#181725]/40 backdrop-blur-sm" 
+                        onClick={() => setListToDelete(null)} 
+                    />
+                    <div className="relative bg-white w-full max-w-[400px] rounded-[24px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="p-8 text-center">
+                            <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-5 text-red-500">
+                                <Trash2 size={32} strokeWidth={2.5} />
+                            </div>
+                            <h3 className="text-[20px] font-black text-[#181725] mb-2">Delete this list?</h3>
+                            <p className="text-[14px] text-gray-400 font-medium leading-relaxed">
+                                Are you sure you want to delete <span className="text-[#181725] font-bold">"{allLists.find(l => l.id === listToDelete)?.name}"</span>? 
+                                This action cannot be undone.
+                            </p>
+                        </div>
+                        <div className="p-6 bg-gray-50 flex flex-col sm:flex-row gap-3">
+                            <button
+                                onClick={() => setListToDelete(null)}
+                                className="flex-1 px-6 py-4 rounded-xl text-[15px] font-bold text-[#181725] bg-white border border-gray-200 hover:bg-gray-100 transition-colors order-2 sm:order-1"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDelete}
+                                className="flex-1 px-6 py-4 rounded-xl text-[15px] font-bold text-white bg-red-500 shadow-lg shadow-red-200 hover:bg-red-600 transition-all active:scale-95 order-1 sm:order-2"
+                            >
+                                Delete List
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <StickyCartBar />
         </div>
