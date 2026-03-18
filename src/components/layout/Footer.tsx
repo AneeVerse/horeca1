@@ -113,7 +113,7 @@ export function Footer() {
                             <ul className="space-y-4">
                                 {FOOTER_LINKS.information.map((link) => (
                                     <li key={link}>
-                                        <Link href="#" className="text-[14px] text-[#7C7C7C] hover:text-[#299E60] transition-colors">
+                                        <Link href="/under-construction" className="text-[14px] text-[#7C7C7C] hover:text-[#299E60] transition-colors">
                                             {link}
                                         </Link>
                                     </li>
@@ -126,7 +126,7 @@ export function Footer() {
                             <ul className="space-y-4">
                                 {FOOTER_LINKS.support.map((link) => (
                                     <li key={link}>
-                                        <Link href="#" className="text-[14px] text-[#7C7C7C] hover:text-[#299E60] transition-colors">
+                                        <Link href="/under-construction" className="text-[14px] text-[#7C7C7C] hover:text-[#299E60] transition-colors">
                                             {link}
                                         </Link>
                                     </li>
@@ -139,7 +139,7 @@ export function Footer() {
                             <ul className="space-y-4">
                                 {FOOTER_LINKS.account.map((link) => (
                                     <li key={link}>
-                                        <Link href="#" className="text-[14px] text-[#7C7C7C] hover:text-[#299E60] transition-colors">
+                                        <Link href="/under-construction" className="text-[14px] text-[#7C7C7C] hover:text-[#299E60] transition-colors">
                                             {link}
                                         </Link>
                                     </li>
@@ -152,7 +152,7 @@ export function Footer() {
                             <ul className="space-y-4">
                                 {FOOTER_LINKS.groceries.map((link) => (
                                     <li key={link}>
-                                        <Link href="#" className="text-[14px] text-[#7C7C7C] hover:text-[#299E60] transition-colors">
+                                        <Link href="/under-construction" className="text-[14px] text-[#7C7C7C] hover:text-[#299E60] transition-colors">
                                             {link}
                                         </Link>
                                     </li>

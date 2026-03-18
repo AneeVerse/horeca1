@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { RotateCcw, ListOrdered, Store } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export function QuickActions() {
     const [isMounted, setIsMounted] = useState(false);
@@ -24,19 +25,22 @@ export function QuickActions() {
     return (
         <section className="w-full py-3 bg-white">
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 md:flex md:items-center md:justify-center gap-2 md:gap-6 lg:gap-8">
                     {actions.map((action) => (
                         <Link
                             key={action.label}
                             href={action.href}
-                            className="flex flex-col items-center gap-2 p-3 md:p-4 rounded-2xl bg-gray-50/80 border border-gray-100 hover:shadow-md hover:border-gray-200 active:scale-[0.98] transition-all"
+                            className="flex flex-col md:flex-row items-center gap-2 md:gap-6 p-2.5 md:p-6 md:flex-1 md:max-w-[360px] rounded-2xl md:rounded-[32px] bg-gray-50/80 border border-gray-100 hover:shadow-xl hover:shadow-gray-100/50 hover:border-[#53B175]/30 hover:-translate-y-1 active:scale-[0.98] transition-all group"
                         >
-                            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${action.color}`}>
-                                <action.icon size={20} />
+                            <div className={cn(
+                                "w-9 h-9 min-[340px]:w-11 min-[340px]:h-11 md:w-16 md:h-16 rounded-xl md:rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 duration-500 shadow-sm",
+                                action.color
+                            )}>
+                                <action.icon className="w-5 h-5 md:w-8 md:h-8" strokeWidth={2.5} />
                             </div>
-                            <div className="text-center">
-                                <p className="text-[12px] md:text-[13px] font-bold text-[#181725]">{action.label}</p>
-                                <p className="text-[10px] text-gray-400 font-medium">{action.desc}</p>
+                            <div className="text-center md:text-left min-w-0">
+                                <p className="text-[11px] min-[340px]:text-[13px] md:text-[18px] font-black text-[#181725] md:mb-1 group-hover:text-[#53B175] transition-colors">{action.label}</p>
+                                <p className="text-[9px] min-[340px]:text-[11px] md:text-[14px] text-gray-400 font-medium leading-tight line-clamp-1">{action.desc}</p>
                             </div>
                         </Link>
                     ))}

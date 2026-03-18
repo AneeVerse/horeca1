@@ -27,8 +27,8 @@ export function NearbyVendors() {
                             href={`/vendor/${vendor.id}`}
                             className="flex items-start gap-4 bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 hover:border-gray-200 transition-all group"
                         >
-                            <div className="w-14 h-14 bg-gray-50 rounded-xl flex items-center justify-center p-2 shrink-0 border border-gray-100">
-                                <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300" />
+                            <div className="w-14 h-14 flex items-center justify-center overflow-hidden shrink-0 transition-transform duration-300">
+                                <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-cover rounded-xl group-hover:scale-110 transition-transform duration-300" />
                             </div>
                             <div className="flex-1 min-w-0">
                                 <h3 className="text-[14px] font-bold text-[#181725] line-clamp-1">{vendor.name}</h3>
@@ -63,8 +63,8 @@ export function NearbyVendors() {
                             href={`/vendor/${vendor.id}`}
                             className="flex items-start gap-4 bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 hover:border-gray-200 transition-all group"
                         >
-                            <div className="w-14 h-14 bg-gray-50 rounded-xl flex items-center justify-center p-2 shrink-0 border border-gray-100">
-                                <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300" />
+                            <div className="w-14 h-14 flex items-center justify-center overflow-hidden shrink-0 transition-transform duration-300">
+                                <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-cover rounded-xl group-hover:scale-110 transition-transform duration-300" />
                             </div>
                             <div className="flex-1 min-w-0">
                                 <h3 className="text-[15px] font-bold text-[#181725] line-clamp-1">{vendor.name}</h3>
@@ -99,8 +99,8 @@ export function NearbyVendors() {
                             href={`/vendor/${vendor.id}`}
                             className="flex items-start gap-4 bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 hover:border-gray-200 transition-all group"
                         >
-                            <div className="w-14 h-14 bg-gray-50 rounded-xl flex items-center justify-center p-2 shrink-0 border border-gray-100">
-                                <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300" />
+                            <div className="w-14 h-14 flex items-center justify-center overflow-hidden shrink-0 transition-transform duration-300">
+                                <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-cover rounded-xl group-hover:scale-110 transition-transform duration-300" />
                             </div>
                             <div className="flex-1 min-w-0">
                                 <h3 className="text-[15px] font-bold text-[#181725] line-clamp-1">{vendor.name}</h3>

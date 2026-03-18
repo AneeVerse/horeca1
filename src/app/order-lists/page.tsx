@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Clock, ChevronRight, ClipboardList, ChevronLeft, Trash2, Edit2, Heart, ShoppingCart, Home, Building2 } from 'lucide-react';
+import { Plus, Clock, ChevronRight, ClipboardList, ChevronLeft, Trash2, Edit2, Heart, ShoppingCart, Home, Building2, AlertCircle } from 'lucide-react';
 import { MOCK_ORDER_LISTS, MOCK_VENDORS, MOCK_VENDOR_PRODUCTS } from '@/lib/mockData';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { useCart } from '@/context/CartContext';
@@ -14,7 +14,7 @@ import type { OrderList } from '@/types';
 
 export default function OrderListsPage() {
     const router = useRouter();
-    const { totalItems } = useCart();
+    const { totalItems, addToCart } = useCart();
     const { wishlist } = useWishlist();
     const [allLists, setAllLists] = React.useState<OrderList[]>([]);
     const [isCreateOverlayOpen, setIsCreateOverlayOpen] = React.useState(false);
@@ -39,12 +39,12 @@ export default function OrderListsPage() {
             }
         }
 
-        // Fallback for first-time or legacy users
-        const customSaved = localStorage.getItem('custom_order_lists');
+        // Prioritize the synced localStorage key
+        const savedLists = localStorage.getItem('horeca_order_lists_all');
         let customParsed: any[] = [];
-        if (customSaved) {
+        if (savedLists) {
             try {
-                customParsed = JSON.parse(customSaved).map((l: any) => ({
+                customParsed = JSON.parse(savedLists).map((l: any) => ({
                     ...l,
                     createdAt: new Date(l.createdAt),
                     updatedAt: new Date(l.updatedAt),
@@ -53,9 +53,12 @@ export default function OrderListsPage() {
             } catch (e) {}
         }
         
-        const merged = [...MOCK_ORDER_LISTS, ...customParsed];
-        setAllLists(merged);
-        localStorage.setItem('horeca_order_lists_all', JSON.stringify(merged));
+        // If we have saved data, use it exclusively. If not, initialize from Mock.
+        const initial = savedLists ? customParsed : MOCK_ORDER_LISTS;
+        setAllLists(initial);
+        if (!savedLists) {
+            localStorage.setItem('horeca_order_lists_all', JSON.stringify(MOCK_ORDER_LISTS));
+        }
     }, []);
 
     const handleCreateList = (data: { name: string; items: { productId: string; quantity: number; vendorId: string }[] }) => {
@@ -112,8 +115,8 @@ export default function OrderListsPage() {
                 vendorLogo: primaryVendor.logo,
                 items: mappedItems,
                 createdAt: new Date(),
-                updatedAt: new Date(),
-                lastUsed: new Date()
+                updatedAt: new Date()
+                // lastUsed intentionally undefined for new lists
             };
             updated = [...allLists, newList];
             toast.success(`List "${data.name}" created!`);
@@ -280,24 +283,60 @@ export default function OrderListsPage() {
                                             <p className="text-[14px] min-[340px]:text-[16px] md:text-[18px] font-bold text-[#181725] line-clamp-1">{list.name}</p>
                                         </div>
                                         <p className="text-[10px] min-[340px]:text-[12px] md:text-[14px] text-[#299e60] font-bold mt-0.5 truncate">
-                                            {list.vendorName}
+                                            {(() => {
+                                                const itemsVendorIds = Array.from(new Set(list.items.map(i => i.product?.vendorId || list.vendorId)));
+                                                const firstVendor = MOCK_VENDORS.find(v => v.id === itemsVendorIds[0]) || { name: list.vendorName };
+                                                return itemsVendorIds.length > 1 
+                                                    ? `${firstVendor.name} +${itemsVendorIds.length - 1} more` 
+                                                    : firstVendor.name;
+                                            })()}
                                         </p>
                                         <div className="flex flex-wrap items-center gap-1.5 min-[340px]:gap-3 mt-1 min-[340px]:mt-1.5">
                                             <span className="text-[10px] min-[340px]:text-[12px] md:text-[13px] text-gray-400 font-semibold">
                                                 {list.items.length} items
                                             </span>
-                                            {list.lastUsed && (
-                                                <span className="flex items-center gap-0.5 text-[10px] min-[340px]:text-[12px] md:text-[13px] text-gray-500 font-bold whitespace-nowrap">
+                                            {list.lastUsed ? (
+                                                <span className="flex items-center gap-0.5 text-[10px] min-[340px]:text-[12px] md:text-[13px] text-[#299e60] font-bold whitespace-nowrap">
                                                     <Clock size={10} className="md:w-3.5 md:h-3.5" />
                                                     <span>
                                                         Used {new Date(list.lastUsed).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                                                     </span>
+                                                </span>
+                                            ) : (
+                                                <span className="flex items-center gap-0.5 text-[10px] min-[340px]:text-[12px] md:text-[13px] text-gray-400 font-bold whitespace-nowrap px-2 py-0.5 bg-gray-50 rounded-full border border-gray-100">
+                                                    <AlertCircle size={10} className="md:w-3.5 md:h-3.5" />
+                                                    <span>Never used</span>
                                                 </span>
                                             )}
                                         </div>
                                     </div>
 
                                     <div className="flex items-center gap-0.5 min-[340px]:gap-2 md:gap-4 ml-auto shrink-0 transition-all">
+                                        <button 
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                // Quick Order Logic: Use defaultQty if defined, fallback to 1
+                                                list.items.forEach(item => {
+                                                    if (item.product) addToCart(item.product, item.defaultQty || 1);
+                                                });
+                                                
+                                                const now = new Date();
+                                                const updated = allLists.map(l => l.id === list.id ? { ...l, lastUsed: now } : l);
+                                                setAllLists(updated);
+                                                localStorage.setItem('horeca_order_lists_all', JSON.stringify(updated));
+                                                window.dispatchEvent(new Event('storage'));
+                                                
+                                                toast.success(`Quick Ordered: ${list.name}`, {
+                                                    description: "Items added to cart and list moved to 'Continue Ordering'!",
+                                                    icon: <ShoppingCart className="text-white bg-[#299e60] p-1 rounded-full" size={18} />
+                                                });
+                                            }}
+                                            className="p-1.5 min-[340px]:p-2 md:p-3 hover:bg-[#299e60]/10 rounded-xl text-gray-400 hover:text-[#299e60] transition-all active:scale-95 cursor-pointer group/order"
+                                            title="Quick Order"
+                                        >
+                                            <ShoppingCart size={15} className="md:w-5 md:h-5" />
+                                        </button>
                                         <button 
                                             onClick={(e) => handleEditClick(list, e)}
                                             className="p-1.5 min-[340px]:p-2 md:p-3 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-[#53B175] transition-all active:scale-95 cursor-pointer"
@@ -310,7 +349,7 @@ export default function OrderListsPage() {
                                         >
                                             <Trash2 size={15} className="md:w-5 md:h-5" />
                                         </button>
-                                        <ChevronRight size={18} className="text-gray-300 group-hover:text-gray-500 transition-colors ml-0.5 min-[340px]:ml-1 md:w-6 md:h-6" />
+                                        <ChevronRight size={18} className="text-gray-300 group-hover/link:text-gray-500 transition-colors ml-0.5 min-[340px]:ml-1 md:w-6 md:h-6" />
                                     </div>
                             </Link>
                         ))}

@@ -304,7 +304,7 @@ export function Navbar() {
                             <div className="flex items-center gap-3 lg:gap-6">
                                 <div className="hidden lg:flex flex-col items-end">
                                     <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Support</span>
-                                    <Link href="/contact" className="text-[15px] font-black text-text hover:text-primary transition-colors">+91-1234567890</Link>
+                                    <Link href="/under-construction" className="text-[15px] font-black text-text hover:text-primary transition-colors">+91-1234567890</Link>
                                 </div>
                                 <div className="flex items-center gap-2 lg:gap-4">
                                     <Link href="/wishlist" className="p-2 hover:bg-gray-50 rounded-full transition-all relative group cursor-pointer">
@@ -448,8 +448,8 @@ export function Navbar() {
                         <div className="flex items-center gap-4 lg:gap-6 text-[var(--text-sm)] font-semibold text-text-muted">
                             <Link href="/" className="hover:text-primary py-4 cursor-pointer">Home</Link>
                             <Link href="/vendors" className="hover:text-primary cursor-pointer">Vendors</Link>
-                            <Link href="/blog" className="hover:text-primary cursor-pointer">Blog</Link>
-                            <Link href="/contact" className="hover:text-primary cursor-pointer">Contact Us</Link>
+                            <Link href="/under-construction" className="hover:text-primary cursor-pointer">Blog</Link>
+                            <Link href="/under-construction" className="hover:text-primary cursor-pointer">Contact Us</Link>
                         </div>
                     </div>
 

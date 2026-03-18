@@ -108,6 +108,23 @@ export default function OrderListDetailPage() {
         });
 
         if (itemsAdded > 0) {
+            // Update lastUsed in localStorage
+            const saved = localStorage.getItem('horeca_order_lists_all');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    const updated = parsed.map((l: any) => 
+                        l.id === orderList.id ? { ...l, lastUsed: new Date() } : l
+                    );
+                    localStorage.setItem('horeca_order_lists_all', JSON.stringify(updated));
+                    
+                    // Trigger storage event for other components (like Homepage)
+                    window.dispatchEvent(new Event('storage'));
+                } catch (e) {
+                    console.error('Failed to update lastUsed', e);
+                }
+            }
+
             toast.success(`${orderList.name} added to cart!`, {
                 description: `Successfully added ${itemsAdded} items to your cart.`,
                 duration: 2500,
