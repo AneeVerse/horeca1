@@ -70,12 +70,12 @@ export function CategoryShowcase() {
 
     return (
         <section
-            className="w-full pt-4 pb-6 bg-white relative z-30 overflow-hidden"
+            className="w-full pt-4 pb-6 bg-white relative z-30"
             suppressHydrationWarning={true}
         >
-            <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
+            <div className="max-w-[var(--container-max)] mx-auto overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center justify-between mb-5 px-4 md:px-[var(--container-padding)]">
                     <h2 className="text-[16px] md:text-[20px] lg:text-[22px] font-bold text-[#181725]">Shop By Category</h2>
                     {/* Mobile toggle */}
                     <button
@@ -93,57 +93,62 @@ export function CategoryShowcase() {
                     </button>
                 </div>
 
-                {/* Mobile: collapsed = 2-row horizontal scroll, expanded = wrapping grid */}
-                {isMobileExpanded ? (
-                    <div className="md:hidden grid grid-cols-4 sm:grid-cols-4 gap-x-3 gap-y-6 pb-4">
-                        {CATEGORIES.map((cat, idx) => (
-                            <CategoryCard key={`mob-exp-${idx}`} cat={cat} />
-                        ))}
+                {/* Content Area */}
+                <div className="relative">
+                    {/* Mobile: collapsed = 2-row horizontal scroll, expanded = wrapping grid */}
+                    <div className="md:hidden">
+                        {isMobileExpanded ? (
+                            <div className="grid grid-cols-4 sm:grid-cols-4 gap-x-3 gap-y-6 pb-4 px-5  md:px-[var(--container-padding)]">
+                                {CATEGORIES.map((cat, idx) => (
+                                    <CategoryCard key={`mob-exp-${idx}`} cat={cat} />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="grid grid-rows-2 grid-flow-col overflow-x-auto no-scrollbar auto-cols-[100px] gap-x-4 gap-y-6 pb-6 px-4 md:px-[var(--container-padding)] scroll-smooth snap-x">
+                                {CATEGORIES.map((cat, idx) => (
+                                    <CategoryCard key={`mob-scr-${idx}`} cat={cat} />
+                                ))}
+                            </div>
+                        )}
                     </div>
-                ) : (
-                    <div className="md:hidden grid grid-rows-2 grid-flow-col overflow-x-auto auto-cols-[90px] gap-x-3 gap-y-6 no-scrollbar pb-4 scroll-smooth snap-x">
-                        {CATEGORIES.map((cat, idx) => (
-                            <CategoryCard key={`mob-scr-${idx}`} cat={cat} />
-                        ))}
+
+                    {/* Desktop: collapsed = 2-row horizontal scroll, expanded = wrapping grid */}
+                    <div className="hidden md:block relative group/scroll w-full">
+                        {!isDesktopExpanded && (
+                            <button
+                                onClick={scrollLeft}
+                                className="absolute left-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform border border-gray-100 opacity-0 group-hover/scroll:opacity-100"
+                            >
+                                <ChevronLeft size={20} className="text-gray-500" />
+                            </button>
+                        )}
+
+                        {isDesktopExpanded ? (
+                            <div className="grid grid-cols-[repeat(auto-fill,110px)] lg:grid-cols-[repeat(auto-fill,125px)] justify-between gap-x-4 gap-y-8 pb-4 px-5 md:px-[var(--container-padding)]">
+                                {desktopCategories.map((cat, idx) => (
+                                    <CategoryCard key={`desk-exp-${idx}`} cat={cat} />
+                                ))}
+                            </div>
+                        ) : (
+                            <div
+                                ref={desktopScrollRef}
+                                className="grid grid-rows-2 grid-flow-col overflow-x-auto auto-cols-[115px] lg:auto-cols-[130px] gap-x-5 gap-y-8 no-scrollbar pb-6 px-5 md:px-[var(--container-padding)] scroll-smooth"
+                            >
+                                {desktopCategories.map((cat, idx) => (
+                                    <CategoryCard key={`desk-scr-${idx}`} cat={cat} />
+                                ))}
+                            </div>
+                        )}
+
+                        {!isDesktopExpanded && (
+                            <button
+                                onClick={scrollRight}
+                                className="absolute right-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform border border-gray-100 opacity-0 group-hover/scroll:opacity-100"
+                            >
+                                <ChevronRight size={20} className="text-gray-500" />
+                            </button>
+                        )}
                     </div>
-                )}
-
-                {/* Desktop: collapsed = 2-row horizontal scroll, expanded = wrapping grid */}
-                <div className="hidden md:block relative group/scroll">
-                    {!isDesktopExpanded && (
-                        <button
-                            onClick={scrollLeft}
-                            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-10 w-9 h-9 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform border border-gray-100 opacity-0 group-hover/scroll:opacity-100"
-                        >
-                            <ChevronLeft size={18} className="text-gray-500" />
-                        </button>
-                    )}
-
-                    {isDesktopExpanded ? (
-                        <div className="grid grid-cols-[repeat(auto-fill,110px)] lg:grid-cols-[repeat(auto-fill,120px)] justify-between gap-x-4 gap-y-6 pb-4">
-                            {desktopCategories.map((cat, idx) => (
-                                <CategoryCard key={`desk-exp-${idx}`} cat={cat} />
-                            ))}
-                        </div>
-                    ) : (
-                        <div
-                            ref={desktopScrollRef}
-                            className="grid grid-rows-2 grid-flow-col overflow-x-auto auto-cols-[110px] lg:auto-cols-[120px] gap-x-4 gap-y-6 no-scrollbar pb-4 scroll-smooth"
-                        >
-                            {desktopCategories.map((cat, idx) => (
-                                <CategoryCard key={`desk-scr-${idx}`} cat={cat} />
-                            ))}
-                        </div>
-                    )}
-
-                    {!isDesktopExpanded && (
-                        <button
-                            onClick={scrollRight}
-                            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-10 w-9 h-9 bg-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform border border-gray-100 opacity-0 group-hover/scroll:opacity-100"
-                        >
-                            <ChevronRight size={18} className="text-gray-500" />
-                        </button>
-                    )}
                 </div>
             </div>
         </section>

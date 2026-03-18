@@ -30,7 +30,7 @@ export function QuickActions() {
                         <Link
                             key={action.label}
                             href={action.href}
-                            className="flex flex-col md:flex-row items-center gap-2 md:gap-6 p-2.5 md:p-6 md:flex-1 md:max-w-[360px] rounded-2xl md:rounded-[32px] bg-gray-50/80 border border-gray-100 hover:shadow-xl hover:shadow-gray-100/50 hover:border-[#53B175]/30 hover:-translate-y-1 active:scale-[0.98] transition-all group"
+                            className="flex flex-col md:flex-row items-center gap-2 md:gap-6 p-2.5 md:p-6 md:flex-1 md:max-w-[360px] rounded-2xl md:rounded-[32px] bg-white border border-gray-200 shadow-sm hover:shadow-xl hover:shadow-gray-200/40 hover:border-[#53B175]/40 hover:-translate-y-1 active:scale-[0.98] transition-all group"
                         >
                             <div className={cn(
                                 "w-9 h-9 min-[340px]:w-11 min-[340px]:h-11 md:w-16 md:h-16 rounded-xl md:rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 duration-500 shadow-sm",
