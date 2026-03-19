@@ -92,19 +92,20 @@ export function ShopByStorePromo() {
                 {/* Vendor Logos Horizontal Scroll */}
                 <div className="pb-7 md:pb-10 pt-5 md:pt-6 w-full">
                     <div className="max-w-[var(--container-max)] mx-auto relative px-0 md:px-[var(--container-padding)] group/scroll">
-                        {/* Desktop scroll arrows - positioned within the container */}
+                        {/* Desktop scroll arrows - Now centered on the circles and refined style */}
                         {canScrollLeft && (
                             <button
                                 onClick={() => scroll('left')}
-                                className="hidden md:flex absolute left-0 top-[79px] -translate-y-1/2 z-20 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full shadow-lg items-center justify-center hover:bg-white hover:scale-110 transition-all cursor-pointer -translate-x-1/2 opacity-0 group-hover/scroll:opacity-100"
+                                className="hidden md:flex absolute left-0 top-[82px] -translate-y-1/2 z-20 w-11 h-11 bg-white/95 backdrop-blur-sm rounded-full shadow-lg items-center justify-center hover:bg-white hover:scale-110 transition-all cursor-pointer -translate-x-1/2 opacity-0 group-hover/scroll:opacity-100 border border-white/20"
                             >
-                                <ChevronLeft size={20} className="text-[#3d9e5c]" />
+                                <ChevronLeft size={24} className="text-[#3d9e5c] mr-0.5" />
                             </button>
                         )}
 
                         <div
                             ref={scrollRef}
-                            className="flex gap-5 md:gap-7 overflow-x-auto no-scrollbar scroll-smooth pb-4"
+                            onScroll={checkScroll}
+                            className="flex gap-5 md:gap-8 overflow-x-auto no-scrollbar scroll-smooth pb-4"
                         >
                             {/* Spacer for mobile alignment (align with px-6 header text) */}
                             <div className="flex-none w-6 md:hidden" />
@@ -127,7 +128,7 @@ export function ShopByStorePromo() {
                                         className="flex-none flex flex-col items-center group"
                                     >
                                         {/* Logo Circle */}
-                                        <div className="w-[90px] h-[90px] md:w-[110px] md:h-[110px] rounded-full bg-white flex items-center justify-center mb-3 overflow-hidden">
+                                        <div className="w-[90px] h-[90px] md:w-[115px] md:h-[115px] rounded-full bg-white flex items-center justify-center mb-4 overflow-hidden shadow-[0_8px_25px_-5px_rgba(0,0,0,0.1)] group-hover:shadow-[0_12px_35px_-8px_rgba(0,0,0,0.2)] transition-shadow">
                                             <img
                                                 src={vendor.logo}
                                                 alt={vendor.name}
@@ -137,14 +138,16 @@ export function ShopByStorePromo() {
                                         </div>
 
                                         {/* Vendor Name */}
-                                        <h3 className="text-white text-[14px] md:text-[17px] font-bold text-center leading-tight line-clamp-1 max-w-[100px] md:max-w-[140px] group-hover:text-[#FFD700] transition-colors">
+                                        <h3 className="text-white text-[14px] md:text-[17px] font-black text-center leading-tight line-clamp-1 max-w-[100px] md:max-w-[140px] group-hover:text-[#FFD700] transition-colors drop-shadow-sm">
                                             {vendor.name}
                                         </h3>
 
                                         {/* Discount Badge */}
-                                        <span className="text-white/90 text-[12px] md:text-[14px] font-bold mt-1 text-center tracking-wide">
-                                            Flat {20 + (index % 4) * 5}% Off
-                                        </span>
+                                        <div className="bg-white/10 backdrop-blur-md px-3 py-1 rounded-full mt-2 border border-white/10">
+                                            <span className="text-white text-[11px] md:text-[13px] font-black text-center tracking-wide">
+                                                Flat {20 + (index % 4) * 5}% Off
+                                            </span>
+                                        </div>
                                     </Link>
                                 );
                             })}
@@ -156,9 +159,9 @@ export function ShopByStorePromo() {
                         {canScrollRight && (
                             <button
                                 onClick={() => scroll('right')}
-                                className="hidden md:flex absolute right-0 top-[79px] -translate-y-1/2 z-20 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full shadow-lg items-center justify-center hover:bg-white hover:scale-110 transition-all cursor-pointer translate-x-1/2 opacity-0 group-hover/scroll:opacity-100"
+                                className="hidden md:flex absolute right-0 top-[82px] -translate-y-1/2 z-20 w-11 h-11 bg-white/95 backdrop-blur-sm rounded-full shadow-lg items-center justify-center hover:bg-white hover:scale-110 transition-all cursor-pointer translate-x-1/2 opacity-0 group-hover/scroll:opacity-100 border border-white/20"
                             >
-                                <ChevronRight size={20} className="text-[#3d9e5c]" />
+                                <ChevronRight size={24} className="text-[#3d9e5c] ml-0.5" />
                             </button>
                         )}
                     </div>
