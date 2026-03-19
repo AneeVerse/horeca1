@@ -42,6 +42,34 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
     const bulk2 = product.bulkPrices?.[1] ?? null;
 
     const isOutOfStock = product.stock === 0 || product.isActive === false;
+    
+    const handleShare = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const shareUrl = `${window.location.origin}/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`;
+        
+        const shareData = {
+            title: product.name,
+            text: `Check out ${product.name} from ${product.vendorName} on Horeca1`,
+            url: shareUrl,
+        };
+
+        try {
+            if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+                await navigator.share(shareData);
+            } else {
+                await navigator.clipboard.writeText(shareUrl);
+                toast.success('Link copied to clipboard!', {
+                    description: 'You can now share it with others.',
+                });
+            }
+        } catch (err) {
+            if (err instanceof Error && err.name !== 'AbortError') {
+                toast.error('Failed to share link');
+            }
+        }
+    };
 
     return (
         <Link
@@ -75,10 +103,7 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
                 </button>
                 <button
                     className="p-1 rounded-full hover:bg-gray-50 transition-colors shadow-sm bg-white/80"
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                    }}
+                    onClick={handleShare}
                 >
                     <Share2 size={13} className="text-gray-400" strokeWidth={1.5} />
                 </button>

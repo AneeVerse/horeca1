@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Star, Clock, CreditCard, Package, ChevronLeft, Share2 } from 'lucide-react';
 import Image from 'next/image';
+import { toast } from 'sonner';
 import type { Vendor } from '@/types';
 import { globalCategories } from '@/data/vendorData';
 
@@ -12,6 +13,29 @@ interface VendorStoreHeaderProps {
 }
 
 export function VendorStoreHeader({ vendor }: VendorStoreHeaderProps) {
+    const handleShare = async () => {
+        const shareData = {
+            title: vendor.name,
+            text: `Check out ${vendor.name} on Horeca1 - ${vendor.description || ''}`,
+            url: window.location.href,
+        };
+
+        try {
+            if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+                await navigator.share(shareData);
+            } else {
+                await navigator.clipboard.writeText(window.location.href);
+                toast.success('Link copied to clipboard!', {
+                    description: 'You can now share this store with others.',
+                });
+            }
+        } catch (err) {
+            if (err instanceof Error && err.name !== 'AbortError') {
+                toast.error('Failed to share store link');
+            }
+        }
+    };
+
     return (
         <div className="w-full bg-white">
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
@@ -21,7 +45,7 @@ export function VendorStoreHeader({ vendor }: VendorStoreHeaderProps) {
                         <ChevronLeft size={20} />
                         <span>Back</span>
                     </Link>
-                    <button className="p-2 rounded-full hover:bg-gray-50 transition-colors">
+                    <button onClick={handleShare} className="p-2 rounded-full hover:bg-gray-50 transition-colors">
                         <Share2 size={20} className="text-gray-400" />
                     </button>
                 </div>
@@ -29,7 +53,7 @@ export function VendorStoreHeader({ vendor }: VendorStoreHeaderProps) {
                 {/* Vendor Info */}
                 <div className="flex items-start gap-3 pb-4">
                     {/* Logo */}
-                    <div className="w-[70px] h-[70px] md:w-[90px] md:h-[90px] rounded-[18px] bg-white border border-gray-100 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                    <div className="w-[70px] h-[70px] md:w-[90px] md:h-[90px] rounded-full bg-white border border-gray-100 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
                         <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-cover" />
                     </div>
 

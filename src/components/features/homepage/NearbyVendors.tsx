@@ -139,42 +139,42 @@ export function NearbyVendors() {
         <section id="vendors" className="w-full py-6 bg-white overflow-hidden">
             <div className="max-w-[var(--container-max)] mx-auto">
                 {/* Header Container */}
-                <div className="flex items-center justify-between mb-4 px-6 md:px-[var(--container-padding)]">
-                    <div>
-                        <h2 className="text-[16px] md:text-[18px] lg:text-[22px] font-bold text-[#181725]">Shop By Vendor</h2>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[12px] font-semibold text-[#299e60] cursor-pointer hover:underline transition-all">See all</span>
-                        <div className="hidden md:flex items-center gap-1.5">
-                            <button
-                                onClick={() => scroll('left')}
-                                disabled={!canScrollLeft}
-                                className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:bg-[#53B175] hover:text-white hover:border-[#53B175] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                            >
-                                <ChevronLeft size={16} />
-                            </button>
-                            <button
-                                onClick={() => scroll('right')}
-                                disabled={!canScrollRight}
-                                className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:bg-[#53B175] hover:text-white hover:border-[#53B175] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                            >
-                                <ChevronRight size={16} />
-                            </button>
-                        </div>
-                    </div>
+                <div className="flex items-center justify-between mb-6 px-6 md:px-[var(--container-padding)]">
+                    <h2 className="text-[18px] md:text-[22px] lg:text-[24px] font-[900] text-[#181725] tracking-tight">Shop By Vendor</h2>
+                    <Link href="/vendors" className="text-[#53B175] font-black text-sm transition-all hover:translate-x-1 cursor-pointer">
+                        See All
+                    </Link>
                 </div>
 
-                {/* Horizontal Scroll Cards (Now inside the max-w container to align on desktop) */}
-                <div className="overflow-x-auto no-scrollbar scroll-smooth">
+                {/* Horizontal Scroll Cards with Side Arrows */}
+                <div className="relative w-full">
+                    <button
+                        onClick={() => scroll('left')}
+                        disabled={!canScrollLeft}
+                        className="hidden md:flex absolute -left-2 top-1/2 -translate-y-1/2 z-20 w-11 h-11 bg-white rounded-full shadow-[0_10px_30px_-5px_rgba(0,0,0,0.15)] flex items-center justify-center hover:scale-110 active:scale-95 transition-all border border-gray-100 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    >
+                        <ChevronLeft size={24} className="text-[#181725]" strokeWidth={2.5} />
+                    </button>
+
                     <div
                         ref={scrollRef}
                         onScroll={checkScroll}
-                        className="flex gap-4 py-4 px-6 md:px-[var(--container-padding)] w-max"
+                        className="overflow-x-auto no-scrollbar scroll-smooth w-full"
                     >
-                        {displayVendors.map((vendor, index) => (
-                            <VendorCard key={vendor.id} vendor={vendor} index={index} />
-                        ))}
+                        <div className="flex gap-4 md:gap-6 py-4 px-6 md:px-[var(--container-padding)] w-max">
+                            {displayVendors.map((vendor, index) => (
+                                <VendorCard key={vendor.id} vendor={vendor} index={index} />
+                            ))}
+                        </div>
                     </div>
+
+                    <button
+                        onClick={() => scroll('right')}
+                        disabled={!canScrollRight}
+                        className="hidden md:flex absolute -right-2 top-1/2 -translate-y-1/2 z-20 w-11 h-11 bg-white rounded-full shadow-[0_10px_30px_-5px_rgba(0,0,0,0.15)] flex items-center justify-center hover:scale-110 active:scale-95 transition-all border border-gray-100 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    >
+                        <ChevronRight size={24} className="text-[#181725]" strokeWidth={2.5} />
+                    </button>
                 </div>
             </div>
         </section>

@@ -377,6 +377,30 @@ export default function ProductDetailPage() {
     }
     similarItemsList = similarItemsList.slice(0, 4);
 
+    const handleShare = async () => {
+        const shareData = {
+            title: product.name,
+            text: `Check out ${product.name} from ${vendorName} on Horeca1`,
+            url: window.location.href,
+        };
+
+        try {
+            if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+                await navigator.share(shareData);
+            } else {
+                await navigator.clipboard.writeText(window.location.href);
+                toast.success('Link copied to clipboard!', {
+                    description: 'You can now share it with others.',
+                });
+            }
+        } catch (err) {
+            // Only show error if it's not a user cancellation
+            if (err instanceof Error && err.name !== 'AbortError') {
+                toast.error('Failed to share link');
+            }
+        }
+    };
+
     return (
         <div className="bg-[#FFFFFF] min-h-screen">
             {/* Top Green Bar (Mobile Only) */}
@@ -417,7 +441,9 @@ export default function ProductDetailPage() {
                                 <button onClick={() => toggleWishlist(vendorProductForContext)} className="text-[#181725] active:scale-90 transition-transform">
                                     <Heart size={21} className={cn("transition-colors", isLiked ? "text-red-500 fill-red-500" : "text-[#181725]")} />
                                 </button>
-                                <button className="text-[#181725]"><Share2 size={21} /></button>
+                                <button onClick={handleShare} className="text-[#181725] active:scale-90 transition-transform">
+                                    <Share2 size={21} />
+                                </button>
                             </div>
                         </div>
                         <p className="text-[15px] font-medium text-[#7C7C7C] mb-6">{product.weight || '1 kg'}</p>
@@ -510,7 +536,7 @@ export default function ProductDetailPage() {
                                     <button onClick={() => toggleWishlist(vendorProductForContext)} className="w-14 h-14 rounded-full bg-white border border-gray-100 flex items-center justify-center hover:bg-gray-50 transition-all shadow-sm active:scale-90">
                                         <Heart size={26} className={cn("transition-colors", isLiked ? "text-red-500 fill-red-500" : "text-[#181725]")} />
                                     </button>
-                                    <button className="w-14 h-14 rounded-full bg-white border border-gray-100 flex items-center justify-center hover:bg-gray-50 transition-all shadow-sm">
+                                    <button onClick={handleShare} className="w-14 h-14 rounded-full bg-white border border-gray-100 flex items-center justify-center hover:bg-gray-50 transition-all shadow-sm active:scale-90 transition-transform">
                                         <Share2 size={26} className="text-[#181725]" />
                                     </button>
                                 </div>
