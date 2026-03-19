@@ -53,14 +53,13 @@ export function ShopByStorePromo() {
 
     return (
         <section
-            className="w-full overflow-hidden relative min-h-[300px]"
+            className="w-full relative min-h-[300px] py-10 md:py-14"
             style={{
                 background: 'linear-gradient(165deg, #2d7a46 0%, #3d9e5c 30%, #46b36e 70%, #2d7a46 100%)',
             }}
         >
             {/* Decorative floating elements */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-                {/* Floating money/confetti shapes */}
                 <div className="absolute top-[10%] left-[5%] w-8 h-4 bg-white/10 rounded-sm rotate-[25deg] shadow-sm animate-float-slow backdrop-blur-sm" />
                 <div className="absolute top-[15%] left-[25%] w-6 h-3 bg-white/5 rounded-sm rotate-[-15deg] animate-float-mid backdrop-blur-sm" />
                 <div className="absolute top-[8%] right-[15%] w-9 h-4.5 bg-white/10 rounded-sm rotate-[40deg] shadow-sm animate-float-slow backdrop-blur-sm" />
@@ -76,10 +75,10 @@ export function ShopByStorePromo() {
                 <div className="absolute -bottom-20 -left-10 w-48 h-48 bg-white/5 rounded-full blur-3xl" />
             </div>
 
-            {/* Content */}
-            <div className="relative z-10">
-                {/* Top Header Text - Now left-aligned and cleaner */}
-                <div className="max-w-[var(--container-max)] mx-auto px-6 md:px-[var(--container-padding)] pt-10 md:pt-14 pb-1">
+            {/* Content - Same container for header AND scroll for perfect alignment */}
+            <div className="max-w-[var(--container-max)] mx-auto relative z-10 overflow-hidden">
+                {/* Header Text */}
+                <div className="px-6 md:px-[var(--container-padding)] pt-0 pb-2 md:pb-4">
                     <h2 className="text-white text-[24px] md:text-[32px] font-black tracking-tight drop-shadow-sm">
                         Vendors Near You
                     </h2>
@@ -88,13 +87,13 @@ export function ShopByStorePromo() {
                     </p>
                 </div>
 
-                {/* Vendor Logos Horizontal Scroll - Full Width Edge-to-Edge */}
-                <div className="relative pb-7 md:pb-10 pt-5 md:pt-6 w-full group">
-                    {/* Desktop scroll arrows - Always visible & prominent as per global theme */}
+                {/* Horizontal Scroll - same container ensures alignment */}
+                <div className="relative group mt-5 md:mt-6">
+                    {/* Desktop scroll arrows */}
                     <button
                         onClick={() => scroll('left')}
                         disabled={!canScrollLeft}
-                        className="hidden md:flex absolute left-4 lg:left-8 top-[82px] -translate-y-1/2 z-20 w-11 h-11 bg-white rounded-full shadow-[0_10px_30px_-5px_rgba(0,0,0,0.3)] items-center justify-center hover:scale-110 active:scale-95 transition-all border border-white/20 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:scale-100"
+                        className="hidden md:flex absolute left-2 lg:left-4 top-[82px] -translate-y-1/2 z-20 w-11 h-11 bg-white rounded-full shadow-[0_10px_30px_-5px_rgba(0,0,0,0.3)] items-center justify-center hover:scale-110 active:scale-95 transition-all border border-white/20 disabled:opacity-20 disabled:cursor-not-allowed"
                     >
                         <ChevronLeft size={24} className="text-[#3d9e5c] mr-0.5" strokeWidth={3} />
                     </button>
@@ -104,12 +103,8 @@ export function ShopByStorePromo() {
                         onScroll={checkScroll}
                         className="overflow-x-auto no-scrollbar scroll-smooth w-full"
                     >
-                        <div className="flex gap-6 md:gap-10 pb-4 w-max">
-                            {/* Alignment Spacer to match header (px-6 or var(--container-padding)) */}
-                            <div className="flex-none w-6 md:w-[calc((100vw-var(--container-max))/2+var(--container-padding))] min-w-6" />
-
+                        <div className="flex gap-6 md:gap-10 pb-4 w-max px-6 md:px-[var(--container-padding)]">
                             {displayVendors.map((vendor, index) => {
-                                // Apply custom scaling/fitting for specific mock logos
                                 let imgClass = "w-full h-full object-cover";
                                 if (vendor.id === 'v3') {
                                     imgClass = "w-full h-full object-cover scale-[1.2]";
@@ -121,24 +116,20 @@ export function ShopByStorePromo() {
                                     <Link
                                         key={`promo-${vendor.id}-${index}`}
                                         href={`/vendor/${vendor.id}`}
-                                        className="flex-none flex flex-col items-center group/card"
+                                        className="flex-none flex flex-col items-center group/card snap-start"
                                     >
-                                        {/* Logo Circle - Pure white background */}
                                         <div className="w-[85px] h-[85px] md:w-[115px] md:h-[115px] rounded-full bg-white flex items-center justify-center mb-4 overflow-hidden shadow-[0_8px_25px_-5px_rgba(0,0,0,0.25)] group-hover/card:shadow-[0_12px_45px_-8px_rgba(0,0,0,0.4)] transition-all">
                                             <img
                                                 src={vendor.logo}
                                                 alt={vendor.name}
                                                 className={imgClass}
-                                                loading="lazy"
                                             />
                                         </div>
 
-                                        {/* Vendor Name */}
                                         <h3 className="text-white text-[13px] md:text-[16px] font-black text-center leading-tight line-clamp-1 max-w-[90px] md:max-w-[130px] group-hover/card:text-[#FFD100] transition-colors drop-shadow-md">
                                             {vendor.name}
                                         </h3>
 
-                                        {/* Discount Badge - Reverted to Original White Style */}
                                         <div className="bg-white/10 backdrop-blur-md px-3 py-1 rounded-full mt-2 border border-white/10">
                                             <span className="text-white text-[10px] md:text-[12px] font-black text-center tracking-tight">
                                                 Flat {20 + (index % 4) * 5}% Off
@@ -147,15 +138,15 @@ export function ShopByStorePromo() {
                                     </Link>
                                 );
                             })}
-                            {/* End spacer */}
-                            <div className="flex-none w-6 md:w-[calc((100vw-var(--container-max))/2+var(--container-padding))] min-w-6" />
+
+
                         </div>
                     </div>
 
                     <button
                         onClick={() => scroll('right')}
                         disabled={!canScrollRight}
-                        className="hidden md:flex absolute right-4 lg:right-8 top-[82px] -translate-y-1/2 z-20 w-11 h-11 bg-white rounded-full shadow-[0_10px_30px_-5px_rgba(0,0,0,0.3)] items-center justify-center hover:scale-110 active:scale-95 transition-all border border-white/20 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:scale-100"
+                        className="hidden md:flex absolute right-2 lg:right-4 top-[82px] -translate-y-1/2 z-20 w-11 h-11 bg-white rounded-full shadow-[0_10px_30px_-5px_rgba(0,0,0,0.3)] items-center justify-center hover:scale-110 active:scale-95 transition-all border border-white/20 disabled:opacity-20 disabled:cursor-not-allowed"
                     >
                         <ChevronRight size={24} className="text-[#3d9e5c] ml-0.5" strokeWidth={3} />
                     </button>
