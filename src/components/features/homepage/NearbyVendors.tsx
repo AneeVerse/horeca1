@@ -2,18 +2,19 @@
 
 import React, { useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Star, MapPin, Bookmark, ChevronLeft, ChevronRight } from 'lucide-react';
 import { MOCK_VENDORS } from '@/lib/mockData';
 
 // Cover images for vendor cards (cycling through available images)
 const VENDOR_COVERS = [
-    '/images/vendors/chad-peltola-BTvQ2ET_iKc-unsplash.jpg',
-    '/images/vendors/eryka-ragna-K5dvZHBJp3k-unsplash.jpg',
-    '/images/vendors/gioia-m-EGjfIKl_ZvE-unsplash.jpg',
-    '/images/vendors/kylle-pangan-LjpD-uW4dH0-unsplash.jpg',
-    '/images/vendors/m-veven-4oHtqbwy7Lo-unsplash.jpg',
-    '/images/vendors/sleeba-thomas-h-T2VPkw9Kw-unsplash.jpg',
-    '/images/vendors/young-kane-kSDOJRNol9E-unsplash.jpg',
+    '/images/vendors/chad-peltola-BTvQ2ET_iKc-unsplash.webp',
+    '/images/vendors/eryka-ragna-K5dvZHBJp3k-unsplash.webp',
+    '/images/vendors/gioia-m-EGjfIKl_ZvE-unsplash.webp',
+    '/images/vendors/kylle-pangan-LjpD-uW4dH0-unsplash.webp',
+    '/images/vendors/m-veven-4oHtqbwy7Lo-unsplash.webp',
+    '/images/vendors/sleeba-thomas-h-T2VPkw9Kw-unsplash.webp',
+    '/images/vendors/young-kane-kSDOJRNol9E-unsplash.webp',
 ];
 
 // Mock distances and addresses for nearby vendors
@@ -56,11 +57,12 @@ function VendorCard({ vendor, index }: { vendor: typeof MOCK_VENDORS[0]; index: 
         >
             {/* Cover Image */}
             <div className="relative w-full h-[160px] md:h-[180px] overflow-hidden">
-                <img
+                <Image
                     src={cover}
                     alt={vendor.name}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
+                    fill
+                    sizes="(max-width: 768px) 230px, 270px"
+                    className="object-cover"
                 />
                 {/* Offer Badge */}
                 <div className="absolute bottom-2 left-2 right-2">
