@@ -37,6 +37,17 @@ export function ShopByStorePromo() {
         }
     };
 
+    // Standard mock login state - consistency with other homepage sections
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+        setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
+    }, []);
+
+    if (!isMounted || !isLoggedIn) return null;
+
     // Use a subset of vendors for display
     const displayVendors = MOCK_VENDORS.slice(0, 12);
 
@@ -55,8 +66,8 @@ export function ShopByStorePromo() {
                 <div className="absolute top-[8%] right-[15%] w-9 h-4.5 bg-white/20 rounded-sm rotate-[40deg] shadow-sm animate-float-slow backdrop-blur-sm" />
                 <div className="absolute top-[20%] right-[8%] w-5 h-2.5 bg-white/15 rounded-sm rotate-[-30deg] animate-float-mid backdrop-blur-sm" />
                 <div className="absolute top-[5%] left-[45%] w-7 h-3.5 bg-white/20 rounded-sm rotate-[10deg] animate-float-fast backdrop-blur-sm" />
-                <div className="absolute top-[35%] left-[10%] w-8 h-4 bg-white/15 rounded-sm rotate-[-20deg] shadow-sm animate-float-slow backdrop-blur-sm" />
-                <div className="absolute top-[25%] left-[60%] w-8 h-4 bg-white/15 rounded-sm rotate-[-20deg] animate-float-slow backdrop-blur-sm" />
+                <div className="absolute top-[35%] left-[10%] w-8 h-4 bg-white/5 rounded-sm rotate-[-20deg] shadow-sm animate-float-slow backdrop-blur-sm" />
+                <div className="absolute top-[25%] left-[60%] w-8 h-4 bg-white/5 rounded-sm rotate-[-20deg] animate-float-slow backdrop-blur-sm" />
                 <div className="absolute top-[12%] right-[30%] w-5 h-2.5 bg-white/20 rounded-sm rotate-[50deg] animate-float-mid backdrop-blur-sm" />
                 <div className="absolute top-[40%] right-[20%] w-7 h-3.5 bg-white/10 rounded-sm rotate-[15deg] shadow-sm animate-float-fast backdrop-blur-sm" />
 
@@ -68,24 +79,13 @@ export function ShopByStorePromo() {
 
             {/* Content */}
             <div className="relative z-10">
-                {/* Top Promo Text */}
-                <div className="text-center pt-7 pb-2 md:pt-10 md:pb-3 px-4">
-                    <p className="text-white/90 text-[11px] md:text-[13px] font-semibold tracking-wider uppercase mb-1.5">
-                        Exclusive for Horeca Partners
-                    </p>
-                    <span className="text-[#FFD700] text-[15px] md:text-[18px] font-extrabold uppercase tracking-[0.15em] block mb-0.5">
-                        EXTRA
-                    </span>
-                    <div className="flex items-baseline justify-center gap-2">
-                        <span className="text-white text-[44px] md:text-[56px] font-black leading-none drop-shadow-lg">
-                            ₹500
-                        </span>
-                        <span className="text-[#FFD700] text-[32px] md:text-[42px] font-black leading-none drop-shadow-lg">
-                            OFF
-                        </span>
-                    </div>
-                    <p className="text-white/90 text-[11px] md:text-[13px] font-semibold mt-1.5 tracking-[0.1em] uppercase">
-                        Apply on bills above ₹2000
+                {/* Top Header Text - Now left-aligned and cleaner */}
+                <div className="max-w-[var(--container-max)] mx-auto px-6 md:px-[var(--container-padding)] pt-10 md:pt-14 pb-1">
+                    <h2 className="text-white text-[24px] md:text-[32px] font-black tracking-tight drop-shadow-sm">
+                        Vendors Nearby
+                    </h2>
+                    <p className="text-white/80 text-[12px] md:text-[14px] font-medium mt-1">
+                        Explore more partners in your region
                     </p>
                 </div>
 

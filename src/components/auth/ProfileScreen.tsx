@@ -21,6 +21,7 @@ import {
     Home,
     User,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -71,11 +72,11 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
     const handleLogout = () => {
         localStorage.removeItem('isLoggedIn');
         localStorage.removeItem('userPhone');
+        toast.success('Logged out successfully');
         onClose();
-        router.push('/');
-        setTimeout(() => {
-             window.location.reload(); 
-        }, 100);
+        
+        // Use window.location for a full hard redirect to home, ensuring state reset
+        window.location.href = '/';
     };
 
     const topActions = [

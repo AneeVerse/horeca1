@@ -22,28 +22,25 @@ export default function Home() {
       {/* Continue Ordering: Recent vendors */}
       <ContinueOrdering />
 
-      {/* Shop By Store (OLD - commented out) */}
-      {/* <ShopByStore /> */}
+      {/* Vendors Near You (Now Shop By Vendor) */}
+      <NearbyVendors />
 
       {/* Shop By Store Promo (Design 1 - green promo banner with vendor logos) */}
-      <ShopByStorePromo />
 
       {/* Categories */}
       <CategoryShowcase />
 
-      {/* Vendors Near You */}
-      <NearbyVendors />
-
       {/* Shop By Store Alt (Design 2 - Popular Chains white clean style) */}
-      <ShopByStoreAlt />
+      {/* <ShopByStoreAlt /> */}
+
+      {/* Vendors Nearby (Repurposed Promo Banner) */}
+      <ShopByStorePromo />
 
       {/* Collections: Italian Kitchen, Oriental, etc. */}
       <Collections />
 
-
       {/* Features Bar */}
       <FeatureBar />
-
 
       {/* Newsletter / Subscription */}
       <NewsletterBanner />

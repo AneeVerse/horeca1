@@ -141,8 +141,7 @@ export function NearbyVendors() {
                 {/* Header Container */}
                 <div className="flex items-center justify-between mb-4 px-6 md:px-[var(--container-padding)]">
                     <div>
-                        <h2 className="text-[16px] md:text-[18px] lg:text-[22px] font-bold text-[#181725]">Vendors Near You</h2>
-                        <p className="text-[11px] md:text-[12px] text-gray-400 font-medium mt-0.5">Delivering to your area</p>
+                        <h2 className="text-[16px] md:text-[18px] lg:text-[22px] font-bold text-[#181725]">Shop By Vendor</h2>
                     </div>
                     <div className="flex items-center gap-2">
                         <span className="text-[12px] font-semibold text-[#299e60] cursor-pointer hover:underline transition-all">See all</span>
