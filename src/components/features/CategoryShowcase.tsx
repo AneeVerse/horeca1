@@ -47,7 +47,7 @@ export function CategoryShowcase() {
     const CategoryCard = ({ cat }: { cat: typeof CATEGORIES[0] }) => (
         <Link
             href={`/?searchOpen=true&q=${encodeURIComponent(cat.name)}&tab=stores`}
-            className="flex flex-col items-center group transition-transform active:scale-95 snap-start w-full"
+            className="flex flex-col items-center group transition-transform active:scale-95 w-full"
         >
             <div
                 className="w-full aspect-square rounded-[18px] flex items-center justify-center mb-2 overflow-hidden relative border border-gray-50 shadow-sm transition-shadow group-hover:shadow-md"
@@ -75,7 +75,7 @@ export function CategoryShowcase() {
         >
             <div className="max-w-[var(--container-max)] mx-auto overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between mb-5 px-4 md:px-[var(--container-padding)]">
+                <div className="flex items-center justify-between mb-5 px-6 md:px-[var(--container-padding)]">
                     <h2 className="text-[16px] md:text-[20px] lg:text-[22px] font-bold text-[#181725]">Shop By Category</h2>
                     {/* Mobile toggle */}
                     <button
@@ -98,16 +98,18 @@ export function CategoryShowcase() {
                     {/* Mobile: collapsed = 2-row horizontal scroll, expanded = wrapping grid */}
                     <div className="md:hidden">
                         {isMobileExpanded ? (
-                            <div className="grid grid-cols-4 sm:grid-cols-4 gap-x-3 gap-y-6 pb-4 px-5  md:px-[var(--container-padding)]">
+                            <div className="grid grid-cols-4 sm:grid-cols-4 gap-x-3 gap-y-6 pb-4 px-6 md:px-[var(--container-padding)]">
                                 {CATEGORIES.map((cat, idx) => (
                                     <CategoryCard key={`mob-exp-${idx}`} cat={cat} />
                                 ))}
                             </div>
                         ) : (
-                            <div className="grid grid-rows-2 grid-flow-col overflow-x-auto no-scrollbar auto-cols-[100px] gap-x-4 gap-y-6 pb-6 px-4 md:px-[var(--container-padding)] scroll-smooth snap-x">
-                                {CATEGORIES.map((cat, idx) => (
-                                    <CategoryCard key={`mob-scr-${idx}`} cat={cat} />
-                                ))}
+                            <div className="overflow-x-auto no-scrollbar scroll-smooth w-full">
+                                <div className="grid grid-rows-2 grid-flow-col auto-cols-[100px] gap-x-4 gap-y-6 pb-6 px-6 md:px-[var(--container-padding)] w-max max-w-none">
+                                    {CATEGORIES.map((cat, idx) => (
+                                        <CategoryCard key={`mob-scr-${idx}`} cat={cat} />
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -124,7 +126,7 @@ export function CategoryShowcase() {
                         )}
 
                         {isDesktopExpanded ? (
-                            <div className="grid grid-cols-[repeat(auto-fill,110px)] lg:grid-cols-[repeat(auto-fill,125px)] justify-between gap-x-4 gap-y-8 pb-4 px-5 md:px-[var(--container-padding)]">
+                            <div className="grid grid-cols-[repeat(auto-fill,110px)] lg:grid-cols-[repeat(auto-fill,125px)] justify-between gap-x-4 gap-y-8 pb-4 px-6 md:px-[var(--container-padding)]">
                                 {desktopCategories.map((cat, idx) => (
                                     <CategoryCard key={`desk-exp-${idx}`} cat={cat} />
                                 ))}
@@ -132,11 +134,13 @@ export function CategoryShowcase() {
                         ) : (
                             <div
                                 ref={desktopScrollRef}
-                                className="grid grid-rows-2 grid-flow-col overflow-x-auto auto-cols-[115px] lg:auto-cols-[130px] gap-x-5 gap-y-8 no-scrollbar pb-6 px-5 md:px-[var(--container-padding)] scroll-smooth"
+                                className="overflow-x-auto no-scrollbar scroll-smooth w-full"
                             >
-                                {desktopCategories.map((cat, idx) => (
-                                    <CategoryCard key={`desk-scr-${idx}`} cat={cat} />
-                                ))}
+                                <div className="grid grid-rows-2 grid-flow-col auto-cols-[115px] lg:auto-cols-[130px] gap-x-5 gap-y-8 pb-6 px-6 md:px-[var(--container-padding)] w-max max-w-none">
+                                    {desktopCategories.map((cat, idx) => (
+                                        <CategoryCard key={`desk-scr-${idx}`} cat={cat} />
+                                    ))}
+                                </div>
                             </div>
                         )}
 
