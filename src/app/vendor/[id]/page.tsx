@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { VendorStoreHeader } from '@/components/features/vendor/VendorStoreHeader';
 import { VendorCatalogNav } from '@/components/features/vendor/VendorCatalogNav';
@@ -16,6 +16,40 @@ export default function VendorStorePage() {
     const [searchQuery, setSearchQuery] = useState('');
 
     const vendor = getVendorById(vendorId);
+
+    // Track recently viewed vendor for "Continue Ordering" section
+    useEffect(() => {
+        if (!vendor) return;
+        try {
+            const KEY = 'horeca_recently_viewed';
+            const saved = localStorage.getItem(KEY);
+            let entries: any[] = [];
+            if (saved) entries = JSON.parse(saved);
+
+            // Get existing entry to merge products
+            const existing = entries.find((e: any) => e.vendorId === vendor.id);
+            const existingProducts = existing?.viewedProducts || [];
+
+            // Remove catalog pre-population. Only track products explicitly viewed.
+            const mergedProducts = existingProducts;
+
+            // Remove existing entry
+            entries = entries.filter((e: any) => e.vendorId !== vendor.id);
+            // Add to front
+            entries.unshift({
+                vendorId: vendor.id,
+                vendorName: vendor.name,
+                vendorLogo: vendor.logo,
+                viewedProducts: mergedProducts.slice(0, 20),
+                viewedAt: Date.now(),
+            });
+            // Keep max 20 vendors
+            if (entries.length > 20) entries = entries.slice(0, 20);
+            localStorage.setItem(KEY, JSON.stringify(entries));
+        } catch (e) {
+            console.error('Failed to save recently viewed vendor:', e);
+        }
+    }, [vendor]);
     const products = useMemo(() => {
         if (!vendor?.catalog) return [];
         return vendor.catalog.flatMap(cat => 

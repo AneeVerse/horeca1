@@ -137,6 +137,8 @@ export default function OrderListsPage() {
         const updated = allLists.filter(l => l.id !== listToDelete);
         setAllLists(updated);
         localStorage.setItem('horeca_order_lists_all', JSON.stringify(updated));
+        // Trigger storage event for same-tab reactivity in ContinueOrdering component
+        window.dispatchEvent(new Event('storage'));
         toast.success('Order list deleted');
         setListToDelete(null);
     };

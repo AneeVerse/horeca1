@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import {
     ArrowLeft,
@@ -20,6 +20,8 @@ import { DeliveryPoster } from '@/components/features/DeliveryPoster';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { toast } from 'sonner';
+import { MOCK_VENDORS } from '@/lib/mockData';
+import { vendors as vendorDataVendors } from '@/data/vendorData';
 import type { VendorProduct } from '@/types';
 
 // --- Types ---
@@ -232,6 +234,62 @@ export default function ProductDetailPage() {
     }), [product, vendorName]);
 
     const isLiked = isInWishlist(vendorProductForContext.id);
+
+    // Track recently viewed vendor for "Continue Ordering" section
+    useEffect(() => {
+        if (!vendorName) return;
+        try {
+            // Try to find vendor in both data sources to get real id/logo
+            const fromMock = MOCK_VENDORS.find(v => v.name.toLowerCase() === vendorName.toLowerCase() || v.slug === vendorName.toLowerCase());
+            const fromVendorData = vendorDataVendors.find(v => v.name.toLowerCase() === vendorName.toLowerCase() || v.slug === vendorName.toLowerCase());
+            const matched = fromMock || fromVendorData;
+            
+            const vId = matched?.id || `product-vendor-${vendorName}`;
+            const vName = matched?.name || vendorName;
+            const vLogo = matched?.logo || '';
+
+            const KEY = 'horeca_recently_viewed';
+            const saved = localStorage.getItem(KEY);
+            let entries: any[] = [];
+            if (saved) entries = JSON.parse(saved);
+
+            // Get existing entry to merge products
+            const existing = entries.find((e: any) => e.vendorId === vId);
+            const existingProducts = existing?.viewedProducts || [];
+
+            // Build the current product entry
+            const currentProduct = {
+                id: product.id.toString(),
+                name: productName,
+                image: productImage,
+                price: parseFloat(productPrice) || 0,
+                unit: productUnit,
+            };
+
+            // Merge: put current product first, then existing (dedup by id)
+            const seenIds = new Set<string>();
+            const mergedProducts: any[] = [];
+            [currentProduct, ...existingProducts].forEach((p: any) => {
+                if (!seenIds.has(p.id)) {
+                    seenIds.add(p.id);
+                    mergedProducts.push(p);
+                }
+            });
+
+            entries = entries.filter((e: any) => e.vendorId !== vId);
+            entries.unshift({
+                vendorId: vId,
+                vendorName: vName,
+                vendorLogo: vLogo,
+                viewedProducts: mergedProducts.slice(0, 20),
+                viewedAt: Date.now(),
+            });
+            if (entries.length > 20) entries = entries.slice(0, 20);
+            localStorage.setItem(KEY, JSON.stringify(entries));
+        } catch (e) {
+            console.error('Failed to save recently viewed vendor:', e);
+        }
+    }, [vendorName, productName]);
 
     const handleAdd = (qty: number = 1) => {
         // Find if item already in cart to update quantity

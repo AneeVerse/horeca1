@@ -29,8 +29,8 @@ export function VendorStoreHeader({ vendor }: VendorStoreHeaderProps) {
                 {/* Vendor Info */}
                 <div className="flex items-start gap-3 pb-4">
                     {/* Logo */}
-                    <div className="w-[70px] h-[70px] md:w-[90px] md:h-[90px] rounded-[18px] bg-[#F7F8FA] border border-gray-50 flex items-center justify-center p-2.5 shrink-0 shadow-sm">
-                        <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-contain" />
+                    <div className="w-[70px] h-[70px] md:w-[90px] md:h-[90px] rounded-[18px] bg-white border border-gray-100 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                        <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-cover" />
                     </div>
 
                     {/* Details */}
