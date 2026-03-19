@@ -11,7 +11,12 @@ import {
     ShoppingCart,
     Search,
     X,
-    Share2
+    Share2,
+    Info,
+    ShieldCheck,
+    Leaf,
+    ArrowRight,
+    Store
 } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -374,11 +379,11 @@ export default function ProductDetailPage() {
 
     return (
         <div className="bg-[#FFFFFF] min-h-screen">
-            {/* Top Green Bar (as seen in Figma) */}
+            {/* Top Green Bar (Mobile Only) */}
             <div className="w-full h-[5px] bg-[#53B175] md:hidden" />
 
-            {/* Header */}
-            <header className="bg-white px-4 py-3 flex items-center justify-between sticky top-0 z-[100] border-b border-gray-50">
+            {/* Mobile Header */}
+            <header className="md:hidden bg-white px-4 py-3 flex items-center justify-between sticky top-0 z-[100] border-b border-gray-50">
                 <button onClick={() => router.back()} className="p-1">
                     <ArrowLeft size={22} className="text-[#181725]" strokeWidth={2} />
                 </button>
@@ -388,23 +393,14 @@ export default function ProductDetailPage() {
                 <div className="w-8" />
             </header>
 
-            {/* Mobile + Tablet View */}
-            <div className="lg:hidden pb-10 bg-[#F8F9FB]/30">
-
-
-                {/* Main Product Section - White Card */}
-                <div className="mx-0 bg-white pt-2 pb-8 px-5 rounded-b-[30px] shadow-sm">
+            {/* --- MOBILE VIEW (Simplified Layout) --- */}
+            <div className="md:hidden bg-[#F8F9FB]/30">
+                <main className="mx-0 bg-white pt-2 pb-8 px-5 rounded-b-[30px] shadow-sm">
                     {/* Image Section */}
                     <div className="relative flex flex-col items-center pt-4">
                         <div className="w-[240px] h-[240px] flex items-center justify-center p-4">
-                            <img
-                                src={product.image}
-                                alt={product.name}
-                                className="w-full h-full object-contain"
-                            />
+                            <img src={product.image} alt={product.name} className="w-full h-full object-contain" />
                         </div>
-
-                        {/* Pagination Dots */}
                         <div className="flex gap-1.5 mt-4">
                             <div className="w-[18px] h-[6px] bg-[#7C7C7C] rounded-full" />
                             <div className="w-[6px] h-[6px] bg-[#E2E2E2] rounded-full" />
@@ -413,91 +409,59 @@ export default function ProductDetailPage() {
                         </div>
                     </div>
 
-                    {/* Basic Info */}
                     <div className="pt-8">
-                        <span className="inline-block px-2 py-1 rounded-[6px] bg-[#EAF6EF] text-[#53B175] text-[11px] font-bold mb-3">
-                            {product.category}
-                        </span>
-
+                        <span className="inline-block px-2 py-1 rounded-[6px] bg-[#EAF6EF] text-[#53B175] text-[11px] font-bold mb-3 uppercase tracking-wider">{product.category}</span>
                         <div className="flex items-start justify-between gap-4 mb-1">
-                            <h1 className="text-[24px] font-extrabold text-[#181725] leading-tight flex-1">
-                                {product.name}
-                            </h1>
+                            <h1 className="text-[24px] font-extrabold text-[#181725] leading-tight flex-1 tracking-tight">{product.name}</h1>
                             <div className="flex items-center gap-2 pt-1.5">
-                                <button 
-                                    onClick={() => toggleWishlist(vendorProductForContext)}
-                                    className="text-[#181725] active:scale-90 transition-transform"
-                                >
-                                    <Heart 
-                                        size={21} 
-                                        className={cn("transition-colors", isLiked ? "text-red-500 fill-red-500" : "text-[#181725]")} 
-                                        strokeWidth={1.5} 
-                                    />
+                                <button onClick={() => toggleWishlist(vendorProductForContext)} className="text-[#181725] active:scale-90 transition-transform">
+                                    <Heart size={21} className={cn("transition-colors", isLiked ? "text-red-500 fill-red-500" : "text-[#181725]")} />
                                 </button>
-                                <button className="text-[#181725]">
-                                    <Share2 size={21} strokeWidth={1.5} />
-                                </button>
+                                <button className="text-[#181725]"><Share2 size={21} /></button>
                             </div>
                         </div>
                         <p className="text-[15px] font-medium text-[#7C7C7C] mb-6">{product.weight || '1 kg'}</p>
 
-                        {/* Tiered Pricing Section */}
+                        {/* Mobile Tiered Pricing Box */}
                         <div className="bg-[#F1FBF4]/40 border border-[#53B175]/15 rounded-[22px] overflow-hidden mb-6">
                             <div className="flex items-center justify-between px-4 py-3 border-b border-[#53B175]/10">
                                 <span className="text-[15px] font-bold text-[#53B175]">₹ 147/kg for 3 kg</span>
-                                <button 
-                                    onClick={() => handleAdd(3)}
-                                    className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm"
-                                >
-                                    <Plus size={16} strokeWidth={3.5} /> ADD
+                                <button onClick={() => handleAdd(3)} className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 shadow-sm">
+                                    <Plus size={16} strokeWidth={3} /> ADD
                                 </button>
                             </div>
                             <div className="flex items-center justify-between px-4 py-3">
                                 <span className="text-[15px] font-bold text-[#53B175]">₹ 245/kg for 5 kg</span>
-                                <button 
-                                    onClick={() => handleAdd(5)}
-                                    className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 transition-transform shadow-sm"
-                                >
-                                    <Plus size={16} strokeWidth={3.5} /> ADD
+                                <button onClick={() => handleAdd(5)} className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 shadow-sm">
+                                    <Plus size={16} strokeWidth={3} /> ADD
                                 </button>
                             </div>
                         </div>
 
-                        {/* Final Price Row */}
                         <div className="flex items-baseline gap-1.5 mb-6">
-                            <span className="text-[22px] font-black text-[#181725]">₹ {product.vendors?.[0]?.price.split('/')[0].replace('₹', '') || '49'}</span>
+                            <span className="text-[22px] font-black text-[#181725]">₹ {productPrice}</span>
                             <span className="text-[15px] text-[#7C7C7C] font-semibold"> /kg</span>
                         </div>
 
-                        {/* Add to Cart Button */}
-                        <button 
-                            onClick={() => handleAdd(1)}
-                            className="w-full py-4 bg-[#EAF7EF] rounded-[20px] border border-[#53B175]/30 flex items-center justify-center gap-3 text-[#53B175] text-[16px] font-bold transition-all active:scale-95 hover:bg-[#E2F2E8]"
-                        >
+                        <button onClick={() => handleAdd(1)} className="w-full py-4 bg-[#EAF7EF] rounded-[20px] border border-[#53B175]/30 flex items-center justify-center gap-3 text-[#53B175] text-[16px] font-bold transition-all active:scale-95 hover:bg-[#E2F2E8]">
                             <span>Add To Cart</span>
                             <ShoppingCart size={20} />
                         </button>
                     </div>
-                </div>
+                </main>
 
-                {/* Product details Section */}
+                {/* Mobile Product details Section */}
                 <div className="mt-4 mx-4 bg-white rounded-[18px] p-5 shadow-sm border border-gray-50">
-                    <h2 className="text-[20px] font-bold text-[#181725] mb-3">Product details</h2>
-                    <p className="text-[14px] text-[#4C4C4C] leading-[1.6] font-medium opacity-80">
-                        {product.description}
-                    </p>
+                    <h2 className="text-[18px] font-extrabold text-[#181725] mb-3">Product details</h2>
+                    <p className="text-[14px] text-[#4C4C4C] leading-[1.6] font-medium opacity-80">{product.description}</p>
                 </div>
 
-                {/* Similar items Section */}
+                {/* Mobile Similar items */}
                 <div className="mt-6 px-4">
                     <h2 className="text-[18px] font-bold text-[#181725] mb-4">Similar items</h2>
                     <div className="flex gap-3 overflow-x-auto pb-6 no-scrollbar -mx-4 px-4 snap-x">
                         {similarItemsList.map((item: any) => (
-                            <Link
-                                key={item.id}
-                                href={`/product/${item.originalId || item.id}`}
-                                className="min-w-[150px] bg-white border border-gray-100 rounded-[18px] p-3 flex flex-col snap-start shadow-sm"
-                            >
+                            <Link key={item.id} href={`/product/${item.originalId || item.id}`} className="min-w-[150px] bg-white border border-gray-100 rounded-[18px] p-3 flex flex-col snap-start shadow-sm">
                                 <div className="w-full aspect-[4/3] flex items-center justify-center mb-3">
                                     <img src={item.image} alt={item.name} className="max-w-[80%] max-h-full object-contain" />
                                 </div>
@@ -507,30 +471,205 @@ export default function ProductDetailPage() {
                         ))}
                     </div>
                 </div>
+            </div>
 
-                {/* More from Category */}
-                <div className="mt-2 px-4">
-                    <h2 className="text-[18px] font-bold text-[#181725] mb-4">More from {product.category}</h2>
-                    <div className="flex gap-4 overflow-x-auto pb-10 no-scrollbar">
-                        <div className="min-w-[140px] relative">
-                            <img src={product.image} className="w-[140px] h-[100px] object-contain" />
-                            <Plus size={20} className="absolute bottom-0 right-0 bg-[#53B175] text-white rounded-full p-1" />
+            {/* --- DESKTOP & TABLET VIEW (Professional Layout) --- */}
+            <div className="hidden md:block">
+                <main className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] pb-24 pt-14">
+                    {/* Upper Professional Section */}
+                    <div className="grid grid-cols-12 gap-12 lg:gap-20">
+                        {/* Left: Professional Showcase */}
+                        <div className="col-span-12 lg:col-span-5">
+                            <div className="w-full aspect-square bg-[#F8F9FB]/50 rounded-[48px] flex items-center justify-center p-12 relative overflow-hidden group border border-gray-50/50 shadow-[0_15px_60px_-15px_rgba(0,0,0,0.03)]">
+                                <img src={product.image} alt={product.name} className="w-full h-full object-contain transition-all duration-700 group-hover:scale-110" />
+                                <div className="absolute bottom-10 flex gap-2.5">
+                                    <div className="w-8 h-1.5 bg-[#53B175] rounded-full" />
+                                    <div className="w-2 h-1.5 bg-[#E2E2E2] rounded-full" />
+                                    <div className="w-2 h-1.5 bg-[#E2E2E2] rounded-full" />
+                                </div>
+                                <div className="absolute top-8 left-8 flex items-center gap-2 bg-white/95 backdrop-blur-sm px-4 py-2 rounded-2xl border border-green-50 shadow-sm">
+                                    <ShieldCheck size={16} className="text-[#53B175]" />
+                                    <span className="text-[12px] font-black text-[#181725] uppercase tracking-widest">Quality Verified</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Right: Professional Actions */}
+                        <div className="col-span-12 lg:col-span-7 flex flex-col pt-4">
+                            <div className="flex items-center gap-2 text-[12px] font-black text-[#7C7C7C] mb-8 uppercase tracking-[0.2em] opacity-50">
+                                <Link href="/" className="hover:text-[#53B175]">Home</Link>
+                                <span>/</span>
+                                <span className="text-[#53B175]">{product.category}</span>
+                            </div>
+
+                            <div className="flex items-start justify-between gap-10 mb-4">
+                                <h1 className="text-[44px] lg:text-[54px] font-black text-[#181725] leading-[1.02] tracking-tighter">
+                                    {product.name}
+                                </h1>
+                                <div className="flex items-center gap-4 pt-4 shrink-0">
+                                    <button onClick={() => toggleWishlist(vendorProductForContext)} className="w-14 h-14 rounded-full bg-white border border-gray-100 flex items-center justify-center hover:bg-gray-50 transition-all shadow-sm active:scale-90">
+                                        <Heart size={26} className={cn("transition-colors", isLiked ? "text-red-500 fill-red-500" : "text-[#181725]")} />
+                                    </button>
+                                    <button className="w-14 h-14 rounded-full bg-white border border-gray-100 flex items-center justify-center hover:bg-gray-50 transition-all shadow-sm">
+                                        <Share2 size={26} className="text-[#181725]" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-5 mb-12">
+                                <span className="text-[24px] font-bold text-[#7C7C7C]">{product.weight || '1 kg'}</span>
+                                <div className="w-1.5 h-1.5 rounded-full bg-gray-200" />
+                                <span className="text-[17px] font-medium text-gray-500">Procured by <span className="text-[#181725] font-black underline decoration-[#53B175]/30 underline-offset-4">{vendorName}</span></span>
+                            </div>
+
+                            {/* Desktop Professional Pricing Cards */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-12">
+                                <div className="bg-[#F1FBF4]/40 border border-[#53B175]/15 rounded-[32px] p-7 transition-all hover:bg-[#F1FBF4]/60">
+                                    <div className="flex items-center justify-between mb-5">
+                                        <span className="text-[13px] font-black text-[#53B175] uppercase tracking-widest">Standard Bulk</span>
+                                        <span className="bg-[#53B175] text-white px-3 py-1 rounded-lg text-[10px] font-black tracking-wide">3 KG MIN</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex flex-col">
+                                            <span className="text-[24px] font-black text-[#181725]">₹ 147<span className="text-[15px] text-gray-400">/kg</span></span>
+                                            <span className="text-[12px] text-[#53B175] font-bold">Recommended</span>
+                                        </div>
+                                        <button onClick={() => handleAdd(3)} className="bg-[#53B175] text-white rounded-full px-7 py-3 flex items-center gap-2 text-[13px] font-black active:scale-95 transition-all shadow-lg shadow-green-200">
+                                            <Plus size={16} strokeWidth={3} /> ADD
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="bg-[#F1FBF4]/40 border border-[#53B175]/15 rounded-[32px] p-7 transition-all hover:bg-[#F1FBF4]/60">
+                                    <div className="flex items-center justify-between mb-5">
+                                        <span className="text-[13px] font-black text-[#53B175] uppercase tracking-widest">Institutional</span>
+                                        <span className="bg-[#53B175] text-white px-3 py-1 rounded-lg text-[10px] font-black tracking-wide">5 KG MIN</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex flex-col">
+                                            <span className="text-[24px] font-black text-[#181725]">₹ 245<span className="text-[15px] text-gray-400">/kg</span></span>
+                                            <span className="text-[12px] text-[#53B175] font-bold">Best Value</span>
+                                        </div>
+                                        <button onClick={() => handleAdd(5)} className="bg-[#53B175] text-white rounded-full px-7 py-3 flex items-center gap-2 text-[13px] font-black active:scale-95 transition-all shadow-lg shadow-green-200">
+                                            <Plus size={16} strokeWidth={3} /> ADD
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Desktop Action Summary */}
+                            <div className="flex items-center gap-8 pt-2">
+                                <div className="flex items-baseline gap-2 min-w-[160px]">
+                                    <span className="text-[48px] font-black text-[#181725]">₹ {productPrice}</span>
+                                    <span className="text-[20px] text-[#7C7C7C] font-bold">/kg</span>
+                                </div>
+                                <button onClick={() => handleAdd(1)} className="flex-1 h-[72px] bg-[#53B175] text-white rounded-[28px] flex items-center justify-center gap-4 text-[20px] font-black transition-all active:scale-[0.98] hover:bg-[#489e67] shadow-2xl shadow-green-100">
+                                    <span>Add To Cart</span>
+                                    <ShoppingCart size={24} strokeWidth={2.5} />
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
+
+                    {/* Information Sections (Desktop/Tab Specific) */}
+                    <div className="mt-32 grid grid-cols-12 gap-16 lg:gap-24">
+                        <div className="col-span-12 lg:col-span-8 space-y-20">
+                            <div>
+                                <h3 className="text-[28px] font-black text-[#181725] mb-10 flex items-center gap-4">
+                                    <Info size={28} className="text-[#53B175]" />
+                                    Product Overview
+                                </h3>
+                                <p className="text-[18px] text-[#4C4C4C] leading-[1.8] font-medium opacity-90 border-l-[6px] border-[#53B175]/40 pl-10 mb-12 italic bg-[#F1FBF4]/20 py-10 rounded-r-3xl">
+                                    {product.description}
+                                    {" Certified as commercial-grade produce, ideal for high-volume kitchen operations. Our sourcing methodology guarantees uniform size metrics and consistent density across every delivery batch."}
+                                </p>
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-10 mt-10">
+                                    <div className="bg-white rounded-[32px] p-10 border border-gray-100 shadow-sm">
+                                        <h4 className="text-[18px] font-black text-[#181725] mb-8 border-b border-gray-50 pb-5 uppercase tracking-wide">Technical Specs</h4>
+                                        <div className="space-y-4">
+                                            {[
+                                                { l: 'Origin', v: 'Verified Local Farms' },
+                                                { l: 'Grade', v: 'Procurement Choice' },
+                                                { l: 'Storage', v: 'Cool & Dry Profile' },
+                                                { l: 'Standard', v: 'Horeca Certified' }
+                                            ].map((s, i) => (
+                                                <div key={i} className="flex justify-between items-center py-1">
+                                                    <span className="text-[13px] font-bold text-gray-400 mb-0.5 uppercase tracking-wider">{s.l}</span>
+                                                    <span className="text-[15px] font-black text-[#181725]">{s.v}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="bg-[#F8F9FB] rounded-[32px] p-10">
+                                        <h4 className="text-[18px] font-black text-[#181725] mb-6 uppercase tracking-wide">Commercial Advice</h4>
+                                        <p className="text-[15px] text-gray-500 leading-relaxed font-semibold">
+                                            Optimized for recipe standardization. Minimal waste percentage ensured through 12-point grading check at our fulfillment center.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="col-span-12 lg:col-span-4 flex flex-col gap-10">
+                            <h3 className="text-[22px] font-black text-[#181725] mb-2">Quality Trust</h3>
+                            {[
+                                { t: 'Farm-Direct Network', d: 'Eliminating middle-men for freshness.', i: Leaf, c: 'bg-emerald-50 text-emerald-600' },
+                                { t: 'Batch Verification', d: 'Verified by certified specialists.', i: ShieldCheck, c: 'bg-blue-50 text-blue-600' },
+                                { t: 'Commercial Sourcing', d: 'Uniform metrics for professionals.', i: Store, c: 'bg-orange-50 text-orange-600' }
+                            ].map((p, i) => {
+                                const Icon = p.i;
+                                return (
+                                    <div key={i} className="flex gap-6 p-2 group transition-all">
+                                        <div className={cn("w-16 h-16 rounded-3xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-500 shadow-sm", p.c)}>
+                                            <Icon size={28} />
+                                        </div>
+                                        <div className="flex flex-col pt-1">
+                                            <h4 className="text-[17px] font-black text-[#181725] mb-1">{p.t}</h4>
+                                            <p className="text-[14px] text-gray-400 font-bold leading-snug">{p.d}</p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Market Alternatives (Desktop Similar) */}
+                    <div className="mt-40 pt-24 border-t border-gray-100">
+                        <div className="flex items-end justify-between mb-16 px-2">
+                            <div>
+                                <h2 className="text-[44px] font-black text-[#181725] tracking-tighter">Market Alternatives</h2>
+                                <p className="text-gray-400 font-bold mt-2 text-[17px]">Complete your procurement with these verified alternatives</p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button className="w-14 h-14 rounded-full border border-gray-100 flex items-center justify-center hover:bg-[#53B175] hover:text-white transition-all bg-white shadow-sm"><ArrowLeft size={22} /></button>
+                                <button className="w-14 h-14 rounded-full border border-gray-100 flex items-center justify-center hover:bg-[#53B175] hover:text-white transition-all bg-white shadow-sm"><ArrowRight size={22} /></button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-4 gap-10">
+                            {similarItemsList.map((item: any) => (
+                                <Link key={item.id} href={`/product/${item.originalId || item.id}`} className="bg-white border border-gray-100 rounded-[48px] p-7 flex flex-col hover:shadow-[0_30px_70px_-15px_rgba(0,0,0,0.1)] hover:-translate-y-3 transition-all group relative overflow-hidden">
+                                    <div className="w-full aspect-square flex items-center justify-center mb-8 bg-[#F8F9FB]/50 rounded-[38px] overflow-hidden group-hover:bg-[#F1FBF4]/50 transition-colors duration-500">
+                                        <img src={item.image} alt={item.name} className="max-w-[75%] max-h-[75%] object-contain group-hover:scale-110 transition-transform duration-700" />
+                                    </div>
+                                    <h3 className="text-[18px] font-black text-[#181725] leading-tight line-clamp-2 mb-4 group-hover:text-[#53B175] transition-colors">{item.name}</h3>
+                                    <div className="mt-auto flex items-center justify-between border-t border-gray-50 pt-6">
+                                        <span className="text-[14px] text-[#7C7C7C] font-bold">Sold by {item.vendorCount || 3} vendors</span>
+                                        <div className="w-11 h-11 rounded-2xl bg-[#EAF6EF] flex items-center justify-center text-[#53B175] group-hover:bg-[#53B175] group-hover:text-white transition-all shadow-sm">
+                                            <Plus size={22} strokeWidth={3} />
+                                        </div>
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
+                </main>
             </div>
 
-            {/* Everyday Items & Delivery Poster */}
-            <div className="mt-0">
+            {/* Global Promotion/Footer Banners */}
+            <div className="w-full">
                 <PromotionBanners />
-            </div>
-            <div className="mt-0">
                 <DeliveryPoster />
-            </div>
-
-            {/* Desktop View (Placeholder/Idea) */}
-            <div className="hidden lg:block max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-12">
-                <p className="text-center text-gray-400">Please switch to mobile view or resize the screen for the best experience.</p>
             </div>
         </div>
     );
