@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/Roger/Desktop/**)",
+      "Bash(npm install:*)",
+      "Bash(npx prisma:*)"
+    ]
+  }
+}

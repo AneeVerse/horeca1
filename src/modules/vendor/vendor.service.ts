@@ -1,0 +1,123 @@
+import { prisma } from '@/lib/prisma';
+import { emitEvent } from '@/events/emitter';
+import { Errors } from '@/middleware/errorHandler';
+
+interface ListVendorsInput {
+  pincode?: string;
+  categoryId?: string;
+  sort?: 'rating' | 'name' | 'min_order_value';
+  order?: 'asc' | 'desc';
+  cursor?: string;
+  limit?: number;
+}
+
+export class VendorService {
+  async list(input: ListVendorsInput) {
+    const { pincode, categoryId, sort = 'rating', order = 'desc', cursor, limit = 20 } = input;
+
+    const where: Record<string, unknown> = { isActive: true, isVerified: true };
+
+    if (pincode) {
+      where.serviceAreas = { some: { pincode, isActive: true } };
+    }
+
+    if (categoryId) {
+      where.products = { some: { categoryId, isActive: true } };
+    }
+
+    const vendors = await prisma.vendor.findMany({
+      where,
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: { [sort === 'min_order_value' ? 'minOrderValue' : sort]: order },
+      select: {
+        id: true,
+        businessName: true,
+        slug: true,
+        logoUrl: true,
+        rating: true,
+        minOrderValue: true,
+        creditEnabled: true,
+        description: true,
+      },
+    });
+
+    const hasMore = vendors.length > limit;
+    if (hasMore) vendors.pop();
+
+    return {
+      vendors,
+      pagination: {
+        next_cursor: hasMore ? vendors[vendors.length - 1]?.id : null,
+        has_more: hasMore,
+      },
+    };
+  }
+
+  async getById(id: string) {
+    const vendor = await prisma.vendor.findUnique({
+      where: { id },
+      include: {
+        serviceAreas: { where: { isActive: true }, select: { pincode: true } },
+        deliverySlots: { where: { isActive: true } },
+      },
+    });
+
+    if (!vendor) throw Errors.notFound('Vendor');
+    return vendor;
+  }
+
+  async getBySlug(slug: string) {
+    const vendor = await prisma.vendor.findUnique({
+      where: { slug },
+      include: {
+        serviceAreas: { where: { isActive: true }, select: { pincode: true } },
+        deliverySlots: { where: { isActive: true } },
+      },
+    });
+
+    if (!vendor) throw Errors.notFound('Vendor');
+    return vendor;
+  }
+
+  async getMyVendors(userId: string) {
+    return prisma.customerVendor.findMany({
+      where: { userId },
+      include: {
+        vendor: {
+          select: {
+            id: true,
+            businessName: true,
+            slug: true,
+            logoUrl: true,
+            rating: true,
+            minOrderValue: true,
+          },
+        },
+      },
+      orderBy: { lastOrderedAt: 'desc' },
+    });
+  }
+
+  async follow(userId: string, vendorId: string) {
+    return prisma.customerVendor.upsert({
+      where: { userId_vendorId: { userId, vendorId } },
+      update: { isFavorite: true },
+      create: { userId, vendorId, isFavorite: true },
+    });
+  }
+
+  async unfollow(userId: string, vendorId: string) {
+    return prisma.customerVendor.delete({
+      where: { userId_vendorId: { userId, vendorId } },
+    });
+  }
+
+  async checkServiceability(pincode: string) {
+    const count = await prisma.serviceArea.count({
+      where: { pincode, isActive: true },
+    });
+
+    return { serviceable: count > 0, vendor_count: count };
+  }
+}
