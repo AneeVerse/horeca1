@@ -82,78 +82,86 @@ export function ShopByStorePromo() {
                 {/* Top Header Text - Now left-aligned and cleaner */}
                 <div className="max-w-[var(--container-max)] mx-auto px-6 md:px-[var(--container-padding)] pt-10 md:pt-14 pb-1">
                     <h2 className="text-white text-[24px] md:text-[32px] font-black tracking-tight drop-shadow-sm">
-                        Vendors Nearby
+                        Vendors Near You
                     </h2>
                     <p className="text-white/80 text-[12px] md:text-[14px] font-medium mt-1">
-                        Explore more partners in your region
+                        Delivering to your area
                     </p>
                 </div>
 
                 {/* Vendor Logos Horizontal Scroll */}
-                <div className="relative pb-7 md:pb-10 pt-5 md:pt-6 w-full">
-                    {/* Desktop scroll arrows */}
-                    {canScrollLeft && (
-                        <button
-                            onClick={() => scroll('left')}
-                            className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full shadow-lg items-center justify-center hover:bg-white hover:scale-110 transition-all cursor-pointer"
+                <div className="pb-7 md:pb-10 pt-5 md:pt-6 w-full">
+                    <div className="max-w-[var(--container-max)] mx-auto relative px-0 md:px-[var(--container-padding)] group/scroll">
+                        {/* Desktop scroll arrows - positioned within the container */}
+                        {canScrollLeft && (
+                            <button
+                                onClick={() => scroll('left')}
+                                className="hidden md:flex absolute left-0 top-[79px] -translate-y-1/2 z-20 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full shadow-lg items-center justify-center hover:bg-white hover:scale-110 transition-all cursor-pointer -translate-x-1/2 opacity-0 group-hover/scroll:opacity-100"
+                            >
+                                <ChevronLeft size={20} className="text-[#3d9e5c]" />
+                            </button>
+                        )}
+
+                        <div
+                            ref={scrollRef}
+                            className="flex gap-5 md:gap-7 overflow-x-auto no-scrollbar scroll-smooth pb-4"
                         >
-                            <ChevronLeft size={20} className="text-[#3d9e5c]" />
-                        </button>
-                    )}
+                            {/* Spacer for mobile alignment (align with px-6 header text) */}
+                            <div className="flex-none w-6 md:hidden" />
 
-                    <div
-                        ref={scrollRef}
-                        className="flex gap-5 md:gap-7 overflow-x-auto no-scrollbar scroll-smooth pb-4 px-4 md:px-8"
-                    >
-                        {displayVendors.map((vendor, index) => {
-                            // Apply custom scaling/fitting for specific mock logos
-                            let imgClass = "w-full h-full object-cover";
-                            if (vendor.id === 'v3') {
-                                // M Mart: needs zoom to remove baked-in white edges
-                                imgClass = "w-full h-full object-cover scale-[1.2]";
-                            } else if (vendor.id === 'v7') {
-                                // Mentari Mart is too wide and text-heavy, needs contain so it doesn't get cropped
-                                imgClass = "w-full h-full object-contain scale-[0.85]";
-                            }
+                            {displayVendors.map((vendor, index) => {
+                                // Apply custom scaling/fitting for specific mock logos
+                                let imgClass = "w-full h-full object-cover";
+                                if (vendor.id === 'v3') {
+                                    // M Mart: needs zoom to remove baked-in white edges
+                                    imgClass = "w-full h-full object-cover scale-[1.2]";
+                                } else if (vendor.id === 'v7') {
+                                    // Mentari Mart is too wide and text-heavy, needs contain so it doesn't get cropped
+                                    imgClass = "w-full h-full object-contain scale-[0.85]";
+                                }
 
-                            return (
-                                <Link
-                                    key={`promo-${vendor.id}-${index}`}
-                                    href={`/vendor/${vendor.id}`}
-                                    className="flex-none flex flex-col items-center group"
-                                >
-                                    {/* Logo Circle */}
-                                    <div className="w-[90px] h-[90px] md:w-[110px] md:h-[110px] rounded-full bg-white flex items-center justify-center mb-3 overflow-hidden">
-                                        <img
-                                            src={vendor.logo}
-                                            alt={vendor.name}
-                                            className={imgClass}
-                                            loading="lazy"
-                                        />
-                                    </div>
+                                return (
+                                    <Link
+                                        key={`promo-${vendor.id}-${index}`}
+                                        href={`/vendor/${vendor.id}`}
+                                        className="flex-none flex flex-col items-center group"
+                                    >
+                                        {/* Logo Circle */}
+                                        <div className="w-[90px] h-[90px] md:w-[110px] md:h-[110px] rounded-full bg-white flex items-center justify-center mb-3 overflow-hidden">
+                                            <img
+                                                src={vendor.logo}
+                                                alt={vendor.name}
+                                                className={imgClass}
+                                                loading="lazy"
+                                            />
+                                        </div>
 
-                                    {/* Vendor Name */}
-                                    <h3 className="text-white text-[14px] md:text-[17px] font-bold text-center leading-tight line-clamp-1 max-w-[100px] md:max-w-[140px] group-hover:text-[#FFD700] transition-colors">
-                                        {vendor.name}
-                                    </h3>
+                                        {/* Vendor Name */}
+                                        <h3 className="text-white text-[14px] md:text-[17px] font-bold text-center leading-tight line-clamp-1 max-w-[100px] md:max-w-[140px] group-hover:text-[#FFD700] transition-colors">
+                                            {vendor.name}
+                                        </h3>
 
-                                    {/* Discount Badge */}
-                                    <span className="text-white/90 text-[12px] md:text-[14px] font-bold mt-1 text-center tracking-wide">
-                                        Flat {20 + (index % 4) * 5}% Off
-                                    </span>
-                                </Link>
-                            );
-                        })}
+                                        {/* Discount Badge */}
+                                        <span className="text-white/90 text-[12px] md:text-[14px] font-bold mt-1 text-center tracking-wide">
+                                            Flat {20 + (index % 4) * 5}% Off
+                                        </span>
+                                    </Link>
+                                );
+                            })}
+
+                            {/* End spacer for mobile */}
+                            <div className="flex-none w-6 md:hidden" />
+                        </div>
+
+                        {canScrollRight && (
+                            <button
+                                onClick={() => scroll('right')}
+                                className="hidden md:flex absolute right-0 top-[79px] -translate-y-1/2 z-20 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full shadow-lg items-center justify-center hover:bg-white hover:scale-110 transition-all cursor-pointer translate-x-1/2 opacity-0 group-hover/scroll:opacity-100"
+                            >
+                                <ChevronRight size={20} className="text-[#3d9e5c]" />
+                            </button>
+                        )}
                     </div>
-
-                    {canScrollRight && (
-                        <button
-                            onClick={() => scroll('right')}
-                            className="hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full shadow-lg items-center justify-center hover:bg-white hover:scale-110 transition-all cursor-pointer"
-                        >
-                            <ChevronRight size={20} className="text-[#3d9e5c]" />
-                        </button>
-                    )}
                 </div>
             </div>
         </section>
