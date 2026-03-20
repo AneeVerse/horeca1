@@ -4,7 +4,9 @@
       "Read(//c/Users/Roger/Desktop/**)",
       "Bash(npm install:*)",
       "Bash(npx prisma:*)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker ps:*)"
     ]
   }
 }
