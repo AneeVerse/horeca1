@@ -1,8 +1,14 @@
 import { prisma } from '@/lib/prisma';
 import { createQueue } from '@/queues/setup';
+import type { Queue } from 'bullmq';
 import type { NotificationChannel } from '@prisma/client';
 
-const notificationQueue = createQueue('notification');
+// Lazy queue creation — only connects to Redis when first notification is sent
+let _queue: Queue | null = null;
+function getQueue() {
+  if (!_queue) _queue = createQueue('notification');
+  return _queue;
+}
 
 interface SendNotificationInput {
   userId: string;
@@ -30,7 +36,7 @@ export class NotificationService {
     });
 
     // Queue for async delivery
-    await notificationQueue.add('send', {
+    await getQueue().add('send', {
       notificationId: notification.id,
       ...input,
     });

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { razorpay } from '@/lib/razorpay';
+import { getRazorpay } from '@/lib/razorpay';
 import { emitEvent } from '@/events/emitter';
 import { Errors } from '@/middleware/errorHandler';
 import crypto from 'crypto';
@@ -11,7 +11,7 @@ export class PaymentService {
     });
     if (!order) throw Errors.notFound('Order');
 
-    const razorpayOrder = await razorpay.orders.create({
+    const razorpayOrder = await getRazorpay().orders.create({
       amount: Math.round(Number(order.totalAmount) * 100), // paise
       currency: 'INR',
       receipt: order.orderNumber,

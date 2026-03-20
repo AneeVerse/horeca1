@@ -1,12 +1,22 @@
 import { Queue, Worker, type Processor } from 'bullmq';
-import { redis } from '@/lib/redis';
+import IORedis from 'ioredis';
 
-const connection = redis;
+// BullMQ needs its own Redis connection (separate from our app's Redis)
+// WHY: BullMQ bundles its own ioredis version which can conflict with ours
+// Using a fresh connection avoids TypeScript version mismatch errors
+function getQueueConnection() {
+  const url = process.env.REDIS_URL || 'redis://localhost:6379';
+  return new IORedis(url, {
+    maxRetriesPerRequest: null, // Required by BullMQ
+    enableReadyCheck: false,
+    lazyConnect: true,
+  });
+}
 
 // Create a queue with standard options
 export function createQueue(name: string) {
   return new Queue(name, {
-    connection,
+    connection: getQueueConnection() as never, // Type cast needed due to ioredis version mismatch
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: 'exponential', delay: 1000 },
@@ -23,7 +33,7 @@ export function createWorker<T>(
   concurrency = 5
 ) {
   return new Worker<T>(name, processor, {
-    connection,
+    connection: getQueueConnection() as never,
     concurrency,
   });
 }

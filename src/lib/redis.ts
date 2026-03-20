@@ -7,6 +7,7 @@ function createRedisClient() {
   return new Redis(url, {
     maxRetriesPerRequest: null, // Required for BullMQ
     enableReadyCheck: false,
+    lazyConnect: true, // Don't connect until first command — prevents crash when Redis isn't running
   });
 }
 

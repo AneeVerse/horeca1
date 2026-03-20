@@ -20,7 +20,13 @@ export class OrderService {
 
   async create(userId: string, input: CreateOrderInput) {
     return prisma.$transaction(async (tx) => {
-      const orders = [];
+      const orders: Array<{
+        id: string;
+        orderNumber: string;
+        vendorId: string;
+        totalAmount: unknown;
+        items: Array<{ productId: string; quantity: number }>;
+      }> = [];
 
       for (const vo of input.vendorOrders) {
         // 1. Validate stock
