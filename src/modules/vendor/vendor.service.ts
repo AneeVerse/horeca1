@@ -71,11 +71,22 @@ export class VendorService {
       include: {
         serviceAreas: { where: { isActive: true }, select: { pincode: true } },
         deliverySlots: { where: { isActive: true } },
+        products: {
+          where: { isActive: true },
+          select: { category: { select: { name: true } } },
+          distinct: ['categoryId'],
+        },
       },
     });
 
     if (!vendor) throw Errors.notFound('Vendor');
-    return vendor;
+
+    // Flatten products→category into a simple categories string array
+    const { products, ...rest } = vendor;
+    return {
+      ...rest,
+      categories: [...new Set(products.map(p => p.category?.name).filter(Boolean))],
+    };
   }
 
   async getBySlug(slug: string) {
@@ -84,11 +95,21 @@ export class VendorService {
       include: {
         serviceAreas: { where: { isActive: true }, select: { pincode: true } },
         deliverySlots: { where: { isActive: true } },
+        products: {
+          where: { isActive: true },
+          select: { category: { select: { name: true } } },
+          distinct: ['categoryId'],
+        },
       },
     });
 
     if (!vendor) throw Errors.notFound('Vendor');
-    return vendor;
+
+    const { products, ...rest } = vendor;
+    return {
+      ...rest,
+      categories: [...new Set(products.map(p => p.category?.name).filter(Boolean))],
+    };
   }
 
   async getMyVendors(userId: string) {

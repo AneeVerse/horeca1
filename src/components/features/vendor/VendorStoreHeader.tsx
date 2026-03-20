@@ -7,6 +7,20 @@ import Image from 'next/image';
 import { toast } from 'sonner';
 import type { Vendor } from '@/types';
 
+// Maps category names to images (same mapping as Navbar)
+const CATEGORY_IMAGE: Record<string, string> = {
+    'vegetables': '/images/category/vegitable.png',
+    'fruits': '/images/category/fruits.png',
+    'dairy & eggs': '/images/category/milk.png',
+    'spices & masala': '/images/category/candy.png',
+    'grains & pulses': '/images/category/snacks.png',
+    'meat & poultry': '/images/category/fish & meat.png',
+    'seafood': '/images/category/fish & meat.png',
+    'beverages': '/images/category/drink-juice.png',
+    'oils & ghee': '/images/category/fruits.png',
+    'packaging & supplies': '/images/category/vegitable.png',
+};
+
 interface VendorStoreHeaderProps {
     vendor: Vendor;
 }
@@ -102,7 +116,7 @@ export function VendorStoreHeader({ vendor }: VendorStoreHeaderProps) {
                 {/* Vendor Categories (Icon Style) */}
                 <div className="flex items-start gap-4 pb-6 overflow-x-auto no-scrollbar -mx-[var(--container-padding)] px-[var(--container-padding)]">
                     {(vendor.categories || []).map((catName, idx) => {
-                        const image = '/images/category/vegitable.png';
+                        const image = CATEGORY_IMAGE[catName.toLowerCase()] || '/images/category/vegitable.png';
                         
                         const slugify = (text: string) => text.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
                         

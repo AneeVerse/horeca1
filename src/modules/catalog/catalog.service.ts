@@ -20,6 +20,8 @@ export class CatalogService {
       include: {
         priceSlabs: { orderBy: { sortOrder: 'asc' } },
         inventory: { select: { qtyAvailable: true, qtyReserved: true } },
+        category: { select: { name: true, slug: true } },
+        vendor: { select: { id: true, businessName: true, logoUrl: true } },
       },
     });
 
@@ -29,6 +31,8 @@ export class CatalogService {
     return {
       products: products.map((p) => ({
         ...p,
+        categoryName: p.category?.name || '',
+        categorySlug: p.category?.slug || '',
         in_stock: p.inventory ? p.inventory.qtyAvailable - p.inventory.qtyReserved > 0 : false,
         qty_available: p.inventory ? p.inventory.qtyAvailable - p.inventory.qtyReserved : 0,
       })),
