@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Smartphone, Eye, EyeOff, ChevronLeft, Pencil } from 'lucide-react';
+import { X, Mail, Lock, Eye, EyeOff, ChevronLeft, Pencil, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { signIn } from 'next-auth/react';
 
 interface AuthScreenProps {
     isOpen: boolean;
@@ -13,31 +14,34 @@ interface AuthScreenProps {
 
 export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'customer' }: AuthScreenProps) {
     const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-    const [step, setStep] = useState<'form' | 'otp' | 'success'>('form');
+    const [step, setStep] = useState<'form' | 'success'>('form');
     const [userRole, setUserRole] = useState<'customer' | 'vendor'>(initialMode);
-    const [phoneNumber, setPhoneNumber] = useState('7777777777');
-    const [loginOtp, setLoginOtp] = useState('777777');
-    const [otp, setOtp] = useState(['7', '7', '7', '7', '7', '7']);
-    const [rememberMe, setRememberMe] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [apiError, setApiError] = useState('');
     const [errors, setErrors] = useState<Record<string, string>>({});
 
-    // Field state
+    // Login fields
+    const [loginEmail, setLoginEmail] = useState('');
+    const [loginPassword, setLoginPassword] = useState('');
+
+    // Register fields
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
     const [businessName, setBusinessName] = useState('');
-    const [address1, setAddress1] = useState('');
-    const [address2, setAddress2] = useState('');
     const [pincode, setPincode] = useState('');
-    const [city, setCity] = useState('');
 
     if (!isOpen) return null;
 
     const handleClose = () => {
         onClose();
-        // Reset state after closing animation
         setTimeout(() => {
             setStep('form');
             setAuthMode('login');
+            setApiError('');
+            setErrors({});
         }, 300);
     };
 
@@ -45,61 +49,118 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
         setUserRole(userRole === 'customer' ? 'vendor' : 'customer');
     };
 
-    const handleNext = () => {
+    // ── LOGIN: Uses Auth.js signIn with credentials ──
+    const handleLogin = async () => {
         setErrors({});
+        setApiError('');
         const newErrors: Record<string, string> = {};
 
-        if (authMode === 'login') {
-            if (!phoneNumber) newErrors.phone = 'Please fill this field';
-        } else {
-            // Register validation
-            if (!fullName) newErrors.fullName = 'Please fill this field';
-            if (!phoneNumber) newErrors.phone = 'Please fill this field';
-
-            if (userRole === 'vendor') {
-                if (!businessName) newErrors.businessName = 'Please fill this field';
-                if (!email) newErrors.email = 'Please fill this field';
-            } else {
-                // Customer has address now
-                if (!address1) newErrors.address = 'Please fill this field';
-                if (!pincode) newErrors.pincode = 'Please fill this field';
-                if (!city) newErrors.city = 'Please fill this field';
-            }
-        }
+        if (!loginEmail) newErrors.email = 'Email is required';
+        if (!loginPassword) newErrors.password = 'Password is required';
 
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
             return;
         }
 
-        if (authMode === 'register') {
-            setStep('otp'); // Now shows for BOTH customer and vendor
-        } else {
-            localStorage.setItem('isLoggedIn', 'true');
-            localStorage.setItem('userPhone', phoneNumber);
-            if (onLoginSuccess) onLoginSuccess();
-            handleClose();
-        }
-    };
+        setIsLoading(true);
+        try {
+            const result = await signIn('credentials', {
+                email: loginEmail,
+                password: loginPassword,
+                redirect: false,
+            });
 
-    const handleOtpChange = (index: number, value: string) => {
-        if (value.length <= 1) {
-            const newOtp = [...otp];
-            newOtp[index] = value;
-            setOtp(newOtp);
-
-            // Auto-focus next input
-            if (value && index < 5) {
-                const nextInput = document.getElementById(`otp-${index + 1}`);
-                nextInput?.focus();
+            if (result?.error) {
+                setApiError('Invalid email or password. Please try again.');
+            } else {
+                // Login successful — Auth.js session is now active
+                if (onLoginSuccess) onLoginSuccess();
+                handleClose();
             }
+        } catch {
+            setApiError('Something went wrong. Please try again.');
+        } finally {
+            setIsLoading(false);
         }
     };
 
+    // ── REGISTER: Calls signup API, then auto-logs in ──
+    const handleRegister = async () => {
+        setErrors({});
+        setApiError('');
+        const newErrors: Record<string, string> = {};
+
+        if (!fullName) newErrors.fullName = 'Name is required';
+        if (!email) newErrors.email = 'Email is required';
+        if (!password) newErrors.password = 'Password is required';
+        if (password && password.length < 6) newErrors.password = 'Min 6 characters';
+        if (!phoneNumber) newErrors.phone = 'Phone is required';
+        if (userRole === 'vendor' && !businessName) newErrors.businessName = 'Business name is required';
+        if (userRole === 'customer' && !pincode) newErrors.pincode = 'Pincode is required';
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            // Step 1: Call signup API
+            const res = await fetch('/api/v1/auth/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email,
+                    password,
+                    fullName,
+                    phone: `+91${phoneNumber.replace(/^\+91/, '')}`,
+                    role: userRole,
+                    pincode: pincode || '400001',
+                    businessName: businessName || undefined,
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                setApiError(data.error?.message || 'Registration failed. Please try again.');
+                return;
+            }
+
+            // Step 2: Auto-login after successful signup
+            const loginResult = await signIn('credentials', {
+                email,
+                password,
+                redirect: false,
+            });
+
+            if (loginResult?.error) {
+                // Signup succeeded but auto-login failed — show success anyway
+                setStep('success');
+            } else {
+                if (onLoginSuccess) onLoginSuccess();
+                handleClose();
+            }
+        } catch {
+            setApiError('Something went wrong. Please try again.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSubmit = () => {
+        if (authMode === 'login') {
+            handleLogin();
+        } else {
+            handleRegister();
+        }
+    };
+
+    // ── SUCCESS SCREEN ──
     if (step === 'success') {
         return (
             <div className="fixed inset-0 z-[13000] bg-white flex flex-col animate-in fade-in zoom-in duration-300">
-                {/* Close Button Top Right */}
                 <button
                     onClick={handleClose}
                     className="absolute top-6 right-6 p-2 hover:bg-gray-50 rounded-full transition-colors z-[10]"
@@ -108,7 +169,6 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                 </button>
 
                 <div className="flex-1 flex flex-col items-center justify-center px-8 pb-32">
-                    {/* Success Icon */}
                     <div className="mb-8">
                         <img
                             src="/images/login/check%20icon.png"
@@ -116,88 +176,27 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                             className="w-32 h-32 object-contain"
                         />
                     </div>
-
-                    {/* Content */}
                     <h2 className="text-[28px] font-[800] text-gray-800 mb-4 text-center">
                         Register Successful
                     </h2>
-
                     <p className="text-[15px] text-gray-400 text-center leading-relaxed">
                         {userRole === 'customer'
-                            ? "You successfully register with Horeca1 application as Customer."
-                            : "Thank you for Choosing us, Our Onboarding Partner will contact you Shortly."
+                            ? "Your account has been created. You can now login with your email and password."
+                            : "Thank you for choosing us. Our onboarding partner will contact you shortly."
                         }
                     </p>
+                    <button
+                        onClick={() => { setAuthMode('login'); setStep('form'); }}
+                        className="mt-8 bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-3 px-8 rounded-xl transition-all"
+                    >
+                        Go to Login
+                    </button>
                 </div>
             </div>
         );
     }
 
-    if (step === 'otp') {
-        return (
-            <div className="fixed inset-0 z-[13000] bg-white flex flex-col animate-in slide-in-from-right duration-300">
-                {/* Header with Back Button */}
-                <div className="p-6">
-                    <button
-                        onClick={() => setStep('form')}
-                        className="p-2 hover:bg-gray-50 rounded-full transition-colors"
-                    >
-                        <ChevronLeft size={24} className="text-gray-800" />
-                    </button>
-                </div>
-
-                <div className="flex-1 flex flex-col items-center px-6 pt-12 max-w-sm mx-auto w-full">
-                    <h2 className="text-[24px] font-[800] text-gray-800 mb-2">OTP Verification</h2>
-                    <p className="text-[14px] text-gray-400 text-center mb-1">
-                        Enter The security code we have sent to
-                    </p>
-                    <div className="flex items-center gap-2 mb-10">
-                        <span className="text-[14px] font-bold text-gray-400">+91 {phoneNumber || "6956568958"}</span>
-                        <button className="text-[#33a852]">
-                            <Pencil size={14} className="stroke-[3px]" />
-                        </button>
-                    </div>
-
-                    {/* OTP Boxes */}
-                    <div className="flex gap-4 mb-12">
-                        {otp.map((digit, index) => (
-                            <input
-                                key={index}
-                                id={`otp-${index}`}
-                                type="text"
-                                maxLength={1}
-                                value={digit}
-                                onChange={(e) => handleOtpChange(index, e.target.value)}
-                                placeholder="*"
-                                className={cn(
-                                    "w-[60px] h-[60px] border-2 rounded-lg text-center text-[20px] font-bold outline-none transition-all",
-                                    digit ? "border-[#33a852] text-gray-800" : "border-gray-200 text-gray-300 focus:border-[#33a852]"
-                                )}
-                            />
-                        ))}
-                    </div>
-
-                    {/* Verify Button */}
-                    <button
-                        onClick={() => setStep('success')}
-                        className="w-full bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-4 rounded-xl shadow-lg shadow-green-100 active:scale-[0.98] transition-all text-[16px] mb-6"
-                    >
-                        Verify
-                    </button>
-
-                    {/* Resend Footer */}
-                    <div className="text-center">
-                        <p className="text-[13px] font-bold text-gray-700 mb-1">Don't Receive code?</p>
-                        <div className="flex items-center justify-center gap-2">
-                            <button className="text-[#33a852] font-bold text-[13px] hover:underline">Resend</button>
-                            <span className="text-gray-400 text-[13px] font-bold">- 00:52</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
+    // ── MAIN FORM ──
     return (
         <div className="fixed inset-0 z-[13000] bg-white flex flex-col animate-in fade-in slide-in-from-bottom duration-300">
             {/* Header / Logo */}
@@ -216,7 +215,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                 {/* Login/Register Toggle */}
                 <div className="flex p-0.5 bg-[#f8f9fa] rounded-lg border border-gray-100 mb-6 overflow-hidden shrink-0">
                     <button
-                        onClick={() => setAuthMode('login')}
+                        onClick={() => { setAuthMode('login'); setApiError(''); setErrors({}); }}
                         className={cn(
                             "flex-1 py-3 text-sm font-bold rounded-lg transition-all",
                             authMode === 'login' ? "bg-[#33a852] text-white shadow-md" : "text-gray-400 hover:text-gray-600"
@@ -225,7 +224,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                         Login
                     </button>
                     <button
-                        onClick={() => setAuthMode('register')}
+                        onClick={() => { setAuthMode('register'); setApiError(''); setErrors({}); }}
                         className={cn(
                             "flex-1 py-3 text-sm font-bold rounded-lg transition-all",
                             authMode === 'register' ? "bg-[#33a852] text-white shadow-md" : "text-gray-400 hover:text-gray-600"
@@ -235,230 +234,147 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                     </button>
                 </div>
 
+                {/* API Error */}
+                {apiError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-[13px] text-red-600 font-medium">
+                        {apiError}
+                    </div>
+                )}
+
                 {/* Form Fields */}
                 <div className="space-y-4">
                     {authMode === 'login' ? (
                         <>
-                            {/* Phone Number Field */}
+                            {/* Email */}
                             <div className="space-y-1.5">
-                                <label className="text-[13px] font-semibold text-gray-400 ml-1 tracking-tight">Phone number</label>
-                                <div className="relative flex items-center">
-                                    <div className="absolute left-4 flex items-center gap-2 text-gray-400">
-                                        <Smartphone size={18} className="text-[#33a852]" />
-                                        <span className="text-sm font-bold border-r border-gray-200 pr-2">+91</span>
-                                    </div>
+                                <label className="text-[13px] font-semibold text-gray-400 ml-1 tracking-tight">Email</label>
+                                <div className="relative">
+                                    <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#33a852]" />
                                     <input
-                                        type="tel"
-                                        value={phoneNumber}
-                                        onChange={(e) => {
-                                            setPhoneNumber(e.target.value);
-                                            if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
-                                        }}
-                                        placeholder=""
+                                        type="email"
+                                        value={loginEmail}
+                                        onChange={(e) => { setLoginEmail(e.target.value); if (errors.email) setErrors(prev => ({ ...prev, email: '' })); }}
+                                        placeholder="Enter your email"
                                         className={cn(
-                                            "w-full pl-[90px] pr-24 py-4 bg-white border rounded-lg text-sm font-bold outline-none transition-colors",
-                                            errors.phone ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                            "w-full pl-12 pr-4 py-4 bg-white border rounded-lg text-sm font-bold outline-none transition-colors",
+                                            errors.email ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
                                         )}
                                     />
-                                    <button className="absolute right-2 bg-[#33a852] text-white text-[11px] font-bold px-3 py-2.5 rounded-md hover:bg-[#2d9448] transition-colors">
-                                        Send OTP
+                                </div>
+                                {errors.email && <p className="text-[10px] text-red-500 ml-1 mt-0.5">{errors.email}</p>}
+                            </div>
+
+                            {/* Password */}
+                            <div className="space-y-1.5">
+                                <label className="text-[13px] font-semibold text-gray-400 ml-1 tracking-tight">Password</label>
+                                <div className="relative">
+                                    <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#33a852]" />
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        value={loginPassword}
+                                        onChange={(e) => { setLoginPassword(e.target.value); if (errors.password) setErrors(prev => ({ ...prev, password: '' })); }}
+                                        placeholder="Enter your password"
+                                        className={cn(
+                                            "w-full pl-12 pr-12 py-4 bg-white border rounded-lg text-sm font-bold outline-none transition-colors",
+                                            errors.password ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                        )}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
+                                    >
+                                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                     </button>
                                 </div>
-                                {errors.phone && <p className="text-[10px] text-red-500 ml-1 mt-0.5">{errors.phone}</p>}
+                                {errors.password && <p className="text-[10px] text-red-500 ml-1 mt-0.5">{errors.password}</p>}
                             </div>
 
-                            {/* OTP Field (Login Only) */}
-                            <div className="space-y-1.5">
-                                <label className="text-[13px] font-semibold text-gray-400 ml-1 tracking-tight">OTP</label>
-                                <input
-                                    type="text"
-                                    value={loginOtp}
-                                    onChange={(e) => setLoginOtp(e.target.value)}
-                                    placeholder=""
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    spellCheck="false"
-                                    data-lpignore="true"
-                                    className="w-full px-4 py-4 bg-white border border-gray-200 rounded-lg text-sm font-bold tracking-[8px] outline-none focus:border-[#33a852] transition-colors"
-                                />
-                            </div>
-
-                            {/* Remember Me & Forgot Password */}
-                            <div className="flex items-center justify-between px-1">
-                                <label className="flex items-center gap-2 cursor-pointer group">
-                                    <div
-                                        onClick={() => setRememberMe(!rememberMe)}
-                                        className={cn(
-                                            "w-5 h-5 rounded-[4px] border-2 transition-colors flex items-center justify-center",
-                                            rememberMe ? "bg-[#33a852] border-[#33a852]" : "border-gray-100 group-hover:border-gray-200"
-                                        )}
-                                    >
-                                        {rememberMe && <div className="w-2 h-2 bg-white rounded-full" />}
-                                    </div>
-                                    <span className="text-[12px] font-semibold text-gray-400 tracking-tight">Remember me</span>
-                                </label>
-                                <button className="text-[12px] font-bold text-[#33a852] hover:underline">
-                                    Forgot Password?
-                                </button>
-                            </div>
+                            {/* Quick login hint */}
+                            <p className="text-[11px] text-gray-400 ml-1">
+                                Demo: <span className="font-bold">chef@tajpalace.com</span> / <span className="font-bold">customer123</span>
+                            </p>
                         </>
                     ) : (
-                        /* Registration Fields - Role Specific */
+                        /* ── REGISTER FORM ── */
                         <div className="space-y-4">
                             <div className="space-y-1.5">
                                 <label className="text-[12px] font-bold text-gray-800 ml-1">Full name</label>
                                 <input
                                     type="text"
                                     value={fullName}
-                                    onChange={(e) => {
-                                        setFullName(e.target.value);
-                                        if (errors.fullName) setErrors(prev => ({ ...prev, fullName: '' }));
-                                    }}
-                                    placeholder="Enter your name."
-                                    className={cn(
-                                        "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
-                                        errors.fullName ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
-                                    )}
+                                    onChange={(e) => { setFullName(e.target.value); if (errors.fullName) setErrors(prev => ({ ...prev, fullName: '' })); }}
+                                    placeholder="Enter your name"
+                                    className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.fullName ? "border-red-500" : "border-gray-200 focus:border-[#33a852]")}
                                 />
                                 {errors.fullName && <p className="text-[10px] text-red-500 ml-1">{errors.fullName}</p>}
                             </div>
 
+                            <div className="space-y-1.5">
+                                <label className="text-[12px] font-bold text-gray-800 ml-1">Email</label>
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(prev => ({ ...prev, email: '' })); }}
+                                    placeholder="Enter your email"
+                                    className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.email ? "border-red-500" : "border-gray-200 focus:border-[#33a852]")}
+                                />
+                                {errors.email && <p className="text-[10px] text-red-500 ml-1">{errors.email}</p>}
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-[12px] font-bold text-gray-800 ml-1">Password</label>
+                                <div className="relative">
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        value={password}
+                                        onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors(prev => ({ ...prev, password: '' })); }}
+                                        placeholder="Min 6 characters"
+                                        className={cn("w-full px-4 pr-12 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.password ? "border-red-500" : "border-gray-200 focus:border-[#33a852]")}
+                                    />
+                                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
+                                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                                {errors.password && <p className="text-[10px] text-red-500 ml-1">{errors.password}</p>}
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-[12px] font-bold text-gray-800 ml-1">Phone number</label>
+                                <input
+                                    type="tel"
+                                    value={phoneNumber}
+                                    onChange={(e) => { setPhoneNumber(e.target.value); if (errors.phone) setErrors(prev => ({ ...prev, phone: '' })); }}
+                                    placeholder="10 digit mobile number"
+                                    className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.phone ? "border-red-500" : "border-gray-200 focus:border-[#33a852]")}
+                                />
+                                {errors.phone && <p className="text-[10px] text-red-500 ml-1">{errors.phone}</p>}
+                            </div>
+
                             {userRole === 'vendor' ? (
-                                <>
-                                    {/* Vendor: Simple + Business Name + Email */}
-                                    <div className="space-y-1.5">
-                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Business Name</label>
-                                        <input
-                                            type="text"
-                                            value={businessName}
-                                            onChange={(e) => {
-                                                setBusinessName(e.target.value);
-                                                if (errors.businessName) setErrors(prev => ({ ...prev, businessName: '' }));
-                                            }}
-                                            placeholder="Enter your restaurant name"
-                                            className={cn(
-                                                "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
-                                                errors.businessName ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
-                                            )}
-                                        />
-                                        {errors.businessName && <p className="text-[10px] text-red-500 ml-1">{errors.businessName}</p>}
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Email</label>
-                                        <input
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => {
-                                                setEmail(e.target.value);
-                                                if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
-                                            }}
-                                            placeholder="Enter your email id"
-                                            className={cn(
-                                                "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
-                                                errors.email ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
-                                            )}
-                                        />
-                                        {errors.email && <p className="text-[10px] text-red-500 ml-1">{errors.email}</p>}
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Phone number</label>
-                                        <input
-                                            type="tel"
-                                            value={phoneNumber}
-                                            onChange={(e) => {
-                                                setPhoneNumber(e.target.value);
-                                                if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
-                                            }}
-                                            placeholder="Enter your Phone no."
-                                            className={cn(
-                                                "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
-                                                errors.phone ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
-                                            )}
-                                        />
-                                        {errors.phone && <p className="text-[10px] text-red-500 ml-1">{errors.phone}</p>}
-                                    </div>
-                                </>
+                                <div className="space-y-1.5">
+                                    <label className="text-[12px] font-bold text-gray-800 ml-1">Business Name</label>
+                                    <input
+                                        type="text"
+                                        value={businessName}
+                                        onChange={(e) => { setBusinessName(e.target.value); if (errors.businessName) setErrors(prev => ({ ...prev, businessName: '' })); }}
+                                        placeholder="Enter your restaurant/business name"
+                                        className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.businessName ? "border-red-500" : "border-gray-200 focus:border-[#33a852]")}
+                                    />
+                                    {errors.businessName && <p className="text-[10px] text-red-500 ml-1">{errors.businessName}</p>}
+                                </div>
                             ) : (
-                                <>
-                                    {/* Customer: Complex Address - No Business Name */}
-                                    <div className="space-y-1.5">
-                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Phone number</label>
-                                        <input
-                                            type="tel"
-                                            value={phoneNumber}
-                                            onChange={(e) => {
-                                                setPhoneNumber(e.target.value);
-                                                if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
-                                            }}
-                                            placeholder="Enter your Phone no."
-                                            className={cn(
-                                                "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
-                                                errors.phone ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
-                                            )}
-                                        />
-                                        {errors.phone && <p className="text-[10px] text-red-500 ml-1">{errors.phone}</p>}
-                                    </div>
-                                    <div className="space-y-3">
-                                        <label className="text-[12px] font-bold text-gray-800 ml-1">Address</label>
-                                        <input
-                                            type="text"
-                                            value={address1}
-                                            onChange={(e) => {
-                                                setAddress1(e.target.value);
-                                                if (errors.address) setErrors(prev => ({ ...prev, address: '' }));
-                                            }}
-                                            placeholder="Enter your address (line -1)"
-                                            className={cn(
-                                                "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
-                                                errors.address ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
-                                            )}
-                                        />
-                                        <input
-                                            type="text"
-                                            value={address2}
-                                            onChange={(e) => setAddress2(e.target.value)}
-                                            placeholder="Enter your address (line -2)"
-                                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#33a852] transition-colors"
-                                        />
-                                        {errors.address && <p className="text-[10px] text-red-500 ml-1">{errors.address}</p>}
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1.5">
-                                            <label className="text-[12px] font-bold text-gray-800 ml-1">Pincode</label>
-                                            <input
-                                                type="text"
-                                                value={pincode}
-                                                onChange={(e) => {
-                                                    setPincode(e.target.value);
-                                                    if (errors.pincode) setErrors(prev => ({ ...prev, pincode: '' }));
-                                                }}
-                                                placeholder="Enter Pincode"
-                                                className={cn(
-                                                    "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
-                                                    errors.pincode ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
-                                                )}
-                                            />
-                                            {errors.pincode && <p className="text-[10px] text-red-500 ml-1">{errors.pincode}</p>}
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-[12px] font-bold text-gray-800 ml-1">City</label>
-                                            <input
-                                                type="text"
-                                                value={city}
-                                                onChange={(e) => {
-                                                    setCity(e.target.value);
-                                                    if (errors.city) setErrors(prev => ({ ...prev, city: '' }));
-                                                }}
-                                                placeholder="Enter City"
-                                                className={cn(
-                                                    "w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors",
-                                                    errors.city ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
-                                                )}
-                                            />
-                                            {errors.city && <p className="text-[10px] text-red-500 ml-1">{errors.city}</p>}
-                                        </div>
-                                    </div>
-                                </>
+                                <div className="space-y-1.5">
+                                    <label className="text-[12px] font-bold text-gray-800 ml-1">Pincode</label>
+                                    <input
+                                        type="text"
+                                        value={pincode}
+                                        onChange={(e) => { setPincode(e.target.value); if (errors.pincode) setErrors(prev => ({ ...prev, pincode: '' })); }}
+                                        placeholder="Your delivery pincode"
+                                        className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.pincode ? "border-red-500" : "border-gray-200 focus:border-[#33a852]")}
+                                    />
+                                    {errors.pincode && <p className="text-[10px] text-red-500 ml-1">{errors.pincode}</p>}
+                                </div>
                             )}
                         </div>
                     )}
@@ -466,13 +382,15 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
 
                 {/* Submit Button */}
                 <button
-                    onClick={handleNext}
-                    className="w-full bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-4 rounded-lg shadow-lg shadow-green-100 mt-10 active:scale-[0.98] transition-all text-base tracking-wide"
+                    onClick={handleSubmit}
+                    disabled={isLoading}
+                    className="w-full bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-4 rounded-lg shadow-lg shadow-green-100 mt-10 active:scale-[0.98] transition-all text-base tracking-wide disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                    {authMode === 'login' ? 'Login' : 'Next'}
+                    {isLoading && <Loader2 size={18} className="animate-spin" />}
+                    {authMode === 'login' ? 'Login' : 'Create Account'}
                 </button>
 
-                {/* Role Switcher for Register Mode */}
+                {/* Role Switcher */}
                 {authMode === 'register' && (
                     <div className="mt-8 shrink-0 pb-10 text-center">
                         <p className="text-[14px] text-gray-500">
@@ -482,28 +400,6 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                         </p>
                     </div>
                 )}
-
-                {/* Role Switcher Commented out as per request */}
-                {/* 
-                {authMode === 'login' && (
-                    <div className="mt-8 shrink-0 pb-10">
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="h-[1px] flex-1 bg-gray-50" />
-                            <span className="text-[12px] font-medium text-gray-300 tracking-tight">Or login with</span>
-                            <div className="h-[1px] flex-1 bg-gray-50" />
-                        </div>
-
-                        <button
-                            onClick={handleRoleSwitch}
-                            className="w-full bg-[#f8f9fa] border border-gray-100 py-4 rounded-lg text-sm font-semibold text-gray-500 transition-colors hover:bg-gray-100"
-                        >
-                            Onboard as <span className="text-[#33a852] font-[800] underline ml-1">
-                                {userRole === 'customer' ? 'Vendor.' : 'Customer.'}
-                            </span>
-                        </button>
-                    </div>
-                )}
-                */}
             </div>
 
             {/* Close button */}
