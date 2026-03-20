@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Quicksand:wght@300..700&display=swap');
+/* Fonts loaded via next/font/google in layout.tsx (self-hosted, no render-blocking) */
 @import "tailwindcss";
 
 @theme {

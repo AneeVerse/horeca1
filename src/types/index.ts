@@ -1,8 +1,33 @@
 // ============================================================
-// Horeca1 V2.2 — Type Definitions (Modular, Vendor-Centric)
+// Horeca1 — Centralized Type Definitions
 // ============================================================
 
-// ---- VENDOR MODULE ----
+// ---- ADDRESS MODULE (Unified) ----
+
+export type AddressLabel = 'Home' | 'Work' | 'Other';
+
+export interface Address {
+    id: string;
+    label?: AddressLabel | string;
+    fullAddress?: string;
+    shortAddress?: string;
+    latitude?: number;
+    longitude?: number;
+    landmark?: string;
+    placeId?: string;
+    flatInfo?: string; // Flat/Floor/Building
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    pincode: string;
+    postalCode?: string; // For backward compatibility
+    country?: string;
+    isDefault?: boolean;
+    type?: string; // Legacy type mapping
+}
+
+// ---- VENDOR MODULE (Unified) ----
 
 export interface Vendor {
     id: string;
@@ -10,6 +35,7 @@ export interface Vendor {
     slug: string;
     logo: string;
     coverImage?: string;
+    tagline?: string;
     rating: number;
     totalRatings: number;
     deliverySchedule: string; // e.g. "Tomorrow 7AM"
@@ -18,9 +44,10 @@ export interface Vendor {
     creditEnabled: boolean;
     creditAmount?: number;
     categories: string[];     // categories this vendor sells
-    catalog?: any[];          // Full category & product structure
+    catalog?: VendorCategory[]; // Main catalog structure
     address?: Address;
     isActive: boolean;
+    isOpen?: boolean;
     description?: string;
 }
 
@@ -36,32 +63,45 @@ export interface VendorSummary {
     categories: string[];
 }
 
-// ---- CATALOG MODULE ----
+// ---- CATALOG MODULE (Unified) ----
 
 export interface Product {
     id: string;
     name: string;
-    description: string;
+    description?: string;
     price: number;
     originalPrice?: number;
-    images: string[];
-    category: string;
+    image?: string;         // Catalog image
+    images?: string[];      // API images
+    category?: string;
     subcategory?: string;
-    packSize: string;       // e.g. "1kg", "500ml", "12pcs"
-    unit: string;
-    stock: number;
-    isActive: boolean;
-    createdAt: Date;
-    updatedAt: Date;
+    packSize?: string;      // e.g. "1kg"
+    unit?: string;           // e.g. "Kg", "Bottle", "Pack"
+    stock?: number;
+    inStock: boolean;
+    discount?: number;
+    isActive?: boolean;
+    createdAt?: Date;
+    updatedAt?: Date;
+
+    // Vendor specific (integrated into base for mock data compatibility)
+    vendorId?: string;
+    vendorName?: string;
+    vendorLogo?: string;
+    bulkPrices?: BulkPriceTier[];
+    creditBadge?: boolean;
+    minOrderQuantity?: number;
+    frequentlyOrdered?: boolean;
+    isDeal?: boolean;
 }
 
 export interface VendorProduct extends Product {
     vendorId: string;
     vendorName: string;
     vendorLogo?: string;
-    bulkPrices: BulkPriceTier[];
-    creditBadge: boolean;
-    minOrderQuantity: number;
+    bulkPrices?: BulkPriceTier[];
+    creditBadge?: boolean;
+    minOrderQuantity?: number;
     frequentlyOrdered?: boolean;
     isDeal?: boolean;
 }
@@ -81,6 +121,13 @@ export interface Category {
     parentId?: string;
     itemCount?: number;
     isActive: boolean;
+}
+
+export interface VendorCategory {
+    id: string;
+    name: string;
+    image: string;
+    products: Product[];
 }
 
 // ---- CART MODULE (Vendor-Grouped) ----
@@ -208,16 +255,6 @@ export interface User {
     createdAt: Date;
 }
 
-export interface Address {
-    line1: string;
-    line2?: string;
-    city: string;
-    state: string;
-    postalCode: string;
-    country: string;
-    pincode?: string;
-}
-
 // ---- SEARCH MODULE ----
 
 export interface SearchResults {
@@ -251,3 +288,4 @@ export interface BaseProps {
     className?: string;
     children?: React.ReactNode;
 }
+

@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
   // Experimental features for better performance
   experimental: {
     // Optimize package imports
-    optimizePackageImports: ['lucide-react', 'react-icons'],
+    optimizePackageImports: ['lucide-react', 'framer-motion', 'recharts'],
   },
 };
 

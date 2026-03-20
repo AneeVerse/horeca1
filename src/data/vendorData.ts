@@ -2,55 +2,18 @@
 // Flow: Search >> Vendor >> Vendor Catalog >> Order (Swiggy Model)
 // Customers buy FROM vendors, not from a universal product pool.
 
-export interface BulkPriceTier {
-  minQty: number;
-  price: number;
-}
-
-export interface Product {
-  id: string;
-  name: string;
-  image: string;
-  price: number;
-  originalPrice: number;
-  unit: string;
-  inStock: boolean;
-  discount?: number;
-  bulkPrices?: BulkPriceTier[];
-  isDeal?: boolean;
-  frequentlyOrdered?: boolean;
-  creditBadge?: boolean;
-}
-
-export interface VendorCategory {
-  id: string;
-  name: string;
-  image: string;
-  products: Product[];
-}
-
-export interface Vendor {
-  id: string;
-  name: string;
-  slug: string;
-  logo: string;
-  tagline: string;
-  categories: string[]; // short summary tags
-  rating: number;
-  totalRatings: number;
-  deliverySchedule: string;
-  deliveryTime: string;
-  minOrderValue: number;
-  creditEnabled: boolean;
-  isOpen: boolean;
-  isActive: boolean;
-  catalog: VendorCategory[];
-}
+import { 
+  Vendor, 
+  VendorCategory, 
+  Product, 
+  BulkPriceTier 
+} from '@/types';
 
 export interface GlobalCategory {
   id: string;
   name: string;
   image: string;
+  bgColor?: string;
 }
 
 // ─── 19 Global Categories ────────────────────────────────────────────────────
@@ -500,7 +463,7 @@ export const vendors: Vendor[] = [
 /** Get all vendors that sell products in a given category */
 export function getVendorsByCategory(categoryId: string): Vendor[] {
   return vendors.filter(v =>
-    v.catalog.some(c => c.id === categoryId)
+    v.catalog!.some(c => c.id === categoryId)
   );
 }
 
@@ -513,7 +476,7 @@ export function getVendorById(vendorId: string): Vendor | undefined {
 export function getVendorCategoryProducts(vendorId: string, categoryId: string): Product[] {
   const vendor = getVendorById(vendorId);
   if (!vendor) return [];
-  const cat = vendor.catalog.find(c => c.id === categoryId);
+  const cat = vendor.catalog!.find(c => c.id === categoryId);
   return cat?.products || [];
 }
 
@@ -521,7 +484,7 @@ export function getVendorCategoryProducts(vendorId: string, categoryId: string):
 export function getAllProductsInCategory(categoryId: string): { product: Product; vendor: Vendor }[] {
   const results: { product: Product; vendor: Vendor }[] = [];
   vendors.forEach(v => {
-    const cat = v.catalog.find(c => c.id === categoryId);
+    const cat = v.catalog!.find(c => c.id === categoryId);
     if (cat) {
       cat.products.forEach(p => {
         results.push({ product: p, vendor: v });
@@ -537,7 +500,7 @@ export function searchVendors(query: string): Vendor[] {
   return vendors.filter(v =>
     v.name.toLowerCase().includes(q) ||
     v.categories.some(c => c.toLowerCase().includes(q)) ||
-    v.tagline.toLowerCase().includes(q)
+    v.tagline!.toLowerCase().includes(q)
   );
 }
 
@@ -546,7 +509,7 @@ export function searchProducts(query: string): { product: Product; vendor: Vendo
   const q = query.toLowerCase();
   const results: { product: Product; vendor: Vendor; categoryName: string }[] = [];
   vendors.forEach(v => {
-    v.catalog.forEach(cat => {
+    v.catalog!.forEach(cat => {
       cat.products.forEach(p => {
         if (p.name.toLowerCase().includes(q)) {
           results.push({ product: p, vendor: v, categoryName: cat.name });
@@ -561,7 +524,7 @@ export function searchProducts(query: string): { product: Product; vendor: Vendo
 export function getActiveCategories(): GlobalCategory[] {
   const activeIds = new Set<string>();
   vendors.forEach(v => {
-    v.catalog.forEach(c => activeIds.add(c.id));
+    v.catalog!.forEach(c => activeIds.add(c.id));
   });
   return globalCategories.filter(gc => activeIds.has(gc.id));
 }
@@ -575,7 +538,7 @@ export function getTopVendors(count = 4): Vendor[] {
 export function getBestDeals(count = 8): { product: Product; vendor: Vendor }[] {
   const all: { product: Product; vendor: Vendor; discount: number }[] = [];
   vendors.forEach(v => {
-    v.catalog.forEach(cat => {
+    v.catalog!.forEach(cat => {
       cat.products.forEach(p => {
         if (p.discount && p.inStock) {
           all.push({ product: p, vendor: v, discount: p.discount });

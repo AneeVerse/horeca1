@@ -1,9 +1,7 @@
 import { Hero } from "@/components/features/Hero";
 import { CategoryShowcase } from "@/components/features/CategoryShowcase";
 import { FeatureBar } from "@/components/features/FeatureBar";
-// import { ShopByStore } from "@/components/features/ShopByStore";
 import { ShopByStorePromo } from "@/components/features/ShopByStorePromo";
-import { ShopByStoreAlt } from "@/components/features/ShopByStoreAlt";
 import { QuickActions } from "@/components/features/homepage/QuickActions";
 import { ContinueOrdering } from "@/components/features/homepage/ContinueOrdering";
 import { NearbyVendors } from "@/components/features/homepage/NearbyVendors";
@@ -30,8 +28,7 @@ export default function Home() {
       {/* Categories */}
       <CategoryShowcase />
 
-      {/* Shop By Store Alt (Design 2 - Popular Chains white clean style) */}
-      {/* <ShopByStoreAlt /> */}
+
 
       {/* Vendors Nearby (Repurposed Promo Banner) */}
       <ShopByStorePromo />

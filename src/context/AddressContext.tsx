@@ -3,20 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useGoogleMaps } from '@/components/providers/GoogleMapsProvider';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-export interface Address {
-    id: string;
-    label: 'Home' | 'Work' | 'Other';
-    fullAddress: string;
-    shortAddress: string;
-    latitude: number;
-    longitude: number;
-    landmark?: string;
-    pincode?: string;
-    placeId?: string;
-    flatInfo?: string; // Flat/Floor/Building
-}
+import { Address, AddressLabel } from '@/types';
 
 interface AddressContextType {
     selectedAddress: Address | null;
@@ -132,13 +119,12 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
                 const result = response.results[0];
                 const components = result.address_components;
 
-                let pincode = '';
-                let shortAddr = '';
                 const locality = components?.find(c => c.types.includes('locality'));
                 const sublocality = components?.find(c => c.types.includes('sublocality_level_1') || c.types.includes('sublocality'));
                 const postalCode = components?.find(c => c.types.includes('postal_code'));
 
-                if (postalCode) pincode = postalCode.long_name;
+                const pincode = postalCode?.long_name || '';
+                let shortAddr = '';
                 if (sublocality && locality) {
                     shortAddr = `${sublocality.long_name}, ${locality.long_name}`;
                 } else if (locality) {
@@ -147,12 +133,21 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
                     shortAddr = result.formatted_address.split(',').slice(0, 2).join(',');
                 }
 
+                const city = locality?.long_name || '';
+                const state = components?.find(c => c.types.includes('administrative_area_level_1'))?.long_name || '';
+                const route = components?.find(c => c.types.includes('route'))?.long_name;
+                const area = sublocality?.long_name;
+                const l1 = route || area || '';
+
                 return {
                     fullAddress: result.formatted_address,
                     shortAddress: shortAddr,
                     latitude: lat,
                     longitude: lng,
-                    pincode,
+                    pincode: pincode,
+                    city,
+                    state,
+                    line1: l1,
                     placeId: result.place_id,
                 };
             }
@@ -193,7 +188,10 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
                     shortAddress: geocoded.shortAddress || '',
                     latitude,
                     longitude,
-                    pincode: geocoded.pincode,
+                    pincode: geocoded.pincode || '',
+                    city: geocoded.city || '',
+                    state: geocoded.state || '',
+                    line1: geocoded.line1 || '',
                     placeId: geocoded.placeId,
                 };
                 setSelectedAddress(address);

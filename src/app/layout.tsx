@@ -1,10 +1,9 @@
-import React, { Suspense } from 'react';
+import React from 'react';
 import type { Metadata } from "next";
-import { Quicksand, Poppins } from "next/font/google";
+import { Quicksand, Poppins, Inter } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { Inter } from "next/font/google";
 import { CartProvider } from "@/context/CartContext";
 import { GoogleMapsProvider } from "@/components/providers/GoogleMapsProvider";
 import { AddressProvider } from "@/context/AddressContext";
