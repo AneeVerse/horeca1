@@ -1,18 +1,24 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { MOCK_VENDORS } from '@/lib/mockData';
+import { dal } from '@/lib/dal';
+import type { Vendor } from '@/types';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export function ShopByStore() {
+    const [vendors, setVendors] = useState<Vendor[]>([]);
     const [isMobileExpanded, setIsMobileExpanded] = useState(false);
     const [isDesktopExpanded, setIsDesktopExpanded] = useState(false);
     const desktopScrollRef = useRef<HTMLDivElement>(null);
 
+    useEffect(() => {
+        dal.vendors.list().then((res) => setVendors(res.vendors)).catch(console.error);
+    }, []);
+
     // Duplicate vendors for desktop to fill horizontal scroll without empty space
-    const desktopVendors = [...MOCK_VENDORS, ...MOCK_VENDORS, ...MOCK_VENDORS];
+    const desktopVendors = [...vendors, ...vendors, ...vendors];
 
     const scrollLeft = () => {
         desktopScrollRef.current?.scrollBy({ left: -400, behavior: 'smooth' });
@@ -22,7 +28,7 @@ export function ShopByStore() {
         desktopScrollRef.current?.scrollBy({ left: 400, behavior: 'smooth' });
     };
 
-    const StoreCard = ({ vendor }: { vendor: typeof MOCK_VENDORS[0] }) => {
+    const StoreCard = ({ vendor }: { vendor: Vendor }) => {
         const isCircular = vendor.id === 'v2';
         const categoriesLabel = vendor.categories.slice(0, 2).join(', ') +
             (vendor.categories.length > 2 ? `, ${vendor.categories.length - 2}+` : '');
@@ -78,13 +84,13 @@ export function ShopByStore() {
                 {/* Mobile: collapsed = 2-row horizontal scroll, expanded = wrapping grid */}
                 {isMobileExpanded ? (
                     <div className="md:hidden grid grid-cols-4 sm:grid-cols-4 gap-x-3 gap-y-6 pb-4">
-                        {MOCK_VENDORS.map((vendor, index) => (
+                        {vendors.map((vendor, index) => (
                             <StoreCard key={`mob-exp-${vendor.id}-${index}`} vendor={vendor} />
                         ))}
                     </div>
                 ) : (
                     <div className="md:hidden grid grid-rows-2 grid-flow-col overflow-x-auto auto-cols-[90px] gap-x-3 gap-y-6 no-scrollbar pb-4">
-                        {MOCK_VENDORS.map((vendor, index) => (
+                        {vendors.map((vendor, index) => (
                             <StoreCard key={`mob-scr-${vendor.id}-${index}`} vendor={vendor} />
                         ))}
                     </div>

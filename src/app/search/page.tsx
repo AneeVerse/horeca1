@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Search, ArrowLeft, Star, Clock, CreditCard, Package, ChevronRight } from 'lucide-react';
-import { ALL_MOCK_PRODUCTS, MOCK_VENDOR_SUMMARIES, MOCK_CATEGORIES } from '@/lib/mockData';
+import { dal } from '@/lib/dal';
+import type { VendorProduct, VendorSummary, Category } from '@/types';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
 
@@ -12,27 +13,31 @@ function SearchPageContent() {
     const searchParams = useSearchParams();
     const initialQuery = searchParams.get('q') || '';
     const [query, setQuery] = useState(initialQuery);
+    const [results, setResults] = useState<{ products: VendorProduct[]; vendors: VendorSummary[]; categories: Category[] }>({ products: [], vendors: [], categories: [] });
 
-    const results = useMemo(() => {
-        if (!query.trim()) return { products: [], vendors: [], categories: [] };
-        const q = query.toLowerCase();
+    useEffect(() => {
+        if (!query.trim()) {
+            setResults({ products: [], vendors: [], categories: [] });
+            return;
+        }
 
-        const products = ALL_MOCK_PRODUCTS.filter(p =>
-            p.name.toLowerCase().includes(q) ||
-            p.category.toLowerCase().includes(q) ||
-            p.description.toLowerCase().includes(q)
-        ).slice(0, 12); // Show more products in grid
+        let cancelled = false;
 
-        const vendors = MOCK_VENDOR_SUMMARIES.filter(v =>
-            v.name.toLowerCase().includes(q) ||
-            v.categories.some(c => c.toLowerCase().includes(q))
-        );
+        dal.search.query(query).then((data) => {
+            if (!cancelled) {
+                setResults({
+                    products: data.products,
+                    vendors: data.vendors,
+                    categories: data.categories,
+                });
+            }
+        }).catch(() => {
+            if (!cancelled) {
+                setResults({ products: [], vendors: [], categories: [] });
+            }
+        });
 
-        const categories = MOCK_CATEGORIES.filter(c =>
-            c.name.toLowerCase().includes(q)
-        );
-
-        return { products, vendors, categories };
+        return () => { cancelled = true; };
     }, [query]);
 
     const hasResults = results.products.length > 0 || results.vendors.length > 0 || results.categories.length > 0;

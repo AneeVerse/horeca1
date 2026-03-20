@@ -4,12 +4,12 @@ import React, { useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft, Plus, Minus, ShoppingCart, ClipboardList, Home, ChevronRight, ChevronUp, ChevronDown, Building2, RotateCcw, AlertTriangle, FileText, X } from 'lucide-react';
-import { MOCK_ORDER_LISTS, MOCK_VENDORS, MOCK_VENDOR_PRODUCTS } from '@/lib/mockData';
+import { dal } from '@/lib/dal';
+import type { Vendor, VendorProduct, OrderList } from '@/types';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { toast } from 'sonner';
-import type { OrderList } from '@/types';
 
 export default function OrderListDetailPage() {
     const router = useRouter();
@@ -19,6 +19,7 @@ export default function OrderListDetailPage() {
     const { wishlist } = useWishlist();
     const [orderList, setOrderList] = useState<OrderList | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [vendorsList, setVendorsList] = useState<Vendor[]>([]);
 
     const [quantities, setQuantities] = useState<Record<string, number>>({});
     const [expandedVendors, setExpandedVendors] = useState<Record<string, boolean>>({});
@@ -27,6 +28,13 @@ export default function OrderListDetailPage() {
         setExpandedVendors(prev => ({ ...prev, [vendorId]: prev[vendorId] !== false ? false : true }));
     };
     const isExpanded = (vendorId: string) => expandedVendors[vendorId] !== false;
+
+    // Load vendors from DAL
+    React.useEffect(() => {
+        dal.vendors.list()
+            .then(result => setVendorsList(result.vendors))
+            .catch(() => setVendorsList([]));
+    }, []);
 
     React.useEffect(() => {
         let found: OrderList | null = null;
@@ -42,9 +50,20 @@ export default function OrderListDetailPage() {
             }
         }
 
-        // 2. Check Mock Data - FALLBACK
+        // 2. Check DAL - FALLBACK
         if (!found) {
-            found = MOCK_ORDER_LISTS.find(l => l.id === listId) || null;
+            dal.lists.getById(listId)
+                .then((list: any) => {
+                    if (list) {
+                        setOrderList(list);
+                        setQuantities(Object.fromEntries((list.items || []).map((item: any) => [item.productId, 0])));
+                    }
+                    setIsLoading(false);
+                })
+                .catch(() => {
+                    setIsLoading(false);
+                });
+            return;
         }
 
         if (found) {
@@ -169,7 +188,7 @@ export default function OrderListDetailPage() {
         if (!seen.has(vid)) {
             seen.add(vid);
             // Lookup vendor details if missing from product
-            const vendorInfo = MOCK_VENDORS.find(v => v.id === vid);
+            const vendorInfo = vendorsList.find(v => v.id === vid);
             vendorGroups.push({
                 vendorId: vid,
                 vendorName: item.product?.vendorName || vendorInfo?.name || orderList.vendorName,

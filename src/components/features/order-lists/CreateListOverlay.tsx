@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { X, Search, ChevronRight, Plus, Minus, Check, AlertCircle, ChevronDown, Store } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { MOCK_VENDORS, MOCK_VENDOR_PRODUCTS } from '@/lib/mockData';
+import { dal } from '@/lib/dal';
 import { toast } from 'sonner';
-import type { Vendor, OrderList } from '@/types';
+import type { Vendor, VendorProduct, OrderList } from '@/types';
 
 interface CreateListOverlayProps {
     isOpen: boolean;
@@ -17,14 +17,39 @@ interface CreateListOverlayProps {
 export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: CreateListOverlayProps) {
     const [step, setStep] = useState<'name' | 'items'>('name');
     const [listName, setListName] = useState('');
-    const [activeVendor, setActiveVendor] = useState<Vendor>(MOCK_VENDORS[0]);
+    const [dalVendors, setDalVendors] = useState<Vendor[]>([]);
+    const [activeVendor, setActiveVendor] = useState<Vendor | null>(null);
     const [selectedItems, setSelectedItems] = useState<Record<string, number>>({});
     // Maps productId -> vendorId so we know which vendor each item belongs to
     const [itemVendorMap, setItemVendorMap] = useState<Record<string, string>>({});
     const [searchQuery, setSearchQuery] = useState('');
     const [showVendorPicker, setShowVendorPicker] = useState(false);
+    const [vendorProductsMap, setVendorProductsMap] = useState<Record<string, VendorProduct[]>>({});
 
-    React.useEffect(() => {
+    // Fetch vendors from DAL on mount
+    useEffect(() => {
+        dal.vendors.list()
+            .then(({ vendors }) => {
+                setDalVendors(vendors);
+                if (!activeVendor && vendors.length > 0) {
+                    setActiveVendor(vendors[0]);
+                }
+            })
+            .catch((err) => console.error('Failed to load vendors:', err));
+    }, []);
+
+    // Fetch products when active vendor changes
+    useEffect(() => {
+        if (!activeVendor) return;
+        if (vendorProductsMap[activeVendor.id]) return; // already cached
+        dal.vendors.getProducts(activeVendor.id)
+            .then(({ products }) => {
+                setVendorProductsMap(prev => ({ ...prev, [activeVendor.id]: products }));
+            })
+            .catch((err) => console.error('Failed to load vendor products:', err));
+    }, [activeVendor, vendorProductsMap]);
+
+    useEffect(() => {
         if (isOpen) {
             if (initialData) {
                 setListName(initialData.name);
@@ -40,27 +65,28 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                 setItemVendorMap(vmap);
                 // Start on first vendor from items
                 const firstVendorId = initialData.items[0]?.product?.vendorId;
-                const firstVendor = firstVendorId ? MOCK_VENDORS.find(v => v.id === firstVendorId) : null;
-                setActiveVendor(firstVendor || MOCK_VENDORS[0]);
+                const firstVendor = firstVendorId ? dalVendors.find(v => v.id === firstVendorId) : null;
+                setActiveVendor(firstVendor || dalVendors[0] || null);
                 setStep('items');
             } else {
                 setStep('name');
                 setListName('');
-                setActiveVendor(MOCK_VENDORS[0]);
+                setActiveVendor(dalVendors[0] || null);
                 setSelectedItems({});
                 setItemVendorMap({});
             }
             setSearchQuery('');
             setShowVendorPicker(false);
         }
-    }, [isOpen, initialData]);
+    }, [isOpen, initialData, dalVendors]);
 
     // Products for active vendor filtered by search
     const vendorProducts = useMemo(() => {
-        const products = MOCK_VENDOR_PRODUCTS[activeVendor.id] || [];
+        if (!activeVendor) return [];
+        const products = vendorProductsMap[activeVendor.id] || [];
         if (!searchQuery) return products;
         return products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    }, [activeVendor, searchQuery]);
+    }, [activeVendor, searchQuery, vendorProductsMap]);
 
     // Count items added per vendor
     const itemsPerVendor = useMemo(() => {
@@ -82,6 +108,7 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
     const vendorCount = Object.keys(itemsPerVendor).length;
 
     const handleAddItem = (productId: string) => {
+        if (!activeVendor) return;
         setSelectedItems(prev => ({ ...prev, [productId]: (prev[productId] || 0) + 1 }));
         setItemVendorMap(prev => ({ ...prev, [productId]: activeVendor.id }));
     };
@@ -116,7 +143,7 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
             .map(([productId, quantity]) => ({
                 productId,
                 quantity,
-                vendorId: itemVendorMap[productId] || activeVendor.id,
+                vendorId: itemVendorMap[productId] || activeVendor?.id || '',
             }));
 
         if (items.length === 0) {
@@ -129,7 +156,7 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
         // Reset
         setStep('name');
         setListName('');
-        setActiveVendor(MOCK_VENDORS[0]);
+        setActiveVendor(dalVendors[0] || null);
         setSelectedItems({});
         setItemVendorMap({});
         onClose();
@@ -197,12 +224,12 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                                 >
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-lg border border-gray-100 p-1 bg-white overflow-hidden shrink-0">
-                                            <img src={activeVendor.logo} alt="" className="w-full h-full object-contain" />
+                                            <img src={activeVendor?.logo || ''} alt="" className="w-full h-full object-contain" />
                                         </div>
                                         <div className="text-left">
-                                            <div className="text-[13px] font-bold text-[#53B175]">{activeVendor.name}</div>
+                                            <div className="text-[13px] font-bold text-[#53B175]">{activeVendor?.name || 'Select vendor'}</div>
                                             <div className="text-[10px] text-[#53B175]/70 font-medium">
-                                                {itemsPerVendor[activeVendor.id]
+                                                {activeVendor && itemsPerVendor[activeVendor.id]
                                                     ? `${itemsPerVendor[activeVendor.id]} item${itemsPerVendor[activeVendor.id] !== 1 ? 's' : ''} added · `
                                                     : ''}
                                                 tap to switch vendor
@@ -216,7 +243,7 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                                 {showVendorPicker && (
                                     <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-gray-100 shadow-xl z-20 overflow-hidden">
                                         <div className="p-2 max-h-[220px] overflow-y-auto">
-                                            {MOCK_VENDORS.map(vendor => (
+                                            {dalVendors.map(vendor => (
                                                 <button
                                                     key={vendor.id}
                                                     onClick={() => {
@@ -226,7 +253,7 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                                                     }}
                                                     className={cn(
                                                         "w-full flex items-center justify-between p-3 rounded-xl transition-all",
-                                                        activeVendor.id === vendor.id ? "bg-[#53B175]/10" : "hover:bg-gray-50"
+                                                        activeVendor?.id === vendor.id ? "bg-[#53B175]/10" : "hover:bg-gray-50"
                                                     )}
                                                 >
                                                     <div className="flex items-center gap-3">
@@ -244,7 +271,7 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                                                                 {itemsPerVendor[vendor.id]}
                                                             </span>
                                                         )}
-                                                        {activeVendor.id === vendor.id && <Check size={15} className="text-[#53B175]" />}
+                                                        {activeVendor?.id === vendor.id && <Check size={15} className="text-[#53B175]" />}
                                                     </div>
                                                 </button>
                                             ))}
@@ -271,7 +298,7 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                 <input
                                     type="text"
-                                    placeholder={`Search in ${activeVendor.name}...`}
+                                    placeholder={`Search in ${activeVendor?.name || 'vendor'}...`}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="w-full bg-[#F7F8FA] border border-transparent rounded-full pl-12 pr-4 py-3 text-[14px] font-medium text-[#181725] focus:bg-white focus:border-[#53B175]/20 outline-none transition-all"

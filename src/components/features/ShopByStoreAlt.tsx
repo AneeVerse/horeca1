@@ -1,14 +1,20 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { MOCK_VENDORS } from '@/lib/mockData';
+import { dal } from '@/lib/dal';
+import type { Vendor } from '@/types';
 
 export function ShopByStoreAlt() {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [canScrollLeft, setCanScrollLeft] = useState(false);
     const [canScrollRight, setCanScrollRight] = useState(true);
+    const [vendors, setVendors] = useState<Vendor[]>([]);
+
+    useEffect(() => {
+        dal.vendors.list().then((res) => setVendors(res.vendors)).catch(console.error);
+    }, []);
 
     const checkScroll = () => {
         if (scrollRef.current) {
@@ -28,7 +34,7 @@ export function ShopByStoreAlt() {
         }
     };
 
-    const displayVendors = MOCK_VENDORS.slice(0, 12);
+    const displayVendors = vendors.slice(0, 12);
 
     // Offer colors cycling
     const offerColors = ['text-red-500', 'text-red-500', 'text-red-500', 'text-red-500'];

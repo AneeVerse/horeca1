@@ -6,7 +6,11 @@
       "Bash(npx prisma:*)",
       "Bash(npx next:*)",
       "Bash(docker compose:*)",
-      "Bash(docker ps:*)"
+      "Bash(docker ps:*)",
+      "Bash(curl -s http://localhost:3000/api/v1/categories)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\Roger\\Desktop\\horeca1-prod\\src\\app\\api\\auth\\[...nextauth]"
     ]
   }
 }

@@ -28,26 +28,23 @@ import { ProfileScreen } from '../auth/ProfileScreen';
 import { InitialPincodeOverlay } from './InitialPincodeOverlay';
 import { WishlistOverlay } from '../auth/WishlistOverlay';
 import { useWishlist } from '@/context/WishlistContext';
-import { vendors } from '@/data/vendorData';
+import { dal } from '@/lib/dal';
+import type { Vendor, Category } from '@/types';
 
-const categories = [
-    { name: 'Fruits & Vegetables', image: '/images/category/vegitable.png', bgColor: '#e8f9e9' },
-    { name: 'Dairy', image: '/images/category/milk.png', bgColor: '#eef2ff' },
-    { name: 'Canned & Imported', image: '/images/category/animal food.png', bgColor: '#fff7ed' },
-    { name: 'Flours', image: '/images/category/snacks.png', bgColor: '#fef2f2' },
-    { name: 'Sauces & Seasoning', image: '/images/category/drink-juice.png', bgColor: '#fdf4ff' },
-    { name: 'Masala, Salt & Sugar', image: '/images/category/candy.png', bgColor: '#eff6ff' },
-    { name: 'Chicken & Eggs', image: '/images/category/fish & meat.png', bgColor: '#fffbeb' },
-    { name: 'Edible Oils', image: '/images/category/fruits.png', bgColor: '#f0fdf4' },
-    { name: 'Custom Packaging', image: '/images/category/vegitable.png', bgColor: '#f8fafc' },
-    { name: 'Frozen & Instant Food', image: '/images/category/frozen foods.png', bgColor: '#f0f9ff' },
-    { name: 'Packaging Material', image: '/images/category/vegitable.png', bgColor: '#fdf2f8' },
-    { name: 'Bakery & Chocolates', image: '/images/category/candy.png', bgColor: '#fff1f2' },
-    { name: 'Beverages & Mixers', image: '/images/category/drink-juice.png', bgColor: '#ecfdf5' },
-    { name: 'Cleaning & Consumables', image: '/images/category/vegitable.png', bgColor: '#fafaf9' },
-    { name: 'Pulses', image: '/images/category/snacks.png', bgColor: '#f5f3ff' },
-    { name: 'Mutton, Duck & Meat', image: '/images/category/fish & meat.png', bgColor: '#fdfcf0' },
-];
+// Maps category slugs to images/colors for display (DB categories don't store these)
+const CATEGORY_STYLE: Record<string, { image: string; bgColor: string }> = {
+    'vegetables': { image: '/images/category/vegitable.png', bgColor: '#e8f9e9' },
+    'fruits': { image: '/images/category/fruits.png', bgColor: '#f0fdf4' },
+    'dairy-eggs': { image: '/images/category/milk.png', bgColor: '#eef2ff' },
+    'spices-masala': { image: '/images/category/candy.png', bgColor: '#eff6ff' },
+    'grains-pulses': { image: '/images/category/snacks.png', bgColor: '#f5f3ff' },
+    'meat-poultry': { image: '/images/category/fish & meat.png', bgColor: '#fffbeb' },
+    'seafood': { image: '/images/category/fish & meat.png', bgColor: '#fff7ed' },
+    'beverages': { image: '/images/category/drink-juice.png', bgColor: '#ecfdf5' },
+    'oils-ghee': { image: '/images/category/fruits.png', bgColor: '#f0fdf4' },
+    'packaging-supplies': { image: '/images/category/vegitable.png', bgColor: '#f8fafc' },
+};
+const DEFAULT_STYLE = { image: '/images/category/vegitable.png', bgColor: '#f7f8fa' };
 
 export function Navbar() {
     const router = useRouter();
@@ -82,10 +79,43 @@ export function Navbar() {
     const { wishlist } = useWishlist();
     const { selectedAddress, setSelectedAddress } = useAddress();
 
+    const [vendors, setVendors] = React.useState<Vendor[]>([]);
+    const [apiCategories, setApiCategories] = React.useState<(Category & { image: string; bgColor: string })[]>([]);
+    const [hoveredCategoryVendors, setHoveredCategoryVendors] = React.useState<Vendor[]>([]);
+
+    React.useEffect(() => {
+        dal.vendors.list().then((res) => setVendors(res.vendors)).catch(console.error);
+        dal.categories.list().then((cats) => {
+            setApiCategories(cats.map(c => ({
+                ...c,
+                image: CATEGORY_STYLE[c.slug]?.image || DEFAULT_STYLE.image,
+                bgColor: CATEGORY_STYLE[c.slug]?.bgColor || DEFAULT_STYLE.bgColor,
+            })));
+        }).catch(console.error);
+    }, []);
+
     const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 
     const [hoveredCategory, setHoveredCategory] = React.useState<string | null>(null);
+    const [hoveredCategoryId, setHoveredCategoryId] = React.useState<string | null>(null);
     const [isBrowseAllOpen, setIsBrowseAllOpen] = React.useState(false);
+
+    // Fetch vendors when a category is hovered in the dropdown
+    React.useEffect(() => {
+        if (!hoveredCategoryId) { setHoveredCategoryVendors([]); return; }
+        dal.categories.getVendors(hoveredCategoryId).then((vendorSummaries) => {
+            // Convert VendorSummary to Vendor shape for display
+            setHoveredCategoryVendors(vendorSummaries.map(vs => ({
+                ...vs,
+                totalRatings: 0,
+                deliverySchedule: 'Tomorrow 7:00 AM',
+                deliveryTime: '24 hrs',
+                isActive: true,
+                description: '',
+                categories: [],
+            })));
+        }).catch(() => setHoveredCategoryVendors([]));
+    }, [hoveredCategoryId]);
 
     const [lastTrigger, setLastTrigger] = React.useState<string>('');
 
@@ -374,10 +404,10 @@ export function Navbar() {
                             )}>
                                 {/* Categories List */}
                                 <div className="w-72 border-r border-gray-100 py-2 bg-white shrink-0">
-                                    {categories.slice(0, 10).map((item, idx) => (
+                                    {apiCategories.map((item) => (
                                         <div
-                                            key={idx}
-                                            onMouseEnter={() => setHoveredCategory(item.name)}
+                                            key={item.id}
+                                            onMouseEnter={() => { setHoveredCategory(item.name); setHoveredCategoryId(item.id); }}
                                             className={cn(
                                                 "flex items-center justify-between px-6 py-3.5 cursor-pointer group/item transition-all",
                                                 hoveredCategory === item.name ? "bg-primary/5 text-primary" : "hover:bg-gray-50 text-text"
@@ -404,14 +434,13 @@ export function Navbar() {
                                         </div>
 
                                         <div className="grid grid-cols-1 gap-3">
-                                            {vendors.filter(v =>
-                                                hoveredCategory && v.categories.some(c => c.toLowerCase() === hoveredCategory.toLowerCase())
-                                            ).slice(0, 6).map((vendor) => (
+                                            {hoveredCategoryVendors.slice(0, 6).map((vendor) => (
                                                 <Link
                                                     key={vendor.id}
                                                     href={`/category/${vendor.slug || slugify(vendor.name)}/${slugify(hoveredCategory || '')}`}
                                                     onClick={() => {
                                                         setHoveredCategory(null);
+                                                        setHoveredCategoryId(null);
                                                         setIsBrowseAllOpen(false);
                                                     }}
                                                     className="flex items-center gap-4 p-4 bg-white rounded-lg border border-gray-100 hover:border-primary/30 hover:shadow-md transition-all group/vendor cursor-pointer"
@@ -422,7 +451,7 @@ export function Navbar() {
                                                     <div className="flex-1 min-w-0">
                                                         <h5 className="text-[14px] font-bold text-text truncate group-hover/vendor:text-primary transition-colors">{vendor.name}</h5>
                                                         <p className="text-[11px] text-text-muted truncate font-medium">
-                                                            {vendor.categories.join(', ')}
+                                                            {vendor.description || 'View products'}
                                                         </p>
                                                     </div>
                                                     <div className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-lg shrink-0">
@@ -433,13 +462,11 @@ export function Navbar() {
                                             ))}
                                         </div>
 
-                                        {vendors.filter(v =>
-                                            hoveredCategory && v.categories.some(c => c.toLowerCase() === hoveredCategory.toLowerCase())
-                                        ).length === 0 && (
-                                                <div className="text-center py-10">
-                                                    <p className="text-text-muted text-[13px] font-medium italic">No direct matches found. Try exploring the category.</p>
-                                                </div>
-                                            )}
+                                        {hoveredCategoryVendors.length === 0 && (
+                                            <div className="text-center py-10">
+                                                <p className="text-text-muted text-[13px] font-medium italic">No vendors found for this category yet.</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -504,10 +531,10 @@ export function Navbar() {
                     </div>
 
                     <div className="grid grid-cols-4 gap-y-6 gap-x-3">
-                        {(isCategoriesExpanded ? categories : categories.slice(0, 8)).map((item, idx) => (
+                        {(isCategoriesExpanded ? apiCategories : apiCategories.slice(0, 8)).map((item) => (
                             <Link
-                                key={idx}
-                                href={`/category/${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+                                key={item.id}
+                                href={`/category/${item.slug}`}
                                 className="flex flex-col items-center gap-2 group"
                                 onClick={() => {
                                     setIsCategoriesSidebarOpen(false);
@@ -517,7 +544,7 @@ export function Navbar() {
                                 <div
                                     className="w-full aspect-square rounded-[18px] flex items-center justify-center p-2 transition-transform active:scale-95 shadow-sm border border-gray-50 overflow-hidden"
                                     style={{
-                                        backgroundColor: (item as any).bgColor || '#F7F8FA',
+                                        backgroundColor: item.bgColor || '#F7F8FA',
                                         aspectRatio: '1 / 1'
                                     }}
                                 >

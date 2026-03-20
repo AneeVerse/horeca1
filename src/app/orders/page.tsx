@@ -6,9 +6,9 @@ import { ChevronLeft, ChevronRight, Heart, ShoppingCart, Star, Home, Package } f
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'sonner';
-import { ALL_MOCK_PRODUCTS } from '@/lib/mockData';
-import { vendors } from '@/data/vendorData';
+import { dal } from '@/lib/dal';
 import { useWishlist } from '@/context/WishlistContext';
+import type { VendorProduct, Vendor } from '@/types';
 import { cn } from '@/lib/utils';
 
 interface OrderItem {
@@ -65,17 +65,49 @@ export default function OrderHistoryPage() {
     const { totalItems, addToCart } = useCart();
     const { wishlist } = useWishlist();
     const [orders, setOrders] = React.useState<Order[]>(MOCK_ORDERS);
+    const [allProducts, setAllProducts] = React.useState<VendorProduct[]>([]);
+    const [vendorsList, setVendorsList] = React.useState<Vendor[]>([]);
 
     React.useEffect(() => {
-        const saved = localStorage.getItem('horeca_orders');
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                setOrders([...parsed, ...MOCK_ORDERS]);
-            } catch (e) {
-                console.error('Failed to load orders:', e);
-            }
-        }
+        dal.vendors.list()
+            .then(result => {
+                setVendorsList(result.vendors);
+                // Fetch products for each vendor
+                return Promise.all(
+                    result.vendors.map(v =>
+                        dal.vendors.getProducts(v.id)
+                            .then(r => r.products)
+                            .catch(() => [] as VendorProduct[])
+                    )
+                );
+            })
+            .then(productArrays => {
+                setAllProducts(productArrays.flat());
+            })
+            .catch(() => {
+                setVendorsList([]);
+                setAllProducts([]);
+            });
+    }, []);
+
+    React.useEffect(() => {
+        dal.orders.list()
+            .then(result => {
+                const apiOrders = (result.orders || []) as Order[];
+                setOrders(prev => [...apiOrders, ...MOCK_ORDERS]);
+            })
+            .catch(() => {
+                // Fallback to localStorage if API fails (e.g., not logged in)
+                const saved = localStorage.getItem('horeca_orders');
+                if (saved) {
+                    try {
+                        const parsed = JSON.parse(saved);
+                        setOrders([...parsed, ...MOCK_ORDERS]);
+                    } catch (e) {
+                        console.error('Failed to load orders:', e);
+                    }
+                }
+            });
     }, []);
 
     const handleOrderAgain = (order: Order) => {
@@ -88,40 +120,7 @@ export default function OrderHistoryPage() {
                 return;
             }
 
-            let product = ALL_MOCK_PRODUCTS.find(p => p.id === item.id);
-            
-            if (!product) {
-                for (const v of vendors) {
-                    for (const cat of v.catalog) {
-                        const found = cat.products.find(p => p.id === item.id);
-                        if (found) {
-                            product = {
-                                ...found,
-                                id: found.id,
-                                name: found.name,
-                                description: '',
-                                price: found.price,
-                                originalPrice: found.originalPrice,
-                                images: [found.image],
-                                category: cat.name,
-                                packSize: found.unit,
-                                unit: found.unit,
-                                stock: found.inStock ? 100 : 0,
-                                isActive: found.inStock,
-                                createdAt: new Date(),
-                                updatedAt: new Date(),
-                                vendorId: v.id,
-                                vendorName: v.name,
-                                bulkPrices: [],
-                                creditBadge: v.creditEnabled,
-                                minOrderQuantity: 1
-                            } as any;
-                            break;
-                        }
-                    }
-                    if (product) break;
-                }
-            }
+            const product = allProducts.find(p => p.id === item.id);
 
             if (product) {
                 addToCart(product, 1);

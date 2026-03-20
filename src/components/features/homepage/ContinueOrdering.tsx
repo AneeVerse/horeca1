@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ClipboardList, Clock, ChevronRight, ChevronLeft, AlertCircle, ShoppingCart, Package, Eye } from 'lucide-react';
-import { MOCK_VENDORS, MOCK_ORDER_LISTS } from '@/lib/mockData';
+import { dal } from '@/lib/dal';
+import type { Vendor } from '@/types';
 import { useCart } from '@/context/CartContext';
 
 /* ====================================================================
@@ -203,6 +204,8 @@ export function ContinueOrdering() {
     const [isMounted, setIsMounted] = useState(false);
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [cards, setCards] = useState<ContinueCard[]>([]);
+    const [vendors, setVendors] = useState<Vendor[]>([]);
+    const [orderLists, setOrderLists] = useState<any[]>([]);
     const { groups: cartGroups, totalItems: cartTotalItems } = useCart();
     const pathname = usePathname(); // Re-runs buildCards on every route change
 
@@ -233,6 +236,19 @@ export function ContinueOrdering() {
         setIsMounted(true);
         setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
     }, []);
+
+    // Fetch vendors and order lists from the DAL
+    useEffect(() => {
+        if (!isMounted || !isLoggedIn) return;
+
+        dal.vendors.list()
+            .then((res) => setVendors(res.vendors))
+            .catch(() => setVendors([]));
+
+        dal.lists.getAll()
+            .then((res) => setOrderLists(res as any[]))
+            .catch(() => setOrderLists([]));
+    }, [isMounted, isLoggedIn]);
 
     const getRelativeTime = (timestamp: number) => {
         const now = Date.now();
@@ -269,7 +285,7 @@ export function ContinueOrdering() {
                     id: `cart-${group.vendorId}`,
                     vendorId: group.vendorId,
                     vendorName: group.vendorName,
-                    vendorLogo: group.vendorLogo || MOCK_VENDORS.find(v => v.id === group.vendorId)?.logo || '',
+                    vendorLogo: group.vendorLogo || vendors.find(v => v.id === group.vendorId)?.logo || '',
                     subtitle: `${itemCount} items in cart • ₹${total.toLocaleString('en-IN')}`,
                     subtitleIcon: 'cart',
                     href: '/cart',
@@ -291,7 +307,7 @@ export function ContinueOrdering() {
                             if (!vendorId || seenVendors.has(vendorId)) return;
                             seenVendors.add(vendorId);
 
-                            const vendor = MOCK_VENDORS.find(v => v.id === vendorId);
+                            const vendor = vendors.find(v => v.id === vendorId);
                             const orderDate = new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
                             allCards.push({
@@ -314,26 +330,24 @@ export function ContinueOrdering() {
 
             // ── SOURCE 3: Quick Order Lists ──
             try {
+                // Merge DAL-fetched lists with any saved in localStorage
                 const savedLists = localStorage.getItem('horeca_order_lists_all');
-                let orderLists: any[] = [];
+                let mergedLists: any[] = [...orderLists];
 
                 if (savedLists) {
-                    orderLists = JSON.parse(savedLists);
-                    // Merge missing mock lists
-                    if (orderLists.length < MOCK_ORDER_LISTS.length) {
-                        MOCK_ORDER_LISTS.forEach(mockList => {
-                            if (!orderLists.find((l: any) => l.id === mockList.id)) {
-                                orderLists.push(mockList);
-                            }
-                        });
-                        localStorage.setItem('horeca_order_lists_all', JSON.stringify(orderLists));
-                    }
-                } else {
-                    orderLists = [...MOCK_ORDER_LISTS];
-                    localStorage.setItem('horeca_order_lists_all', JSON.stringify(MOCK_ORDER_LISTS));
+                    const parsed = JSON.parse(savedLists);
+                    parsed.forEach((localList: any) => {
+                        if (!mergedLists.find((l: any) => l.id === localList.id)) {
+                            mergedLists.push(localList);
+                        }
+                    });
                 }
 
-                orderLists
+                if (mergedLists.length > 0) {
+                    localStorage.setItem('horeca_order_lists_all', JSON.stringify(mergedLists));
+                }
+
+                mergedLists
                     .filter((list: any) => !!list.lastUsed)
                     .sort((a: any, b: any) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime())
                     .forEach((list: any) => {
@@ -341,8 +355,8 @@ export function ContinueOrdering() {
                         if (!vendorId || seenVendors.has(vendorId)) return;
                         seenVendors.add(vendorId);
 
-                        const vendor = MOCK_VENDORS.find(v => v.id === vendorId);
-                        
+                        const vendor = vendors.find(v => v.id === vendorId);
+
                         // Check if list has products from multiple vendors
                         const listVendorIds = new Set<string>();
                         if (list.items) {
@@ -351,8 +365,8 @@ export function ContinueOrdering() {
                                 if (vid) listVendorIds.add(vid);
                             });
                         }
-                        
-                        const logos = Array.from(listVendorIds).map(vid => MOCK_VENDORS.find(v => v.id === vid)?.logo).filter(Boolean) as string[];
+
+                        const logos = Array.from(listVendorIds).map(vid => vendors.find(v => v.id === vid)?.logo).filter(Boolean) as string[];
 
                         // Get base vendor name to avoid double "+ N more"
                         // Regex strips any existing " + N more" pattern
@@ -427,7 +441,7 @@ export function ContinueOrdering() {
                                 id: `viewed-${vendorId}`,
                                 vendorId,
                                 vendorName: entry.vendorName || 'Vendor',
-                                vendorLogo: entry.vendorLogo || MOCK_VENDORS.find(v => v.id === vendorId)?.logo || '',
+                                vendorLogo: entry.vendorLogo || vendors.find(v => v.id === vendorId)?.logo || '',
                                 subtitle: productLabel,
                                 subtitle2: finalSubtitle2,
                                 subtitleIcon: 'viewed',
@@ -464,7 +478,7 @@ export function ContinueOrdering() {
             window.removeEventListener('focus', buildCards);
             document.removeEventListener('visibilitychange', handleVisibility);
         };
-    }, [isMounted, isLoggedIn, cartGroups, pathname]);
+    }, [isMounted, isLoggedIn, cartGroups, pathname, vendors, orderLists]);
 
     if (!isMounted || !isLoggedIn || cards.length === 0) return null;
 
@@ -520,7 +534,7 @@ export function ContinueOrdering() {
                     >
                         <div className="flex flex-nowrap gap-3 md:gap-5 py-4 px-6 md:px-[var(--container-padding)] w-max">
                             {cards.map((card) => {
-                                const vendor = MOCK_VENDORS.find(v => v.id === card.vendorId);
+                                const vendor = vendors.find(v => v.id === card.vendorId);
 
                                 return (
                                     <Link

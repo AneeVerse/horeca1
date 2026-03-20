@@ -6,16 +6,30 @@ import { VendorStoreHeader } from '@/components/features/vendor/VendorStoreHeade
 import { VendorCatalogNav } from '@/components/features/vendor/VendorCatalogNav';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
-import { getVendorById } from '@/data/vendorData';
-import type { VendorProduct } from '@/types';
+import { dal } from '@/lib/dal';
+import type { Vendor, VendorProduct } from '@/types';
 
 export default function VendorStorePage() {
     const params = useParams();
     const vendorId = params.id as string;
+    const [vendor, setVendor] = useState<Vendor | null>(null);
+    const [products, setProducts] = useState<VendorProduct[]>([]);
+    const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
 
-    const vendor = getVendorById(vendorId);
+    // Fetch vendor + products from real API
+    useEffect(() => {
+        if (!vendorId) return;
+        setLoading(true);
+        Promise.all([
+            dal.vendors.getById(vendorId),
+            dal.vendors.getProducts(vendorId),
+        ]).then(([v, p]) => {
+            setVendor(v);
+            setProducts(p.products);
+        }).catch(console.error).finally(() => setLoading(false));
+    }, [vendorId]);
 
     // Track recently viewed vendor for "Continue Ordering" section
     useEffect(() => {
@@ -26,16 +40,11 @@ export default function VendorStorePage() {
             let entries: any[] = [];
             if (saved) entries = JSON.parse(saved);
 
-            // Get existing entry to merge products
             const existing = entries.find((e: any) => e.vendorId === vendor.id);
             const existingProducts = existing?.viewedProducts || [];
-
-            // Remove catalog pre-population. Only track products explicitly viewed.
             const mergedProducts = existingProducts;
 
-            // Remove existing entry
             entries = entries.filter((e: any) => e.vendorId !== vendor.id);
-            // Add to front
             entries.unshift({
                 vendorId: vendor.id,
                 vendorName: vendor.name,
@@ -43,39 +52,11 @@ export default function VendorStorePage() {
                 viewedProducts: mergedProducts.slice(0, 20),
                 viewedAt: Date.now(),
             });
-            // Keep max 20 vendors
             if (entries.length > 20) entries = entries.slice(0, 20);
             localStorage.setItem(KEY, JSON.stringify(entries));
         } catch (e) {
             console.error('Failed to save recently viewed vendor:', e);
         }
-    }, [vendor]);
-    const products = useMemo(() => {
-        if (!vendor?.catalog) return [];
-        return vendor.catalog.flatMap(cat => 
-            cat.products.map(p => ({
-                id: p.id,
-                vendorId: vendor.id,
-                vendorName: vendor.name,
-                name: p.name,
-                description: '', // fallback
-                category: cat.name,
-                packSize: p.unit,
-                unit: p.unit,
-                price: p.price,
-                originalPrice: p.originalPrice,
-                stock: p.inStock ? 100 : 0,
-                images: [p.image],
-                bulkPrices: p.bulkPrices || [],
-                creditBadge: p.creditBadge ?? vendor.creditEnabled,
-                minOrderQuantity: 1,
-                isActive: p.inStock,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                isDeal: p.isDeal ?? !!p.discount,
-                frequentlyOrdered: p.frequentlyOrdered ?? false
-            } as VendorProduct))
-        );
     }, [vendor]);
 
     const filteredProducts = useMemo(() => {
@@ -104,6 +85,17 @@ export default function VendorStorePage() {
         return result;
     }, [products, activeTab, searchQuery]);
 
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-8 h-8 border-2 border-[#53B175] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-[14px] text-gray-500">Loading store...</p>
+                </div>
+            </div>
+        );
+    }
+
     if (!vendor) {
         return (
             <div className="min-h-screen flex items-center justify-center">
@@ -124,7 +116,7 @@ export default function VendorStorePage() {
             <VendorCatalogNav
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                categories={vendor.catalog?.map(c => c.name) || vendor.categories}
+                categories={vendor.categories}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
             />

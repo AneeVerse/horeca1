@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import {
     ChevronRight,
@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { ALL_MOCK_PRODUCTS, MOCK_CATEGORIES } from '@/lib/mockData';
+import { dal } from '@/lib/dal';
+import type { Category, VendorProduct } from '@/types';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 
@@ -29,15 +30,28 @@ function CategoryPageContent() {
     const router = useRouter();
     const slug = params.slug as string;
 
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [products, setProducts] = useState<VendorProduct[]>([]);
+
+    useEffect(() => {
+        dal.categories.list().then(setCategories).catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        // Products are fetched globally; filtering happens in the memo below
+        // For now, fetch vendor products from all vendors or use search
+        dal.search.query(slug?.replace(/-/g, ' ') || '').then(res => setProducts(res.products)).catch(() => {});
+    }, [slug]);
+
     // Filter products based on category slug
     const filteredProducts = useMemo(() => {
-        if (!slug) return ALL_MOCK_PRODUCTS;
+        if (!slug) return products;
         const categoryName = slug.toLowerCase().replace(/-/g, ' ');
-        return ALL_MOCK_PRODUCTS.filter(p => 
-            p.category.toLowerCase().includes(categoryName) || 
+        return products.filter(p =>
+            p.category.toLowerCase().includes(categoryName) ||
             (p.subcategory && p.subcategory.toLowerCase().includes(categoryName))
         );
-    }, [slug]);
+    }, [slug, products]);
 
     // Check for expanded state in URL
     const isExpanded = searchParams.get('exp') === '1';
@@ -115,7 +129,7 @@ function CategoryPageContent() {
                 <div className="flex flex-1 overflow-hidden">
                     {/* Left Sidebar: Categories */}
                     <div className="w-[100px] bg-white overflow-y-auto no-scrollbar border-r border-[#D0D0D0] flex flex-col pt-2">
-                        {[{ name: 'See All', slug: 'all', icon: '🛒' }, ...MOCK_CATEGORIES].map((cat, idx) => {
+                        {[{ name: 'See All', slug: 'all', icon: '🛒' }, ...categories].map((cat, idx) => {
                             const isActive = isTabActive(cat.slug, slug);
                             return (
                                 <Link
@@ -210,7 +224,7 @@ function CategoryPageContent() {
                                 <div>
                                     <h3 className="text-[18px] font-bold text-[#181725] mb-4 pb-2 border-b-2 border-[#53B175]/10">Categories</h3>
                                     <div className="space-y-3">
-                                        {MOCK_CATEGORIES.map((cat, idx) => (
+                                        {categories.map((cat, idx) => (
                                             <Link
                                                 key={idx}
                                                 href={`/category/${cat.slug}`}

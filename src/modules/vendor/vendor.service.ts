@@ -39,16 +39,27 @@ export class VendorService {
         minOrderValue: true,
         creditEnabled: true,
         description: true,
+        products: {
+          where: { isActive: true },
+          select: { category: { select: { name: true } } },
+          distinct: ['categoryId'],
+        },
       },
     });
 
     const hasMore = vendors.length > limit;
     if (hasMore) vendors.pop();
 
+    // Flatten products→category into a simple categories string array
+    const vendorsWithCategories = vendors.map(({ products, ...rest }) => ({
+      ...rest,
+      categories: [...new Set(products.map(p => p.category?.name).filter(Boolean))],
+    }));
+
     return {
-      vendors,
+      vendors: vendorsWithCategories,
       pagination: {
-        next_cursor: hasMore ? vendors[vendors.length - 1]?.id : null,
+        next_cursor: hasMore ? vendorsWithCategories[vendorsWithCategories.length - 1]?.id : null,
         has_more: hasMore,
       },
     };

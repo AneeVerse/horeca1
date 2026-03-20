@@ -25,9 +25,8 @@ import { DeliveryPoster } from '@/components/features/DeliveryPoster';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { toast } from 'sonner';
-import { MOCK_VENDORS } from '@/lib/mockData';
-import { vendors as vendorDataVendors } from '@/data/vendorData';
-import type { VendorProduct } from '@/types';
+import { dal } from '@/lib/dal';
+import type { Vendor as DalVendor, VendorProduct } from '@/types';
 
 // --- Types ---
 interface Vendor {
@@ -240,15 +239,18 @@ export default function ProductDetailPage() {
 
     const isLiked = isInWishlist(vendorProductForContext.id);
 
+    // Fetch vendors from DAL for recently-viewed tracking
+    const [dalVendors, setDalVendors] = useState<DalVendor[]>([]);
+    useEffect(() => {
+        dal.vendors.list().then(({ vendors }) => setDalVendors(vendors)).catch(() => {});
+    }, []);
+
     // Track recently viewed vendor for "Continue Ordering" section
     useEffect(() => {
         if (!vendorName) return;
         try {
-            // Try to find vendor in both data sources to get real id/logo
-            const fromMock = MOCK_VENDORS.find(v => v.name.toLowerCase() === vendorName.toLowerCase() || v.slug === vendorName.toLowerCase());
-            const fromVendorData = vendorDataVendors.find(v => v.name.toLowerCase() === vendorName.toLowerCase() || v.slug === vendorName.toLowerCase());
-            const matched = fromMock || fromVendorData;
-            
+            const matched = dalVendors.find(v => v.name.toLowerCase() === vendorName.toLowerCase() || v.slug === vendorName.toLowerCase());
+
             const vId = matched?.id || `product-vendor-${vendorName}`;
             const vName = matched?.name || vendorName;
             const vLogo = matched?.logo || '';
@@ -294,7 +296,7 @@ export default function ProductDetailPage() {
         } catch (e) {
             console.error('Failed to save recently viewed vendor:', e);
         }
-    }, [vendorName, productName]);
+    }, [vendorName, productName, dalVendors]);
 
     const handleAdd = (qty: number = 1) => {
         // Find if item already in cart to update quantity

@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { Search, Star, ArrowLeft, ChevronDown } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { vendors } from '@/data/vendorData';
+import { dal } from '@/lib/dal';
+import type { Vendor, VendorProduct, Category } from '@/types';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 
@@ -18,36 +19,66 @@ function VendorCategoryPageContent() {
     const slug = params.slug as string;
     const categoryId = params.categoryId as string;
 
-    const vendor = useMemo(() => {
-        const targetVendor = slugify(slug);
-        return vendors.find(v => slugify(v.id) === targetVendor || slugify(v.name) === targetVendor);
+    const [vendor, setVendor] = useState<Vendor | null>(null);
+    const [products, setProducts] = useState<VendorProduct[]>([]);
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // Fetch vendor by slug (which may be an ID)
+    useEffect(() => {
+        if (!slug) return;
+        setLoading(true);
+        // Try fetching by ID first (slug param could be vendor ID)
+        dal.vendors.getById(slug)
+            .then(setVendor)
+            .catch(() => {
+                // Fallback: search vendors list for matching slug
+                dal.vendors.list().then(res => {
+                    const found = res.vendors.find(v => slugify(v.slug) === slugify(slug) || v.id === slug);
+                    setVendor(found || null);
+                }).catch(() => setVendor(null));
+            })
+            .finally(() => setLoading(false));
     }, [slug]);
 
+    // Fetch categories for sidebar
+    useEffect(() => {
+        dal.categories.list().then(setCategories).catch(() => {});
+    }, []);
+
+    // Fetch products for this vendor (optionally filtered)
+    useEffect(() => {
+        if (!vendor) return;
+        dal.vendors.getProducts(vendor.id).then(res => {
+            setProducts(res.products);
+        }).catch(() => setProducts([]));
+    }, [vendor]);
+
+    // Find active category by slug match
     const activeCategory = useMemo(() => {
-        if (!vendor || !vendor.catalog.length) return null;
-        const targetCat = slugify(categoryId || '');
-        
-        // 1. Try direct match on ID or Name
-        let found = vendor.catalog.find(c => 
-            slugify(c.id) === targetCat || 
-            slugify(c.name) === targetCat
-        );
+        if (!categoryId || categories.length === 0) return null;
+        return categories.find(c =>
+            slugify(c.slug) === slugify(categoryId) ||
+            slugify(c.name) === slugify(categoryId) ||
+            c.id === categoryId
+        ) || null;
+    }, [categoryId, categories]);
 
-        // 2. Fallback: Find category containing a product that matches the slug
-        if (!found) {
-            found = vendor.catalog.find(cat => 
-                cat.products.some(p => slugify(p.name).includes(targetCat) || targetCat.includes(slugify(p.name)))
-            );
-        }
-
-        // 3. Final Fallback: First category if we're on this vendor's space
-        return found || vendor.catalog[0];
-    }, [vendor, categoryId]);
-
+    // Filter products by category name match
     const filteredProducts = useMemo(() => {
-        if (!activeCategory) return [];
-        return activeCategory.products;
-    }, [activeCategory]);
+        if (!activeCategory) return products;
+        return products.filter(p =>
+            (p.category || '').toLowerCase().includes(activeCategory.name.toLowerCase())
+        );
+    }, [products, activeCategory]);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-white">
+                <div className="w-8 h-8 border-2 border-[#53B175] border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     if (!vendor) {
         return (
@@ -62,7 +93,6 @@ function VendorCategoryPageContent() {
 
     return (
         <div className="bg-white min-h-screen flex flex-col">
-            {/* Global Footer Hide for Mobile on this page */}
             <style dangerouslySetInnerHTML={{
                 __html: `
                 @media (max-width: 1023px) {
@@ -72,7 +102,6 @@ function VendorCategoryPageContent() {
 
             {/* ==================== MOBILE/TABLET LAYOUT ==================== */}
             <div className="lg:hidden flex flex-col h-screen overflow-hidden">
-                {/* Fixed Header */}
                 <header className="bg-white px-4 md:px-8 py-4 flex items-center justify-between border-b border-[#F2F3F2] shrink-0 relative">
                     <button onClick={() => router.back()}>
                         <ArrowLeft size={24} className="text-[#181725] md:w-7 md:h-7" />
@@ -88,9 +117,6 @@ function VendorCategoryPageContent() {
                 <div className="flex flex-1 overflow-hidden">
                     {/* Left Sidebar: Categories */}
                     <div className="w-[100px] md:w-[130px] bg-white overflow-y-auto no-scrollbar border-r border-[#D0D0D0] flex flex-col pt-2">
-                        {/* "See All" or similar? The user's screenshot has several icons. 
-                           Based on screenshot: See All, Dairy, Vegetables, Fruits, Grocery, Sauces & Condiments */}
-                        
                         <Link
                             href={`/vendor/${vendor.id}`}
                             className="flex flex-col items-center py-4 px-1 relative transition-all"
@@ -103,10 +129,10 @@ function VendorCategoryPageContent() {
                             </p>
                         </Link>
 
-                        {vendor.catalog.map((cat, idx) => {
-                            const isActive = activeCategory?.id === cat.id;
+                        {categories.map((cat, idx) => {
+                            const isActive = activeCategory?.id === cat.id || slugify(activeCategory?.name || '') === slugify(cat.name);
                             const categorySlug = slugify(cat.name);
-                            
+
                             return (
                                 <Link
                                     key={idx}
@@ -122,7 +148,7 @@ function VendorCategoryPageContent() {
                                         "w-[72px] h-[72px] md:w-[92px] md:h-[92px] rounded-[14px] md:rounded-[20px] bg-white p-2 md:p-3",
                                         isActive ? "border-[2px] border-[#53B175]" : "border border-gray-100"
                                     )}>
-                                        <img src={cat.image} alt="" className="w-full h-full object-contain" />
+                                        <img src={cat.image || '/images/category/vegitable.png'} alt="" className="w-full h-full object-contain" />
                                     </div>
                                     <p className={cn(
                                         "text-[11px] md:text-[13px] text-center font-black leading-tight px-1",
@@ -135,18 +161,8 @@ function VendorCategoryPageContent() {
                         })}
                     </div>
 
-                    {/* Right Content Area: Chips + Products */}
+                    {/* Right Content Area */}
                     <div className="flex-1 flex flex-col overflow-hidden bg-white">
-                        {/* Title bar below header? The screenshot shows "Sauces & Seasoning" in the header, 
-                           but user says "top name should be of vendor". 
-                           Let's put Category name as a secondary sub-header or just inside the main area.
-                           Actually, re-reading the screenshot: The header title WAS "Sauces & Seasoning".
-                           User said: "top name should be of vendor at top".
-                           I'll put the Category name as a sub-header.
-                        */}
-
-
-                        {/* Scrollable Filter Chips */}
                         <div className="flex overflow-x-auto px-4 md:px-8 py-3 md:py-4 gap-2 md:gap-3 no-scrollbar border-b border-[#F2F3F2]">
                             {[
                                 { label: 'Above 4.0+', icon: <Star size={14} className="fill-[#FFB800] text-[#FFB800] mr-1" /> },
@@ -164,33 +180,12 @@ function VendorCategoryPageContent() {
                             ))}
                         </div>
 
-                        {/* Product Feed */}
                         <div className="flex-1 overflow-y-auto p-4 md:p-8 no-scrollbar">
                             {filteredProducts.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                                {filteredProducts.map((product: any) => {
-                                    if (!activeCategory) return null;
-                                    return (
-                                        <VendorProductCard
-                                            key={product.id}
-                                            product={{
-                                                ...product,
-                                                vendorId: vendor.id,
-                                                vendorName: vendor.name,
-                                                category: activeCategory.name,
-                                                images: [product.image],
-                                                packSize: product.unit,
-                                                stock: product.inStock ? 100 : 0,
-                                                isActive: product.inStock,
-                                                bulkPrices: product.bulkPrices || [],
-                                                creditBadge: product.creditBadge ?? vendor.creditEnabled,
-                                                minOrderQuantity: 1,
-                                                isDeal: product.isDeal ?? !!product.discount,
-                                                frequentlyOrdered: product.frequentlyOrdered ?? false,
-                                            } as any}
-                                        />
-                                    );
-                                })}
+                                {filteredProducts.map((product) => (
+                                    <VendorProductCard key={product.id} product={product} />
+                                ))}
                                 </div>
                             ) : (
                                 <div className="text-center py-20 flex flex-col items-center">
@@ -209,7 +204,6 @@ function VendorCategoryPageContent() {
             {/* ==================== DESKTOP SECTION ==================== */}
             <div className="hidden lg:block bg-gray-50/50 min-h-screen">
                 <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-6">
-                    {/* Breadcrumbs */}
                     <nav className="flex items-center gap-2 mb-6 text-[13px] text-gray-500 font-medium">
                         <Link href="/" className="hover:text-[#53B175]">Home</Link>
                         <span>/</span>
@@ -219,7 +213,6 @@ function VendorCategoryPageContent() {
                     </nav>
 
                     <div className="flex gap-8 items-start">
-                        {/* Desktop Sidebar */}
                         <aside className="w-[280px] shrink-0 sticky top-24">
                             <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm overflow-hidden">
                                 <div className="flex items-center gap-4 mb-8">
@@ -247,8 +240,8 @@ function VendorCategoryPageContent() {
                                         <span className="text-[14px] font-bold text-[#181725]">All Products</span>
                                     </Link>
 
-                                    {vendor.catalog.map((cat, idx) => {
-                                        const isActive = activeCategory?.id === cat.id;
+                                    {categories.map((cat, idx) => {
+                                        const isActive = activeCategory?.id === cat.id || slugify(activeCategory?.name || '') === slugify(cat.name);
                                         const categorySlug = slugify(cat.name);
                                         return (
                                             <Link
@@ -264,7 +257,7 @@ function VendorCategoryPageContent() {
                                                         "w-8 h-8 rounded-lg flex items-center justify-center border transition-all",
                                                         isActive ? "bg-white border-[#53B175]/20 shadow-sm" : "bg-gray-50 border-transparent group-hover:bg-white group-hover:border-gray-100"
                                                     )}>
-                                                        <img src={cat.image} alt="" className="w-6 h-6 object-contain" />
+                                                        <img src={cat.image || '/images/category/vegitable.png'} alt="" className="w-6 h-6 object-contain" />
                                                     </div>
                                                     <span className={cn(
                                                         "text-[14px] font-bold transition-colors",
@@ -284,22 +277,20 @@ function VendorCategoryPageContent() {
                             </div>
                         </aside>
 
-                        {/* Desktop Main Feed */}
                         <div className="flex-1 min-w-0">
-                            {/* Filter Bar */}
                             <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-6 shadow-sm flex items-center justify-between">
                                 <h3 className="text-[18px] font-bold text-[#181725]">
-                                    {activeCategory?.name || 'Category'}
+                                    {activeCategory?.name || 'All Products'}
                                     <span className="ml-2 text-[14px] text-gray-400 font-medium">({filteredProducts.length} items)</span>
                                 </h3>
-                                
+
                                 <div className="flex items-center gap-2">
                                     {[
                                         { label: 'Rating 4.0+', active: true },
                                         { label: 'Price: Low to High' },
                                         { label: 'Best Offers' },
                                     ].map((f, i) => (
-                                        <button 
+                                        <button
                                             key={i}
                                             className={cn(
                                                 "px-4 py-2 rounded-xl border text-[13px] font-bold transition-all",
@@ -312,27 +303,9 @@ function VendorCategoryPageContent() {
                                 </div>
                             </div>
 
-                            {/* Products Grid */}
                             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                {filteredProducts.map((product: any) => (
-                                    <VendorProductCard
-                                        key={product.id}
-                                        product={{
-                                            ...product,
-                                            vendorId: vendor.id,
-                                            vendorName: vendor.name,
-                                            category: activeCategory?.name || '',
-                                            images: [product.image],
-                                            packSize: product.unit,
-                                            stock: product.inStock ? 100 : 0,
-                                            isActive: product.inStock,
-                                            bulkPrices: product.bulkPrices || [],
-                                            creditBadge: product.creditBadge ?? vendor.creditEnabled,
-                                            minOrderQuantity: 1,
-                                            isDeal: product.isDeal ?? !!product.discount,
-                                            frequentlyOrdered: product.frequentlyOrdered ?? false,
-                                        } as any}
-                                    />
+                                {filteredProducts.map((product) => (
+                                    <VendorProductCard key={product.id} product={product} />
                                 ))}
                             </div>
 
@@ -347,7 +320,7 @@ function VendorCategoryPageContent() {
                     </div>
                 </div>
             </div>
-            
+
             <StickyCartBar />
         </div>
     );

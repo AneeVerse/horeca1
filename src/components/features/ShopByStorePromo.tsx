@@ -2,13 +2,19 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MOCK_VENDORS } from '@/lib/mockData';
+import { dal } from '@/lib/dal';
+import type { Vendor } from '@/types';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export function ShopByStorePromo() {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [canScrollLeft, setCanScrollLeft] = useState(false);
     const [canScrollRight, setCanScrollRight] = useState(true);
+    const [vendors, setVendors] = useState<Vendor[]>([]);
+
+    useEffect(() => {
+        dal.vendors.list().then((res) => setVendors(res.vendors)).catch(console.error);
+    }, []);
 
     const checkScroll = () => {
         if (scrollRef.current) {
@@ -37,19 +43,10 @@ export function ShopByStorePromo() {
         }
     };
 
-    // Standard mock login state - consistency with other homepage sections
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [isMounted, setIsMounted] = useState(false);
+    // Show for everyone — no login gate needed for vendor discovery
+    if (vendors.length === 0) return null;
 
-    useEffect(() => {
-        setIsMounted(true);
-        setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
-    }, []);
-
-    if (!isMounted || !isLoggedIn) return null;
-
-    // Use a subset of vendors for display
-    const displayVendors = MOCK_VENDORS.slice(0, 12);
+    const displayVendors = vendors.slice(0, 12);
 
     return (
         <section

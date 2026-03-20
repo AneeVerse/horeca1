@@ -1,14 +1,23 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, Star, Clock, CreditCard, Package, Search } from 'lucide-react';
 import Link from 'next/link';
-import { vendors } from '@/data/vendorData';
+import { dal } from '@/lib/dal';
+import type { Vendor } from '@/types';
 
 export default function VendorsPage() {
     const router = useRouter();
-    const allVendors = vendors;
+    const [allVendors, setAllVendors] = useState<Vendor[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        dal.vendors.list()
+            .then(({ vendors }) => setAllVendors(vendors))
+            .catch((err) => console.error('Failed to load vendors:', err))
+            .finally(() => setIsLoading(false));
+    }, []);
 
     return (
         <div className="min-h-screen bg-gray-50/50">
@@ -48,6 +57,11 @@ export default function VendorsPage() {
 
             {/* Vendor Grid */}
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-6 pb-24">
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-20">
+                        <div className="w-10 h-10 border-4 border-[#299e60] border-t-transparent rounded-full animate-spin" />
+                    </div>
+                ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
                     {allVendors.map((vendor) => (
                         <Link
@@ -92,6 +106,7 @@ export default function VendorsPage() {
                         </Link>
                     ))}
                 </div>
+                )}
             </div>
         </div>
     );

@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Star, MapPin, Bookmark, ChevronLeft, ChevronRight } from 'lucide-react';
-import { MOCK_VENDORS } from '@/lib/mockData';
+import { dal } from '@/lib/dal';
+import type { Vendor } from '@/types';
 
 // Cover images for vendor cards (cycling through available images)
 const VENDOR_COVERS = [
@@ -43,7 +44,7 @@ const VENDOR_OFFERS = [
     'Flat 15% OFF + FLAT ₹100 OFF',
 ];
 
-function VendorCard({ vendor, index }: { vendor: typeof MOCK_VENDORS[0]; index: number }) {
+function VendorCard({ vendor, index }: { vendor: Vendor; index: number }) {
     const cover = VENDOR_COVERS[index % VENDOR_COVERS.length];
     const location = VENDOR_LOCATIONS[index % VENDOR_LOCATIONS.length];
     const offer = VENDOR_OFFERS[index % VENDOR_OFFERS.length];
@@ -114,6 +115,11 @@ export function NearbyVendors() {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [canScrollLeft, setCanScrollLeft] = useState(false);
     const [canScrollRight, setCanScrollRight] = useState(true);
+    const [vendors, setVendors] = useState<Vendor[]>([]);
+
+    useEffect(() => {
+        dal.vendors.list().then((res) => setVendors(res.vendors)).catch(console.error);
+    }, []);
 
     const checkScroll = () => {
         if (scrollRef.current) {
@@ -133,7 +139,7 @@ export function NearbyVendors() {
         }
     };
 
-    const displayVendors = MOCK_VENDORS.slice(0, 10);
+    const displayVendors = vendors.slice(0, 10);
 
     return (
         <section id="vendors" className="w-full py-6 bg-white overflow-hidden">

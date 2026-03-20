@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Search, X, Star, Heart, ShoppingCart } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { vendors } from '@/data/vendorData';
-import type { VendorProduct } from '@/types';
+import { dal } from '@/lib/dal';
+import type { Vendor, VendorProduct } from '@/types';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
 
@@ -23,6 +23,12 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
     const { wishlist } = useWishlist();
     const { totalItems } = useCart();
 
+    const [vendors, setVendors] = useState<Vendor[]>([]);
+
+    useEffect(() => {
+        dal.vendors.list().then((res) => setVendors(res.vendors)).catch(console.error);
+    }, []);
+
     // Sync search query when overlay opens
     React.useEffect(() => {
         if (isOpen && !prevOpenRef.current) {
@@ -32,47 +38,21 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
         prevOpenRef.current = isOpen;
     }, [isOpen, initialQuery, initialTab]);
 
-    const allProducts = useMemo(() => {
-        const mapped: VendorProduct[] = [];
-        vendors.forEach(v => {
-            v.catalog.forEach(cat => {
-                cat.products.forEach(p => {
-                    mapped.push({
-                        id: p.id,
-                        vendorId: v.id,
-                        vendorName: v.name,
-                        name: p.name,
-                        description: '',
-                        category: cat.name,
-                        subcategory: '',
-                        price: p.price,
-                        stock: p.inStock ? 100 : 0,
-                        images: [p.image],
-                        packSize: p.unit,
-                        unit: p.unit,
-                        bulkPrices: [],
-                        isDeal: !!p.discount,
-                        frequentlyOrdered: false,
-                        creditBadge: v.creditEnabled,
-                        minOrderQuantity: 1,
-                        isActive: p.inStock,
-                        createdAt: new Date(),
-                        updatedAt: new Date(),
-                    } as unknown as VendorProduct);
-                });
-            });
-        });
-        return mapped;
-    }, []);
+    // Search products from API when user types
+    const [filteredItems, setFilteredItems] = useState<VendorProduct[]>([]);
 
-    const filteredItems = useMemo(() => {
-        if (!searchQuery.trim()) return [];
-        const q = searchQuery.toLowerCase();
-        return allProducts.filter(item =>
-            item.name.toLowerCase().includes(q) ||
-            item.category.toLowerCase().includes(q)
-        );
-    }, [searchQuery, allProducts]);
+    useEffect(() => {
+        if (!searchQuery.trim()) {
+            setFilteredItems([]);
+            return;
+        }
+        const timeout = setTimeout(() => {
+            dal.search.query(searchQuery).then((res) => {
+                setFilteredItems(res.products);
+            }).catch(() => setFilteredItems([]));
+        }, 300); // debounce 300ms
+        return () => clearTimeout(timeout);
+    }, [searchQuery]);
 
     const filteredVendors = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
@@ -89,40 +69,25 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
 
         return vendors.filter(v => {
             const vendorName = v.name.toLowerCase();
-            const catalogCatNames = v.catalog.map(cat => cat.name.toLowerCase().replace(/&/g, 'and'));
-            const vendorTags = v.categories.map(tag => tag.toLowerCase().replace(/&/g, 'and'));
+            const vendorDesc = (v.description || '').toLowerCase();
+            const vendorTags = (v.categories || []).map(tag => tag.toLowerCase().replace(/&/g, 'and'));
 
-            // 1. Highest Priority: Store Name Match
+            // 1. Store Name Match
             if (vendorName.includes(q)) return true;
 
-            // 2. High Priority: Catalog Category Match (Source of Truth)
-            // If the vendor has the category in their catalog, they definitely sell it.
-            const hasCatalogMatch = catalogCatNames.some(cat =>
-                cat.includes(cleanQuery) ||
-                (queryKeywords.length > 0 && queryKeywords.some(word => cat.includes(word)))
-            );
-            if (hasCatalogMatch) return true;
+            // 2. Description Match
+            if (vendorDesc.includes(q)) return true;
 
-            // 3. High Priority: Product match (Does the store sell an item with this name?)
-            const hasProductMatch = v.catalog.some(cat =>
-                cat.products.some(p => p.name.toLowerCase().includes(q))
+            // 3. Tag Match
+            const hasTagMatch = vendorTags.some(tag =>
+                tag.includes(cleanQuery) ||
+                (queryKeywords.length > 0 && queryKeywords.some(word => tag.includes(word)))
             );
-            if (hasProductMatch) return true;
-
-            // 4. Low Priority: Display Tag Match (Only for non-categorical searches)
-            // If user searches "Fruits", we don't want to match a vendor just because they have a "Vegetables" tag.
-            // We only use tags for general attributes like "Organic", "Fast", "Wholesale", etc.
-            if (!isCategorySearch) {
-                const hasTagMatch = vendorTags.some(tag =>
-                    tag.includes(cleanQuery) ||
-                    (queryKeywords.length > 0 && queryKeywords.some(word => tag.includes(word)))
-                );
-                if (hasTagMatch) return true;
-            }
+            if (hasTagMatch) return true;
 
             return false;
         });
-    }, [searchQuery]);
+    }, [searchQuery, vendors]);
 
     if (!isOpen) return null;
 
@@ -300,13 +265,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                                 // 1. Check for exact category match
                                 let catMatch = vendor.categories.find(c => slugify(c) === slugify(q));
                                 
-                                // 2. If no category match, find category of matched product
-                                if (!catMatch) {
-                                    const matchedCat = vendor.catalog.find(cat => 
-                                        cat.products.some(p => p.name.toLowerCase().includes(q))
-                                    );
-                                    if (matchedCat) catMatch = matchedCat.name;
-                                }
+                                // 2. Fallback: no catalog on DAL vendors, skip product-level matching
 
                                 const vendorTarget = catMatch 
                                     ? `/category/${vendor.slug}/${slugify(catMatch)}`

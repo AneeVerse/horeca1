@@ -4,8 +4,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft, Plus, Minus, ShoppingCart, Eye, Home, ChevronRight, ChevronUp, ChevronDown, Building2, X, FileText, AlertTriangle } from 'lucide-react';
-import { MOCK_VENDORS } from '@/lib/mockData';
-import { vendors as vendorDataVendors } from '@/data/vendorData';
 import { useCart } from '@/context/CartContext';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { toast } from 'sonner';

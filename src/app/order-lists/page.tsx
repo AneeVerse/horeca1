@@ -4,13 +4,13 @@ import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Plus, Clock, ChevronRight, ClipboardList, ChevronLeft, Trash2, Edit2, Heart, ShoppingCart, Home, Building2, AlertCircle } from 'lucide-react';
-import { MOCK_ORDER_LISTS, MOCK_VENDORS, MOCK_VENDOR_PRODUCTS } from '@/lib/mockData';
+import { dal } from '@/lib/dal';
+import type { Vendor, VendorProduct, OrderList } from '@/types';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { toast } from 'sonner';
 import { CreateListOverlay } from '@/components/features/order-lists/CreateListOverlay';
-import type { OrderList } from '@/types';
 
 export default function OrderListsPage() {
     const router = useRouter();
@@ -20,8 +20,34 @@ export default function OrderListsPage() {
     const [isCreateOverlayOpen, setIsCreateOverlayOpen] = React.useState(false);
     const [editingList, setEditingList] = React.useState<OrderList | null>(null);
     const [listToDelete, setListToDelete] = React.useState<string | null>(null);
+    const [vendorsList, setVendorsList] = React.useState<Vendor[]>([]);
+    const [vendorProductsMap, setVendorProductsMap] = React.useState<Record<string, VendorProduct[]>>({});
 
-    // Initial load: Priority to merged storage, fallback to mock + custom
+    // Load vendors and their products from the DAL
+    React.useEffect(() => {
+        dal.vendors.list()
+            .then(result => {
+                setVendorsList(result.vendors);
+                return Promise.all(
+                    result.vendors.map(v =>
+                        dal.vendors.getProducts(v.id)
+                            .then(r => ({ vendorId: v.id, products: r.products }))
+                            .catch(() => ({ vendorId: v.id, products: [] as VendorProduct[] }))
+                    )
+                );
+            })
+            .then(results => {
+                const map: Record<string, VendorProduct[]> = {};
+                results.forEach(r => { map[r.vendorId] = r.products; });
+                setVendorProductsMap(map);
+            })
+            .catch(() => {
+                setVendorsList([]);
+                setVendorProductsMap({});
+            });
+    }, []);
+
+    // Initial load: Priority to merged storage, fallback to DAL
     React.useEffect(() => {
         const savedAll = localStorage.getItem('horeca_order_lists_all');
         if (savedAll) {
@@ -39,33 +65,28 @@ export default function OrderListsPage() {
             }
         }
 
-        // Prioritize the synced localStorage key
-        const savedLists = localStorage.getItem('horeca_order_lists_all');
-        let customParsed: any[] = [];
-        if (savedLists) {
-            try {
-                customParsed = JSON.parse(savedLists).map((l: any) => ({
+        // Fetch from DAL if no localStorage data
+        dal.lists.getAll()
+            .then(lists => {
+                const parsed = (lists as any[]).map((l: any) => ({
                     ...l,
                     createdAt: new Date(l.createdAt),
                     updatedAt: new Date(l.updatedAt),
                     lastUsed: l.lastUsed ? new Date(l.lastUsed) : undefined
                 }));
-            } catch (e) {}
-        }
-        
-        // If we have saved data, use it exclusively. If not, initialize from Mock.
-        const initial = savedLists ? customParsed : MOCK_ORDER_LISTS;
-        setAllLists(initial);
-        if (!savedLists) {
-            localStorage.setItem('horeca_order_lists_all', JSON.stringify(MOCK_ORDER_LISTS));
-        }
+                setAllLists(parsed);
+                localStorage.setItem('horeca_order_lists_all', JSON.stringify(parsed));
+            })
+            .catch(() => {
+                setAllLists([]);
+            });
     }, []);
 
     const handleCreateList = (data: { name: string; items: { productId: string; quantity: number; vendorId: string }[] }) => {
         // Derive unique vendors from the items
         const vendorIds = [...new Set(data.items.map(i => i.vendorId))];
         const vendors = vendorIds
-            .map(id => MOCK_VENDORS.find(v => v.id === id))
+            .map(id => vendorsList.find(v => v.id === id))
             .filter((v): v is NonNullable<typeof v> => !!v);
 
         if (vendors.length === 0) return;
@@ -79,7 +100,7 @@ export default function OrderListsPage() {
         // Map each item to its product using per-item vendorId
         const mappedItems = data.items
             .map(item => {
-                const product = (MOCK_VENDOR_PRODUCTS[item.vendorId] || []).find(p => p.id === item.productId);
+                const product = (vendorProductsMap[item.vendorId] || []).find(p => p.id === item.productId);
                 if (!product) return null;
                 return {
                     productId: item.productId,
@@ -233,9 +254,9 @@ export default function OrderListsPage() {
                                 {(() => {
                                     // Extract all unique vendor IDs from the items
                                     const itemsVendorIds = Array.from(new Set(list.items.map(i => i.product?.vendorId || list.vendorId)));
-                                    // Map them to their actual logos from MOCK_VENDORS
+                                    // Map them to their actual logos from vendorsList
                                     const logos = itemsVendorIds
-                                        .map(vid => MOCK_VENDORS.find(v => v.id === vid)?.logo)
+                                        .map(vid => vendorsList.find(v => v.id === vid)?.logo)
                                         .filter(Boolean);
 
                                     const isStack = logos.length > 1;
@@ -287,7 +308,7 @@ export default function OrderListsPage() {
                                         <p className="text-[10px] min-[340px]:text-[12px] md:text-[14px] text-[#299e60] font-bold mt-0.5 truncate">
                                             {(() => {
                                                 const itemsVendorIds = Array.from(new Set(list.items.map(i => i.product?.vendorId || list.vendorId)));
-                                                const firstVendor = MOCK_VENDORS.find(v => v.id === itemsVendorIds[0]) || { name: list.vendorName };
+                                                const firstVendor = vendorsList.find(v => v.id === itemsVendorIds[0]) || { name: list.vendorName };
                                                 return itemsVendorIds.length > 1 
                                                     ? `${firstVendor.name} +${itemsVendorIds.length - 1} more` 
                                                     : firstVendor.name;
