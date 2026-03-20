@@ -1,39 +1,43 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { dal } from '@/lib/dal';
+import type { Category } from '@/types';
 
-const CATEGORIES = [
-    { name: 'Fruits & Vegetables', image: '/images/category/vegitable.png', count: '125+ Products', bgColor: '#e8f9e9' },
-    { name: 'Dairy', image: '/images/category/milk.png', count: '80+ Products', bgColor: '#eef2ff' },
-    { name: 'Canned & Imported', image: '/images/category/animal food.png', count: '50+ Products', bgColor: '#fff7ed' },
-    { name: 'Flours', image: '/images/category/snacks.png', count: '150+ Products', bgColor: '#fef2f2' },
-    { name: 'Sauces & Seasoning', image: '/images/category/desset.png', count: '40+ Products', bgColor: '#fdf4ff' },
-    { name: 'Masala, Salt & Sugar', image: '/images/category/candy.png', count: '110+ Products', bgColor: '#eff6ff' },
-    { name: 'Chicken & Eggs', image: '/images/category/fish & meat.png', count: '95+ Products', bgColor: '#fffbeb' },
-    { name: 'Edible Oils', image: '/images/category/fruits.png', count: '65+ Products', bgColor: '#f0fdf4' },
-    { name: 'Custom Packaging', image: '/images/category/vegitable.png', count: '130+ Products', bgColor: '#f8fafc' },
-    { name: 'Frozen & Instant Food', image: '/images/category/frozen foods.png', count: '125+ Products', bgColor: '#f0f9ff' },
-    { name: 'Packaging Material', image: '/images/category/vegitable.png', count: '80+ Products', bgColor: '#fdf2f8' },
-    { name: 'Bakery & Chocolates', image: '/images/category/candy.png', count: '50+ Products', bgColor: '#fff1f2' },
-    { name: 'Beverages & Mixers', image: '/images/category/drink-juice.png', count: '150+ Products', bgColor: '#ecfdf5' },
-    { name: 'Cleaning & Consumables', image: '/images/category/vegitable.png', count: '40+ Products', bgColor: '#fafaf9' },
-    { name: 'Pulses', image: '/images/category/snacks.png', count: '110+ Products', bgColor: '#f5f3ff' },
-    { name: 'Mutton, Duck & Meat', image: '/images/category/fish & meat.png', count: '95+ Products', bgColor: '#fdfcf0' },
-    { name: 'Dry Fruits & Nuts', image: '/images/category/snacks.png', count: '65+ Products', bgColor: '#fff7ed' },
-    { name: 'Rice & Rice Products', image: '/images/category/snacks.png', count: '130+ Products', bgColor: '#f0fdfa' },
-    { name: 'Fish, Prawns & Seafood', image: '/images/category/fish & meat.png', count: '125+ Products', bgColor: '#fef2f2' }
-];
+// Background colors per category slug (visual styling — not data)
+const CATEGORY_BG: Record<string, string> = {
+    'vegetables': '#e8f9e9',
+    'fruits': '#fff7ed',
+    'dairy-eggs': '#eef2ff',
+    'spices-masala': '#fef2f2',
+    'grains-pulses': '#f5f3ff',
+    'meat-poultry': '#fffbeb',
+    'seafood': '#fdf4ff',
+    'beverages': '#ecfdf5',
+    'oils-ghee': '#f0fdf4',
+    'packaging-supplies': '#f8fafc',
+};
 
 export function CategoryShowcase() {
+    const [categories, setCategories] = useState<(Category & { bgColor: string })[]>([]);
     const [isMobileExpanded, setIsMobileExpanded] = useState(false);
     const [isDesktopExpanded, setIsDesktopExpanded] = useState(false);
     const desktopScrollRef = useRef<HTMLDivElement>(null);
     const [canScrollLeft, setCanScrollLeft] = useState(false);
     const [canScrollRight, setCanScrollRight] = useState(true);
+
+    useEffect(() => {
+        dal.categories.list().then((cats) => {
+            setCategories(cats.map(c => ({
+                ...c,
+                bgColor: CATEGORY_BG[c.slug] || '#f7f8fa',
+            })));
+        }).catch(console.error);
+    }, []);
 
     const checkScroll = () => {
         if (desktopScrollRef.current) {
@@ -42,9 +46,6 @@ export function CategoryShowcase() {
             setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 5);
         }
     };
-
-    // Duplicate categories for desktop to fill scroll area
-    const desktopCategories = [...CATEGORIES, ...CATEGORIES];
 
     const scroll = (direction: 'left' | 'right') => {
         if (desktopScrollRef.current) {
@@ -57,21 +58,24 @@ export function CategoryShowcase() {
         }
     };
 
-    const CategoryCard = ({ cat }: { cat: typeof CATEGORIES[0] }) => (
+    if (categories.length === 0) return null;
+
+    const CategoryCard = ({ cat }: { cat: (typeof categories)[0] }) => (
         <Link
             href={`/?searchOpen=true&q=${encodeURIComponent(cat.name)}&tab=stores`}
             className="flex flex-col items-center group transition-transform active:scale-95 w-full"
         >
             <div
                 className="w-full aspect-square rounded-[22px] flex items-center justify-center mb-3 overflow-hidden relative border border-gray-50 shadow-sm transition-all group-hover:shadow-md group-hover:-translate-y-1"
-                style={{ backgroundColor: cat.bgColor || '#F2F3F2' }}
+                style={{ backgroundColor: cat.bgColor }}
             >
                 <div className="relative w-[70%] h-[70%] transition-transform duration-500 group-hover:scale-110">
                     <Image
-                        src={cat.image}
+                        src={cat.image || '/images/category/vegitable.png'}
                         alt={cat.name}
                         fill
                         className="object-contain"
+                        unoptimized
                     />
                 </div>
             </div>
@@ -91,14 +95,12 @@ export function CategoryShowcase() {
                 <div className="flex items-center justify-between mb-8 px-6 md:px-[var(--container-padding)]">
                     <h2 className="text-[18px] md:text-[22px] lg:text-[24px] font-[900] text-[#181725] tracking-tight">Shop By Category</h2>
                     <div className="flex items-center gap-4">
-                        {/* Desktop toggle */}
                         <button
                             onClick={() => setIsDesktopExpanded(!isDesktopExpanded)}
                             className="hidden md:block text-[#53B175] font-black text-sm transition-all hover:translate-x-1 cursor-pointer"
                         >
                             {isDesktopExpanded ? "Show Less" : "See All"}
                         </button>
-                        {/* Mobile toggle */}
                         <button
                             onClick={() => setIsMobileExpanded(!isMobileExpanded)}
                             className="text-[#53B175] font-black text-sm transition-opacity hover:opacity-80 md:hidden"
@@ -114,15 +116,15 @@ export function CategoryShowcase() {
                     <div className="md:hidden">
                         {isMobileExpanded ? (
                             <div className="grid grid-cols-4 sm:grid-cols-4 gap-x-3 gap-y-6 pb-4 px-6 md:px-[var(--container-padding)]">
-                                {CATEGORIES.map((cat, idx) => (
-                                    <CategoryCard key={`mob-exp-${idx}`} cat={cat} />
+                                {categories.map((cat) => (
+                                    <CategoryCard key={cat.id} cat={cat} />
                                 ))}
                             </div>
                         ) : (
                             <div className="overflow-x-auto no-scrollbar scroll-smooth w-full">
                                 <div className="grid grid-rows-2 grid-flow-col auto-cols-[100px] gap-x-4 gap-y-6 pb-6 px-6 md:px-[var(--container-padding)] w-max max-w-none">
-                                    {CATEGORIES.map((cat, idx) => (
-                                        <CategoryCard key={`mob-scr-${idx}`} cat={cat} />
+                                    {categories.map((cat) => (
+                                        <CategoryCard key={cat.id} cat={cat} />
                                     ))}
                                 </div>
                             </div>
@@ -143,8 +145,8 @@ export function CategoryShowcase() {
 
                         {isDesktopExpanded ? (
                             <div className="grid grid-cols-[repeat(auto-fill,115px)] lg:grid-cols-[repeat(auto-fill,135px)] justify-between gap-x-5 gap-y-10 pb-4 px-6 md:px-[var(--container-padding)]">
-                                {desktopCategories.map((cat, idx) => (
-                                    <CategoryCard key={`desk-exp-${idx}`} cat={cat} />
+                                {categories.map((cat) => (
+                                    <CategoryCard key={cat.id} cat={cat} />
                                 ))}
                             </div>
                         ) : (
@@ -154,8 +156,8 @@ export function CategoryShowcase() {
                                 className="overflow-x-auto no-scrollbar scroll-smooth w-full"
                             >
                                 <div className="grid grid-rows-2 grid-flow-col auto-cols-[125px] lg:auto-cols-[145px] gap-x-6 gap-y-10 pb-8 px-6 md:px-[var(--container-padding)] w-max max-w-none">
-                                    {desktopCategories.map((cat, idx) => (
-                                        <CategoryCard key={`desk-scr-${idx}`} cat={cat} />
+                                    {categories.map((cat) => (
+                                        <CategoryCard key={cat.id} cat={cat} />
                                     ))}
                                 </div>
                             </div>
