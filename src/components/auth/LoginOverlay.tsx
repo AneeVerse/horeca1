@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Smartphone } from 'lucide-react';
+import { X, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { signIn } from 'next-auth/react';
 
 interface LoginOverlayProps {
     isOpen: boolean;
@@ -11,22 +12,25 @@ interface LoginOverlayProps {
 }
 
 export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayProps) {
-    const [phoneNumber, setPhoneNumber] = useState('7777777777');
-    const [otp, setOtp] = useState('777777');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [apiError, setApiError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     if (!isOpen) return null;
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         setErrors({});
+        setApiError('');
         const newErrors: Record<string, string> = {};
 
-        if (!phoneNumber || phoneNumber.length < 10) {
-            newErrors.phone = 'Enter a valid 10-digit number';
+        if (!email) {
+            newErrors.email = 'Email is required';
         }
-        if (!otp || otp.length < 6) {
-            newErrors.otp = 'Enter a valid 6-digit OTP';
+        if (!password) {
+            newErrors.password = 'Password is required';
         }
 
         if (Object.keys(newErrors).length > 0) {
@@ -35,11 +39,23 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
         }
 
         setIsSubmitting(true);
-        // Simulate login
-        setTimeout(() => {
+        try {
+            const result = await signIn('credentials', {
+                email,
+                password,
+                redirect: false,
+            });
+
+            if (result?.error) {
+                setApiError('Invalid email or password. Please try again.');
+            } else {
+                onLoginSuccess();
+            }
+        } catch {
+            setApiError('Something went wrong. Please try again.');
+        } finally {
             setIsSubmitting(false);
-            onLoginSuccess();
-        }, 600);
+        }
     };
 
     return (
@@ -67,49 +83,68 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
                         </button>
                     </div>
 
-                    {/* Phone Number Field */}
+                    {/* API Error */}
+                    {apiError && (
+                        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4 text-[13px] text-red-600 font-medium">
+                            {apiError}
+                        </div>
+                    )}
+
+                    {/* Email Field */}
                     <div className="space-y-1.5 mb-4">
-                        <label className="text-[12px] font-bold text-gray-500 ml-1 tracking-tight">Phone number</label>
-                        <div className="relative flex items-center">
-                            <div className="absolute left-4 flex items-center gap-2 text-gray-400">
-                                <Smartphone size={16} className="text-[#53B175]" />
-                                <span className="text-[13px] font-bold border-r border-gray-200 pr-2">+91</span>
-                            </div>
+                        <label className="text-[12px] font-bold text-gray-500 ml-1 tracking-tight">Email</label>
+                        <div className="relative">
+                            <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#53B175]" />
                             <input
-                                type="tel"
-                                value={phoneNumber}
+                                type="email"
+                                value={email}
                                 onChange={(e) => {
-                                    setPhoneNumber(e.target.value);
-                                    if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
+                                    setEmail(e.target.value);
+                                    if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
                                 }}
-                                maxLength={10}
+                                placeholder="Enter your email"
                                 className={cn(
-                                    "w-full pl-[85px] pr-4 py-3.5 bg-[#F7F8FA] border rounded-xl text-[14px] font-bold outline-none transition-all",
-                                    errors.phone ? "border-red-400 bg-red-50/50" : "border-gray-100 focus:border-[#53B175] focus:bg-white"
+                                    "w-full pl-11 pr-4 py-3.5 bg-[#F7F8FA] border rounded-xl text-[14px] font-bold outline-none transition-all",
+                                    errors.email ? "border-red-400 bg-red-50/50" : "border-gray-100 focus:border-[#53B175] focus:bg-white"
                                 )}
                             />
                         </div>
-                        {errors.phone && <p className="text-[10px] text-red-500 ml-1">{errors.phone}</p>}
+                        {errors.email && <p className="text-[10px] text-red-500 ml-1">{errors.email}</p>}
                     </div>
 
-                    {/* OTP Field */}
-                    <div className="space-y-1.5 mb-6">
-                        <label className="text-[12px] font-bold text-gray-500 ml-1 tracking-tight">OTP</label>
-                        <input
-                            type="text"
-                            value={otp}
-                            onChange={(e) => {
-                                setOtp(e.target.value);
-                                if (errors.otp) setErrors(prev => ({ ...prev, otp: '' }));
-                            }}
-                            maxLength={6}
-                            className={cn(
-                                "w-full px-4 py-3.5 bg-[#F7F8FA] border rounded-xl text-[14px] font-bold tracking-[6px] outline-none transition-all",
-                                errors.otp ? "border-red-400 bg-red-50/50" : "border-gray-100 focus:border-[#53B175] focus:bg-white"
-                            )}
-                        />
-                        {errors.otp && <p className="text-[10px] text-red-500 ml-1">{errors.otp}</p>}
+                    {/* Password Field */}
+                    <div className="space-y-1.5 mb-4">
+                        <label className="text-[12px] font-bold text-gray-500 ml-1 tracking-tight">Password</label>
+                        <div className="relative">
+                            <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#53B175]" />
+                            <input
+                                type={showPassword ? 'text' : 'password'}
+                                value={password}
+                                onChange={(e) => {
+                                    setPassword(e.target.value);
+                                    if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
+                                }}
+                                placeholder="Enter your password"
+                                className={cn(
+                                    "w-full pl-11 pr-12 py-3.5 bg-[#F7F8FA] border rounded-xl text-[14px] font-bold outline-none transition-all",
+                                    errors.password ? "border-red-400 bg-red-50/50" : "border-gray-100 focus:border-[#53B175] focus:bg-white"
+                                )}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
+                            >
+                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                        </div>
+                        {errors.password && <p className="text-[10px] text-red-500 ml-1">{errors.password}</p>}
                     </div>
+
+                    {/* Demo credentials hint */}
+                    <p className="text-[11px] text-gray-400 ml-1 mb-6">
+                        Demo: <span className="font-bold">chef@tajpalace.com</span> / <span className="font-bold">customer123</span>
+                    </p>
 
                     {/* Submit Button */}
                     <button
@@ -123,12 +158,26 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
                         {isSubmitting ? (
                             <span className="flex items-center justify-center gap-2">
                                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                Verifying...
+                                Signing in...
                             </span>
                         ) : (
                             'Login'
                         )}
                     </button>
+
+                    {/* Register hint */}
+                    <p className="text-[13px] text-gray-400 text-center mt-5">
+                        Don&apos;t have an account?{' '}
+                        <button
+                            onClick={() => {
+                                onClose();
+                                onLoginSuccess();
+                            }}
+                            className="text-[#53B175] font-bold"
+                        >
+                            Register
+                        </button>
+                    </p>
                 </div>
             </div>
         </>

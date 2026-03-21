@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronLeft, ClipboardList, Clock, AlertCircle, ShoppingCart, Package, Eye, ChevronRight, Home, Building2 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { dal } from '@/lib/dal';
 import type { Vendor } from '@/types';
 import { useCart } from '@/context/CartContext';
@@ -23,8 +24,9 @@ interface ContinueCard {
 }
 
 export default function ContinueOrderingPage() {
+    const { status } = useSession();
+    const isLoggedIn = status === 'authenticated';
     const [isMounted, setIsMounted] = useState(false);
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [cards, setCards] = useState<ContinueCard[]>([]);
     const [vendorsList, setVendorsList] = useState<Vendor[]>([]);
     const { groups: cartGroups } = useCart();
@@ -47,7 +49,6 @@ export default function ContinueOrderingPage() {
 
     useEffect(() => {
         setIsMounted(true);
-        setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
         dal.vendors.list()
             .then(result => setVendorsList(result.vendors))
             .catch(() => setVendorsList([]));

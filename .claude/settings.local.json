@@ -7,7 +7,18 @@
       "Bash(npx next:*)",
       "Bash(docker compose:*)",
       "Bash(docker ps:*)",
-      "Bash(curl -s http://localhost:3000/api/v1/categories)"
+      "Bash(curl -s http://localhost:3000/api/v1/categories)",
+      "Bash(npm run:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(curl -s http://localhost:3000/api/v1/vendors)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''Status: success={d.get\\(\"\"success\"\"\\)}''''\\); print\\(f''''Vendors: {len\\(d.get\\(\"\"data\"\",{}\\).get\\(\"\"vendors\"\",[]\\)\\)}''''\\); [print\\(f''''  - {v[\"\"name\"\"]} \\(rating: {v[\"\"rating\"\"]}, cats: {v.get\\(\"\"categories\"\",[]\\)}\\)''''\\)for v in d.get\\(''''data'''',{}\\).get\\(''''vendors'''',[]\\)]\")",
+      "Bash(node -e \"let d='''''''';process.stdin.on\\(''''data'''',c=>d+=c\\);process.stdin.on\\(''''end'''',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\(''''success:'''',j.success\\);console.log\\(''''vendors:'''',j.data.vendors.length\\);j.data.vendors.forEach\\(v=>console.log\\('''' -'''',v.name,''''rating:'''',v.rating,''''cats:'''',JSON.stringify\\(v.categories\\)\\)\\)}\\)\")",
+      "Bash(curl -s http://localhost:3000/api/v1/admin/dashboard)",
+      "Bash(node -e \"let d='''''''';process.stdin.on\\(''''data'''',c=>d+=c\\);process.stdin.on\\(''''end'''',\\(\\)=>console.log\\(JSON.parse\\(d\\)\\)\\)\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/callback/credentials -H 'Content-Type: application/x-www-form-urlencoded' -d \"email=chef@tajpalace.com&password=customer123&redirect=false&callbackUrl=http://localhost:3000&json=true\" -o /dev/null -w 'HTTP Status: %{http_code}\\\\nRedirect: %{redirect_url}\\\\n' -D -)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/callback/credentials -H 'Content-Type: application/x-www-form-urlencoded' -d \"email=admin@horeca1.com&password=admin123&redirect=false&callbackUrl=http://localhost:3000&json=true\" -o /dev/null -w 'HTTP Status: %{http_code}\\\\nRedirect: %{redirect_url}\\\\n' -D -)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/callback/credentials -H 'Content-Type: application/x-www-form-urlencoded' -d \"email=fresh@dailyfreshfoods.com&password=vendor123&redirect=false&callbackUrl=http://localhost:3000&json=true\" -o /dev/null -w 'HTTP Status: %{http_code}\\\\nRedirect: %{redirect_url}\\\\n' -D -)",
+      "Bash(node -e \":*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Roger\\Desktop\\horeca1-prod\\src\\app\\api\\auth\\[...nextauth]"

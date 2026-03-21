@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import {
     LayoutDashboard,
     ShoppingBag,
@@ -17,7 +18,9 @@ import {
     ChevronDown,
     Menu,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    Loader2,
+    ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -38,7 +41,36 @@ export default function AdminLayout({
     children: React.ReactNode;
 }) {
     const pathname = usePathname();
+    const router = useRouter();
+    const { data: session, status } = useSession();
     const [isCollapsed, setIsCollapsed] = useState(false);
+
+    // Show loading while checking auth
+    if (status === 'loading') {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-[#F8F9FB]">
+                <Loader2 className="animate-spin text-[#299E60]" size={40} />
+            </div>
+        );
+    }
+
+    // Block non-admin users
+    const userRole = (session?.user as { role?: string })?.role;
+    if (status === 'unauthenticated' || userRole !== 'admin') {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-[#F8F9FB] gap-4">
+                <ShieldAlert size={48} className="text-[#E74C3C]" />
+                <h1 className="text-[24px] font-bold text-[#181725]">Access Denied</h1>
+                <p className="text-[14px] text-[#7C7C7C]">You need admin privileges to access this area.</p>
+                <button
+                    onClick={() => router.push('/')}
+                    className="mt-4 px-6 py-3 bg-[#299E60] text-white rounded-[10px] font-bold hover:bg-[#238a54] transition-colors"
+                >
+                    Go to Homepage
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col min-h-screen bg-[#F8F9FB] font-[family-name:var(--font-poppins)]">
@@ -93,10 +125,12 @@ export default function AdminLayout({
                     <div className="flex items-center gap-3 cursor-pointer group">
                         <div className="w-[42px] h-[42px] relative flex items-center justify-center shrink-0">
                             <img src="/images/admin/Ellipse 2.svg" alt="" className="absolute inset-0 w-full h-full object-contain" />
-                            <span className="relative z-10 text-white font-bold text-[13px]">AD</span>
+                            <span className="relative z-10 text-white font-bold text-[13px]">
+                                {(session?.user?.name || 'AD').substring(0, 2).toUpperCase()}
+                            </span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                            <span className="text-[15px] font-bold text-[#181725]">Admin</span>
+                            <span className="text-[15px] font-bold text-[#181725]">{session?.user?.name || 'Admin'}</span>
                             <ChevronDown size={16} className="text-[#AEAEAE] group-hover:text-[#181725] transition-colors" />
                         </div>
                     </div>

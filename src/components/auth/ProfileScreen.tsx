@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { EditProfileOverlay } from './EditProfileOverlay';
@@ -50,32 +51,37 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
     const [isGeneralInfoOpen, setIsGeneralInfoOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
+    const { data: session } = useSession();
+
+    // Derive user data from real Auth.js session
     const [userData, setUserData] = useState({
-        fullName: 'Alex Mordoti',
-        phone: '88678 68776',
-        businessName: 'XYZ FoodTi',
-        address: 'S60, Fz. Chowk, Thane',
-        address2: 'New Mumbai, aharashtra',
-        pincode: '005425',
-        city: 'Thane',
+        fullName: '',
+        phone: '',
+        businessName: '',
+        email: '',
+        address: '',
+        address2: '',
+        pincode: '',
+        city: '',
     });
 
+    // Update userData when session loads
     useEffect(() => {
-        const storedPhone = localStorage.getItem('userPhone');
-        if (storedPhone) {
-            setUserData(prev => ({ ...prev, phone: storedPhone }));
+        if (session?.user) {
+            setUserData(prev => ({
+                ...prev,
+                fullName: session.user?.name || 'Guest User',
+                email: session.user?.email || '',
+            }));
         }
-    }, []);
+    }, [session]);
 
     if (!isOpen) return null;
 
-    const handleLogout = () => {
-        localStorage.removeItem('isLoggedIn');
-        localStorage.removeItem('userPhone');
+    const handleLogout = async () => {
+        await signOut({ redirect: false });
         toast.success('Logged out successfully');
         onClose();
-        
-        // Use window.location for a full hard redirect to home, ensuring state reset
         window.location.href = '/';
     };
 
@@ -169,7 +175,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                     </button>
                                 </div>
                                 <h3 className="text-[19px] font-[700] text-[#181725] mb-0.5">{userData.fullName}</h3>
-                                <p className="text-[12px] text-gray-400 font-medium">+91 {userData.phone}</p>
+                                <p className="text-[12px] text-gray-400 font-medium">{userData.email}</p>
                             </div>
 
                             {/* Top Actions */}
@@ -258,9 +264,8 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                             </button>
                                         </div>
                                         <h3 className="text-[20px] lg:text-[24px] font-[700] text-[#181725] mb-0.5">{userData.fullName}</h3>
-                                        <p className="text-[14px] text-gray-400 font-medium">+91 {userData.phone}</p>
-                                        <p className="text-[13px] text-gray-400 font-medium mt-1.5">{userData.businessName}</p>
-                                        <p className="text-[12px] text-gray-300 font-medium mt-1">{userData.address}, {userData.city}</p>
+                                        <p className="text-[14px] text-gray-400 font-medium">{userData.email}</p>
+                                        {userData.businessName && <p className="text-[13px] text-gray-400 font-medium mt-1.5">{userData.businessName}</p>}
                                     </div>
                                 </div>
 
@@ -387,7 +392,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                 isOpen={isEditProfileOpen}
                 onClose={() => setIsEditProfileOpen(false)}
                 userData={userData}
-                onSave={(data) => setUserData(data)}
+                onSave={(data) => setUserData(prev => ({ ...prev, ...data }))}
             />
 
             {/* Wishlist Overlay */}

@@ -9,6 +9,7 @@ import { CartProvider } from "@/context/CartContext";
 import { GoogleMapsProvider } from "@/components/providers/GoogleMapsProvider";
 import { AddressProvider } from "@/context/AddressContext";
 import { WishlistProvider } from "@/context/WishlistContext";
+import { AuthProvider } from "@/components/providers/AuthProvider";
 import { Toaster } from 'sonner';
 
 const quicksand = Quicksand({
@@ -42,6 +43,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${quicksand.variable} ${inter.variable} ${poppins.variable} font-sans antialiased bg-background`}>
+        <AuthProvider>
         <GoogleMapsProvider>
           <AddressProvider>
             <WishlistProvider>
@@ -56,6 +58,7 @@ export default function RootLayout({
           </WishlistProvider>
         </AddressProvider>
         </GoogleMapsProvider>
+        </AuthProvider>
       </body>
     </html>
   );

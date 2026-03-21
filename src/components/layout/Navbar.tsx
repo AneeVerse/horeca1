@@ -21,6 +21,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileSearchOverlay } from './MobileSearchOverlay';
 import { LocationSelectionOverlay } from './LocationSelectionOverlay';
+import { useSession } from 'next-auth/react';
 import { useCart } from '@/context/CartContext';
 import { useAddress } from '@/context/AddressContext';
 import { AuthScreen } from '../auth/AuthScreen';
@@ -54,11 +55,8 @@ export function Navbar() {
     const [isSearchOverlayOpen, setIsSearchOverlayOpen] = React.useState(false);
     const [isLocationOverlayOpen, setIsLocationOverlayOpen] = React.useState(false);
     const [isLoginOverlayOpen, setIsLoginOverlayOpen] = React.useState(false);
-    const [isLoggedIn, setIsLoggedIn] = React.useState(false);
-
-    React.useEffect(() => {
-        setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
-    }, []);
+    const { data: session, status: sessionStatus } = useSession();
+    const isLoggedIn = sessionStatus === 'authenticated';
 
     const [isScrolled, setIsScrolled] = React.useState(false);
 
@@ -191,7 +189,6 @@ export function Navbar() {
                 onClose={() => setIsLoginOverlayOpen(false)}
                 onLoginSuccess={() => {
                     setIsLoginOverlayOpen(false);
-                    setIsLoggedIn(true);
                     router.push('/');
                     setTimeout(() => window.location.reload(), 100);
                 }}

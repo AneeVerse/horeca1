@@ -2,8 +2,9 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Heart, ShoppingCart, Star, Home, Package } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Heart, ShoppingCart, Star, Home, Package, LogIn } from 'lucide-react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'sonner';
 import { dal } from '@/lib/dal';
@@ -27,52 +28,23 @@ interface Order {
     canRate?: boolean;
 }
 
-const MOCK_ORDERS: Order[] = [
-    {
-        id: '1',
-        status: 'Order delivered',
-        date: 'Placed at 14th Feb 2025, 03:55 pm',
-        price: 569,
-        items: [
-            { id: 'p1', image: '/images/category/milk.png' },
-            { id: 'p2', image: '/images/category/vegitable.png' },
-            { id: 'p3', image: '/images/category/fruits.png' },
-            { id: 'p4', image: '/images/category/snacks.png' },
-            { id: 'p5', image: '/images/category/milk.png' },
-            { id: 'p6', image: '/images/category/vegitable.png' },
-        ],
-        rating: 3,
-        canRate: false
-    },
-    {
-        id: '2',
-        status: 'Order delivered',
-        date: 'Placed at 9th Feb 2025, 12:55 pm',
-        price: 1335,
-        items: [
-            { id: 'p1', image: '/images/category/vegitable.png' },
-            { id: 'p2', image: '/images/category/fruits.png' },
-            { id: 'p3', image: '/images/category/snacks.png' },
-            { id: 'p4', image: '/images/category/milk.png' },
-            { id: 'p5', image: '/images/category/vegitable.png' },
-        ],
-        canRate: true
-    }
-];
-
 export default function OrderHistoryPage() {
     const router = useRouter();
+    const { data: session, status: sessionStatus } = useSession();
+    const isLoggedIn = sessionStatus === 'authenticated';
+    const isLoading = sessionStatus === 'loading';
     const { totalItems, addToCart } = useCart();
     const { wishlist } = useWishlist();
-    const [orders, setOrders] = React.useState<Order[]>(MOCK_ORDERS);
+    const [orders, setOrders] = React.useState<Order[]>([]);
+    const [ordersLoading, setOrdersLoading] = React.useState(true);
     const [allProducts, setAllProducts] = React.useState<VendorProduct[]>([]);
     const [vendorsList, setVendorsList] = React.useState<Vendor[]>([]);
 
     React.useEffect(() => {
+        if (!isLoggedIn) return;
         dal.vendors.list()
             .then(result => {
                 setVendorsList(result.vendors);
-                // Fetch products for each vendor
                 return Promise.all(
                     result.vendors.map(v =>
                         dal.vendors.getProducts(v.id)
@@ -88,27 +60,28 @@ export default function OrderHistoryPage() {
                 setVendorsList([]);
                 setAllProducts([]);
             });
-    }, []);
+    }, [isLoggedIn]);
 
     React.useEffect(() => {
+        if (isLoading) return;
+        if (!isLoggedIn) {
+            setOrdersLoading(false);
+            setOrders([]);
+            return;
+        }
+        setOrdersLoading(true);
         dal.orders.list()
             .then(result => {
                 const apiOrders = (result.orders || []) as Order[];
-                setOrders(prev => [...apiOrders, ...MOCK_ORDERS]);
+                setOrders(apiOrders);
             })
             .catch(() => {
-                // Fallback to localStorage if API fails (e.g., not logged in)
-                const saved = localStorage.getItem('horeca_orders');
-                if (saved) {
-                    try {
-                        const parsed = JSON.parse(saved);
-                        setOrders([...parsed, ...MOCK_ORDERS]);
-                    } catch (e) {
-                        console.error('Failed to load orders:', e);
-                    }
-                }
+                setOrders([]);
+            })
+            .finally(() => {
+                setOrdersLoading(false);
             });
-    }, []);
+    }, [isLoggedIn, isLoading]);
 
     const handleOrderAgain = (order: Order) => {
         let itemsAdded = 0;
@@ -177,7 +150,28 @@ export default function OrderHistoryPage() {
 
             {/* Orders List */}
             <div className="p-4 space-y-4 pb-24 md:pb-16 max-w-[600px] md:max-w-[var(--container-max)] mx-auto md:px-[var(--container-padding)] md:pt-8 flex-1">
-                {orders.length === 0 ? (
+                {(isLoading || ordersLoading) ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <div className="w-10 h-10 border-4 border-gray-200 border-t-primary rounded-full animate-spin mb-6" />
+                        <p className="text-[14px] text-gray-400 font-medium">Loading your orders...</p>
+                    </div>
+                ) : !isLoggedIn ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <div className="w-24 h-24 bg-gray-100/80 rounded-full flex items-center justify-center mb-6">
+                            <LogIn size={40} className="text-gray-300" strokeWidth={1.5} />
+                        </div>
+                        <h2 className="text-[20px] font-bold text-[#181725] mb-2">Login to view your orders</h2>
+                        <p className="text-[14px] text-gray-400 font-medium max-w-[260px] mx-auto">
+                            Sign in to your account to see your order history and reorder your favorites.
+                        </p>
+                        <button
+                            onClick={() => router.push('/login')}
+                            className="mt-8 px-8 py-3 bg-[#53B175] text-white font-bold rounded-2xl transition-all shadow-lg shadow-green-100 hover:bg-[#48a068]"
+                        >
+                            Login
+                        </button>
+                    </div>
+                ) : orders.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-center">
                         <div className="w-24 h-24 bg-gray-100/80 rounded-full flex items-center justify-center mb-6">
                             <Package size={40} className="text-gray-300" strokeWidth={1.5} />

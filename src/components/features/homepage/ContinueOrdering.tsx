@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ClipboardList, Clock, ChevronRight, ChevronLeft, AlertCircle, ShoppingCart, Package, Eye } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { dal } from '@/lib/dal';
 import type { Vendor } from '@/types';
 import { useCart } from '@/context/CartContext';
@@ -201,8 +202,9 @@ interface ContinueCard {
 }
 
 export function ContinueOrdering() {
+    const { status } = useSession();
+    const isLoggedIn = status === 'authenticated';
     const [isMounted, setIsMounted] = useState(false);
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [cards, setCards] = useState<ContinueCard[]>([]);
     const [vendors, setVendors] = useState<Vendor[]>([]);
     const [orderLists, setOrderLists] = useState<any[]>([]);
@@ -234,7 +236,6 @@ export function ContinueOrdering() {
 
     useEffect(() => {
         setIsMounted(true);
-        setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
     }, []);
 
     // Fetch vendors and order lists from the DAL

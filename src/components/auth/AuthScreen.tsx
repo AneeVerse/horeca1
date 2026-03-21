@@ -160,37 +160,41 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
     // ── SUCCESS SCREEN ──
     if (step === 'success') {
         return (
-            <div className="fixed inset-0 z-[13000] bg-white flex flex-col animate-in fade-in zoom-in duration-300">
-                <button
-                    onClick={handleClose}
-                    className="absolute top-6 right-6 p-2 hover:bg-gray-50 rounded-full transition-colors z-[10]"
-                >
-                    <X size={24} className="text-gray-800" />
-                </button>
-
-                <div className="flex-1 flex flex-col items-center justify-center px-8 pb-32">
-                    <div className="mb-8">
-                        <img
-                            src="/images/login/check%20icon.png"
-                            alt="Success"
-                            className="w-32 h-32 object-contain"
-                        />
-                    </div>
-                    <h2 className="text-[28px] font-[800] text-gray-800 mb-4 text-center">
-                        Register Successful
-                    </h2>
-                    <p className="text-[15px] text-gray-400 text-center leading-relaxed">
-                        {userRole === 'customer'
-                            ? "Your account has been created. You can now login with your email and password."
-                            : "Thank you for choosing us. Our onboarding partner will contact you shortly."
-                        }
-                    </p>
+            <div className="fixed inset-0 z-[13000] flex items-center justify-center bg-white md:bg-black/50 md:backdrop-blur-sm animate-in fade-in duration-300"
+                onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+            >
+                <div className="relative w-full h-full flex flex-col bg-white md:w-auto md:h-auto md:max-w-[460px] md:rounded-[20px] md:shadow-2xl md:mx-4 animate-in zoom-in duration-300">
                     <button
-                        onClick={() => { setAuthMode('login'); setStep('form'); }}
-                        className="mt-8 bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-3 px-8 rounded-xl transition-all"
+                        onClick={handleClose}
+                        className="absolute top-6 right-6 p-2 hover:bg-gray-50 rounded-full transition-colors z-[10]"
                     >
-                        Go to Login
+                        <X size={24} className="text-gray-800" />
                     </button>
+
+                    <div className="flex-1 flex flex-col items-center justify-center px-8 pb-32 md:py-12 md:pb-12">
+                        <div className="mb-8">
+                            <img
+                                src="/images/login/check%20icon.png"
+                                alt="Success"
+                                className="w-32 h-32 object-contain"
+                            />
+                        </div>
+                        <h2 className="text-[28px] font-[800] text-gray-800 mb-4 text-center">
+                            Register Successful
+                        </h2>
+                        <p className="text-[15px] text-gray-400 text-center leading-relaxed">
+                            {userRole === 'customer'
+                                ? "Your account has been created. You can now login with your email and password."
+                                : "Thank you for choosing us. Our onboarding partner will contact you shortly."
+                            }
+                        </p>
+                        <button
+                            onClick={() => { setAuthMode('login'); setStep('form'); }}
+                            className="mt-8 bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-3 px-8 rounded-xl transition-all"
+                        >
+                            Go to Login
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -198,16 +202,19 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
 
     // ── MAIN FORM ──
     return (
-        <div className="fixed inset-0 z-[13000] bg-white flex flex-col animate-in fade-in slide-in-from-bottom duration-300">
+        <div className="fixed inset-0 z-[13000] flex items-center justify-center bg-white md:bg-black/50 md:backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+        >
+          <div className="relative w-full h-full flex flex-col bg-white md:w-auto md:h-auto md:max-w-[460px] md:rounded-[20px] md:shadow-2xl md:mx-4 md:max-h-[90vh] animate-in slide-in-from-bottom duration-300">
             {/* Header / Logo */}
-            <div className="flex flex-col items-center pt-20 pb-8 shrink-0">
+            <div className="flex flex-col items-center pt-20 pb-8 md:pt-10 md:pb-6 shrink-0">
                 <h1 className="text-[34px] font-[900] tracking-tight flex items-center justify-center">
                     <span className="text-[#ee2c2c]">Horeca</span>
                     <span className="text-[#1a237e]">1</span>
                 </h1>
             </div>
 
-            <div className="flex-1 flex flex-col px-6 max-w-sm mx-auto w-full overflow-y-auto pb-6">
+            <div className="flex-1 flex flex-col px-6 max-w-sm mx-auto w-full overflow-y-auto pb-6 md:px-8 md:pb-8">
                 <h2 className="text-[22px] font-bold text-gray-800 mb-6 shrink-0">
                     {authMode === 'login' ? 'Login to your Account' : 'Create your Account'}
                 </h2>
@@ -384,7 +391,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                 <button
                     onClick={handleSubmit}
                     disabled={isLoading}
-                    className="w-full bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-4 rounded-lg shadow-lg shadow-green-100 mt-10 active:scale-[0.98] transition-all text-base tracking-wide disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-4 rounded-lg shadow-lg shadow-green-100 mt-10 md:mt-8 active:scale-[0.98] transition-all text-base tracking-wide disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                     {isLoading && <Loader2 size={18} className="animate-spin" />}
                     {authMode === 'login' ? 'Login' : 'Create Account'}
@@ -392,7 +399,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
 
                 {/* Role Switcher */}
                 {authMode === 'register' && (
-                    <div className="mt-8 shrink-0 pb-10 text-center">
+                    <div className="mt-8 shrink-0 pb-10 md:pb-4 text-center">
                         <p className="text-[14px] text-gray-500">
                             Onboard as <button onClick={handleRoleSwitch} className="text-[#33a852] font-[800] underline ml-1">
                                 {userRole === 'customer' ? 'Vendor.' : 'Customer.'}
@@ -409,6 +416,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
             >
                 <X size={24} />
             </button>
+          </div>
         </div>
     );
 }

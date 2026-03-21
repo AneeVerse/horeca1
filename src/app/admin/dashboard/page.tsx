@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
     ShoppingCart,
@@ -10,6 +10,7 @@ import {
     TrendingUp,
     Star,
     ChevronRight,
+    Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -24,12 +25,10 @@ import {
     ResponsiveContainer,
 } from 'recharts';
 
-const STAT_CARDS = [
-    { label: 'Total Order Today', value: '469', icon: ShoppingCart, color: 'bg-blue-50 text-blue-600', trend: '+12.5%', trendType: 'up' },
-    { label: 'Total Customers', value: '1,446', icon: Users, color: 'bg-yellow-50 text-yellow-600', trend: '+5.4%', trendType: 'up' },
-    { label: 'Total Vendors', value: '210', icon: Store, color: 'bg-pink-50 text-pink-600', trend: '+2.1%', trendType: 'up' },
-    { label: 'Revenue This Month', value: '₹ 1,15,000', icon: Wallet, color: 'bg-green-50 text-green-600', trend: '+18.2%', trendType: 'up' },
-];
+// Format Indian currency: 115000 → "₹ 1,15,000"
+function formatINR(val: number): string {
+    return '₹ ' + val.toLocaleString('en-IN');
+}
 
 const SALES_DATA = [
     { month: 'Jan', value: 30000 },
@@ -71,14 +70,26 @@ const BEST_SELLERS = [
     { name: 'Groceri', category: 'Grocery & Fruits', rating: '3.5', image: '/images/admin/dashboard/grociri.png' },
 ];
 
-const RECENT_ACTIVITY = [
-    { id: '343464', customer: 'Hotel MH27', vendor: 'FreshFoods', status: 'Delivered', date: '24 Apr 2025' },
-    { id: '343465', customer: 'Urban Eats', vendor: 'Spice Mart', status: 'Pending', date: '24 Apr 2025' },
-    { id: '343466', customer: 'G Mart', vendor: '122 market', status: 'Pending', date: '24 Apr 2025' },
-    { id: '343467', customer: 'Urban Eats', vendor: 'Spice Mart', status: 'Pending', date: '24 Apr 2025' },
-    { id: '343468', customer: 'Urban Eats', vendor: 'Spice Mart', status: 'Pending', date: '24 Apr 2025' },
-    { id: '343469', customer: 'Urban Eats', vendor: 'Spice Mart', status: 'Pending', date: '24 Apr 2025' },
-];
+interface DashboardData {
+    stats: {
+        totalUsers: number;
+        totalVendors: number;
+        totalOrders: number;
+        totalRevenue: number;
+        newUsersThisMonth: number;
+    };
+    ordersByStatus: Record<string, number>;
+    recentOrders: {
+        id: string;
+        orderNumber: string;
+        status: string;
+        totalAmount: number;
+        paymentStatus: string;
+        createdAt: string;
+        vendor: { id: string; businessName: string };
+        user: { id: string; fullName: string; email: string };
+    }[];
+}
 
 const formatYAxis = (value: number) => {
     if (value === 0) return '0';
@@ -122,6 +133,24 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function DashboardPage() {
+    const [data, setData] = useState<DashboardData | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetch('/api/v1/admin/dashboard')
+            .then(res => res.json())
+            .then(json => { if (json.success) setData(json.data); })
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, []);
+
+    const statCards = data ? [
+        { label: 'Total Orders', value: data.stats.totalOrders.toLocaleString('en-IN'), icon: ShoppingCart, color: 'bg-blue-50 text-blue-600', trend: `+${data.stats.newUsersThisMonth} this month`, trendType: 'up' as const },
+        { label: 'Total Customers', value: data.stats.totalUsers.toLocaleString('en-IN'), icon: Users, color: 'bg-yellow-50 text-yellow-600', trend: `+${data.stats.newUsersThisMonth}`, trendType: 'up' as const },
+        { label: 'Total Vendors', value: data.stats.totalVendors.toLocaleString('en-IN'), icon: Store, color: 'bg-pink-50 text-pink-600', trend: '', trendType: 'up' as const },
+        { label: 'Total Revenue', value: formatINR(Number(data.stats.totalRevenue)), icon: Wallet, color: 'bg-green-50 text-green-600', trend: '', trendType: 'up' as const },
+    ] : [];
+
     return (
         <div className="space-y-8 pb-10">
             {/* Page Header */}
@@ -130,9 +159,15 @@ export default function DashboardPage() {
                 <p className="text-[#000000] text-[12px] font-light">Whole data about your business here</p>
             </div>
 
+            {loading ? (
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 className="animate-spin text-[#299E60]" size={32} />
+                </div>
+            ) : (
+            <>
             {/* Stat Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {STAT_CARDS.map((stat, idx) => (
+                {statCards.map((stat, idx) => (
                     <div key={idx} className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm hover:shadow-md transition-all h-[145px] flex flex-col justify-between cursor-default">
                         <div className="flex items-center gap-3">
                             <div className={cn("w-11 h-11 rounded-lg flex items-center justify-center shrink-0", stat.color)}>
@@ -143,32 +178,18 @@ export default function DashboardPage() {
 
                         <div className="flex items-center justify-between">
                             <h4 className="text-[28px] font-[800] text-[#181725] leading-none">{stat.value}</h4>
+                            {stat.trend && (
                             <div className={cn(
                                 "flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-bold",
                                 stat.trendType === 'up' ? "bg-[#EEF8F1] text-[#299E60]" : "bg-[#FFF0F0] text-[#E74C3C]"
                             )}>
                                 {stat.trend}
                             </div>
+                            )}
                         </div>
                     </div>
                 ))}
             </div>
-
-            {/* Previous Stat Cards Layout (Commented Out)
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {STAT_CARDS.map((stat, idx) => (
-                    <div key={idx} className="bg-white h-[135px] px-6 rounded-[14px] border border-[#EEEEEE] flex items-center gap-5 shadow-sm hover:shadow-md transition-shadow cursor-default">
-                        <div className={cn("w-[52px] h-[52px] rounded-full flex items-center justify-center shrink-0", stat.color)}>
-                            <stat.icon size={24} />
-                        </div>
-                        <div className="flex-1 flex flex-col justify-center min-w-0">
-                            <p className="text-[#000000] text-[15px] xl:text-[18px] font-medium leading-[1.2] mb-0.5">{stat.label}</p>
-                            <p className="text-[26px] xl:text-[35px] font-bold text-[#000000] leading-none whitespace-nowrap">{stat.value}</p>
-                        </div>
-                    </div>
-                ))}
-            </div>
-            */}
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -340,7 +361,7 @@ export default function DashboardPage() {
                         <thead>
                             <tr className="bg-[#EFEFEF] h-[47px]">
                                 <th className="px-6 text-center text-[13px] font-bold text-[#4B4B4B] first:rounded-l-[10px]">Order ID</th>
-                                <th className="px-6 text-center text-[13px] font-bold text-[#4B4B4B]">Customers</th>
+                                <th className="px-6 text-center text-[13px] font-bold text-[#4B4B4B]">Customer</th>
                                 <th className="px-6 text-center text-[13px] font-bold text-[#4B4B4B]">Vendor</th>
                                 <th className="px-6 text-center text-[13px] font-bold text-[#4B4B4B]">Status</th>
                                 <th className="px-6 text-center text-[13px] font-bold text-[#4B4B4B]">Date</th>
@@ -348,24 +369,28 @@ export default function DashboardPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#EEEEEE]">
-                            {RECENT_ACTIVITY.map((row, i) => (
-                                <tr key={i} className="hover:bg-gray-50/50 transition-colors">
-                                    <td className="py-5 px-6 text-center font-bold text-[14px] text-[#181725]">{row.id}</td>
-                                    <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-medium">{row.customer}</td>
-                                    <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-medium">{row.vendor}</td>
+                            {(data?.recentOrders || []).length === 0 ? (
+                                <tr><td colSpan={6} className="py-10 text-center text-[14px] text-[#7C7C7C]">No orders yet</td></tr>
+                            ) : (
+                            data?.recentOrders.map((row) => {
+                                const statusStyle = row.status === 'delivered'
+                                    ? "bg-[#EEF8F1] text-[#299E60] px-6 py-1.5"
+                                    : row.status === 'cancelled'
+                                    ? "bg-[#FFF0F0] text-[#E74C3C] px-6 py-1.5"
+                                    : "bg-[#FFF4E5] text-[#976538] px-6 py-1.5";
+                                return (
+                                <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
+                                    <td className="py-5 px-6 text-center font-bold text-[14px] text-[#181725]">{row.orderNumber}</td>
+                                    <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-medium">{row.user.fullName}</td>
+                                    <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-medium">{row.vendor.businessName}</td>
                                     <td className="py-5 px-6 text-center">
                                         <div className="flex justify-center">
-                                            <span className={cn(
-                                                "inline-flex items-center justify-center rounded-[10px] text-[14px] font-medium",
-                                                row.status === 'Delivered'
-                                                    ? "bg-[#EEF8F1] text-[#299E60] px-6 py-1.5"
-                                                    : "bg-[#FFF4E5] text-[#976538] w-[100px] h-[21px]"
-                                            )}>
+                                            <span className={cn("inline-flex items-center justify-center rounded-[10px] text-[14px] font-medium capitalize", statusStyle)}>
                                                 {row.status}
                                             </span>
                                         </div>
                                     </td>
-                                    <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-medium">{row.date}</td>
+                                    <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-medium">{new Date(row.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                                     <td className="py-5 px-6 text-center">
                                         <div className="flex justify-center">
                                             <Link href={`/admin/orders/${row.id}`} className="bg-[#299E60] hover:bg-[#238b54] text-white text-[12px] font-bold h-[28px] px-4 rounded-[5px] transition-colors cursor-pointer flex items-center justify-center">
@@ -374,16 +399,20 @@ export default function DashboardPage() {
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
+                                );
+                            })
+                            )}
                         </tbody>
                     </table>
                 </div>
                 <div className="mt-8 flex justify-center">
-                    <button className="flex items-center justify-center gap-[3px] w-[149px] h-[41px] border border-[#299E60] rounded-[5px] text-[14px] font-bold text-[#299E60] hover:bg-[#EEF8F1] transition-all pt-[4px] pb-[4px] pl-[3px] pr-[11px] cursor-pointer">
+                    <Link href="/admin/orders" className="flex items-center justify-center gap-[3px] w-[149px] h-[41px] border border-[#299E60] rounded-[5px] text-[14px] font-bold text-[#299E60] hover:bg-[#EEF8F1] transition-all cursor-pointer">
                         <span>View all</span> <ChevronRight size={14} className="text-[#299E60]" />
-                    </button>
+                    </Link>
                 </div>
             </div>
+            </>
+            )}
         </div>
     );
 }

@@ -3,15 +3,16 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { RotateCcw, ListOrdered, Store } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 
 export function QuickActions() {
+    const { status } = useSession();
+    const isLoggedIn = status === 'authenticated';
     const [isMounted, setIsMounted] = useState(false);
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
 
     useEffect(() => {
         setIsMounted(true);
-        setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
     }, []);
 
     const actions = [

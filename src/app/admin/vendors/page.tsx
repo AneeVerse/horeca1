@@ -1,167 +1,75 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
     Search,
-    ChevronDown,
     Star,
-    MapPin,
     Mail,
     Phone,
-    Heart,
-    MoreVertical,
-    TrendingUp,
-    Info
+    Loader2,
+    Package,
+    ShoppingBag,
+    CheckCircle,
+    XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
 
-const getVendorSlug = (name: string) => name.toLowerCase().replace(/\s+/g, '-').replace(/&/g, '');
-
-const VENDORS = [
-    {
-        name: 'ZARA International',
-        category: 'Fashion',
-        website: 'www.zara.com',
-        rating: 4.5,
-        reviews: '3.5k',
-        address: '4604, Philli Lane Kiowa IN 47404',
-        email: 'zarafashionworld@dayrep.com',
-        phone: '+243 812-801-9335',
-        revenue: '$200k',
-        revenueProgress: 65,
-        stock: '865',
-        sells: '+4.5k',
-        happyClients: '+2k',
-        logo: '/images/admin/vendors/zara.svg'
-    },
-    {
-        name: 'Rolex Watches',
-        category: 'Watch',
-        website: 'www.rolex.com',
-        rating: 4.5,
-        reviews: '1.2k',
-        address: '1678 Avenue Milwaukee, WI 53202',
-        email: 'rolexwatches@dayrep.com',
-        phone: '+243 252-223-1454',
-        revenue: '$349k',
-        revenueProgress: 75,
-        stock: '261',
-        sells: '+2.9k',
-        happyClients: '+1.4k',
-        logo: '/images/admin/vendors/rolex.svg'
-    },
-    {
-        name: 'Dyson Machinery',
-        category: 'Electronics',
-        website: 'www.dyson.com',
-        rating: 4.1,
-        reviews: '3.7k',
-        address: '23 Cubbine Road GHOOLI WA 6426',
-        email: 'dysonmachine@dayrep.com',
-        phone: '+81(08) 9059 8047',
-        revenue: '$545k',
-        revenueProgress: 85,
-        stock: '781',
-        sells: '+5.3k',
-        happyClients: '+3.1k',
-        logo: '/images/admin/vendors/dyson.svg'
-    },
-    {
-        name: 'GoPro Camera',
-        category: 'Electronics',
-        website: 'www.gopro.com',
-        rating: 4.3,
-        reviews: '7.2k',
-        address: '5 Gaffney Street MIDDLE PARK VIC 3206',
-        email: 'goprocamera@dayrep.com',
-        phone: '+81(08) 6727 4227',
-        revenue: '$465k',
-        revenueProgress: 70,
-        stock: '890',
-        sells: '+10.6k',
-        happyClients: '+6.1k',
-        logo: '/images/admin/vendors/gopro.svg'
-    },
-    {
-        name: 'H&M',
-        category: 'Fashion',
-        website: 'www.hm.com',
-        rating: 4.5,
-        reviews: '15.3k',
-        address: '1697 Bay Street Toronto, ON M5J 2R8',
-        email: 'hmfashion@dayrep.com',
-        phone: '+1(416) 123-4567',
-        revenue: '$1.2M',
-        revenueProgress: 90,
-        stock: '2.4k',
-        sells: '+45k',
-        happyClients: '+12k',
-        logo: '/images/admin/vendors/h&m.svg'
-    },
-    {
-        name: 'Huawei Phone',
-        category: 'Electronics',
-        rating: 4.1,
-        reviews: '8.2k',
-        website: 'www.huawei.com',
-        address: '2182 Blanchard Victoria, BC V8W 2H9',
-        email: 'huaweiphone@dayrep.com',
-        phone: '+1(250) 987-6543',
-        revenue: '$850k',
-        revenueProgress: 80,
-        stock: '1.2k',
-        sells: '+15.2k',
-        happyClients: '+8k',
-        logo: '/images/admin/vendors/huawei.svg'
-    },
-    {
-        name: 'Nike Clothings',
-        category: 'Fashion',
-        rating: 4.5,
-        reviews: '18.9k',
-        website: 'www.nike.com',
-        address: '2113 Eglinton Avenue Toronto 1A5',
-        email: 'nikefashion@dayrep.com',
-        phone: '+1(416) 987-6543',
-        revenue: '$2.5M',
-        revenueProgress: 95,
-        stock: '5.2k',
-        sells: '+85k',
-        happyClients: '+45k',
-        logo: '/images/admin/vendors/nike.svg'
-    },
-    {
-        name: 'The North Face',
-        category: 'Fashion',
-        rating: 4.4,
-        reviews: '12.7k',
-        website: 'www.thenorthface.com',
-        address: '1377 49th Avenue Clyde River, 0E0',
-        email: 'thenorthface@dayrep.com',
-        phone: '+1(867) 123-4567',
-        revenue: '$650k',
-        revenueProgress: 75,
-        stock: '1.5k',
-        sells: '+12.5k',
-        happyClients: '+9k',
-        logo: '/images/admin/vendors/thenorthface.svg'
-    }
-];
+interface AdminVendor {
+    id: string;
+    businessName: string;
+    slug: string;
+    logoUrl: string | null;
+    rating: number;
+    isVerified: boolean;
+    isActive: boolean;
+    createdAt: string;
+    user: {
+        id: string;
+        fullName: string;
+        email: string;
+        phone: string | null;
+    };
+    _count: {
+        products: number;
+        orders: number;
+    };
+}
 
 export default function VendorsPage() {
     const [searchQuery, setSearchQuery] = useState('');
-    const router = useRouter();
+    const [vendors, setVendors] = useState<AdminVendor[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    const handleCardClick = (vendorName: string) => {
-        router.push(`/admin/vendors/${getVendorSlug(vendorName)}`);
-    };
+    useEffect(() => {
+        fetch('/api/v1/admin/vendors?limit=50')
+            .then(res => res.json())
+            .then(json => { if (json.success) setVendors(json.data.vendors); })
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, []);
 
-    const filteredVendors = VENDORS.filter(vendor =>
-        vendor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        vendor.category.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredVendors = vendors.filter(vendor =>
+        vendor.businessName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        vendor.user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        vendor.user.fullName.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    const toggleVerified = async (vendorId: string, isVerified: boolean) => {
+        try {
+            const res = await fetch(`/api/v1/admin/vendors/${vendorId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ isVerified: !isVerified }),
+            });
+            const json = await res.json();
+            if (json.success) {
+                setVendors(prev => prev.map(v => v.id === vendorId ? { ...v, isVerified: !isVerified } : v));
+            }
+        } catch (err) {
+            console.error('Failed to toggle vendor verification:', err);
+        }
+    };
 
     return (
         <div className="space-y-8 pb-10">
@@ -186,142 +94,124 @@ export default function VendorsPage() {
                 </div>
             </div>
 
-            {/* Vendors Grid */}
+            {loading ? (
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 className="animate-spin text-[#299E60]" size={32} />
+                </div>
+            ) : filteredVendors.length === 0 ? (
+                <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-20 text-center text-[#AEAEAE] font-medium">
+                    {searchQuery ? `No vendors found matching "${searchQuery}"` : 'No vendors yet'}
+                </div>
+            ) : (
+            /* Vendors Grid */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-[24px]">
-                {filteredVendors.map((vendor, idx) => (
+                {filteredVendors.map((vendor) => (
                     <div
-                        key={idx}
-                        onClick={() => handleCardClick(vendor.name)}
-                        className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden flex flex-col h-full hover:shadow-md transition-all cursor-pointer max-w-[381px] w-full mx-auto active:scale-[0.98]"
+                        key={vendor.id}
+                        className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden flex flex-col h-full hover:shadow-md transition-all max-w-[381px] w-full mx-auto"
                     >
-                        {/* Top Grey Logo Box */}
+                        {/* Top Logo Box */}
                         <div className="p-3">
                             <div className="bg-[#F1F4F9] rounded-[12px] h-[144px] relative flex items-center justify-center p-6">
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); /* detail info */ }}
-                                    className="absolute top-4 right-4 text-[#AEAEAE] hover:text-[#181725] transition-colors z-20"
-                                >
-                                    <Info size={18} />
-                                </button>
-                                <img
-                                    src={vendor.logo}
-                                    alt={vendor.name}
-                                    className="w-[120px] h-[120px] object-contain"
-                                />
+                                {/* Verification badge */}
+                                <div className={cn(
+                                    "absolute top-3 left-3 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold",
+                                    vendor.isVerified ? "bg-[#EEF8F1] text-[#299E60]" : "bg-[#FFF4E5] text-[#976538]"
+                                )}>
+                                    {vendor.isVerified ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                                    {vendor.isVerified ? 'Verified' : 'Pending'}
+                                </div>
+                                {vendor.logoUrl ? (
+                                    <img
+                                        src={vendor.logoUrl}
+                                        alt={vendor.businessName}
+                                        className="w-[100px] h-[100px] object-contain rounded-full"
+                                    />
+                                ) : (
+                                    <div className="w-[100px] h-[100px] rounded-full bg-[#299E60]/10 flex items-center justify-center">
+                                        <span className="text-[32px] font-black text-[#299E60]">
+                                            {vendor.businessName.charAt(0)}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
                         {/* Content Area */}
                         <div className="px-6 pb-6 pt-2 flex flex-col flex-1">
-                            {/* Header Info */}
                             <div className="mb-4">
-                                <div className="flex items-center justify-between gap-1.5 items-start">
-                                    <div className="flex flex-col">
-                                        <h3 className="text-[17px] font-extrabold text-[#181725] line-clamp-1">{vendor.name}</h3>
-                                        <span className="text-[13px] text-[#4B4B4B] font-medium mt-0.5">({vendor.category})</span>
-                                    </div>
-
+                                <div className="flex items-center justify-between gap-1.5">
+                                    <h3 className="text-[17px] font-extrabold text-[#181725] line-clamp-1">{vendor.businessName}</h3>
                                     <div className="flex items-center gap-1.5 bg-[#F5F9FD] px-2 py-1 rounded-md shrink-0">
                                         <Star size={14} fill="#F59E0B" className="text-[#F59E0B]" />
-                                        <span className="text-[13px] font-bold text-[#181725]">{vendor.rating}</span>
-                                        <span className="text-[12px] text-[#AEAEAE] font-medium">{vendor.reviews}</span>
+                                        <span className="text-[13px] font-bold text-[#181725]">{Number(vendor.rating).toFixed(1)}</span>
                                     </div>
                                 </div>
-                                <a
-                                    href={vendor.website.startsWith('http') ? vendor.website : `https://${vendor.website}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="text-[13px] font-bold text-[#299E60] hover:underline mt-2 block w-fit"
-                                >
-                                    {vendor.website}
-                                </a>
+                                <p className="text-[13px] text-[#7C7C7C] font-medium mt-1">Owner: {vendor.user.fullName}</p>
                             </div>
 
                             {/* Contact Details */}
-                            <div className="space-y-4 my-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="w-[32px] h-[32px] rounded-[10px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0 mt-0.5">
-                                        <MapPin size={15} />
-                                    </div>
-                                    <span className="text-[13px] font-[800] text-[#7C7C7C] leading-tight line-clamp-2 min-h-[32px] flex items-center">{vendor.address}</span>
-                                </div>
+                            <div className="space-y-3 my-2">
                                 <div className="flex items-center gap-3">
                                     <div className="w-[32px] h-[32px] rounded-[10px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
                                         <Mail size={15} />
                                     </div>
-                                    <span className="text-[13px] font-[800] text-[#7C7C7C] truncate">{vendor.email}</span>
+                                    <span className="text-[13px] font-[800] text-[#7C7C7C] truncate">{vendor.user.email}</span>
                                 </div>
+                                {vendor.user.phone && (
                                 <div className="flex items-center gap-3">
                                     <div className="w-[32px] h-[32px] rounded-[10px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
                                         <Phone size={15} />
                                     </div>
-                                    <span className="text-[13px] font-[800] text-[#7C7C7C]">{vendor.phone}</span>
+                                    <span className="text-[13px] font-[800] text-[#7C7C7C]">{vendor.user.phone}</span>
                                 </div>
-                            </div>
-
-                            {/* Progress Section */}
-                            <div className="mt-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-[14px] font-bold text-[#181725]">{vendor.category}</span>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="text-[14px] font-bold text-[#181725]">{vendor.revenue}</span>
-                                        <TrendingUp size={16} className="text-[#299E60]" />
-                                    </div>
-                                </div>
-                                <div className="h-[6px] w-full bg-[#F5F5F5] rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full bg-[#299E60] transition-all duration-1000 relative"
-                                        style={{ width: `${vendor.revenueProgress}%` }}
-                                    >
-                                        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(45deg, #fff 25%, transparent 25%, transparent 50%, #fff 50%, #fff 75%, transparent 75%, transparent)', backgroundSize: '10px 10px' }}></div>
-                                    </div>
-                                </div>
+                                )}
                             </div>
 
                             {/* Stats Row */}
-                            <div className="mt-8 flex items-center border-t border-[#EEEEEE] -mx-6 pt-6 px-6">
+                            <div className="mt-auto flex items-center border-t border-[#EEEEEE] -mx-6 pt-6 px-6">
                                 <div className="flex-1 text-center">
-                                    <p className="text-[16px] font-[900] text-[#181725] leading-none">{vendor.stock}</p>
-                                    <p className="text-[12px] font-bold text-[#AEAEAE] mt-2">Item Stock</p>
+                                    <p className="text-[16px] font-[900] text-[#181725] leading-none">{vendor._count.products}</p>
+                                    <p className="text-[12px] font-bold text-[#AEAEAE] mt-2">Products</p>
                                 </div>
                                 <div className="w-[1px] h-10 bg-[#EEEEEE]" />
                                 <div className="flex-1 text-center">
-                                    <p className="text-[16px] font-[900] text-[#181725] leading-none">{vendor.sells}</p>
-                                    <p className="text-[12px] font-bold text-[#AEAEAE] mt-2">Sells</p>
-                                </div>
-                                <div className="w-[1px] h-10 bg-[#EEEEEE]" />
-                                <div className="flex-1 text-center">
-                                    <p className="text-[16px] font-[900] text-[#181725] leading-none">{vendor.happyClients}</p>
-                                    <p className="text-[12px] font-bold text-[#AEAEAE] mt-2">Happy Client</p>
+                                    <p className="text-[16px] font-[900] text-[#181725] leading-none">{vendor._count.orders}</p>
+                                    <p className="text-[12px] font-bold text-[#AEAEAE] mt-2">Orders</p>
                                 </div>
                             </div>
                         </div>
 
                         {/* Footer Buttons */}
                         <div className="p-6 border-t border-[#EEEEEE] flex items-center gap-3">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); handleCardClick(vendor.name); }}
+                            <Link
+                                href={`/admin/vendors/${vendor.id}`}
                                 className="flex-1 h-[44px] bg-[#299E60] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center justify-center"
                             >
-                                View Profile
-                            </button>
-                            <button
-                                onClick={(e) => e.stopPropagation()}
-                                className="flex-1 h-[44px] bg-[#EEF8F1] text-[#299E60] rounded-[10px] text-[14px] font-bold hover:bg-[#e0f0e5] transition-all"
-                            >
-                                Edit Profile
-                            </button>
-                            <button
-                                onClick={(e) => e.stopPropagation()}
-                                className="group w-[44px] h-[44px] rounded-[10px] border border-[#EEEEEE] flex items-center justify-center text-[#299E60] hover:bg-[#EEF8F1] transition-all"
-                            >
-                                <Heart size={18} className="transition-all group-hover:fill-[#299E60]" />
-                            </button>
+                                View Details
+                            </Link>
+                            {!vendor.isVerified ? (
+                                <button
+                                    onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
+                                    className="flex-1 h-[44px] bg-[#EEF8F1] text-[#299E60] rounded-[10px] text-[14px] font-bold hover:bg-[#e0f0e5] transition-all flex items-center justify-center gap-2"
+                                >
+                                    <CheckCircle size={16} />
+                                    Approve
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
+                                    className="flex-1 h-[44px] bg-[#FFF0F0] text-[#E74C3C] rounded-[10px] text-[14px] font-bold hover:bg-[#ffe5e5] transition-all flex items-center justify-center gap-2"
+                                >
+                                    <XCircle size={16} />
+                                    Revoke
+                                </button>
+                            )}
                         </div>
                     </div>
                 ))}
             </div>
+            )}
         </div>
     );
 }
