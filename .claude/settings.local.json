@@ -18,7 +18,8 @@
       "Bash(curl -s -X POST http://localhost:3000/api/auth/callback/credentials -H 'Content-Type: application/x-www-form-urlencoded' -d \"email=chef@tajpalace.com&password=customer123&redirect=false&callbackUrl=http://localhost:3000&json=true\" -o /dev/null -w 'HTTP Status: %{http_code}\\\\nRedirect: %{redirect_url}\\\\n' -D -)",
       "Bash(curl -s -X POST http://localhost:3000/api/auth/callback/credentials -H 'Content-Type: application/x-www-form-urlencoded' -d \"email=admin@horeca1.com&password=admin123&redirect=false&callbackUrl=http://localhost:3000&json=true\" -o /dev/null -w 'HTTP Status: %{http_code}\\\\nRedirect: %{redirect_url}\\\\n' -D -)",
       "Bash(curl -s -X POST http://localhost:3000/api/auth/callback/credentials -H 'Content-Type: application/x-www-form-urlencoded' -d \"email=fresh@dailyfreshfoods.com&password=vendor123&redirect=false&callbackUrl=http://localhost:3000&json=true\" -o /dev/null -w 'HTTP Status: %{http_code}\\\\nRedirect: %{redirect_url}\\\\n' -D -)",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "Read(//c/Users/Roger/.claude/projects/c--Users-Roger-Desktop-horeca1-prod/**)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Roger\\Desktop\\horeca1-prod\\src\\app\\api\\auth\\[...nextauth]"

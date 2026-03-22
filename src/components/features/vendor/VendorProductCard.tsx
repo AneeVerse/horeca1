@@ -13,7 +13,7 @@ interface VendorProductCardProps {
     product: VendorProduct;
 }
 
-export function VendorProductCard({ product }: VendorProductCardProps) {
+export const VendorProductCard = React.memo(function VendorProductCard({ product }: VendorProductCardProps) {
     const { addToCart, groups, updateQuantity } = useCart();
     const { isInWishlist, toggleWishlist } = useWishlist();
     const isLiked = isInWishlist(product.id);
@@ -248,4 +248,4 @@ export function VendorProductCard({ product }: VendorProductCardProps) {
             </div>
         </Link>
     );
-}
+});

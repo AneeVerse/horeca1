@@ -1,13 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Enable React Compiler for automatic optimizations
+  output: 'standalone',
+
   reactCompiler: true,
-  
-  // Enable strict mode for better development experience
   reactStrictMode: true,
-  
-  // Optimize images
+
   images: {
     formats: ['image/avif', 'image/webp'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048],
@@ -17,19 +15,26 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'images.unsplash.com' },
     ],
   },
-  
-  // Compress responses
+
   compress: true,
-  
-  // Generate ETags for caching
   generateEtags: true,
-  
-  // Powered by header (disable for security)
   poweredByHeader: false,
-  
-  // Experimental features for better performance
+
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
+        ],
+      },
+    ];
+  },
+
   experimental: {
-    // Optimize package imports
     optimizePackageImports: ['lucide-react', 'react-icons'],
   },
 };

@@ -18,6 +18,7 @@ import { OrderService } from '@/modules/order/order.service';
 import { createOrderSchema, listOrdersSchema } from '@/modules/order/order.validator';
 import { withAuth } from '@/middleware/auth';
 import { errorResponse } from '@/middleware/errorHandler';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 const orderService = new OrderService();
 
@@ -37,6 +38,15 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
 // POST — create purchase order (the checkout action)
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
+    // Rate limit: 10 orders per user per minute (prevents checkout spam)
+    const { allowed } = checkRateLimit(`order:${ctx.userId}`, 10, 60000);
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, error: { code: 'RATE_LIMITED', message: 'Too many order attempts. Please wait.' } },
+        { status: 429, headers: { 'Retry-After': '60' } }
+      );
+    }
+
     const body = await req.json();
     const input = createOrderSchema.parse(body);
 

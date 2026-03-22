@@ -6,11 +6,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AuthService } from '@/modules/auth/auth.service';
 import { signupSchema } from '@/modules/auth/auth.validator';
 import { errorResponse } from '@/middleware/errorHandler';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 const authService = new AuthService();
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 5 signup attempts per IP per minute
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+    const { allowed } = checkRateLimit(`signup:${ip}`, 5, 60000);
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, error: { code: 'RATE_LIMITED', message: 'Too many signup attempts. Try again later.' } },
+        { status: 429, headers: { 'Retry-After': '60' } }
+      );
+    }
+
     // 1. Parse and validate the request body using Zod schema
     //    This checks: valid email format, password >= 8 chars, valid phone format, etc.
     const body = await req.json();

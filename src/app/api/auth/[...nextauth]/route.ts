@@ -1,8 +1,24 @@
-// Auth.js catch-all route handler
+// Auth.js catch-all route handler with rate limiting
 // WHY: Auth.js v5 needs this to handle login, logout, session, and callback URLs
 // It auto-handles: POST /api/auth/signin, GET /api/auth/session, POST /api/auth/signout, etc.
-// We don't write any logic here — Auth.js does it all based on src/auth.ts config
 
 import { handlers } from '@/auth';
+import { checkRateLimit } from '@/lib/rateLimit';
+import { NextRequest, NextResponse } from 'next/server';
 
-export const { GET, POST } = handlers;
+function withRateLimit(handler: (req: NextRequest) => Promise<Response>) {
+  return async (req: NextRequest) => {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+    const { allowed } = checkRateLimit(`auth:${ip}`, 10, 60000); // 10 per minute (brute force protection)
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Try again later.' },
+        { status: 429, headers: { 'Retry-After': '60' } }
+      );
+    }
+    return handler(req);
+  };
+}
+
+export const GET = withRateLimit(handlers.GET);
+export const POST = withRateLimit(handlers.POST);

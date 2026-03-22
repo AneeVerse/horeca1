@@ -14,7 +14,11 @@ class TypedEventEmitter {
   }
 
   emit<K extends EventName>(event: K, payload: EventMap[K]): void {
-    console.log(`[Event] ${event}`, JSON.stringify(payload).slice(0, 200));
+    try {
+      console.log(`[Event] ${event}`, JSON.stringify(payload).slice(0, 200));
+    } catch {
+      console.log(`[Event] ${event} (payload not serializable)`);
+    }
     this.emitter.emit(event, payload);
   }
 

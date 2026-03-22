@@ -1,12 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { ProfileScreen } from '@/components/auth/ProfileScreen';
 import { useRouter } from 'next/navigation';
 
 export default function ProfilePage() {
     const router = useRouter();
-    const [isLoggedIn, setIsLoggedIn] = useState(true);
 
     return (
         <main className="min-h-screen bg-[#F2F3F2]">

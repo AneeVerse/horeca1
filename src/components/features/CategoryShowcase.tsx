@@ -75,7 +75,6 @@ export function CategoryShowcase() {
                         alt={cat.name}
                         fill
                         className="object-contain"
-                        unoptimized
                     />
                 </div>
             </div>

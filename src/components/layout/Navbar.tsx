@@ -4,6 +4,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
     Search,
     MapPin,
@@ -82,14 +83,18 @@ export function Navbar() {
     const [hoveredCategoryVendors, setHoveredCategoryVendors] = React.useState<Vendor[]>([]);
 
     React.useEffect(() => {
-        dal.vendors.list().then((res) => setVendors(res.vendors)).catch(console.error);
-        dal.categories.list().then((cats) => {
-            setApiCategories(cats.map(c => ({
-                ...c,
-                image: CATEGORY_STYLE[c.slug]?.image || DEFAULT_STYLE.image,
-                bgColor: CATEGORY_STYLE[c.slug]?.bgColor || DEFAULT_STYLE.bgColor,
-            })));
-        }).catch(console.error);
+        Promise.all([
+            dal.vendors.list().then((res) => setVendors(res.vendors)),
+            dal.categories.list().then((cats) => {
+                setApiCategories(cats.map(c => ({
+                    ...c,
+                    image: CATEGORY_STYLE[c.slug]?.image || DEFAULT_STYLE.image,
+                    bgColor: CATEGORY_STYLE[c.slug]?.bgColor || DEFAULT_STYLE.bgColor,
+                })));
+            }),
+        ]).catch((err) => {
+            console.error('[Navbar] Failed to load data:', err);
+        });
     }, []);
 
     const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
@@ -227,10 +232,13 @@ export function Navbar() {
 
                                 {/* Logo (Center) */}
                                 <Link href="/" className="flex justify-center">
-                                    <img
+                                    <Image
                                         src="/Horeca1.png"
                                         alt="Horeca1"
+                                        width={80}
+                                        height={20}
                                         className="h-[20px] w-auto object-contain"
+                                        priority
                                     />
                                 </Link>
 
@@ -295,7 +303,7 @@ export function Navbar() {
                         {/* Desktop Header Content (Hidden on Mobile) */}
                         <div className="hidden md:flex items-center justify-between gap-3 lg:gap-6">
                             <Link href="/" className="flex-shrink-0">
-                                <img src="/Horeca1.png" alt="Horeca1" className="h-[26px] w-auto object-contain" />
+                                <Image src="/Horeca1.png" alt="Horeca1" width={104} height={26} className="h-[26px] w-auto object-contain" priority />
                             </Link>
 
                             {!pathname?.startsWith('/vendor/') && (

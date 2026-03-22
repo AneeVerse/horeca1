@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { VendorProduct } from '@/types';
 
 interface WishlistContextType {
@@ -20,9 +20,11 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
         const saved = localStorage.getItem('wishlist');
         if (saved) {
             try {
-                setWishlist(JSON.parse(saved));
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) setWishlist(parsed);
             } catch (e) {
                 console.error('Failed to parse wishlist', e);
+                localStorage.removeItem('wishlist');
             }
         }
     }, []);
@@ -31,31 +33,38 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('wishlist', JSON.stringify(wishlist));
     }, [wishlist]);
 
-    const addToWishlist = (product: VendorProduct) => {
+    const addToWishlist = useCallback((product: VendorProduct) => {
         setWishlist(prev => {
             if (prev.find(p => p.id === product.id)) return prev;
             return [...prev, product];
         });
-    };
+    }, []);
 
-    const removeFromWishlist = (productId: string) => {
+    const removeFromWishlist = useCallback((productId: string) => {
         setWishlist(prev => prev.filter(p => p.id !== productId));
-    };
+    }, []);
 
-    const isInWishlist = (productId: string) => {
-        return wishlist.some(p => p.id === productId);
-    };
+    // Use a Set for O(1) lookup instead of .some() on every call
+    const wishlistIds = useMemo(() => new Set(wishlist.map(p => p.id)), [wishlist]);
 
-    const toggleWishlist = (product: VendorProduct) => {
-        if (isInWishlist(product.id)) {
+    const isInWishlist = useCallback((productId: string) => {
+        return wishlistIds.has(productId);
+    }, [wishlistIds]);
+
+    const toggleWishlist = useCallback((product: VendorProduct) => {
+        if (wishlistIds.has(product.id)) {
             removeFromWishlist(product.id);
         } else {
             addToWishlist(product);
         }
-    };
+    }, [wishlistIds, removeFromWishlist, addToWishlist]);
+
+    const value = useMemo(() => ({
+        wishlist, addToWishlist, removeFromWishlist, isInWishlist, toggleWishlist,
+    }), [wishlist, addToWishlist, removeFromWishlist, isInWishlist, toggleWishlist]);
 
     return (
-        <WishlistContext.Provider value={{ wishlist, addToWishlist, removeFromWishlist, isInWishlist, toggleWishlist }}>
+        <WishlistContext.Provider value={value}>
             {children}
         </WishlistContext.Provider>
     );
