@@ -22,7 +22,8 @@
       "Read(//c/Users/Roger/.claude/projects/c--Users-Roger-Desktop-horeca1-prod/**)"
     ],
     "additionalDirectories": [
-      "c:\\Users\\Roger\\Desktop\\horeca1-prod\\src\\app\\api\\auth\\[...nextauth]"
+      "c:\\Users\\Roger\\Desktop\\horeca1-prod\\src\\app\\api\\auth\\[...nextauth]",
+      "c:\\Users\\Roger\\Desktop\\horeca1-prod\\src\\app\\vendor\\orders"
     ]
   }
 }

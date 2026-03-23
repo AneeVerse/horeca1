@@ -10,10 +10,14 @@ const protectedRoutes = [
   '/profile',
   '/wishlist',
   '/admin',
+  '/vendor',
 ];
 
 // Routes that only admins can access
 const adminRoutes = ['/admin'];
+
+// Routes that only vendors (or admins) can access
+const vendorRoutes = ['/vendor'];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -30,11 +34,22 @@ export default auth((req) => {
     return NextResponse.redirect(url);
   }
 
+  const role = (req.auth.user as { role?: string })?.role;
+
   // Check admin access
   const isAdminRoute = adminRoutes.some(route => pathname.startsWith(route));
   if (isAdminRoute) {
-    const role = (req.auth.user as { role?: string })?.role;
     if (role !== 'admin') {
+      const url = req.nextUrl.clone();
+      url.pathname = '/';
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // Check vendor dashboard access (vendors + admins allowed)
+  const isVendorRoute = vendorRoutes.some(route => pathname.startsWith(route));
+  if (isVendorRoute) {
+    if (role !== 'vendor' && role !== 'admin') {
       const url = req.nextUrl.clone();
       url.pathname = '/';
       return NextResponse.redirect(url);

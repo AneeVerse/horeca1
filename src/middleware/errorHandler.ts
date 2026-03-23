@@ -99,4 +99,7 @@ export const Errors = {
       available,
       required,
     }),
+
+  conflict: (message: string) =>
+    new ApiError('CONFLICT', message, 409),
 };

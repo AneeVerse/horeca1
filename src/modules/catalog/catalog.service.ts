@@ -4,11 +4,12 @@ import { Errors } from '@/middleware/errorHandler';
 export class CatalogService {
   async getVendorProducts(
     vendorId: string,
-    options: { categoryId?: string; search?: string; cursor?: string; limit?: number }
+    options: { categoryId?: string; search?: string; cursor?: string; limit?: number; includeInactive?: boolean }
   ) {
-    const { categoryId, search, cursor, limit = 20 } = options;
+    const { categoryId, search, cursor, limit = 20, includeInactive } = options;
 
-    const where: Record<string, unknown> = { vendorId, isActive: true };
+    const where: Record<string, unknown> = { vendorId };
+    if (!includeInactive) where.isActive = true;
     if (categoryId) where.categoryId = categoryId;
     if (search) where.name = { contains: search, mode: 'insensitive' };
 

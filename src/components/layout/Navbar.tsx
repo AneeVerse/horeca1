@@ -158,9 +158,10 @@ export function Navbar() {
     const pathname = usePathname();
     const isShipmentPage = pathname?.includes('/cart/shipment/');
     const isAdminPage = pathname?.startsWith('/admin');
+    const isVendorDashboard = pathname?.startsWith('/vendor/') && !pathname?.startsWith('/vendor/[');
 
-    // Completely hide navbar on these pages
-    if (isAdminPage || isShipmentPage) return null;
+    // Completely hide navbar on dashboard and shipment pages
+    if (isAdminPage || isVendorDashboard || isShipmentPage) return null;
 
     return (
         <>
@@ -192,10 +193,23 @@ export function Navbar() {
             <AuthScreen
                 isOpen={isLoginOverlayOpen}
                 onClose={() => setIsLoginOverlayOpen(false)}
-                onLoginSuccess={() => {
+                onLoginSuccess={async () => {
                     setIsLoginOverlayOpen(false);
-                    router.push('/');
-                    setTimeout(() => window.location.reload(), 100);
+                    try {
+                        const res = await fetch('/api/v1/auth/me');
+                        const json = await res.json();
+                        const role = json?.data?.role;
+                        if (role === 'vendor') {
+                            router.push('/vendor/dashboard');
+                        } else if (role === 'admin') {
+                            router.push('/admin/dashboard');
+                        } else {
+                            router.push('/');
+                        }
+                    } catch {
+                        router.push('/');
+                    }
+                    setTimeout(() => window.location.reload(), 200);
                 }}
             />
 
@@ -478,6 +492,12 @@ export function Navbar() {
                         </div>
 
                         <div className="flex items-center gap-4 lg:gap-6 text-[var(--text-sm)] font-semibold text-text-muted">
+                            {isLoggedIn && (session?.user as { role?: string })?.role === 'vendor' && (
+                                <Link href="/vendor/dashboard" className="hover:text-primary py-4 cursor-pointer text-primary font-bold">Dashboard</Link>
+                            )}
+                            {isLoggedIn && (session?.user as { role?: string })?.role === 'admin' && (
+                                <Link href="/admin/dashboard" className="hover:text-primary py-4 cursor-pointer text-primary font-bold">Dashboard</Link>
+                            )}
                             <Link href="/" className="hover:text-primary py-4 cursor-pointer">Home</Link>
                             <Link href="/vendors" className="hover:text-primary cursor-pointer">Vendors</Link>
                             <Link href="/under-construction" className="hover:text-primary cursor-pointer">Blog</Link>
