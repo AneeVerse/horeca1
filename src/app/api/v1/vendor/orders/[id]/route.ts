@@ -50,6 +50,16 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
             quantity: true,
             unitPrice: true,
             totalPrice: true,
+            product: {
+              select: {
+                imageUrl: true,
+                sku: true,
+                hsn: true,
+                unit: true,
+                packSize: true,
+                taxPercent: true,
+              },
+            },
           },
         },
         payments: {

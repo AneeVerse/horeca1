@@ -199,20 +199,29 @@ model Category {
 }
 
 model Product {
-  id             String   @id @default(uuid()) @db.Uuid
-  vendorId       String   @map("vendor_id") @db.Uuid
-  categoryId     String?  @map("category_id") @db.Uuid
-  name           String   @db.VarChar(255)
-  slug           String   @db.VarChar(255)
-  description    String?  @db.Text
-  imageUrl       String?  @map("image_url") @db.VarChar(512)
-  packSize       String?  @map("pack_size") @db.VarChar(100)
-  unit           String?  @db.VarChar(50)
-  basePrice      Decimal  @map("base_price") @db.Decimal(10, 2)
-  creditEligible Boolean  @default(false) @map("credit_eligible")
-  isActive       Boolean  @default(true) @map("is_active")
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id              String   @id @default(uuid()) @db.Uuid
+  vendorId        String   @map("vendor_id") @db.Uuid
+  categoryId      String?  @map("category_id") @db.Uuid
+  name            String   @db.VarChar(255)
+  slug            String   @db.VarChar(255)
+  description     String?  @db.Text
+  imageUrl        String?  @map("image_url") @db.VarChar(512)
+  images          String[] @default([]) @map("images")
+  packSize        String?  @map("pack_size") @db.VarChar(100)
+  unit            String?  @db.VarChar(50)
+  sku             String?  @db.VarChar(100)
+  hsn             String?  @db.VarChar(50)
+  brand           String?  @db.VarChar(150)
+  barcode         String?  @db.VarChar(100)
+  tags            String[] @default([]) @map("tags")
+  basePrice       Decimal  @map("base_price") @db.Decimal(10, 2)
+  originalPrice   Decimal? @map("original_price") @db.Decimal(10, 2)
+  taxPercent      Decimal  @default(0) @map("tax_percent") @db.Decimal(5, 2)
+  minOrderQty     Int      @default(1) @map("min_order_qty")
+  creditEligible  Boolean  @default(false) @map("credit_eligible")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   vendor              Vendor               @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   category            Category?            @relation(fields: [categoryId], references: [id])
@@ -227,6 +236,7 @@ model Product {
   @@index([vendorId])
   @@index([categoryId])
   @@index([isActive])
+  @@index([sku])
   @@map("products")
 }
 

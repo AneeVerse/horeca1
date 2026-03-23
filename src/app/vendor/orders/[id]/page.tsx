@@ -21,6 +21,14 @@ interface OrderItem {
     quantity: number;
     unitPrice: number;
     totalPrice: number;
+    product?: {
+        imageUrl: string | null;
+        sku: string | null;
+        hsn: string | null;
+        unit: string | null;
+        packSize: string | null;
+        taxPercent: number;
+    };
 }
 
 interface OrderPayment {
@@ -36,11 +44,11 @@ interface OrderData {
     orderNumber: string;
     status: string;
     subtotal: number;
-    deliveryFee: number;
+    taxAmount: number;
     totalAmount: number;
+    paymentMethod: string | null;
     paymentStatus: string;
-    deliveryAddress: string | null;
-    deliveryPincode: string | null;
+    deliveryDate: string | null;
     notes: string | null;
     createdAt: string;
     user: OrderUser;
@@ -50,6 +58,7 @@ interface OrderData {
 }
 
 const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'] as const;
+const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 function getStatusStyle(status: string): string {
     switch (status) {
@@ -179,13 +188,23 @@ export default function VendorOrderDetailPage() {
                         <h3 className="text-[16px] font-bold text-[#181725]">Delivery</h3>
                     </div>
                     <div className="space-y-2 text-[14px]">
-                        <p className="text-[#181725]">{order.deliveryAddress || 'No address'}</p>
-                        {order.deliveryPincode && <p className="text-[#7C7C7C]">Pincode: {order.deliveryPincode}</p>}
                         {order.deliverySlot && (
-                            <div className="flex items-center gap-1.5 text-[#7C7C7C]">
-                                <Clock size={14} />
-                                <span>{order.deliverySlot.dayOfWeek} {formatTime(order.deliverySlot.slotStart)} - {formatTime(order.deliverySlot.slotEnd)}</span>
+                            <div className="flex items-center gap-1.5 text-[#181725]">
+                                <Clock size={14} className="text-[#3B82F6]" />
+                                <span className="font-bold">{DAY_NAMES[Number(order.deliverySlot.dayOfWeek)] || `Day ${order.deliverySlot.dayOfWeek}`}</span>
+                                <span className="text-[#7C7C7C]">{formatTime(order.deliverySlot.slotStart)} - {formatTime(order.deliverySlot.slotEnd)}</span>
                             </div>
+                        )}
+                        {order.deliveryDate && (
+                            <p className="text-[#7C7C7C]">
+                                Delivery Date: {new Date(order.deliveryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
+                            </p>
+                        )}
+                        {order.paymentMethod && (
+                            <p className="text-[#7C7C7C]">Payment: <span className="capitalize font-bold text-[#181725]">{order.paymentMethod}</span></p>
+                        )}
+                        {!order.deliverySlot && !order.deliveryDate && (
+                            <p className="text-[#AEAEAE]">No delivery details set</p>
                         )}
                     </div>
                 </div>
@@ -223,20 +242,59 @@ export default function VendorOrderDetailPage() {
                         <thead>
                             <tr className="bg-[#FAFAFA] border-b border-[#EEEEEE]">
                                 <th className="px-6 py-3 text-left text-[12px] font-bold text-[#AEAEAE] uppercase">Product</th>
+                                <th className="px-6 py-3 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">SKU / HSN</th>
                                 <th className="px-6 py-3 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Unit Price</th>
                                 <th className="px-6 py-3 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Qty</th>
+                                <th className="px-6 py-3 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">GST</th>
                                 <th className="px-6 py-3 text-right text-[12px] font-bold text-[#AEAEAE] uppercase">Total</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#F5F5F5]">
-                            {order.items.map((item) => (
-                                <tr key={item.id} className="hover:bg-[#FAFAFA]">
-                                    <td className="px-6 py-4 text-[14px] font-bold text-[#181725]">{item.productName}</td>
-                                    <td className="px-6 py-4 text-center text-[14px] text-[#7C7C7C]">{formatPrice(item.unitPrice)}</td>
-                                    <td className="px-6 py-4 text-center text-[14px] font-bold text-[#181725]">{item.quantity}</td>
-                                    <td className="px-6 py-4 text-right text-[14px] font-bold text-[#181725]">{formatPrice(item.totalPrice)}</td>
-                                </tr>
-                            ))}
+                            {order.items.map((item) => {
+                                const taxPct = Number(item.product?.taxPercent ?? 0);
+                                const itemGST = taxPct > 0 ? Number(item.totalPrice) - (Number(item.totalPrice) / (1 + taxPct / 100)) : 0;
+                                return (
+                                    <tr key={item.id} className="hover:bg-[#FAFAFA]">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                {item.product?.imageUrl ? (
+                                                    <div className="w-[40px] h-[40px] rounded-[8px] overflow-hidden bg-[#F1F4F9] shrink-0">
+                                                        <img src={item.product.imageUrl} alt={item.productName} className="w-full h-full object-cover" />
+                                                    </div>
+                                                ) : (
+                                                    <div className="w-[40px] h-[40px] rounded-[8px] bg-[#F1F4F9] shrink-0 flex items-center justify-center">
+                                                        <Package size={16} className="text-[#AEAEAE]" />
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <p className="text-[14px] font-bold text-[#181725]">{item.productName}</p>
+                                                    {item.product?.packSize && (
+                                                        <p className="text-[11px] text-[#7C7C7C]">{item.product.packSize}{item.product.unit ? ` / ${item.product.unit}` : ''}</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="text-[12px] text-[#7C7C7C]">
+                                                {item.product?.sku && <p>{item.product.sku}</p>}
+                                                {item.product?.hsn && <p className="text-[11px]">HSN: {item.product.hsn}</p>}
+                                                {!item.product?.sku && !item.product?.hsn && '—'}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-center text-[14px] text-[#7C7C7C]">{formatPrice(item.unitPrice)}</td>
+                                        <td className="px-6 py-4 text-center text-[14px] font-bold text-[#181725]">{item.quantity}</td>
+                                        <td className="px-6 py-4 text-center text-[12px] text-[#7C7C7C]">
+                                            {taxPct > 0 ? (
+                                                <div>
+                                                    <p>{taxPct}%</p>
+                                                    <p className="text-[11px]">{formatPrice(itemGST)}</p>
+                                                </div>
+                                            ) : '—'}
+                                        </td>
+                                        <td className="px-6 py-4 text-right text-[14px] font-bold text-[#181725]">{formatPrice(item.totalPrice)}</td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -244,15 +302,17 @@ export default function VendorOrderDetailPage() {
                 <div className="p-6 border-t border-[#EEEEEE] flex flex-col items-end gap-2">
                     <div className="flex gap-8 text-[14px]">
                         <span className="text-[#7C7C7C]">Subtotal</span>
-                        <span className="font-bold text-[#181725] w-24 text-right">{formatPrice(order.subtotal)}</span>
+                        <span className="font-bold text-[#181725] w-28 text-right">{formatPrice(order.subtotal)}</span>
                     </div>
-                    <div className="flex gap-8 text-[14px]">
-                        <span className="text-[#7C7C7C]">Delivery Fee</span>
-                        <span className="font-bold text-[#181725] w-24 text-right">{formatPrice(order.deliveryFee)}</span>
-                    </div>
+                    {Number(order.taxAmount) > 0 && (
+                        <div className="flex gap-8 text-[14px]">
+                            <span className="text-[#7C7C7C]">GST / Tax</span>
+                            <span className="font-bold text-[#181725] w-28 text-right">{formatPrice(Number(order.taxAmount))}</span>
+                        </div>
+                    )}
                     <div className="flex gap-8 text-[16px] pt-2 border-t border-[#EEEEEE]">
                         <span className="font-bold text-[#181725]">Total</span>
-                        <span className="font-[900] text-[#299E60] w-24 text-right">{formatPrice(order.totalAmount)}</span>
+                        <span className="font-[900] text-[#299E60] w-28 text-right">{formatPrice(order.totalAmount)}</span>
                     </div>
                 </div>
             </div>

@@ -102,9 +102,18 @@ export class CatalogService {
     categoryId?: string;
     description?: string;
     imageUrl?: string;
+    images?: string[];
     packSize?: string;
     unit?: string;
+    sku?: string;
+    hsn?: string;
+    brand?: string;
+    barcode?: string;
+    tags?: string[];
     basePrice: number;
+    originalPrice?: number;
+    taxPercent?: number;
+    minOrderQty?: number;
     creditEligible?: boolean;
   }) {
     return prisma.product.create({
