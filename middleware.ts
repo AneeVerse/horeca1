@@ -61,7 +61,7 @@ export default auth((req) => {
 
 export const config = {
   matcher: [
-    // Match all routes except static files, api routes (handled by their own auth), and _next
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif)$).*)',
+    // Match all routes except static files, api routes (handled by their own auth), _next, and Sentry tunnel
+    '/((?!api|monitoring|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif)$).*)',
   ],
 };
