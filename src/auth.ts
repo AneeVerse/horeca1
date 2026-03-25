@@ -6,6 +6,8 @@ import { prisma } from '@/lib/prisma';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
+  // Disable rate limiting in development to avoid 429 during testing
+  ...(process.env.NODE_ENV === 'development' && { rateLimit: false }),
   session: {
     strategy: 'jwt',
     maxAge: 7 * 24 * 60 * 60, // 7 days

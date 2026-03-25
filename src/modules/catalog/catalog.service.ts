@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
+import { emitEvent } from '@/events/emitter';
 
 export class CatalogService {
   async getVendorProducts(
@@ -9,7 +10,10 @@ export class CatalogService {
     const { categoryId, search, cursor, limit = 20, includeInactive } = options;
 
     const where: Record<string, unknown> = { vendorId };
-    if (!includeInactive) where.isActive = true;
+    if (!includeInactive) {
+      where.isActive = true;
+      where.approvalStatus = 'approved';
+    }
     if (categoryId) where.categoryId = categoryId;
     if (search) where.name = { contains: search, mode: 'insensitive' };
 
@@ -46,11 +50,11 @@ export class CatalogService {
 
   async getCategories(parentId?: string) {
     return prisma.category.findMany({
-      where: { isActive: true, parentId: parentId || null },
+      where: { isActive: true, approvalStatus: 'approved', parentId: parentId || null },
       orderBy: { sortOrder: 'asc' },
       include: {
         children: {
-          where: { isActive: true },
+          where: { isActive: true, approvalStatus: 'approved' },
           orderBy: { sortOrder: 'asc' },
         },
       },
@@ -115,9 +119,22 @@ export class CatalogService {
     taxPercent?: number;
     minOrderQty?: number;
     creditEligible?: boolean;
+    basedOnProductId?: string;
   }) {
+    const { basedOnProductId, ...productData } = data;
+
+    // If based on an existing approved product, auto-approve
+    let approvalStatus: 'pending' | 'approved' = 'pending';
+    if (basedOnProductId) {
+      const source = await prisma.product.findFirst({
+        where: { id: basedOnProductId, approvalStatus: 'approved' },
+        select: { id: true },
+      });
+      if (source) approvalStatus = 'approved';
+    }
+
     return prisma.product.create({
-      data: { ...data, vendorId, basePrice: data.basePrice },
+      data: { ...productData, vendorId, basePrice: productData.basePrice, approvalStatus },
     });
   }
 
@@ -128,5 +145,85 @@ export class CatalogService {
     if (!product) throw Errors.notFound('Product');
 
     return prisma.product.update({ where: { id: productId }, data });
+  }
+
+  async approveProduct(productId: string, adminUserId: string, note?: string) {
+    const product = await prisma.product.update({
+      where: { id: productId },
+      data: {
+        approvalStatus: 'approved',
+        approvedBy: adminUserId,
+        approvedAt: new Date(),
+        approvalNote: note || null,
+      },
+      include: { vendor: { select: { id: true, userId: true } } },
+    });
+    emitEvent('ProductApproved', {
+      productId: product.id,
+      vendorId: product.vendorId,
+      productName: product.name,
+      approvedBy: adminUserId,
+    });
+    return product;
+  }
+
+  async rejectProduct(productId: string, adminUserId: string, note: string) {
+    const product = await prisma.product.update({
+      where: { id: productId },
+      data: {
+        approvalStatus: 'rejected',
+        approvedBy: adminUserId,
+        approvedAt: new Date(),
+        approvalNote: note,
+      },
+      include: { vendor: { select: { id: true, userId: true } } },
+    });
+    emitEvent('ProductRejected', {
+      productId: product.id,
+      vendorId: product.vendorId,
+      productName: product.name,
+      rejectedBy: adminUserId,
+      reason: note,
+    });
+    return product;
+  }
+
+  async approveCategory(categoryId: string, adminUserId: string, note?: string) {
+    const category = await prisma.category.update({
+      where: { id: categoryId },
+      data: {
+        approvalStatus: 'approved',
+        approvedBy: adminUserId,
+        approvedAt: new Date(),
+        approvalNote: note || null,
+      },
+    });
+    emitEvent('CategoryApproved', {
+      categoryId: category.id,
+      categoryName: category.name,
+      approvedBy: adminUserId,
+      suggestedBy: category.suggestedBy || undefined,
+    });
+    return category;
+  }
+
+  async rejectCategory(categoryId: string, adminUserId: string, note: string) {
+    const category = await prisma.category.update({
+      where: { id: categoryId },
+      data: {
+        approvalStatus: 'rejected',
+        approvedBy: adminUserId,
+        approvedAt: new Date(),
+        approvalNote: note,
+      },
+    });
+    emitEvent('CategoryRejected', {
+      categoryId: category.id,
+      categoryName: category.name,
+      rejectedBy: adminUserId,
+      suggestedBy: category.suggestedBy || undefined,
+      reason: note,
+    });
+    return category;
   }
 }

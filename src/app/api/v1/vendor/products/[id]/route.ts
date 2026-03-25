@@ -27,6 +27,9 @@ const updateProductSchema = z.object({
   barcode: z.string().optional(),
   tags: z.array(z.string()).optional(),
   taxPercent: z.number().min(0).max(100).optional(),
+  promoPrice: z.number().positive().nullable().optional(),
+  promoStartTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  promoEndTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
   minOrderQty: z.number().int().min(1).optional(),
   isActive: z.boolean().optional(),
   creditEligible: z.boolean().optional(),
@@ -35,6 +38,7 @@ const updateProductSchema = z.object({
     minQty: z.number().int().min(1),
     maxQty: z.number().int().min(1).optional(),
     price: z.number().positive(),
+    promoPrice: z.number().positive().optional(),
   })).optional(),
 });
 
@@ -75,6 +79,7 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
             minQty: slab.minQty,
             maxQty: slab.maxQty ?? null,
             price: slab.price,
+            promoPrice: slab.promoPrice ?? null,
             sortOrder: idx,
           })),
         });

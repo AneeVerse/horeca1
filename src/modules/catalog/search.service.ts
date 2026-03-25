@@ -5,6 +5,7 @@ export class SearchService {
     // Basic text search using Prisma (upgrade to FTS + pgvector later)
     const where: Record<string, unknown> = {
       isActive: true,
+      approvalStatus: 'approved',
       name: { contains: query, mode: 'insensitive' },
     };
 

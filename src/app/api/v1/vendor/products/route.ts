@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { CatalogService } from '@/modules/catalog/catalog.service';
+import { emitEvent } from '@/events/emitter';
 
 // Validation schema for product creation
 const createProductSchema = z.object({
@@ -28,14 +29,19 @@ const createProductSchema = z.object({
   tags: z.array(z.string()).optional(),
   images: z.array(z.string().url()).optional(),
   taxPercent: z.number().min(0).max(100).optional(),
+  promoPrice: z.number().positive().optional(),
+  promoStartTime: z.string().regex(/^\d{2}:\d{2}$/).optional(), // HH:mm
+  promoEndTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),   // HH:mm
   minOrderQty: z.number().int().min(1).optional(),
   description: z.string().optional(),
   imageUrl: z.string().url().optional(),
   creditEligible: z.boolean().optional(),
+  basedOnProductId: z.string().uuid().optional(),
   priceSlabs: z.array(z.object({
     minQty: z.number().int().min(1),
     maxQty: z.number().int().min(1).optional(),
     price: z.number().positive(),
+    promoPrice: z.number().positive().optional(),
   })).optional(),
 });
 
@@ -86,9 +92,23 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     const body = await req.json();
     const data = createProductSchema.parse(body);
 
-    const { priceSlabs, ...productData } = data;
+    // Prevent duplicate: check if this vendor already has a product with the same name
+    const existing = await prisma.product.findFirst({
+      where: {
+        vendorId,
+        name: { equals: data.name, mode: 'insensitive' },
+      },
+      select: { id: true, name: true, approvalStatus: true },
+    });
+    if (existing) {
+      throw Errors.conflict(
+        `You already have a product named "${existing.name}" (${existing.approvalStatus}). Edit the existing product instead.`
+      );
+    }
+
+    const { priceSlabs, basedOnProductId, ...productData } = data;
     const catalogService = new CatalogService();
-    const product = await catalogService.createProduct(vendorId, productData);
+    const product = await catalogService.createProduct(vendorId, { ...productData, basedOnProductId });
 
     // After product creation, add price slabs if provided
     if (priceSlabs && priceSlabs.length > 0) {
@@ -99,6 +119,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
           minQty: slab.minQty,
           maxQty: slab.maxQty ?? null,
           price: slab.price,
+          promoPrice: slab.promoPrice ?? null,
           sortOrder: idx,
         })),
       });
@@ -113,6 +134,15 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
         lowStockThreshold: 10,
       },
     });
+
+    // Only notify admins if product needs approval (not auto-approved)
+    if (product.approvalStatus === 'pending') {
+      emitEvent('ProductSubmitted', {
+        productId: product.id,
+        vendorId,
+        productName: data.name,
+      });
+    }
 
     return NextResponse.json({ success: true, data: product }, { status: 201 });
   } catch (error) {

@@ -57,6 +57,7 @@ export class CartService {
       include: { priceSlabs: { orderBy: { minQty: 'asc' } } },
     });
     if (!product) throw Errors.notFound('Product');
+    if (product.approvalStatus !== 'approved') throw Errors.forbidden('This product is not available for purchase');
 
     let unitPrice = Number(product.basePrice);
     for (const slab of product.priceSlabs) {

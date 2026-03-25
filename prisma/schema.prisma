@@ -86,6 +86,12 @@ model User {
   @@map("users")
 }
 
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+}
+
 enum Role {
   customer
   vendor
@@ -186,8 +192,13 @@ model Category {
   parentId  String?    @map("parent_id") @db.Uuid
   imageUrl  String?    @map("image_url") @db.VarChar(512)
   sortOrder Int        @default(0) @map("sort_order")
-  isActive  Boolean    @default(true) @map("is_active")
-  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  isActive       Boolean        @default(true) @map("is_active")
+  approvalStatus ApprovalStatus @default(approved) @map("approval_status")
+  approvalNote   String?        @map("approval_note") @db.Text
+  approvedBy     String?        @map("approved_by") @db.Uuid
+  approvedAt     DateTime?      @map("approved_at") @db.Timestamptz
+  suggestedBy    String?        @map("suggested_by") @db.Uuid
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
 
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children Category[] @relation("CategoryTree")
@@ -195,12 +206,13 @@ model Category {
 
   @@index([parentId])
   @@index([slug])
+  @@index([approvalStatus])
   @@map("categories")
 }
 
 model Product {
   id              String   @id @default(uuid()) @db.Uuid
-  vendorId        String   @map("vendor_id") @db.Uuid
+  vendorId        String?  @map("vendor_id") @db.Uuid
   categoryId      String?  @map("category_id") @db.Uuid
   name            String   @db.VarChar(255)
   slug            String   @db.VarChar(255)
@@ -214,16 +226,23 @@ model Product {
   brand           String?  @db.VarChar(150)
   barcode         String?  @db.VarChar(100)
   tags            String[] @default([]) @map("tags")
-  basePrice       Decimal  @map("base_price") @db.Decimal(10, 2)
-  originalPrice   Decimal? @map("original_price") @db.Decimal(10, 2)
+  basePrice       Decimal  @map("base_price") @db.Decimal(10, 2)       // Taxable rate (before tax)
+  originalPrice   Decimal? @map("original_price") @db.Decimal(10, 2)  // MRP / strikethrough price
   taxPercent      Decimal  @default(0) @map("tax_percent") @db.Decimal(5, 2)
+  promoPrice      Decimal? @map("promo_price") @db.Decimal(10, 2)     // Promo taxable rate (single unit)
+  promoStartTime  String?  @map("promo_start_time") @db.VarChar(5)    // HH:mm format e.g. "18:00"
+  promoEndTime    String?  @map("promo_end_time") @db.VarChar(5)      // HH:mm format e.g. "09:00"
   minOrderQty     Int      @default(1) @map("min_order_qty")
-  creditEligible  Boolean  @default(false) @map("credit_eligible")
-  isActive        Boolean  @default(true) @map("is_active")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  creditEligible  Boolean        @default(false) @map("credit_eligible")
+  isActive        Boolean        @default(true) @map("is_active")
+  approvalStatus  ApprovalStatus @default(pending) @map("approval_status")
+  approvalNote    String?        @map("approval_note") @db.Text
+  approvedBy      String?        @map("approved_by") @db.Uuid
+  approvedAt      DateTime?      @map("approved_at") @db.Timestamptz
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  vendor              Vendor               @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  vendor              Vendor?              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   category            Category?            @relation(fields: [categoryId], references: [id])
   priceSlabs          PriceSlab[]
   inventory           Inventory?
@@ -236,18 +255,20 @@ model Product {
   @@index([vendorId])
   @@index([categoryId])
   @@index([isActive])
+  @@index([approvalStatus])
   @@index([sku])
   @@map("products")
 }
 
 model PriceSlab {
-  id        String  @id @default(uuid()) @db.Uuid
-  productId String  @map("product_id") @db.Uuid
-  vendorId  String  @map("vendor_id") @db.Uuid
-  minQty    Int     @map("min_qty")
-  maxQty    Int?    @map("max_qty")
-  price     Decimal @db.Decimal(10, 2)
-  sortOrder Int     @default(0) @map("sort_order")
+  id         String   @id @default(uuid()) @db.Uuid
+  productId  String   @map("product_id") @db.Uuid
+  vendorId   String   @map("vendor_id") @db.Uuid
+  minQty     Int      @map("min_qty")
+  maxQty     Int?     @map("max_qty")
+  price      Decimal  @db.Decimal(10, 2)            // Regular taxable rate per unit
+  promoPrice Decimal? @map("promo_price") @db.Decimal(10, 2) // Promo taxable rate per unit
+  sortOrder  Int      @default(0) @map("sort_order")
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   vendor  Vendor  @relation(fields: [vendorId], references: [id])

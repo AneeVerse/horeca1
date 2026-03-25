@@ -1,5 +1,6 @@
 import { eventBus } from './emitter';
 import { NotificationService } from '@/modules/notification/notification.service';
+import { prisma } from '@/lib/prisma';
 
 const notifications = new NotificationService();
 
@@ -217,6 +218,134 @@ export function registerEventListeners(): void {
       });
     } catch (error) {
       console.error('[Events] StockUpdated listener failed:', error);
+    }
+  });
+
+  // ── Approval: Products ─────────────────────────────────────────
+
+  eventBus.on('ProductSubmitted', async (payload) => {
+    try {
+      const admins = await prisma.user.findMany({ where: { role: 'admin' } });
+      await Promise.all(
+        admins.map((admin) =>
+          notifications.send({
+            userId: admin.id,
+            type: 'approval',
+            channel: 'in_app',
+            title: 'New Product Pending Approval',
+            body: `New product pending approval: ${payload.productName}`,
+            referenceId: payload.productId,
+            referenceType: 'product',
+          })
+        )
+      );
+    } catch (error) {
+      console.error('[Events] ProductSubmitted listener failed:', error);
+    }
+  });
+
+  eventBus.on('ProductApproved', async (payload) => {
+    try {
+      const vendor = await prisma.vendor.findUnique({
+        where: { id: payload.vendorId },
+        select: { userId: true },
+      });
+      if (vendor) {
+        await notifications.send({
+          userId: vendor.userId,
+          type: 'approval',
+          channel: 'in_app',
+          title: 'Product Approved',
+          body: `Your product '${payload.productName}' has been approved`,
+          referenceId: payload.productId,
+          referenceType: 'product',
+        });
+      }
+    } catch (error) {
+      console.error('[Events] ProductApproved listener failed:', error);
+    }
+  });
+
+  eventBus.on('ProductRejected', async (payload) => {
+    try {
+      const vendor = await prisma.vendor.findUnique({
+        where: { id: payload.vendorId },
+        select: { userId: true },
+      });
+      if (vendor) {
+        const reasonSuffix = payload.reason ? `: ${payload.reason}` : '';
+        await notifications.send({
+          userId: vendor.userId,
+          type: 'approval',
+          channel: 'in_app',
+          title: 'Product Rejected',
+          body: `Your product '${payload.productName}' was rejected${reasonSuffix}`,
+          referenceId: payload.productId,
+          referenceType: 'product',
+        });
+      }
+    } catch (error) {
+      console.error('[Events] ProductRejected listener failed:', error);
+    }
+  });
+
+  // ── Approval: Categories ──────────────────────────────────────
+
+  eventBus.on('CategorySuggested', async (payload) => {
+    try {
+      const admins = await prisma.user.findMany({ where: { role: 'admin' } });
+      await Promise.all(
+        admins.map((admin) =>
+          notifications.send({
+            userId: admin.id,
+            type: 'approval',
+            channel: 'in_app',
+            title: 'New Category Suggestion',
+            body: `New category suggestion: ${payload.categoryName}`,
+            referenceId: payload.categoryId,
+            referenceType: 'category',
+          })
+        )
+      );
+    } catch (error) {
+      console.error('[Events] CategorySuggested listener failed:', error);
+    }
+  });
+
+  eventBus.on('CategoryApproved', async (payload) => {
+    try {
+      if (payload.suggestedBy) {
+        await notifications.send({
+          userId: payload.suggestedBy,
+          type: 'approval',
+          channel: 'in_app',
+          title: 'Category Approved',
+          body: `Category '${payload.categoryName}' has been approved`,
+          referenceId: payload.categoryId,
+          referenceType: 'category',
+        });
+      }
+    } catch (error) {
+      console.error('[Events] CategoryApproved listener failed:', error);
+    }
+  });
+
+  eventBus.on('CategoryRejected', async (payload) => {
+    try {
+      if (payload.suggestedBy) {
+        const reasonSuffix = payload.reason ? `: ${payload.reason}` : '';
+        await notifications.send({
+          userId: payload.suggestedBy,
+          type: 'approval',
+          channel: 'in_app',
+          title: 'Category Rejected',
+          body: `Category '${payload.categoryName}' was rejected${reasonSuffix}`,
+          referenceId: payload.categoryId,
+          referenceType: 'category',
+        });
+      }
+    } catch (error) {
+      console.error('[Events] CategoryRejected listener failed:', error);
     }
   });
 

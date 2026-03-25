@@ -23,6 +23,9 @@ export const GET = adminOnly(async (_req: NextRequest, _ctx) => {
       ordersByStatus,
       recentOrders,
       newUsersThisMonth,
+      pendingProducts,
+      pendingCategories,
+      pendingVendors,
     ] = await Promise.all([
       // Total users (all roles)
       prisma.user.count(),
@@ -69,6 +72,11 @@ export const GET = adminOnly(async (_req: NextRequest, _ctx) => {
       prisma.user.count({
         where: { createdAt: { gte: startOfMonth } },
       }),
+
+      // Pending approvals
+      prisma.product.count({ where: { approvalStatus: 'pending' } }),
+      prisma.category.count({ where: { approvalStatus: 'pending' } }),
+      prisma.vendor.count({ where: { isVerified: false } }),
     ]);
 
     // Transform ordersByStatus into a clean map: { pending: 5, confirmed: 12, ... }
@@ -88,6 +96,12 @@ export const GET = adminOnly(async (_req: NextRequest, _ctx) => {
           newUsersThisMonth,
         },
         ordersByStatus: statusCounts,
+        pendingApprovals: {
+          products: pendingProducts,
+          categories: pendingCategories,
+          vendors: pendingVendors,
+          total: pendingProducts + pendingCategories + pendingVendors,
+        },
         recentOrders,
       },
     });

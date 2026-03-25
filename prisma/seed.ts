@@ -189,7 +189,7 @@ async function main() {
     const c = await prisma.category.upsert({
       where: { slug: cat.slug },
       update: { imageUrl: cat.imageUrl },
-      create: cat,
+      create: { ...cat, approvalStatus: 'approved' as const },
     });
     categories[cat.slug] = c.id;
   }
@@ -286,6 +286,7 @@ async function main() {
           unit: p.unit,
           imageUrl: p.imageUrl,
           creditEligible: vendorIdx < 2, // first 2 vendors have credit
+          approvalStatus: 'approved',
         },
       });
 

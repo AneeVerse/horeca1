@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Search, Plus, Loader2, Package, Pencil, ToggleLeft, ToggleRight, X,
     ChevronRight, Info, ImageIcon, Settings, DollarSign, Trash2,
-    BarChart3, BoxIcon,
+    BarChart3, BoxIcon, Clock, Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -39,6 +39,8 @@ interface VendorProduct {
     category?: { id?: string; name: string; slug: string } | null;
     inventory?: { qtyAvailable: number; qtyReserved: number } | null;
     priceSlabs?: { minQty: number; maxQty?: number | null; price: number }[];
+    approvalStatus?: 'pending' | 'approved' | 'rejected';
+    approvalNote?: string | null;
 }
 
 interface Category {
@@ -51,6 +53,7 @@ interface PriceSlabRow {
     minQty: string;
     maxQty: string;
     price: string;
+    promoPrice: string;
 }
 
 interface ProductForm {
@@ -70,6 +73,9 @@ interface ProductForm {
     images: string[];
     tags: string[];
     taxPercent: string;
+    promoPrice: string;
+    promoStartTime: string;
+    promoEndTime: string;
     minOrderQty: string;
     creditEligible: boolean;
     priceSlabs: PriceSlabRow[];
@@ -98,10 +104,15 @@ const EMPTY_FORM: ProductForm = {
     images: [],
     tags: [],
     taxPercent: '0',
+    promoPrice: '',
+    promoStartTime: '18:00',
+    promoEndTime: '09:00',
     minOrderQty: '1',
     creditEligible: false,
     priceSlabs: [],
 };
+
+const TAX_OPTIONS = ['0', '5', '12', '18', '28'];
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -111,12 +122,28 @@ function slugify(text: string): string {
     return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
-function calcTaxableRate(basePrice: string, taxPercent: string): string {
-    const bp = parseFloat(basePrice);
+// Gross = taxable * (1 + tax/100)
+function calcGrossRate(taxableRate: string, taxPercent: string): string {
+    const t = parseFloat(taxableRate);
     const tp = parseFloat(taxPercent);
-    if (isNaN(bp) || isNaN(tp) || tp < 0) return '';
-    if (tp === 0) return bp.toFixed(2);
-    return (bp / (1 + tp / 100)).toFixed(2);
+    if (isNaN(t) || isNaN(tp) || tp < 0) return '';
+    return (t * (1 + tp / 100)).toFixed(2);
+}
+
+// Taxable = gross / (1 + tax/100)
+function calcTaxableFromGross(grossRate: string, taxPercent: string): string {
+    const g = parseFloat(grossRate);
+    const tp = parseFloat(taxPercent);
+    if (isNaN(g) || isNaN(tp) || tp < 0) return '';
+    if (tp === 0) return g.toFixed(2);
+    return (g / (1 + tp / 100)).toFixed(2);
+}
+
+function calcTaxAmount(taxableRate: string, taxPercent: string): string {
+    const t = parseFloat(taxableRate);
+    const tp = parseFloat(taxPercent);
+    if (isNaN(t) || isNaN(tp) || tp <= 0) return '0.00';
+    return (t * tp / 100).toFixed(2);
 }
 
 function calcSavingsPercent(base: string, original: string): number | null {
@@ -204,6 +231,29 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[
 /*  Main Page Component                                                */
 /* ------------------------------------------------------------------ */
 
+interface ProductSuggestion {
+    id: string;
+    name: string;
+    slug: string;
+    basePrice: number;
+    originalPrice?: number | null;
+    packSize?: string | null;
+    unit?: string | null;
+    sku?: string | null;
+    hsn?: string | null;
+    brand?: string | null;
+    barcode?: string | null;
+    description?: string | null;
+    imageUrl?: string | null;
+    images?: string[] | null;
+    tags?: string[] | null;
+    taxPercent?: number | null;
+    minOrderQty?: number | null;
+    creditEligible?: boolean;
+    category?: { id: string; name: string; slug: string } | null;
+    vendor?: { businessName: string } | null;
+}
+
 export default function VendorProductsPage() {
     const [products, setProducts] = useState<VendorProduct[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -216,6 +266,19 @@ export default function VendorProductsPage() {
     const [formError, setFormError] = useState('');
     const [loadingProduct, setLoadingProduct] = useState(false);
     const panelRef = useRef<HTMLDivElement>(null);
+
+    // Product suggestion state
+    const [suggestions, setSuggestions] = useState<ProductSuggestion[]>([]);
+    const [ownMatches, setOwnMatches] = useState<{ id: string; name: string; approvalStatus: string; isActive: boolean }[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+    const [basedOnProductId, setBasedOnProductId] = useState<string | null>(null);
+    const suggestionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const suggestionsRef = useRef<HTMLDivElement>(null);
+
+    // Delete state
+    const [deleteTarget, setDeleteTarget] = useState<VendorProduct | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     /* ---- Data fetching ---- */
 
@@ -244,12 +307,100 @@ export default function VendorProductsPage() {
         p.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    /* ---- Product suggestions (autocomplete) ---- */
+
+    const fetchSuggestions = useCallback(async (query: string) => {
+        if (query.length < 2) {
+            setSuggestions([]);
+            setOwnMatches([]);
+            setShowSuggestions(false);
+            return;
+        }
+        setLoadingSuggestions(true);
+        try {
+            const res = await fetch(`/api/v1/vendor/products/suggestions?q=${encodeURIComponent(query)}`);
+            const json = await res.json();
+            if (json.success) {
+                const s = json.data.suggestions || [];
+                const own = json.data.ownMatches || [];
+                setSuggestions(s);
+                setOwnMatches(own);
+                if (s.length > 0 || own.length > 0) {
+                    setShowSuggestions(true);
+                } else {
+                    setShowSuggestions(false);
+                }
+            } else {
+                setSuggestions([]);
+                setOwnMatches([]);
+                setShowSuggestions(false);
+            }
+        } catch {
+            setSuggestions([]);
+            setOwnMatches([]);
+        } finally {
+            setLoadingSuggestions(false);
+        }
+    }, []);
+
+    const handleNameChange = (name: string) => {
+        setForm(prev => ({ ...prev, name, slug: slugify(name) }));
+        setBasedOnProductId(null); // Reset if they type again
+
+        // Debounce suggestion fetch (only when adding new product)
+        if (!editingProduct) {
+            if (suggestionTimeoutRef.current) clearTimeout(suggestionTimeoutRef.current);
+            suggestionTimeoutRef.current = setTimeout(() => fetchSuggestions(name), 350);
+        }
+    };
+
+    const fillFromSuggestion = (s: ProductSuggestion) => {
+        setBasedOnProductId(s.id);
+        setShowSuggestions(false);
+        setSuggestions([]);
+        setForm(prev => ({
+            ...prev,
+            name: s.name,
+            slug: slugify(s.name),
+            categoryId: s.category?.id || prev.categoryId,
+            basePrice: s.basePrice != null ? String(s.basePrice) : prev.basePrice,
+            originalPrice: s.originalPrice != null ? String(s.originalPrice) : '',
+            packSize: s.packSize || '',
+            unit: s.unit || '',
+            sku: s.sku || prev.sku,
+            hsn: s.hsn || prev.hsn,
+            brand: s.brand || '',
+            barcode: s.barcode || prev.barcode,
+            description: s.description || '',
+            imageUrl: s.imageUrl || '',
+            images: Array.isArray(s.images) ? s.images : [],
+            tags: Array.isArray(s.tags) ? s.tags : [],
+            taxPercent: s.taxPercent != null ? String(s.taxPercent) : '0',
+            minOrderQty: s.minOrderQty != null ? String(s.minOrderQty) : '1',
+            creditEligible: !!s.creditEligible,
+        }));
+    };
+
+    // Close suggestions when clicking outside
+    useEffect(() => {
+        function handleClickOutside(e: MouseEvent) {
+            if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node)) {
+                setShowSuggestions(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     /* ---- Panel open / close ---- */
 
     const openAddPanel = () => {
         setEditingProduct(null);
         setForm(EMPTY_FORM);
         setFormError('');
+        setBasedOnProductId(null);
+        setSuggestions([]);
+        setShowSuggestions(false);
         setIsPanelOpen(true);
     };
 
@@ -282,13 +433,17 @@ export default function VendorProductsPage() {
                 images: Array.isArray(p.images) ? p.images : [],
                 tags: Array.isArray(p.tags) ? p.tags : [],
                 taxPercent: p.taxPercent != null ? String(p.taxPercent) : '0',
+                promoPrice: p.promoPrice != null ? String(p.promoPrice) : '',
+                promoStartTime: p.promoStartTime || '18:00',
+                promoEndTime: p.promoEndTime || '09:00',
                 minOrderQty: p.minOrderQty != null ? String(p.minOrderQty) : '1',
                 creditEligible: !!p.creditEligible,
                 priceSlabs: Array.isArray(p.priceSlabs)
-                    ? p.priceSlabs.map((s: { minQty: number; maxQty?: number | null; price: number }) => ({
+                    ? p.priceSlabs.map((s: { minQty: number; maxQty?: number | null; price: number; promoPrice?: number | null }) => ({
                         minQty: String(s.minQty),
                         maxQty: s.maxQty != null ? String(s.maxQty) : '',
                         price: String(s.price),
+                        promoPrice: s.promoPrice != null ? String(s.promoPrice) : '',
                     }))
                     : [],
             });
@@ -311,6 +466,9 @@ export default function VendorProductsPage() {
                 images: [],
                 tags: [],
                 taxPercent: '0',
+                promoPrice: '',
+                promoStartTime: '18:00',
+                promoEndTime: '09:00',
                 minOrderQty: '1',
                 creditEligible: product.creditEligible,
                 priceSlabs: [],
@@ -336,7 +494,7 @@ export default function VendorProductsPage() {
     const addPriceSlab = () => {
         setForm(prev => ({
             ...prev,
-            priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '' }],
+            priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '', promoPrice: '' }],
         }));
     };
 
@@ -412,6 +570,17 @@ export default function VendorProductsPage() {
                 body.originalPrice = parseFloat(form.originalPrice);
             }
 
+            // Promo pricing
+            if (form.promoPrice) {
+                body.promoPrice = parseFloat(form.promoPrice);
+                body.promoStartTime = form.promoStartTime || '18:00';
+                body.promoEndTime = form.promoEndTime || '09:00';
+            } else {
+                body.promoPrice = null;
+                body.promoStartTime = null;
+                body.promoEndTime = null;
+            }
+
             // Category: find by slug or id
             if (form.categoryId) {
                 const cat = categories.find(c => c.slug === form.categoryId || c.id === form.categoryId);
@@ -425,11 +594,17 @@ export default function VendorProductsPage() {
                     minQty: parseInt(s.minQty, 10),
                     maxQty: s.maxQty ? parseInt(s.maxQty, 10) : undefined,
                     price: parseFloat(s.price),
+                    promoPrice: s.promoPrice ? parseFloat(s.promoPrice) : undefined,
                 }))
                 .sort((a, b) => a.minQty - b.minQty);
 
             if (slabs.length > 0) {
                 body.priceSlabs = slabs;
+            }
+
+            // If based on an existing approved product, include for auto-approval
+            if (basedOnProductId && !editingProduct) {
+                body.basedOnProductId = basedOnProductId;
             }
 
             let res: Response;
@@ -479,10 +654,31 @@ export default function VendorProductsPage() {
         }
     };
 
+    /* ---- Delete product ---- */
+
+    const handleDelete = async () => {
+        if (!deleteTarget) return;
+        setDeleting(true);
+        try {
+            const res = await fetch(`/api/v1/vendor/products/${deleteTarget.id}`, { method: 'DELETE' });
+            const json = await res.json();
+            if (json.success) {
+                setProducts(prev => prev.filter(p => p.id !== deleteTarget.id));
+            }
+        } catch (err) {
+            console.error('Delete failed:', err);
+        } finally {
+            setDeleting(false);
+            setDeleteTarget(null);
+        }
+    };
+
     /* ---- Derived values ---- */
 
-    const taxableRate = calcTaxableRate(form.basePrice, form.taxPercent);
-    const savings = calcSavingsPercent(form.basePrice, form.originalPrice);
+    const grossRate = calcGrossRate(form.basePrice, form.taxPercent);
+    const taxAmount = calcTaxAmount(form.basePrice, form.taxPercent);
+    const promoGrossRate = form.promoPrice ? calcGrossRate(form.promoPrice, form.taxPercent) : '';
+    const savings = calcSavingsPercent(grossRate, form.originalPrice);
 
     /* ------------------------------------------------------------------ */
     /*  Render                                                             */
@@ -539,6 +735,7 @@ export default function VendorProductsPage() {
                                     <th className="px-6 py-4 text-left text-[12px] font-bold text-[#AEAEAE] uppercase">Category</th>
                                     <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Price</th>
                                     <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Stock</th>
+                                    <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Approval</th>
                                     <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Status</th>
                                     <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Actions</th>
                                 </tr>
@@ -574,6 +771,19 @@ export default function VendorProductsPage() {
                                         <td className="px-6 py-4 text-center">
                                             <span className={cn(
                                                 'text-[11px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase',
+                                                product.approvalStatus === 'approved' ? 'bg-[#EEF8F1] text-[#299E60]' :
+                                                product.approvalStatus === 'rejected' ? 'bg-[#FFF0F0] text-[#E74C3C]' :
+                                                'bg-[#FFF7E6] text-[#F59E0B]'
+                                            )}
+                                            title={product.approvalStatus === 'rejected' && product.approvalNote ? `Reason: ${product.approvalNote}` : undefined}
+                                            >
+                                                {product.approvalStatus === 'approved' ? 'Approved' :
+                                                 product.approvalStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className={cn(
+                                                'text-[11px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase',
                                                 product.isActive ? 'bg-[#EEF8F1] text-[#299E60]' : 'bg-[#FFF0F0] text-[#E74C3C]'
                                             )}>
                                                 {product.isActive ? 'Active' : 'Inactive'}
@@ -597,6 +807,13 @@ export default function VendorProductsPage() {
                                                     title={product.isActive ? 'Deactivate' : 'Activate'}
                                                 >
                                                     {product.isActive ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                                                </button>
+                                                <button
+                                                    onClick={() => setDeleteTarget(product)}
+                                                    className="p-2 hover:bg-[#FFF0F0] rounded-[8px] transition-colors text-[#AEAEAE] hover:text-[#E74C3C]"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={16} />
                                                 </button>
                                             </div>
                                         </td>
@@ -677,24 +894,109 @@ export default function VendorProductsPage() {
                                     <SectionHeader icon={<Info size={16} />} title="Basic Information" />
 
                                     <div className="space-y-4">
-                                        {/* Product Name */}
-                                        <div>
+                                        {/* Product Name with Autocomplete */}
+                                        <div className="relative" ref={suggestionsRef}>
                                             <FieldLabel required>Product Name</FieldLabel>
-                                            <input
-                                                type="text"
-                                                value={form.name}
-                                                onChange={(e) => {
-                                                    const name = e.target.value;
-                                                    setForm(prev => ({
-                                                        ...prev,
-                                                        name,
-                                                        slug: slugify(name),
-                                                    }));
-                                                }}
-                                                className={inputCls}
-                                                placeholder="e.g., Premium Basmati Rice"
-                                            />
-                                            {form.slug && (
+                                            <div className="relative">
+                                                <input
+                                                    type="text"
+                                                    value={form.name}
+                                                    onChange={(e) => handleNameChange(e.target.value)}
+                                                    onFocus={() => { if (suggestions.length > 0 && !editingProduct) setShowSuggestions(true); }}
+                                                    className={inputCls}
+                                                    placeholder="e.g., Premium Basmati Rice"
+                                                />
+                                                {loadingSuggestions && (
+                                                    <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-[#AEAEAE]" />
+                                                )}
+                                            </div>
+
+                                            {/* Suggestions dropdown */}
+                                            {showSuggestions && (suggestions.length > 0 || ownMatches.length > 0) && !editingProduct && (
+                                                <div className="absolute z-50 w-full mt-1 bg-white border border-[#EEEEEE] rounded-[12px] shadow-lg max-h-[320px] overflow-y-auto">
+                                                    {/* Duplicate warning — vendor already has this product */}
+                                                    {ownMatches.length > 0 && (
+                                                        <div className="px-4 py-3 bg-[#FFF8F0] border-b border-[#FFE0B2]">
+                                                            <p className="text-[12px] font-bold text-[#E67E22] mb-1">
+                                                                You already have similar products:
+                                                            </p>
+                                                            {ownMatches.map(m => (
+                                                                <div key={m.id} className="flex items-center gap-2 text-[12px] text-[#B45309]">
+                                                                    <span className="font-medium">{m.name}</span>
+                                                                    <span className={cn(
+                                                                        'px-1.5 py-0.5 rounded text-[10px] font-bold',
+                                                                        m.approvalStatus === 'approved' ? 'bg-[#EEF8F1] text-[#299E60]' :
+                                                                        m.approvalStatus === 'pending' ? 'bg-[#FFF8E1] text-[#F59E0B]' :
+                                                                        'bg-[#FFF0F0] text-[#E74C3C]'
+                                                                    )}>
+                                                                        {m.approvalStatus}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                            <p className="text-[11px] text-[#B45309] mt-1">
+                                                                Creating a duplicate will be blocked. Edit the existing product instead.
+                                                            </p>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Catalog suggestions */}
+                                                    {suggestions.length > 0 && (
+                                                        <>
+                                                            <div className="px-4 py-2 border-b border-[#F5F5F5]">
+                                                                <p className="text-[11px] font-bold text-[#299E60] uppercase tracking-wide">
+                                                                    Existing Products — Select to auto-fill & auto-approve
+                                                                </p>
+                                                            </div>
+                                                            {suggestions.map(s => (
+                                                                <button
+                                                                    key={s.id}
+                                                                    type="button"
+                                                                    onClick={() => fillFromSuggestion(s)}
+                                                                    className="w-full text-left px-4 py-3 hover:bg-[#F8FBF9] transition-colors border-b border-[#F5F5F5] last:border-0 flex items-center gap-3"
+                                                                >
+                                                                    {s.imageUrl ? (
+                                                                        <img src={s.imageUrl} alt="" className="w-[36px] h-[36px] rounded-[8px] object-cover shrink-0 border border-[#EEEEEE]" />
+                                                                    ) : (
+                                                                        <div className="w-[36px] h-[36px] rounded-[8px] bg-[#F5F5F5] flex items-center justify-center shrink-0">
+                                                                            <Package size={16} className="text-[#AEAEAE]" />
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-[13px] font-bold text-[#181725] truncate">{s.name}</p>
+                                                                        <p className="text-[11px] text-[#AEAEAE] font-medium">
+                                                                            {s.category?.name || 'Uncategorized'}
+                                                                            {s.vendor?.businessName ? ` · ${s.vendor.businessName}` : ''}
+                                                                            {s.brand ? ` · ${s.brand}` : ''}
+                                                                        </p>
+                                                                    </div>
+                                                                    <span className="text-[12px] font-bold text-[#299E60] shrink-0">
+                                                                        ₹{Number(s.basePrice).toLocaleString('en-IN')}
+                                                                    </span>
+                                                                </button>
+                                                            ))}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Based-on badge */}
+                                            {basedOnProductId && (
+                                                <div className="flex items-center gap-2 mt-1.5">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#EEF8F1] text-[#299E60] text-[11px] font-bold rounded-[6px]">
+                                                        <ChevronRight size={12} />
+                                                        Based on existing product — will auto-approve
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setBasedOnProductId(null)}
+                                                        className="text-[#AEAEAE] hover:text-[#E74C3C] transition-colors"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {form.slug && !basedOnProductId && (
                                                 <p className="text-[11px] text-[#AEAEAE] mt-1 font-medium">
                                                     Slug: {form.slug}
                                                 </p>
@@ -777,15 +1079,15 @@ export default function VendorProductsPage() {
                                     </div>
                                 </div>
 
-                                {/* ======== Section 2: Pricing ======== */}
+                                {/* ======== Section 2: Pricing & Tax ======== */}
                                 <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                    <SectionHeader icon={<DollarSign size={16} />} title="Pricing" />
+                                    <SectionHeader icon={<DollarSign size={16} />} title="Pricing & Tax" />
 
                                     <div className="space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            {/* Base Price */}
+                                        {/* Row 1: Taxable Rate, Tax %, Gross Rate */}
+                                        <div className="grid grid-cols-3 gap-4">
                                             <div>
-                                                <FieldLabel required>Base Price ({'\u20B9'})</FieldLabel>
+                                                <FieldLabel required>Taxable Rate (Amt)</FieldLabel>
                                                 <input
                                                     type="number"
                                                     step="0.01"
@@ -795,42 +1097,14 @@ export default function VendorProductsPage() {
                                                     className={inputCls}
                                                     placeholder="0.00"
                                                 />
-                                                {taxableRate && parseFloat(form.taxPercent) > 0 && (
-                                                    <p className="text-[11px] text-[#7C7C7C] mt-1 font-medium">
-                                                        Taxable rate: {'\u20B9'}{taxableRate}
-                                                    </p>
-                                                )}
                                             </div>
-
-                                            {/* Original Price / MRP */}
                                             <div>
-                                                <FieldLabel>Original Price / MRP ({'\u20B9'})</FieldLabel>
+                                                <FieldLabel required>Tax %</FieldLabel>
                                                 <input
                                                     type="number"
-                                                    step="0.01"
-                                                    min="0"
-                                                    value={form.originalPrice}
-                                                    onChange={(e) => updateField('originalPrice', e.target.value)}
-                                                    className={inputCls}
-                                                    placeholder="0.00"
-                                                />
-                                                {savings !== null && (
-                                                    <p className="text-[11px] text-[#299E60] mt-1 font-bold">
-                                                        {savings}% savings from MRP
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Tax */}
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <FieldLabel>Tax / GST Percent (%)</FieldLabel>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
                                                     min="0"
                                                     max="100"
+                                                    step="0.01"
                                                     value={form.taxPercent}
                                                     onChange={(e) => updateField('taxPercent', e.target.value)}
                                                     className={inputCls}
@@ -838,13 +1112,32 @@ export default function VendorProductsPage() {
                                                 />
                                             </div>
                                             <div>
-                                                <FieldLabel>Taxable Rate ({'\u20B9'})</FieldLabel>
-                                                <div className={cn(inputCls, 'flex items-center bg-[#FAFAFA] text-[#7C7C7C] cursor-not-allowed')}>
-                                                    {taxableRate ? `\u20B9${taxableRate}` : '\u2014'}
-                                                </div>
-                                                <p className="text-[11px] text-[#AEAEAE] mt-1 font-medium">
-                                                    Auto-calculated: Base Price / (1 + Tax%)
-                                                </p>
+                                                <FieldLabel required>Gross Rate (Customer Price)</FieldLabel>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    value={grossRate || form.originalPrice}
+                                                    onChange={(e) => {
+                                                        const newGross = e.target.value;
+                                                        updateField('originalPrice', newGross);
+                                                        // Auto-calculate taxable from gross
+                                                        const taxable = calcTaxableFromGross(newGross, form.taxPercent);
+                                                        if (taxable) updateField('basePrice', taxable);
+                                                    }}
+                                                    className={inputCls}
+                                                    placeholder="0.00"
+                                                />
+                                                {form.basePrice && parseFloat(form.taxPercent) > 0 && (
+                                                    <p className="text-[11px] text-[#7C7C7C] mt-1 font-medium">
+                                                        Taxable: {'\u20B9'}{parseFloat(form.basePrice).toFixed(2)} | GST {form.taxPercent}%: {'\u20B9'}{taxAmount}
+                                                    </p>
+                                                )}
+                                                {savings !== null && (
+                                                    <p className="text-[11px] text-[#299E60] mt-1 font-bold">
+                                                        {savings}% savings from MRP
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -852,72 +1145,200 @@ export default function VendorProductsPage() {
 
                                 {/* ======== Section 3: Bulk Pricing Tiers ======== */}
                                 <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                    <SectionHeader icon={<BarChart3 size={16} />} title="Bulk Pricing Tiers" />
+                                    <div className="flex items-start justify-between mb-5">
+                                        <div>
+                                            <SectionHeader icon={<Tag size={16} />} title="Bulk Pricing Tiers" />
+                                            <p className="text-[12px] text-[#AEAEAE] font-medium -mt-3 ml-[42px]">
+                                                Configure bulk pricing with regular and promotional rates side by side
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={addPriceSlab}
+                                            className="h-[40px] px-5 bg-[#1a365d] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#1a365d]/90 transition-colors flex items-center gap-2 shrink-0"
+                                        >
+                                            <Plus size={14} />
+                                            Add Bulk Tier
+                                        </button>
+                                    </div>
 
-                                    <div className="space-y-3">
-                                        {form.priceSlabs.length > 0 && (
-                                            <div className="grid grid-cols-[1fr_1fr_1fr_40px] gap-3 mb-1">
-                                                <p className="text-[11px] font-bold text-[#AEAEAE] uppercase">Min Qty</p>
-                                                <p className="text-[11px] font-bold text-[#AEAEAE] uppercase">Max Qty</p>
-                                                <p className="text-[11px] font-bold text-[#AEAEAE] uppercase">Price / Unit</p>
-                                                <div />
+                                    {/* Promo Single Unit Price (time-based) */}
+                                    <div className="rounded-[14px] border-2 border-[#299E60]/20 bg-gradient-to-br from-[#EEF8F1]/60 to-[#E8F5E9]/30 p-5 mb-5">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center gap-2">
+                                                <Clock size={16} className="text-[#299E60]" />
+                                                <h4 className="text-[14px] font-bold text-[#181725]">
+                                                    Promo Single Unit Price ({form.promoStartTime || '6pm'} - {form.promoEndTime || '9am'})
+                                                </h4>
                                             </div>
-                                        )}
+                                            <span className="text-[11px] font-bold text-[#299E60] bg-[#EEF8F1] px-2.5 py-1 rounded-[6px]">
+                                                Time-based
+                                            </span>
+                                        </div>
 
-                                        {form.priceSlabs.map((slab, index) => (
-                                            <div key={index} className="grid grid-cols-[1fr_1fr_1fr_40px] gap-3 items-center">
+                                        {/* Time window */}
+                                        <div className="grid grid-cols-4 gap-4 mb-4">
+                                            <div>
+                                                <FieldLabel>Start Time</FieldLabel>
                                                 <input
-                                                    type="number"
-                                                    min="1"
-                                                    value={slab.minQty}
-                                                    onChange={(e) => updatePriceSlab(index, 'minQty', e.target.value)}
+                                                    type="time"
+                                                    value={form.promoStartTime}
+                                                    onChange={(e) => updateField('promoStartTime', e.target.value)}
                                                     className={inputCls}
-                                                    placeholder="Min"
                                                 />
+                                            </div>
+                                            <div>
+                                                <FieldLabel>End Time</FieldLabel>
                                                 <input
-                                                    type="number"
-                                                    min="0"
-                                                    value={slab.maxQty}
-                                                    onChange={(e) => updatePriceSlab(index, 'maxQty', e.target.value)}
+                                                    type="time"
+                                                    value={form.promoEndTime}
+                                                    onChange={(e) => updateField('promoEndTime', e.target.value)}
                                                     className={inputCls}
-                                                    placeholder="No limit"
                                                 />
+                                            </div>
+                                            <div>
+                                                <FieldLabel required>Promo Taxable Rate</FieldLabel>
                                                 <input
                                                     type="number"
                                                     step="0.01"
                                                     min="0"
-                                                    value={slab.price}
-                                                    onChange={(e) => updatePriceSlab(index, 'price', e.target.value)}
+                                                    value={form.promoPrice}
+                                                    onChange={(e) => updateField('promoPrice', e.target.value)}
                                                     className={inputCls}
-                                                    placeholder={'\u20B90.00'}
+                                                    placeholder="0.00"
                                                 />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removePriceSlab(index)}
-                                                    className="p-2 hover:bg-[#FFF0F0] rounded-[8px] transition-colors text-[#E74C3C]"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
+                                            </div>
+                                            <div>
+                                                <FieldLabel>Promo Gross Rate</FieldLabel>
+                                                <div className={cn(inputCls, 'flex items-center bg-[#FAFAFA] text-[#7C7C7C]')}>
+                                                    {promoGrossRate ? `\u20B9${promoGrossRate}` : '\u2014'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Bulk tiers */}
+                                    <div className="space-y-4">
+                                        {form.priceSlabs.map((slab, index) => (
+                                            <div key={index} className="rounded-[14px] border border-[#EEEEEE] overflow-hidden">
+                                                {/* Tier header */}
+                                                <div className="flex items-center justify-between px-5 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE]">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <span className="w-[28px] h-[28px] rounded-full bg-[#299E60] text-white text-[12px] font-bold flex items-center justify-center">
+                                                            {index + 1}
+                                                        </span>
+                                                        <h4 className="text-[14px] font-bold text-[#181725]">Bulk Tier {index + 1}</h4>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removePriceSlab(index)}
+                                                        className="p-1.5 hover:bg-[#FFF0F0] rounded-[6px] transition-colors text-[#AEAEAE] hover:text-[#E74C3C]"
+                                                    >
+                                                        <Trash2 size={15} />
+                                                    </button>
+                                                </div>
+
+                                                {/* Tier body: Regular + Promo side by side */}
+                                                <div className="grid grid-cols-2">
+                                                    {/* Regular Bulk Pricing (left) */}
+                                                    <div className="p-5 border-r border-[#EEEEEE]">
+                                                        <div className="flex items-center gap-2 mb-3">
+                                                            <span className="w-[8px] h-[8px] rounded-full bg-[#3B82F6]" />
+                                                            <p className="text-[11px] font-bold text-[#3B82F6] uppercase tracking-wide">Regular Bulk Pricing</p>
+                                                        </div>
+                                                        <div className="space-y-3">
+                                                            <div>
+                                                                <FieldLabel>Min Quantity</FieldLabel>
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    value={slab.minQty}
+                                                                    onChange={(e) => updatePriceSlab(index, 'minQty', e.target.value)}
+                                                                    className={inputCls}
+                                                                    placeholder="e.g., 10"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <FieldLabel required>Taxable Rate (per Unit)</FieldLabel>
+                                                                <div className="relative">
+                                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] text-[14px]">{'\u20B9'}</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        min="0"
+                                                                        value={slab.price}
+                                                                        onChange={(e) => updatePriceSlab(index, 'price', e.target.value)}
+                                                                        className={cn(inputCls, 'pl-8')}
+                                                                        placeholder="0.00"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <FieldLabel>Price per Unit</FieldLabel>
+                                                                <div className={cn(inputCls, 'flex items-center bg-[#FAFAFA] text-[#7C7C7C]')}>
+                                                                    <span className="text-[#AEAEAE] mr-1">{'\u20B9'}</span>
+                                                                    {slab.price ? calcGrossRate(slab.price, form.taxPercent) : '0'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Promo Bulk Pricing (right) */}
+                                                    <div className="p-5 bg-gradient-to-br from-[#EEF8F1]/40 to-[#E8F5E9]/20">
+                                                        <div className="flex items-center justify-between mb-3">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-[8px] h-[8px] rounded-full bg-[#299E60]" />
+                                                                <p className="text-[11px] font-bold text-[#299E60] uppercase tracking-wide">
+                                                                    {form.promoStartTime || '18:00'} - {form.promoEndTime || '09:00'} Promo Bulk
+                                                                </p>
+                                                            </div>
+                                                            <span className="text-[10px] font-bold text-[#E74C3C] bg-[#FFF0F0] px-2 py-0.5 rounded-[4px]">PROMO</span>
+                                                        </div>
+                                                        <div className="space-y-3">
+                                                            <div>
+                                                                <FieldLabel>Min Quantity</FieldLabel>
+                                                                <div className={cn(inputCls, 'flex items-center bg-[#FAFAFA] text-[#7C7C7C]')}>
+                                                                    {slab.minQty || '—'}
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <FieldLabel required>Promo Taxable Rate (per Unit)</FieldLabel>
+                                                                <div className="relative">
+                                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] text-[14px]">{'\u20B9'}</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        min="0"
+                                                                        value={slab.promoPrice}
+                                                                        onChange={(e) => updatePriceSlab(index, 'promoPrice', e.target.value)}
+                                                                        className={cn(inputCls, 'pl-8')}
+                                                                        placeholder="0.00"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <FieldLabel>Price per Unit</FieldLabel>
+                                                                <div className={cn(inputCls, 'flex items-center bg-[#FAFAFA] text-[#7C7C7C]')}>
+                                                                    <span className="text-[#AEAEAE] mr-1">{'\u20B9'}</span>
+                                                                    {slab.promoPrice ? calcGrossRate(slab.promoPrice, form.taxPercent) : '0'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         ))}
 
-                                        <button
-                                            type="button"
-                                            onClick={addPriceSlab}
-                                            className="h-[40px] px-4 border border-dashed border-[#299E60]/40 text-[#299E60] rounded-[10px] text-[13px] font-bold hover:bg-[#EEF8F1] transition-colors flex items-center gap-2"
-                                        >
-                                            <Plus size={14} />
-                                            Add Tier
-                                        </button>
-
-                                        <div className="flex items-start gap-2 bg-[#F8F9FA] rounded-[8px] px-3 py-2.5 mt-2">
-                                            <Info size={14} className="text-[#AEAEAE] shrink-0 mt-0.5" />
-                                            <p className="text-[11px] text-[#7C7C7C] font-medium leading-relaxed">
-                                                Highest matching tier applies based on order quantity. Leave Max Qty empty for the last tier to mean &quot;and above&quot;.
-                                            </p>
-                                        </div>
+                                        {form.priceSlabs.length === 0 && (
+                                            <div className="text-center py-8 text-[#AEAEAE]">
+                                                <BarChart3 size={32} className="mx-auto mb-2 text-[#E5E7EB]" />
+                                                <p className="text-[13px] font-medium">No bulk tiers yet. Click &quot;Add Bulk Tier&quot; to add quantity-based pricing.</p>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
+
+                                {/* End of Bulk Pricing Tiers */}
 
                                 {/* ======== Section 4: Inventory & Packaging ======== */}
                                 <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
@@ -1081,6 +1502,43 @@ export default function VendorProductsPage() {
                                 </div>
                             </form>
                         )}
+                    </div>
+                </>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteTarget && (
+                <>
+                    <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => !deleting && setDeleteTarget(null)} />
+                    <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
+                        <div className="bg-white rounded-[16px] shadow-xl max-w-[420px] w-full p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-[40px] h-[40px] rounded-full bg-[#FFF0F0] flex items-center justify-center shrink-0">
+                                    <Trash2 size={20} className="text-[#E74C3C]" />
+                                </div>
+                                <h3 className="text-[18px] font-bold text-[#181725]">Delete Product</h3>
+                            </div>
+                            <p className="text-[14px] text-[#7C7C7C] mb-6">
+                                Are you sure you want to delete <strong className="text-[#181725]">{deleteTarget.name}</strong>? This will remove the product from your catalog.
+                            </p>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setDeleteTarget(null)}
+                                    disabled={deleting}
+                                    className="flex-1 h-[44px] border border-[#EEEEEE] rounded-[10px] text-[14px] font-bold text-[#181725] hover:bg-[#F8F9FB] transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleDelete}
+                                    disabled={deleting}
+                                    className="flex-1 h-[44px] bg-[#E74C3C] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#d44234] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {deleting && <Loader2 size={16} className="animate-spin" />}
+                                    {deleting ? 'Deleting...' : 'Delete'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </>
             )}

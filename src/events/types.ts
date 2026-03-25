@@ -99,6 +99,48 @@ export interface ListCreatedPayload {
   name: string;
 }
 
+export interface ProductSubmittedPayload {
+  productId: string;
+  vendorId: string;
+  productName: string;
+}
+
+export interface ProductApprovedPayload {
+  productId: string;
+  vendorId: string;
+  productName: string;
+  approvedBy: string;
+}
+
+export interface ProductRejectedPayload {
+  productId: string;
+  vendorId: string;
+  productName: string;
+  rejectedBy: string;
+  reason?: string;
+}
+
+export interface CategorySuggestedPayload {
+  categoryId: string;
+  categoryName: string;
+  suggestedBy: string;
+}
+
+export interface CategoryApprovedPayload {
+  categoryId: string;
+  categoryName: string;
+  approvedBy: string;
+  suggestedBy?: string;
+}
+
+export interface CategoryRejectedPayload {
+  categoryId: string;
+  categoryName: string;
+  rejectedBy: string;
+  suggestedBy?: string;
+  reason?: string;
+}
+
 // Event map: event name → payload type
 export interface EventMap {
   OrderCreated: OrderCreatedPayload;
@@ -115,6 +157,12 @@ export interface EventMap {
   VendorOnboarded: VendorOnboardedPayload;
   ListOrdered: ListOrderedPayload;
   ListCreated: ListCreatedPayload;
+  ProductSubmitted: ProductSubmittedPayload;
+  ProductApproved: ProductApprovedPayload;
+  ProductRejected: ProductRejectedPayload;
+  CategorySuggested: CategorySuggestedPayload;
+  CategoryApproved: CategoryApprovedPayload;
+  CategoryRejected: CategoryRejectedPayload;
 }
 
 export type EventName = keyof EventMap;
