@@ -26,6 +26,7 @@ import {
     ToggleRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -295,7 +296,7 @@ export default function CategoriesPage() {
             });
 
             const json = await res.json();
-            if (!res.ok) throw new Error(json.error || 'Operation failed');
+            if (!res.ok) throw new Error(json.error?.message || json.error || json.message || 'Operation failed');
 
             closeFormModal();
             fetchCategories();
@@ -951,42 +952,20 @@ export default function CategoriesPage() {
                                 </select>
                             </div>
 
-                            {/* Image URL */}
+                            {/* Category Image */}
                             <div>
-                                <label className="block text-[13px] font-bold text-[#181725] mb-2">
-                                    Image URL
-                                </label>
-                                <input
-                                    type="text"
+                                <ImageUpload
                                     value={formData.imageUrl}
-                                    onChange={(e) =>
+                                    onChange={(url) =>
                                         setFormData((prev) => ({
                                             ...prev,
-                                            imageUrl: e.target.value,
+                                            imageUrl: url,
                                         }))
                                     }
-                                    placeholder="https://example.com/image.jpg"
-                                    className="w-full h-[46px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
+                                    folder="categories"
+                                    label="Category Image"
+                                    size="md"
                                 />
-                                {formData.imageUrl && (
-                                    <div className="mt-3 flex items-center gap-3">
-                                        <div className="w-[60px] h-[60px] rounded-[10px] border border-[#EEEEEE] overflow-hidden bg-[#F8F9FB] flex items-center justify-center">
-                                            <img
-                                                src={formData.imageUrl}
-                                                alt="Preview"
-                                                className="w-full h-full object-cover"
-                                                onError={(e) => {
-                                                    (e.target as HTMLImageElement).style.display = 'none';
-                                                    (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                                                }}
-                                            />
-                                            <ImageIcon size={20} className="text-[#AEAEAE] hidden" />
-                                        </div>
-                                        <span className="text-[12px] text-[#AEAEAE] font-medium">
-                                            Preview
-                                        </span>
-                                    </div>
-                                )}
                             </div>
 
                             {/* Sort Order + Is Active row */}

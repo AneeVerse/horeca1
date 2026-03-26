@@ -96,15 +96,15 @@ export const PATCH = adminOnly(async (req: NextRequest, _ctx) => {
       },
     });
 
-    // If priceSlabs provided, delete existing and recreate
-    if (priceSlabs) {
+    // If priceSlabs provided, delete existing and recreate (only if product has a vendor)
+    if (priceSlabs && existing.vendorId) {
       await prisma.priceSlab.deleteMany({ where: { productId: id } });
 
       if (priceSlabs.length > 0) {
         await prisma.priceSlab.createMany({
           data: priceSlabs.map((slab, idx) => ({
             productId: id,
-            vendorId: existing.vendorId,
+            vendorId: existing.vendorId!,
             minQty: slab.minQty,
             maxQty: slab.maxQty ?? null,
             price: slab.price,

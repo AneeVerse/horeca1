@@ -2,9 +2,23 @@ import ImageKit from '@imagekit/nodejs';
 
 const globalForImageKit = globalThis as unknown as { imagekit: ImageKit };
 
+// ImageKit URL endpoint — used for generating image URLs on the client
+export const IMAGEKIT_URL_ENDPOINT =
+  process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT || 'https://ik.imagekit.io/nasjugiz2';
+
+// Folder structure for organized uploads
+export const IMAGEKIT_FOLDERS = {
+  products: '/horeca/products',
+  categories: '/horeca/categories',
+  vendors: '/horeca/vendors',
+  banners: '/horeca/banners',
+  misc: '/horeca/misc',
+} as const;
+
+export type ImageFolder = keyof typeof IMAGEKIT_FOLDERS;
+
 // Lazy getter — only creates client when image upload code actually runs
-// @imagekit/nodejs v7+ only needs privateKey for server-side operations
-// (publicKey is only used client-side for upload authentication)
+// @imagekit/nodejs v7+ ClientOptions only accepts privateKey
 export function getImageKit(): ImageKit {
   if (!globalForImageKit.imagekit) {
     if (!process.env.IMAGEKIT_PRIVATE_KEY) {

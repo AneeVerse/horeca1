@@ -7,6 +7,7 @@ import {
     BarChart3, BoxIcon, Clock, Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ImageUpload, MultiImageUpload } from '@/components/ui/ImageUpload';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -763,9 +764,11 @@ export default function VendorProductsPage() {
                                         <td className="px-6 py-4 text-center">
                                             <span className={cn(
                                                 'text-[12px] font-bold px-2.5 py-1 rounded-[6px]',
-                                                product.qty_available > 0 ? 'bg-[#EEF8F1] text-[#299E60]' : 'bg-[#FFF0F0] text-[#E74C3C]'
+                                                product.qty_available > 0
+                                                    ? 'bg-[#EEF8F1] text-[#299E60]'
+                                                    : 'bg-[#F8F9FB] text-[#AEAEAE]'
                                             )}>
-                                                {product.qty_available > 0 ? product.qty_available : 'Out of stock'}
+                                                {product.qty_available > 0 ? product.qty_available : '0'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -1394,61 +1397,24 @@ export default function VendorProductsPage() {
                                 <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
                                     <SectionHeader icon={<ImageIcon size={16} />} title="Media" />
 
-                                    <div className="space-y-4">
+                                    <div className="space-y-5">
                                         {/* Primary Image */}
-                                        <div>
-                                            <FieldLabel>Primary Image URL</FieldLabel>
-                                            <input
-                                                type="text"
-                                                value={form.imageUrl}
-                                                onChange={(e) => updateField('imageUrl', e.target.value)}
-                                                className={inputCls}
-                                                placeholder="https://..."
-                                            />
-                                            {form.imageUrl && (
-                                                <div className="mt-2 w-[80px] h-[80px] rounded-[10px] bg-[#F1F4F9] overflow-hidden border border-[#EEEEEE]">
-                                                    <img
-                                                        src={form.imageUrl}
-                                                        alt="Preview"
-                                                        className="w-full h-full object-cover"
-                                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
+                                        <ImageUpload
+                                            value={form.imageUrl}
+                                            onChange={(url) => updateField('imageUrl', url)}
+                                            folder="products"
+                                            label="Primary Image"
+                                            size="lg"
+                                        />
 
                                         {/* Additional Images */}
-                                        <div>
-                                            <FieldLabel>Additional Images</FieldLabel>
-                                            <div className="space-y-2">
-                                                {form.images.map((url, index) => (
-                                                    <div key={index} className="flex items-center gap-2">
-                                                        <input
-                                                            type="text"
-                                                            value={url}
-                                                            onChange={(e) => updateImage(index, e.target.value)}
-                                                            className={cn(inputCls, 'flex-1')}
-                                                            placeholder="https://..."
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeImage(index)}
-                                                            className="p-2 hover:bg-[#FFF0F0] rounded-[8px] transition-colors text-[#E74C3C] shrink-0"
-                                                        >
-                                                            <X size={16} />
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                                <button
-                                                    type="button"
-                                                    onClick={addImage}
-                                                    className="h-[40px] px-4 border border-dashed border-[#299E60]/40 text-[#299E60] rounded-[10px] text-[13px] font-bold hover:bg-[#EEF8F1] transition-colors flex items-center gap-2"
-                                                >
-                                                    <Plus size={14} />
-                                                    Add Image
-                                                </button>
-                                            </div>
-                                        </div>
+                                        <MultiImageUpload
+                                            values={form.images.filter(Boolean)}
+                                            onChange={(urls) => updateField('images', urls)}
+                                            folder="products"
+                                            label="Additional Images"
+                                            max={8}
+                                        />
                                     </div>
                                 </div>
 

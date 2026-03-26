@@ -158,12 +158,14 @@ export class CatalogService {
       },
       include: { vendor: { select: { id: true, userId: true } } },
     });
-    emitEvent('ProductApproved', {
-      productId: product.id,
-      vendorId: product.vendorId,
-      productName: product.name,
-      approvedBy: adminUserId,
-    });
+    if (product.vendorId) {
+      emitEvent('ProductApproved', {
+        productId: product.id,
+        vendorId: product.vendorId,
+        productName: product.name,
+        approvedBy: adminUserId,
+      });
+    }
     return product;
   }
 
@@ -178,13 +180,15 @@ export class CatalogService {
       },
       include: { vendor: { select: { id: true, userId: true } } },
     });
-    emitEvent('ProductRejected', {
-      productId: product.id,
-      vendorId: product.vendorId,
-      productName: product.name,
-      rejectedBy: adminUserId,
-      reason: note,
-    });
+    if (product.vendorId) {
+      emitEvent('ProductRejected', {
+        productId: product.id,
+        vendorId: product.vendorId,
+        productName: product.name,
+        rejectedBy: adminUserId,
+        reason: note,
+      });
+    }
     return product;
   }
 

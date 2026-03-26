@@ -23,6 +23,7 @@ import {
     ImageIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,6 +52,8 @@ interface Product {
     inventory: { qtyAvailable: number } | null;
     vendorCount?: number;
     vendors?: string[];
+    vendorStock?: { vendor: string; qty: number }[];
+    totalStock?: number;
 }
 
 interface Vendor {
@@ -76,6 +79,7 @@ interface ProductFormData {
     taxPercent: string;
     minOrderQty: string;
     creditEligible: boolean;
+    imageUrl: string;
 }
 
 interface ImportResult {
@@ -96,6 +100,7 @@ const EMPTY_FORM: ProductFormData = {
     taxPercent: '0',
     minOrderQty: '1',
     creditEligible: false,
+    imageUrl: '',
 };
 
 const STATUS_CONFIG = {
@@ -363,10 +368,11 @@ export default function ProductsPage() {
             description: product.description ?? '',
             basePrice: String(product.basePrice),
             originalPrice: product.originalPrice != null ? String(product.originalPrice) : '',
-            vendorId: product.vendor.id,
+            vendorId: product.vendor?.id ?? '',
             taxPercent: String(product.taxPercent),
             minOrderQty: String(product.minOrderQty),
             creditEligible: product.creditEligible,
+            imageUrl: product.imageUrl ?? '',
         });
         setFormErrors({});
         setPanelOpen(true);
@@ -400,11 +406,12 @@ export default function ProductsPage() {
             const payload: Record<string, unknown> = {
                 name: formData.name.trim(),
                 basePrice: Number(formData.basePrice),
-                vendorId: formData.vendorId,
                 taxPercent: Number(formData.taxPercent) || 0,
                 minOrderQty: Number(formData.minOrderQty) || 1,
                 creditEligible: formData.creditEligible,
             };
+            if (formData.vendorId) payload.vendorId = formData.vendorId;
+            if (formData.imageUrl) payload.imageUrl = formData.imageUrl;
             if (formData.sku.trim()) payload.sku = formData.sku.trim();
             if (formData.hsn.trim()) payload.hsn = formData.hsn.trim();
             if (formData.brand.trim()) payload.brand = formData.brand.trim();
@@ -677,18 +684,6 @@ export default function ProductsPage() {
                         <option value="rejected">Rejected</option>
                     </select>
 
-                    {/* Vendor */}
-                    <select
-                        value={filterVendor}
-                        onChange={e => setFilterVendor(e.target.value)}
-                        className="h-[44px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[13px] font-medium text-[#181725] outline-none focus:border-[#299E60]/40 focus:bg-white transition-all min-w-[180px] cursor-pointer"
-                    >
-                        <option value="">All Vendors</option>
-                        {vendors.map(v => (
-                            <option key={v.id} value={v.id}>{v.businessName}</option>
-                        ))}
-                    </select>
-
                     {/* Category */}
                     <select
                         value={filterCategory}
@@ -735,19 +730,16 @@ export default function ProductsPage() {
                                             Name
                                         </th>
                                         <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
-                                            Vendor
+                                            Vendors
                                         </th>
                                         <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
                                             Category
                                         </th>
                                         <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
-                                            Price
-                                        </th>
-                                        <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
                                             Status
                                         </th>
                                         <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
-                                            Stock
+                                            Inventory
                                         </th>
                                         <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider text-right">
                                             Actions
@@ -757,7 +749,6 @@ export default function ProductsPage() {
                                 <tbody className="divide-y divide-[#EEEEEE]">
                                     {products.map(product => {
                                         const statusCfg = STATUS_CONFIG[product.approvalStatus];
-                                        const stock = product.inventory?.qtyAvailable ?? 0;
                                         return (
                                             <tr key={product.id} className="hover:bg-[#F8F9FB]/60 transition-colors group">
                                                 {/* Image */}
@@ -789,24 +780,23 @@ export default function ProductsPage() {
                                                     </div>
                                                 </td>
 
-                                                {/* Vendor */}
+                                                {/* Vendors */}
                                                 <td className="px-6 py-4">
-                                                    <span className="text-[13px] font-semibold text-[#181725]">
-                                                        {product.vendor.businessName}
-                                                    </span>
+                                                    {(product.vendorCount ?? 0) > 0 ? (
+                                                        <span className="text-[13px] font-semibold text-[#181725]" title={product.vendors?.join(', ')}>
+                                                            {product.vendorCount} vendor{product.vendorCount !== 1 ? 's' : ''}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[11px] font-bold text-[#3B82F6] bg-[#EFF6FF] px-2.5 py-1 rounded-[6px] uppercase tracking-wider">
+                                                            Catalog
+                                                        </span>
+                                                    )}
                                                 </td>
 
                                                 {/* Category */}
                                                 <td className="px-6 py-4">
                                                     <span className="text-[13px] font-medium text-[#7C7C7C]">
                                                         {product.category?.name ?? '--'}
-                                                    </span>
-                                                </td>
-
-                                                {/* Price */}
-                                                <td className="px-6 py-4">
-                                                    <span className="text-[14px] font-bold text-[#181725]">
-                                                        {'\u20B9'}{Number(product.basePrice).toLocaleString('en-IN')}
                                                     </span>
                                                 </td>
 
@@ -825,16 +815,28 @@ export default function ProductsPage() {
                                                     </span>
                                                 </td>
 
-                                                {/* Stock */}
+                                                {/* Inventory — aggregated across vendors */}
                                                 <td className="px-6 py-4">
-                                                    <span
-                                                        className={cn(
-                                                            'text-[13px] font-bold',
-                                                            stock > 0 ? 'text-[#181725]' : 'text-[#E74C3C]',
-                                                        )}
-                                                    >
-                                                        {stock > 0 ? stock : 'Out of stock'}
-                                                    </span>
+                                                    {(product.vendorCount ?? 0) > 0 ? (
+                                                        <div
+                                                            className="cursor-default"
+                                                            title={product.vendorStock?.map(vs => `${vs.vendor}: ${vs.qty}`).join('\n')}
+                                                        >
+                                                            <span className={cn(
+                                                                'text-[13px] font-bold',
+                                                                (product.totalStock ?? 0) > 0 ? 'text-[#181725]' : 'text-[#AEAEAE]',
+                                                            )}>
+                                                                {product.totalStock ?? 0}
+                                                            </span>
+                                                            <span className="text-[11px] text-[#AEAEAE] ml-1">
+                                                                across {product.vendorCount} vendor{product.vendorCount !== 1 ? 's' : ''}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-[11px] font-medium text-[#AEAEAE]">
+                                                            —
+                                                        </span>
+                                                    )}
                                                 </td>
 
                                                 {/* Actions */}
@@ -1050,6 +1052,17 @@ export default function ProductsPage() {
                                 />
                             </div>
                         </div>
+                    </div>
+
+                    {/* Product Image */}
+                    <div>
+                        <h3 className="text-[16px] font-[800] text-[#181725] mb-5">Product Image</h3>
+                        <ImageUpload
+                            value={formData.imageUrl}
+                            onChange={(url) => updateField('imageUrl', url)}
+                            folder="products"
+                            size="lg"
+                        />
                     </div>
 
                     {/* Pricing & Tax */}

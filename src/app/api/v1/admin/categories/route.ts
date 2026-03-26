@@ -24,9 +24,10 @@ function slugify(name: string): string {
 const createCategorySchema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1).optional(),
-  parentId: z.string().uuid().optional(),
-  imageUrl: z.string().url().optional(),
+  parentId: z.string().uuid().optional().nullable(),
+  imageUrl: z.string().optional().nullable(),
   sortOrder: z.number().int().optional(),
+  isActive: z.boolean().optional(),
 });
 
 // GET — list all categories with children count and product count

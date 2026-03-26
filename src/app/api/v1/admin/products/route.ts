@@ -16,7 +16,7 @@ import { errorResponse } from '@/middleware/errorHandler';
 const createProductSchema = z.object({
   vendorId: z.string().uuid().optional(),
   name: z.string().min(1),
-  slug: z.string().min(1),
+  slug: z.string().optional(),
   basePrice: z.number().positive(),
   categoryId: z.string().uuid().optional(),
   originalPrice: z.number().positive().optional(),
@@ -34,7 +34,7 @@ const createProductSchema = z.object({
   promoEndTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   minOrderQty: z.number().int().min(1).optional(),
   description: z.string().optional(),
-  imageUrl: z.string().url().optional(),
+  imageUrl: z.string().optional(),
   creditEligible: z.boolean().optional(),
   priceSlabs: z.array(z.object({
     minQty: z.number().int().min(1),
@@ -79,26 +79,33 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
       },
     });
 
-    // Deduplicate: group by lowercase name, keep first entry, count vendors
+    // Deduplicate: group by lowercase name, keep first entry, count vendors, aggregate stock
     const catalogMap = new Map<string, {
       product: (typeof allProducts)[0];
       vendorCount: number;
       vendors: string[];
+      vendorStock: { vendor: string; qty: number }[];
+      totalStock: number;
     }>();
 
     for (const p of allProducts) {
       const key = p.name.toLowerCase().trim();
+      const qty = p.inventory?.qtyAvailable ?? 0;
       const existing = catalogMap.get(key);
       if (existing) {
         if (p.vendor && !existing.vendors.includes(p.vendor.businessName)) {
           existing.vendorCount++;
           existing.vendors.push(p.vendor.businessName);
+          existing.vendorStock.push({ vendor: p.vendor.businessName, qty });
+          existing.totalStock += qty;
         }
       } else {
         catalogMap.set(key, {
           product: p,
           vendorCount: p.vendor ? 1 : 0,
           vendors: p.vendor ? [p.vendor.businessName] : [],
+          vendorStock: p.vendor ? [{ vendor: p.vendor.businessName, qty }] : [],
+          totalStock: qty,
         });
       }
     }
@@ -119,6 +126,8 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
       ...e.product,
       vendorCount: e.vendorCount,
       vendors: e.vendors,
+      vendorStock: e.vendorStock,
+      totalStock: e.totalStock,
     }));
 
     const nextCursor = hasMore ? products[products.length - 1].id : null;
@@ -140,12 +149,20 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
     const body = await req.json();
     const data = createProductSchema.parse(body);
 
-    const { priceSlabs, vendorId, ...productData } = data;
+    const { priceSlabs, vendorId, slug: providedSlug, ...productData } = data;
 
-    // Build create data — use unchecked create (raw IDs) for consistency
+    // Auto-generate slug from name if not provided
+    const slug = providedSlug || productData.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      + '-' + Date.now().toString(36);
+
+    // Build unchecked create data (raw IDs — vendorId is optional after migration)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const createData: any = {
       ...productData,
+      slug,
       approvalStatus: 'approved',
       approvedBy: ctx.userId,
       approvedAt: new Date(),

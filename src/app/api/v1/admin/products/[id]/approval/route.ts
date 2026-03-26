@@ -47,12 +47,14 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
         },
       });
 
-      emitEvent('ProductApproved', {
-        productId: id,
-        vendorId: existing.vendorId,
-        productName: existing.name,
-        approvedBy: ctx.userId,
-      });
+      if (existing.vendorId) {
+        emitEvent('ProductApproved', {
+          productId: id,
+          vendorId: existing.vendorId,
+          productName: existing.name,
+          approvedBy: ctx.userId,
+        });
+      }
 
       return NextResponse.json({ success: true, data: product });
     }
@@ -68,13 +70,15 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       },
     });
 
-    emitEvent('ProductRejected', {
-      productId: id,
-      vendorId: existing.vendorId,
-      productName: existing.name,
-      rejectedBy: ctx.userId,
-      reason: note,
-    });
+    if (existing.vendorId) {
+      emitEvent('ProductRejected', {
+        productId: id,
+        vendorId: existing.vendorId,
+        productName: existing.name,
+        rejectedBy: ctx.userId,
+        reason: note,
+      });
+    }
 
     return NextResponse.json({ success: true, data: product });
   } catch (error) {

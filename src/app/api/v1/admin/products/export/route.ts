@@ -31,7 +31,7 @@ export const GET = adminOnly(async (req: NextRequest) => {
     const rows = products.map(p => ({
       name: p.name,
       slug: p.slug,
-      vendorName: p.vendor.businessName,
+      vendorName: p.vendor?.businessName ?? '',
       categoryName: p.category?.name,
       basePrice: Number(p.basePrice),
       originalPrice: p.originalPrice ? Number(p.originalPrice) : null,
