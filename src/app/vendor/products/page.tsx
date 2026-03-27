@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Search, Plus, Loader2, Package, Pencil, ToggleLeft, ToggleRight, X,
     ChevronRight, Info, ImageIcon, Settings, DollarSign, Trash2,
-    BarChart3, BoxIcon, Clock, Tag,
+    BarChart3, BoxIcon, Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImageUpload, MultiImageUpload } from '@/components/ui/ImageUpload';
@@ -54,7 +54,6 @@ interface PriceSlabRow {
     minQty: string;
     maxQty: string;
     price: string;
-    promoPrice: string;
 }
 
 interface ProductForm {
@@ -74,9 +73,6 @@ interface ProductForm {
     images: string[];
     tags: string[];
     taxPercent: string;
-    promoPrice: string;
-    promoStartTime: string;
-    promoEndTime: string;
     minOrderQty: string;
     creditEligible: boolean;
     priceSlabs: PriceSlabRow[];
@@ -105,9 +101,6 @@ const EMPTY_FORM: ProductForm = {
     images: [],
     tags: [],
     taxPercent: '0',
-    promoPrice: '',
-    promoStartTime: '18:00',
-    promoEndTime: '09:00',
     minOrderQty: '1',
     creditEligible: false,
     priceSlabs: [],
@@ -434,17 +427,13 @@ export default function VendorProductsPage() {
                 images: Array.isArray(p.images) ? p.images : [],
                 tags: Array.isArray(p.tags) ? p.tags : [],
                 taxPercent: p.taxPercent != null ? String(p.taxPercent) : '0',
-                promoPrice: p.promoPrice != null ? String(p.promoPrice) : '',
-                promoStartTime: p.promoStartTime || '18:00',
-                promoEndTime: p.promoEndTime || '09:00',
                 minOrderQty: p.minOrderQty != null ? String(p.minOrderQty) : '1',
                 creditEligible: !!p.creditEligible,
                 priceSlabs: Array.isArray(p.priceSlabs)
-                    ? p.priceSlabs.map((s: { minQty: number; maxQty?: number | null; price: number; promoPrice?: number | null }) => ({
+                    ? p.priceSlabs.map((s: { minQty: number; maxQty?: number | null; price: number }) => ({
                         minQty: String(s.minQty),
                         maxQty: s.maxQty != null ? String(s.maxQty) : '',
                         price: String(s.price),
-                        promoPrice: s.promoPrice != null ? String(s.promoPrice) : '',
                     }))
                     : [],
             });
@@ -467,9 +456,6 @@ export default function VendorProductsPage() {
                 images: [],
                 tags: [],
                 taxPercent: '0',
-                promoPrice: '',
-                promoStartTime: '18:00',
-                promoEndTime: '09:00',
                 minOrderQty: '1',
                 creditEligible: product.creditEligible,
                 priceSlabs: [],
@@ -495,7 +481,7 @@ export default function VendorProductsPage() {
     const addPriceSlab = () => {
         setForm(prev => ({
             ...prev,
-            priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '', promoPrice: '' }],
+            priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '' }],
         }));
     };
 
@@ -571,17 +557,6 @@ export default function VendorProductsPage() {
                 body.originalPrice = parseFloat(form.originalPrice);
             }
 
-            // Promo pricing
-            if (form.promoPrice) {
-                body.promoPrice = parseFloat(form.promoPrice);
-                body.promoStartTime = form.promoStartTime || '18:00';
-                body.promoEndTime = form.promoEndTime || '09:00';
-            } else {
-                body.promoPrice = null;
-                body.promoStartTime = null;
-                body.promoEndTime = null;
-            }
-
             // Category: find by slug or id
             if (form.categoryId) {
                 const cat = categories.find(c => c.slug === form.categoryId || c.id === form.categoryId);
@@ -595,7 +570,6 @@ export default function VendorProductsPage() {
                     minQty: parseInt(s.minQty, 10),
                     maxQty: s.maxQty ? parseInt(s.maxQty, 10) : undefined,
                     price: parseFloat(s.price),
-                    promoPrice: s.promoPrice ? parseFloat(s.promoPrice) : undefined,
                 }))
                 .sort((a, b) => a.minQty - b.minQty);
 
@@ -678,7 +652,6 @@ export default function VendorProductsPage() {
 
     const grossRate = calcGrossRate(form.basePrice, form.taxPercent);
     const taxAmount = calcTaxAmount(form.basePrice, form.taxPercent);
-    const promoGrossRate = form.promoPrice ? calcGrossRate(form.promoPrice, form.taxPercent) : '';
     const savings = calcSavingsPercent(grossRate, form.originalPrice);
 
     /* ------------------------------------------------------------------ */
@@ -1152,7 +1125,7 @@ export default function VendorProductsPage() {
                                         <div>
                                             <SectionHeader icon={<Tag size={16} />} title="Bulk Pricing Tiers" />
                                             <p className="text-[12px] text-[#AEAEAE] font-medium -mt-3 ml-[42px]">
-                                                Configure bulk pricing with regular and promotional rates side by side
+                                                Configure quantity-based pricing tiers
                                             </p>
                                         </div>
                                         <button
@@ -1163,61 +1136,6 @@ export default function VendorProductsPage() {
                                             <Plus size={14} />
                                             Add Bulk Tier
                                         </button>
-                                    </div>
-
-                                    {/* Promo Single Unit Price (time-based) */}
-                                    <div className="rounded-[14px] border-2 border-[#299E60]/20 bg-gradient-to-br from-[#EEF8F1]/60 to-[#E8F5E9]/30 p-5 mb-5">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <div className="flex items-center gap-2">
-                                                <Clock size={16} className="text-[#299E60]" />
-                                                <h4 className="text-[14px] font-bold text-[#181725]">
-                                                    Promo Single Unit Price ({form.promoStartTime || '6pm'} - {form.promoEndTime || '9am'})
-                                                </h4>
-                                            </div>
-                                            <span className="text-[11px] font-bold text-[#299E60] bg-[#EEF8F1] px-2.5 py-1 rounded-[6px]">
-                                                Time-based
-                                            </span>
-                                        </div>
-
-                                        {/* Time window */}
-                                        <div className="grid grid-cols-4 gap-4 mb-4">
-                                            <div>
-                                                <FieldLabel>Start Time</FieldLabel>
-                                                <input
-                                                    type="time"
-                                                    value={form.promoStartTime}
-                                                    onChange={(e) => updateField('promoStartTime', e.target.value)}
-                                                    className={inputCls}
-                                                />
-                                            </div>
-                                            <div>
-                                                <FieldLabel>End Time</FieldLabel>
-                                                <input
-                                                    type="time"
-                                                    value={form.promoEndTime}
-                                                    onChange={(e) => updateField('promoEndTime', e.target.value)}
-                                                    className={inputCls}
-                                                />
-                                            </div>
-                                            <div>
-                                                <FieldLabel required>Promo Taxable Rate</FieldLabel>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    min="0"
-                                                    value={form.promoPrice}
-                                                    onChange={(e) => updateField('promoPrice', e.target.value)}
-                                                    className={inputCls}
-                                                    placeholder="0.00"
-                                                />
-                                            </div>
-                                            <div>
-                                                <FieldLabel>Promo Gross Rate</FieldLabel>
-                                                <div className={cn(inputCls, 'flex items-center bg-[#FAFAFA] text-[#7C7C7C]')}>
-                                                    {promoGrossRate ? `\u20B9${promoGrossRate}` : '\u2014'}
-                                                </div>
-                                            </div>
-                                        </div>
                                     </div>
 
                                     {/* Bulk tiers */}
@@ -1241,90 +1159,40 @@ export default function VendorProductsPage() {
                                                     </button>
                                                 </div>
 
-                                                {/* Tier body: Regular + Promo side by side */}
-                                                <div className="grid grid-cols-2">
-                                                    {/* Regular Bulk Pricing (left) */}
-                                                    <div className="p-5 border-r border-[#EEEEEE]">
-                                                        <div className="flex items-center gap-2 mb-3">
-                                                            <span className="w-[8px] h-[8px] rounded-full bg-[#3B82F6]" />
-                                                            <p className="text-[11px] font-bold text-[#3B82F6] uppercase tracking-wide">Regular Bulk Pricing</p>
+                                                {/* Tier body */}
+                                                <div className="p-5">
+                                                    <div className="grid grid-cols-3 gap-4">
+                                                        <div>
+                                                            <FieldLabel>Min Quantity</FieldLabel>
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                value={slab.minQty}
+                                                                onChange={(e) => updatePriceSlab(index, 'minQty', e.target.value)}
+                                                                className={inputCls}
+                                                                placeholder="e.g., 10"
+                                                            />
                                                         </div>
-                                                        <div className="space-y-3">
-                                                            <div>
-                                                                <FieldLabel>Min Quantity</FieldLabel>
+                                                        <div>
+                                                            <FieldLabel required>Taxable Rate (per Unit)</FieldLabel>
+                                                            <div className="relative">
+                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] text-[14px]">{'\u20B9'}</span>
                                                                 <input
                                                                     type="number"
-                                                                    min="1"
-                                                                    value={slab.minQty}
-                                                                    onChange={(e) => updatePriceSlab(index, 'minQty', e.target.value)}
-                                                                    className={inputCls}
-                                                                    placeholder="e.g., 10"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    value={slab.price}
+                                                                    onChange={(e) => updatePriceSlab(index, 'price', e.target.value)}
+                                                                    className={cn(inputCls, 'pl-8')}
+                                                                    placeholder="0.00"
                                                                 />
                                                             </div>
-                                                            <div>
-                                                                <FieldLabel required>Taxable Rate (per Unit)</FieldLabel>
-                                                                <div className="relative">
-                                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] text-[14px]">{'\u20B9'}</span>
-                                                                    <input
-                                                                        type="number"
-                                                                        step="0.01"
-                                                                        min="0"
-                                                                        value={slab.price}
-                                                                        onChange={(e) => updatePriceSlab(index, 'price', e.target.value)}
-                                                                        className={cn(inputCls, 'pl-8')}
-                                                                        placeholder="0.00"
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                            <div>
-                                                                <FieldLabel>Price per Unit</FieldLabel>
-                                                                <div className={cn(inputCls, 'flex items-center bg-[#FAFAFA] text-[#7C7C7C]')}>
-                                                                    <span className="text-[#AEAEAE] mr-1">{'\u20B9'}</span>
-                                                                    {slab.price ? calcGrossRate(slab.price, form.taxPercent) : '0'}
-                                                                </div>
-                                                            </div>
                                                         </div>
-                                                    </div>
-
-                                                    {/* Promo Bulk Pricing (right) */}
-                                                    <div className="p-5 bg-gradient-to-br from-[#EEF8F1]/40 to-[#E8F5E9]/20">
-                                                        <div className="flex items-center justify-between mb-3">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-[8px] h-[8px] rounded-full bg-[#299E60]" />
-                                                                <p className="text-[11px] font-bold text-[#299E60] uppercase tracking-wide">
-                                                                    {form.promoStartTime || '18:00'} - {form.promoEndTime || '09:00'} Promo Bulk
-                                                                </p>
-                                                            </div>
-                                                            <span className="text-[10px] font-bold text-[#E74C3C] bg-[#FFF0F0] px-2 py-0.5 rounded-[4px]">PROMO</span>
-                                                        </div>
-                                                        <div className="space-y-3">
-                                                            <div>
-                                                                <FieldLabel>Min Quantity</FieldLabel>
-                                                                <div className={cn(inputCls, 'flex items-center bg-[#FAFAFA] text-[#7C7C7C]')}>
-                                                                    {slab.minQty || '—'}
-                                                                </div>
-                                                            </div>
-                                                            <div>
-                                                                <FieldLabel required>Promo Taxable Rate (per Unit)</FieldLabel>
-                                                                <div className="relative">
-                                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] text-[14px]">{'\u20B9'}</span>
-                                                                    <input
-                                                                        type="number"
-                                                                        step="0.01"
-                                                                        min="0"
-                                                                        value={slab.promoPrice}
-                                                                        onChange={(e) => updatePriceSlab(index, 'promoPrice', e.target.value)}
-                                                                        className={cn(inputCls, 'pl-8')}
-                                                                        placeholder="0.00"
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                            <div>
-                                                                <FieldLabel>Price per Unit</FieldLabel>
-                                                                <div className={cn(inputCls, 'flex items-center bg-[#FAFAFA] text-[#7C7C7C]')}>
-                                                                    <span className="text-[#AEAEAE] mr-1">{'\u20B9'}</span>
-                                                                    {slab.promoPrice ? calcGrossRate(slab.promoPrice, form.taxPercent) : '0'}
-                                                                </div>
+                                                        <div>
+                                                            <FieldLabel>Price per Unit</FieldLabel>
+                                                            <div className={cn(inputCls, 'flex items-center bg-[#FAFAFA] text-[#7C7C7C]')}>
+                                                                <span className="text-[#AEAEAE] mr-1">{'\u20B9'}</span>
+                                                                {slab.price ? calcGrossRate(slab.price, form.taxPercent) : '0'}
                                                             </div>
                                                         </div>
                                                     </div>
