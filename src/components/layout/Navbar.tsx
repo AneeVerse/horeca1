@@ -26,6 +26,7 @@ import { useSession } from 'next-auth/react';
 import { useCart } from '@/context/CartContext';
 import { useAddress } from '@/context/AddressContext';
 import { AuthScreen } from '../auth/AuthScreen';
+import { saveAccount } from '@/lib/account-store';
 import { ProfileScreen } from '../auth/ProfileScreen';
 import { InitialPincodeOverlay } from './InitialPincodeOverlay';
 import { WishlistOverlay } from '../auth/WishlistOverlay';
@@ -194,6 +195,9 @@ export function Navbar() {
             <AuthScreen
                 isOpen={isLoginOverlayOpen}
                 onClose={() => setIsLoginOverlayOpen(false)}
+                onLoginSuccessWithCredentials={async (data) => {
+                    await saveAccount(data);
+                }}
                 onLoginSuccess={async () => {
                     setIsLoginOverlayOpen(false);
                     try {

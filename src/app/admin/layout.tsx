@@ -25,6 +25,7 @@ import {
     Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AccountSwitcherDropdown } from '@/components/account-switcher/AccountSwitcherDropdown';
 
 const SIDEBAR_LINKS = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
@@ -126,18 +127,7 @@ export default function AdminLayout({
                         <Bell size={22} className="text-[#181725]" fill="#181725" />
                     </button>
 
-                    <div className="flex items-center gap-3 cursor-pointer group">
-                        <div className="w-[42px] h-[42px] relative flex items-center justify-center shrink-0">
-                            <img src="/images/admin/Ellipse 2.svg" alt="" className="absolute inset-0 w-full h-full object-contain" />
-                            <span className="relative z-10 text-white font-bold text-[13px]">
-                                {(session?.user?.name || 'AD').substring(0, 2).toUpperCase()}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <span className="text-[15px] font-bold text-[#181725]">{session?.user?.name || 'Admin'}</span>
-                            <ChevronDown size={16} className="text-[#AEAEAE] group-hover:text-[#181725] transition-colors" />
-                        </div>
-                    </div>
+                    <AccountSwitcherDropdown />
                 </div>
             </header>
 

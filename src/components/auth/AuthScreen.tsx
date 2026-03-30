@@ -3,16 +3,17 @@
 import React, { useState } from 'react';
 import { X, Mail, Lock, Eye, EyeOff, ChevronLeft, Pencil, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { signIn } from 'next-auth/react';
+import { signIn, getSession } from 'next-auth/react';
 
 interface AuthScreenProps {
     isOpen: boolean;
     onClose: () => void;
     onLoginSuccess?: () => void;
+    onLoginSuccessWithCredentials?: (data: { email: string; password: string; name: string; role: string; id: string }) => void;
     initialMode?: 'customer' | 'vendor';
 }
 
-export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'customer' }: AuthScreenProps) {
+export function AuthScreen({ isOpen, onClose, onLoginSuccess, onLoginSuccessWithCredentials, initialMode = 'customer' }: AuthScreenProps) {
     const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
     const [step, setStep] = useState<'form' | 'success'>('form');
     const [userRole, setUserRole] = useState<'customer' | 'vendor'>(initialMode);
@@ -75,6 +76,18 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                 setApiError('Invalid email or password. Please try again.');
             } else {
                 // Login successful — Auth.js session is now active
+                if (onLoginSuccessWithCredentials) {
+                    const session = await getSession();
+                    if (session?.user) {
+                        onLoginSuccessWithCredentials({
+                            email: loginEmail,
+                            password: loginPassword,
+                            name: session.user.name || loginEmail,
+                            role: (session.user as { role?: string }).role || 'customer',
+                            id: (session.user as { id?: string }).id || '',
+                        });
+                    }
+                }
                 if (onLoginSuccess) onLoginSuccess();
                 handleClose();
             }
@@ -139,6 +152,18 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                 // Signup succeeded but auto-login failed — show success anyway
                 setStep('success');
             } else {
+                if (onLoginSuccessWithCredentials) {
+                    const session = await getSession();
+                    if (session?.user) {
+                        onLoginSuccessWithCredentials({
+                            email,
+                            password,
+                            name: session.user.name || fullName,
+                            role: (session.user as { role?: string }).role || 'customer',
+                            id: (session.user as { id?: string }).id || '',
+                        });
+                    }
+                }
                 if (onLoginSuccess) onLoginSuccess();
                 handleClose();
             }
