@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh -o StrictHostKeyChecking=no root@68.183.85.111 \"cat /var/www/horeca1-prod/.env\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@68.183.85.111 \"docker logs horeca1-app --tail 100 2>&1\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@68.183.85.111 \"cat /var/www/horeca1-prod/docker-compose.yml 2>/dev/null || cat /var/www/horeca1-prod/docker/docker-compose.yml 2>/dev/null\")",
+      "Bash(ssh -o StrictHostKeyChecking=no root@68.183.85.111 \"docker exec horeca1-app env 2>&1\")"
+    ]
+  }
+}
