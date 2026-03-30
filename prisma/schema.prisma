@@ -70,6 +70,9 @@ model User {
   accounts Account[]
   sessions Session[]
 
+  linkedAccounts  LinkedAccount[] @relation("MyLinks")
+  linkedBy        LinkedAccount[] @relation("LinkedToMe")
+
   vendor          Vendor?
   cart            Cart?
   wallet          Wallet?
@@ -96,6 +99,24 @@ enum Role {
   customer
   vendor
   admin
+}
+
+// ═══ LINKED ACCOUNTS (multi-account switcher) ════════
+
+model LinkedAccount {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  linkedUserId String   @map("linked_user_id") @db.Uuid
+  switchToken  String   @unique @default(uuid()) @map("switch_token") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user       User @relation("MyLinks", fields: [userId], references: [id], onDelete: Cascade)
+  linkedUser User @relation("LinkedToMe", fields: [linkedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, linkedUserId])
+  @@index([userId])
+  @@index([switchToken])
+  @@map("linked_accounts")
 }
 
 // ═══ VENDOR ═══════════════════════════════════════════

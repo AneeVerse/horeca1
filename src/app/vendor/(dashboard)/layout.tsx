@@ -117,7 +117,7 @@ export default function VendorLayout({
                         <Bell size={22} className="text-[#181725]" fill="#181725" />
                     </button>
 
-                    <AccountSwitcherDropdown />
+                    <AccountSwitcherDropdown allowAdd />
                 </div>
             </header>
 

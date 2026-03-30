@@ -20,8 +20,38 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
+        switchToken: { label: 'Switch Token', type: 'text' },
       },
       async authorize(credentials) {
+        // ── Switch token flow (account switcher) ──
+        if (credentials?.switchToken) {
+          const link = await prisma.linkedAccount.findUnique({
+            where: { switchToken: credentials.switchToken as string },
+            include: {
+              linkedUser: {
+                select: { id: true, email: true, fullName: true, role: true, image: true, isActive: true },
+              },
+            },
+          });
+
+          if (!link || !link.linkedUser.isActive) return null;
+
+          // Rotate the switch token (one-time use)
+          await prisma.linkedAccount.update({
+            where: { id: link.id },
+            data: { switchToken: crypto.randomUUID() },
+          });
+
+          return {
+            id: link.linkedUser.id,
+            email: link.linkedUser.email,
+            name: link.linkedUser.fullName,
+            role: link.linkedUser.role,
+            image: link.linkedUser.image,
+          };
+        }
+
+        // ── Normal email/password flow ──
         if (!credentials?.email || !credentials?.password) return null;
 
         const user = await prisma.user.findUnique({

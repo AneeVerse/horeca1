@@ -2,135 +2,157 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
-import {
-  saveAccount,
-  getAccounts,
-  getCredentials,
-  removeAccount as removeFromStore,
-  updateAccountRole,
-  clearAllAccounts,
-  type SavedAccount,
-} from '@/lib/account-store';
+
+export interface LinkedAccount {
+  linkId: string;
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  image: string | null;
+}
 
 export function useAccountSwitcher() {
   const { data: session } = useSession();
-  const router = useRouter();
   const { clearCart } = useCart();
   const { clearWishlist } = useWishlist();
-  const [accounts, setAccounts] = useState<SavedAccount[]>([]);
+  const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
+  const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState(false);
 
   const currentEmail = session?.user?.email || null;
   const currentRole = (session?.user as { role?: string })?.role || 'customer';
 
-  // Load accounts on mount & keep role in sync
-  useEffect(() => {
-    const stored = getAccounts();
-    setAccounts(stored);
-
-    // Update stored role if it changed (e.g. vendor approval)
-    if (currentEmail && currentRole) {
-      const match = stored.find((a) => a.email === currentEmail);
-      if (match && match.role !== currentRole) {
-        updateAccountRole(currentEmail, currentRole);
-        setAccounts(getAccounts());
+  // Fetch linked accounts from server
+  const fetchAccounts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/auth/linked-accounts');
+      const json = await res.json();
+      if (json.success) {
+        setAccounts(json.data);
       }
+    } catch {
+      // silently fail
+    } finally {
+      setLoading(false);
     }
-  }, [currentEmail, currentRole]);
-
-  const refreshAccounts = useCallback(() => {
-    setAccounts(getAccounts());
   }, []);
 
-  const addAccount = useCallback(
-    async (data: { email: string; password: string; name: string; role: string; id: string }) => {
-      await saveAccount(data);
-      refreshAccounts();
+  useEffect(() => {
+    if (session?.user) {
+      fetchAccounts();
+    }
+  }, [session, fetchAccounts]);
+
+  // Link a new account (verify credentials server-side, no signIn)
+  const linkAccount = useCallback(
+    async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const res = await fetch('/api/v1/auth/link-account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const json = await res.json();
+
+        if (json.success) {
+          await fetchAccounts();
+          return { success: true };
+        }
+        return { success: false, error: json.error || 'Failed to link account' };
+      } catch {
+        return { success: false, error: 'Network error' };
+      }
     },
-    [refreshAccounts]
+    [fetchAccounts]
   );
 
+  // Switch to a linked account using server-generated switch token
   const switchAccount = useCallback(
-    async (email: string) => {
-      if (email === currentEmail || switching) return;
-
+    async (linkedUserId: string) => {
+      if (switching) return;
       setSwitching(true);
+
       try {
-        const creds = await getCredentials(email);
-        if (!creds) {
-          setSwitching(false);
-          return;
-        }
-
-        const result = await signIn('credentials', {
-          email: creds.email,
-          password: creds.password,
-          redirect: false,
+        // 1. Get a one-time switch token from the server
+        const res = await fetch('/api/v1/auth/switch-account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ linkedUserId }),
         });
+        const json = await res.json();
 
-        if (result?.error) {
-          // Credentials no longer valid — remove the stale account
-          removeFromStore(email);
-          refreshAccounts();
+        if (!json.success) {
           setSwitching(false);
           return;
         }
 
-        // Clear user-specific state
+        // 2. Clear user-specific state before switching
         clearCart();
         clearWishlist();
 
-        // Full page reload to ensure NextAuth session cache is refreshed
-        const account = accounts.find((a) => a.email === email);
-        const targetRole = account?.role || 'customer';
+        // 3. Use signIn with redirect — NextAuth handles navigation
+        //    after the cookie is fully set (no race condition)
+        const targetRole = json.data.role;
+        let callbackUrl = '/';
+        if (targetRole === 'admin') callbackUrl = '/admin/dashboard';
+        else if (targetRole === 'vendor') callbackUrl = '/vendor/dashboard';
 
-        if (targetRole === 'admin') {
-          window.location.href = '/admin/dashboard';
-        } else if (targetRole === 'vendor') {
-          window.location.href = '/vendor/dashboard';
-        } else {
-          window.location.href = '/';
-        }
+        await signIn('credentials', {
+          switchToken: json.data.switchToken,
+          callbackUrl,
+        });
+        // signIn with redirect:true never returns — browser navigates
       } catch {
         setSwitching(false);
       }
     },
-    [currentEmail, switching, accounts, clearCart, clearWishlist, router, refreshAccounts]
+    [switching, clearCart, clearWishlist]
   );
 
-  const removeAccountById = useCallback(
-    (email: string) => {
-      removeFromStore(email);
-      refreshAccounts();
-    },
-    [refreshAccounts]
-  );
-
-  const handleSignOut = useCallback(
-    async (removeFromSaved = false) => {
-      if (removeFromSaved && currentEmail) {
-        removeFromStore(currentEmail);
+  // Remove a linked account
+  const unlinkAccount = useCallback(
+    async (linkId: string) => {
+      try {
+        await fetch(`/api/v1/auth/link-account/${linkId}`, { method: 'DELETE' });
+        await fetchAccounts();
+      } catch {
+        // silently fail
       }
+    },
+    [fetchAccounts]
+  );
+
+  // Sign out — switch to next linked account or go home
+  const handleSignOut = useCallback(
+    async () => {
+      if (accounts.length > 0) {
+        // Switch to the first linked account instead of logging out
+        const next = accounts[0];
+        await switchAccount(next.id);
+        return;
+      }
+
+      // No linked accounts — full sign out
       clearCart();
       clearWishlist();
-      clearAllAccounts();
       await signOut({ callbackUrl: '/' });
     },
-    [currentEmail, clearCart, clearWishlist]
+    [accounts, switchAccount, clearCart, clearWishlist]
   );
 
   return {
     accounts,
+    loading,
     currentEmail,
     currentRole,
     switching,
-    addAccount,
+    linkAccount,
     switchAccount,
-    removeAccount: removeAccountById,
-    signOutAll: handleSignOut,
-    refreshAccounts,
+    unlinkAccount,
+    signOutCurrent: handleSignOut,
+    refreshAccounts: fetchAccounts,
   };
 }
