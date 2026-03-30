@@ -22,8 +22,6 @@ import {
     AlertTriangle,
     FolderTree,
     Package,
-    ToggleLeft,
-    ToggleRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImageUpload } from '@/components/ui/ImageUpload';
@@ -574,10 +572,13 @@ export default function CategoriesPage() {
                 >
                     {toggleLoadingId === cat.id ? (
                         <Loader2 size={20} className="animate-spin text-[#AEAEAE]" />
-                    ) : cat.isActive ? (
-                        <ToggleRight size={28} className="text-[#299E60]" />
                     ) : (
-                        <ToggleLeft size={28} className="text-[#AEAEAE]" />
+                        <div
+                            className="relative inline-flex h-[22px] w-[40px] shrink-0 items-center rounded-full transition-colors duration-200"
+                            style={{ backgroundColor: cat.isActive ? '#299E60' : '#D1D5DB' }}
+                        >
+                            <span className="inline-block h-[16px] w-[16px] rounded-full bg-white shadow-sm transition-transform duration-200" style={{ transform: cat.isActive ? 'translateX(20px)' : 'translateX(3px)' }} />
+                        </div>
                     )}
                     <span
                         className={cn(

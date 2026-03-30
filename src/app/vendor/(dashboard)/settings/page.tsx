@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, ToggleLeft, ToggleRight, Pencil } from 'lucide-react';
+import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ServiceArea {
@@ -475,13 +475,11 @@ export default function VendorSettingsPage() {
                                     <span>{area.pincode}</span>
                                     <button
                                         onClick={() => handleToggleArea(area)}
-                                        className="ml-1 p-1 rounded hover:bg-black/5 transition-colors"
+                                        className="relative ml-1 inline-flex h-[18px] w-[32px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200"
+                                        style={{ backgroundColor: area.isActive ? '#299E60' : '#D1D5DB' }}
                                         title={area.isActive ? 'Deactivate' : 'Activate'}
                                     >
-                                        {area.isActive
-                                            ? <ToggleRight size={16} className="text-[#299E60]" />
-                                            : <ToggleLeft size={16} className="text-[#AEAEAE]" />
-                                        }
+                                        <span className="inline-block h-[13px] w-[13px] rounded-full bg-white shadow-sm transition-transform duration-200" style={{ transform: area.isActive ? 'translateX(16px)' : 'translateX(3px)' }} />
                                     </button>
                                     <button
                                         onClick={() => handleDeleteArea(area)}
@@ -609,13 +607,11 @@ export default function VendorSettingsPage() {
                                     </span>
                                     <button
                                         onClick={() => handleToggleSlot(slot)}
-                                        className="p-1.5 rounded-[6px] hover:bg-gray-100 transition-colors"
+                                        className="relative inline-flex h-[20px] w-[36px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200"
+                                        style={{ backgroundColor: slot.isActive ? '#299E60' : '#D1D5DB' }}
                                         title={slot.isActive ? 'Deactivate' : 'Activate'}
                                     >
-                                        {slot.isActive
-                                            ? <ToggleRight size={18} className="text-[#299E60]" />
-                                            : <ToggleLeft size={18} className="text-[#AEAEAE]" />
-                                        }
+                                        <span className="inline-block h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform duration-200" style={{ transform: slot.isActive ? 'translateX(18px)' : 'translateX(3px)' }} />
                                     </button>
                                     <button
                                         onClick={() => openEditSlot(slot)}

@@ -15,8 +15,6 @@ import {
     CheckCircle,
     Clock,
     XCircle,
-    ToggleLeft,
-    ToggleRight,
     AlertTriangle,
     FileSpreadsheet,
     FileDown,
@@ -865,10 +863,13 @@ export default function ProductsPage() {
                                                         >
                                                             {actionLoading === product.id ? (
                                                                 <Loader2 size={16} className="animate-spin" />
-                                                            ) : product.isActive ? (
-                                                                <ToggleRight size={20} />
                                                             ) : (
-                                                                <ToggleLeft size={20} />
+                                                                <div
+                                                                    className="relative inline-flex h-[20px] w-[36px] shrink-0 items-center rounded-full transition-colors duration-200"
+                                                                    style={{ backgroundColor: product.isActive ? '#299E60' : '#D1D5DB' }}
+                                                                >
+                                                                    <span className="inline-block h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform duration-200" style={{ transform: product.isActive ? 'translateX(18px)' : 'translateX(3px)' }} />
+                                                                </div>
                                                             )}
                                                         </button>
 

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-    Search, Plus, Loader2, Package, Pencil, ToggleLeft, ToggleRight, X,
+    Search, Plus, Loader2, Package, Pencil, X,
     ChevronRight, Info, ImageIcon, Settings, DollarSign, Trash2,
     BarChart3, BoxIcon, Tag,
 } from 'lucide-react';
@@ -776,13 +776,14 @@ export default function VendorProductsPage() {
                                                 </button>
                                                 <button
                                                     onClick={() => toggleActive(product)}
-                                                    className={cn(
-                                                        'p-2 rounded-[8px] transition-colors',
-                                                        product.isActive ? 'hover:bg-[#FFF0F0] text-[#E74C3C]' : 'hover:bg-[#EEF8F1] text-[#299E60]'
-                                                    )}
+                                                    className="relative inline-flex h-[22px] w-[40px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200"
+                                                    style={{ backgroundColor: product.isActive ? '#299E60' : '#D1D5DB' }}
                                                     title={product.isActive ? 'Deactivate' : 'Activate'}
                                                 >
-                                                    {product.isActive ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                                                    <span
+                                                        className="inline-block h-[16px] w-[16px] rounded-full bg-white shadow-sm transition-transform duration-200"
+                                                        style={{ transform: product.isActive ? 'translateX(20px)' : 'translateX(3px)' }}
+                                                    />
                                                 </button>
                                                 <button
                                                     onClick={() => setDeleteTarget(product)}
