@@ -158,7 +158,8 @@ export function Navbar() {
     const pathname = usePathname();
     const isShipmentPage = pathname?.includes('/cart/shipment/');
     const isAdminPage = pathname?.startsWith('/admin');
-    const isVendorDashboard = pathname?.startsWith('/vendor/') && !pathname?.startsWith('/vendor/[');
+    const vendorDashboardPaths = ['/vendor/dashboard', '/vendor/orders', '/vendor/products', '/vendor/inventory', '/vendor/settings'];
+    const isVendorDashboard = vendorDashboardPaths.some(p => pathname?.startsWith(p));
 
     // Completely hide navbar on dashboard and shipment pages
     if (isAdminPage || isVendorDashboard || isShipmentPage) return null;

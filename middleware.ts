@@ -10,14 +10,24 @@ const protectedRoutes = [
   '/profile',
   '/wishlist',
   '/admin',
-  '/vendor',
+  '/vendor/dashboard',
+  '/vendor/orders',
+  '/vendor/products',
+  '/vendor/inventory',
+  '/vendor/settings',
 ];
 
 // Routes that only admins can access
 const adminRoutes = ['/admin'];
 
-// Routes that only vendors (or admins) can access
-const vendorRoutes = ['/vendor'];
+// Vendor dashboard routes (vendors + admins only)
+const vendorRoutes = [
+  '/vendor/dashboard',
+  '/vendor/orders',
+  '/vendor/products',
+  '/vendor/inventory',
+  '/vendor/settings',
+];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;

@@ -112,6 +112,11 @@ export const PATCH = adminOnly(async (req: NextRequest, _ctx) => {
       throw Errors.notFound('Vendor');
     }
 
+    // When approving: also activate the vendor
+    if (allowedFields.isVerified === true) {
+      allowedFields.isActive = true;
+    }
+
     const updated = await prisma.vendor.update({
       where: { id },
       data: allowedFields,
@@ -127,6 +132,14 @@ export const PATCH = adminOnly(async (req: NextRequest, _ctx) => {
         },
       },
     });
+
+    // Promote user role to 'vendor' on approval, revert to 'customer' on revoke
+    if (typeof allowedFields.isVerified === 'boolean') {
+      await prisma.user.update({
+        where: { id: existing.userId },
+        data: { role: allowedFields.isVerified ? 'vendor' : 'customer' },
+      });
+    }
 
     // Emit VendorOnboarded when vendor is verified for the first time
     if (

@@ -11,6 +11,7 @@ import { AddressProvider } from "@/context/AddressContext";
 import { WishlistProvider } from "@/context/WishlistContext";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { Toaster } from 'sonner';
+import { VendorApplicationBanner } from '@/components/features/homepage/VendorApplicationBanner';
 
 const quicksand = Quicksand({
   subsets: ["latin"],
@@ -50,6 +51,7 @@ export default function RootLayout({
               <CartProvider>
                 <Toaster position="top-center" richColors />
               <Navbar />
+              <VendorApplicationBanner />
               <main className="w-full min-h-screen pb-20 md:pb-0">
                 {children}
               </main>

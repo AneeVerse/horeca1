@@ -84,7 +84,7 @@ export default function VendorDashboardPage() {
                 if (json.success) {
                     setData(json.data);
                 } else {
-                    setError(json.error || 'Failed to load dashboard data');
+                    setError(json.error?.message || json.error || 'Failed to load dashboard data');
                 }
             })
             .catch(() => setError('Failed to load dashboard data'))

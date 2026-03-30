@@ -34,13 +34,14 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(input.password, 12);
 
+    // All users start as 'customer' — vendors get promoted after admin approval
     const user = await prisma.user.create({
       data: {
         email: input.email,
         password: hashedPassword,
         fullName: input.fullName,
         phone: input.phone,
-        role: input.role || 'customer',
+        role: 'customer',
         pincode: input.pincode,
         businessName: input.businessName,
         gstNumber: input.gstNumber,
@@ -56,10 +57,31 @@ export class AuthService {
       },
     });
 
+    // If user applied as vendor, create a Vendor record (unverified, inactive)
+    // Admin will review and approve via /admin/approvals
+    if (input.role === 'vendor') {
+      const businessName = input.businessName || input.fullName;
+      const slug = businessName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        + '-' + user.id.slice(0, 8);
+
+      await prisma.vendor.create({
+        data: {
+          userId: user.id,
+          businessName,
+          slug,
+          isVerified: false,
+          isActive: false,
+        },
+      });
+    }
+
     emitEvent('UserRegistered', {
       userId: user.id,
       email: user.email,
-      role: user.role,
+      role: input.role || 'customer',
     });
 
     return user;
