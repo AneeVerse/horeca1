@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.env*
+!.env.production
+docker
+docs
+*.md
+local_dump.sql
+.claude
