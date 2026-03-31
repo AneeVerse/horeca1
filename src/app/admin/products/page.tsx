@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Search,
     Loader2,
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImageUpload } from '@/components/ui/ImageUpload';
+import ProductImportModal from '@/components/features/admin/ProductImportModal';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -78,11 +79,6 @@ interface ProductFormData {
     minOrderQty: string;
     creditEligible: boolean;
     imageUrl: string;
-}
-
-interface ImportResult {
-    created: number;
-    errors: { row: number; message: string }[];
 }
 
 const EMPTY_FORM: ProductFormData = {
@@ -144,10 +140,6 @@ export default function ProductsPage() {
 
     // Import modal
     const [importOpen, setImportOpen] = useState(false);
-    const [importFile, setImportFile] = useState<File | null>(null);
-    const [importVendorId, setImportVendorId] = useState('');
-    const [importing, setImporting] = useState(false);
-    const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
     // Export dropdown
     const [exportOpen, setExportOpen] = useState(false);
@@ -157,7 +149,6 @@ export default function ProductsPage() {
     const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
     const [deleting, setDeleting] = useState(false);
 
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // -----------------------------------------------------------------------
     // Debounced search
@@ -234,6 +225,7 @@ export default function ProductsPage() {
                     setProducts(prev => append ? [...prev, ...incoming] : incoming);
                     setCursor(json.data?.nextCursor ?? null);
                     setHasMore(!!json.data?.nextCursor);
+                    if (json.data?.stats) setStats(json.data.stats);
                 }
             } catch (err) {
                 console.error('Failed to fetch products:', err);
@@ -268,6 +260,7 @@ export default function ProductsPage() {
                     setProducts(incoming);
                     setCursor(json.data?.nextCursor ?? null);
                     setHasMore(!!json.data?.nextCursor);
+                    if (json.data?.stats) setStats(json.data.stats);
                 }
             } catch (err) {
                 console.error('Failed to fetch products:', err);
@@ -280,16 +273,10 @@ export default function ProductsPage() {
     }, [debouncedSearch, filterStatus, filterVendor, filterCategory]);
 
     // -----------------------------------------------------------------------
-    // Stats (computed from loaded products)
+    // Stats (from API — counts ALL products, not just loaded page)
     // -----------------------------------------------------------------------
 
-    const stats = useMemo(() => {
-        const total = products.length;
-        const approved = products.filter(p => p.approvalStatus === 'approved').length;
-        const pending = products.filter(p => p.approvalStatus === 'pending').length;
-        const rejected = products.filter(p => p.approvalStatus === 'rejected').length;
-        return { total, approved, pending, rejected };
-    }, [products]);
+    const [stats, setStats] = useState({ total: 0, approved: 0, pending: 0, rejected: 0 });
 
     const statCards = [
         { label: 'Total Products', value: stats.total, icon: Package, color: '#3B82F6', bgColor: '#EFF6FF' },
@@ -456,59 +443,29 @@ export default function ProductsPage() {
     // Import
     // -----------------------------------------------------------------------
 
-    const openImport = () => {
-        setImportFile(null);
-        setImportVendorId('');
-        setImportResult(null);
-        setImportOpen(true);
-    };
+    const openImport = () => setImportOpen(true);
 
-    const handleImport = async () => {
-        if (!importFile || !importVendorId) return;
-        setImporting(true);
-        setImportResult(null);
-        try {
-            const fd = new FormData();
-            fd.append('file', importFile);
-            fd.append('vendorId', importVendorId);
-
-            const res = await fetch('/api/v1/admin/products/import', { method: 'POST', body: fd });
-            const json = await res.json();
-
-            if (json.success || res.ok) {
-                setImportResult({
-                    created: json.data?.created ?? 0,
-                    errors: json.data?.errors ?? [],
-                });
-                // Refresh products list
-                setCursor(null);
-                setHasMore(false);
-                const params = new URLSearchParams();
-                params.set('limit', String(PAGE_LIMIT));
-                if (debouncedSearch) params.set('search', debouncedSearch);
-                if (filterStatus) params.set('approvalStatus', filterStatus);
-                if (filterVendor) params.set('vendorId', filterVendor);
-                if (filterCategory) params.set('categoryId', filterCategory);
-                const refetchRes = await fetch(`/api/v1/admin/products?${params.toString()}`);
-                const refetchJson = await refetchRes.json();
-                if (refetchJson.success) {
-                    const incoming: Product[] = refetchJson.data?.products ?? refetchJson.data ?? [];
+    const handleImportComplete = () => {
+        // Refresh products list after import
+        setCursor(null);
+        setHasMore(false);
+        const params = new URLSearchParams();
+        params.set('limit', String(PAGE_LIMIT));
+        if (debouncedSearch) params.set('search', debouncedSearch);
+        if (filterStatus) params.set('approvalStatus', filterStatus);
+        if (filterVendor) params.set('vendorId', filterVendor);
+        if (filterCategory) params.set('categoryId', filterCategory);
+        fetch(`/api/v1/admin/products?${params.toString()}`)
+            .then(r => r.json())
+            .then(json => {
+                if (json.success) {
+                    const incoming: Product[] = json.data?.products ?? json.data ?? [];
                     setProducts(incoming);
-                    setCursor(refetchJson.data?.nextCursor ?? null);
-                    setHasMore(!!refetchJson.data?.nextCursor);
+                    setCursor(json.data?.nextCursor ?? null);
+                    setHasMore(!!json.data?.nextCursor);
                 }
-            } else {
-                setImportResult({
-                    created: 0,
-                    errors: [{ row: 0, message: json.error?.message ?? json.message ?? 'Import failed' }],
-                });
-            }
-        } catch (err) {
-            console.error('Failed to import products:', err);
-            setImportResult({ created: 0, errors: [{ row: 0, message: 'Network error. Please try again.' }] });
-        } finally {
-            setImporting(false);
-        }
+            })
+            .catch(console.error);
     };
 
     // -----------------------------------------------------------------------
@@ -528,20 +485,8 @@ export default function ProductsPage() {
     };
 
     // -----------------------------------------------------------------------
-    // Template download (import)
+    // Template download (import) — now handled inside ProductImportModal
     // -----------------------------------------------------------------------
-
-    const downloadTemplate = () => {
-        const cols = ['name', 'sku', 'hsn', 'brand', 'categoryId', 'description', 'basePrice', 'originalPrice', 'taxPercent', 'minOrderQty', 'creditEligible'];
-        const csvContent = cols.join(',') + '\n';
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'product_import_template.csv';
-        a.click();
-        URL.revokeObjectURL(url);
-    };
 
     // -----------------------------------------------------------------------
     // Helpers
@@ -1222,166 +1167,12 @@ export default function ProductsPage() {
             {/* ============================================================= */}
             {/* Import Modal                                                    */}
             {/* ============================================================= */}
-            {importOpen && (
-                <>
-                    {/* Backdrop */}
-                    <div
-                        className="fixed inset-0 bg-black/40 z-[80] animate-in fade-in duration-200"
-                        onClick={() => !importing && setImportOpen(false)}
-                    />
-
-                    {/* Modal */}
-                    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-                        <div
-                            className="bg-white rounded-[20px] border border-[#EEEEEE] shadow-2xl w-full max-w-[560px] max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200"
-                            onClick={e => e.stopPropagation()}
-                        >
-                            {/* Modal Header */}
-                            <div className="flex items-center justify-between px-8 py-6 border-b border-[#EEEEEE] shrink-0">
-                                <h2 className="text-[20px] font-[900] text-[#181725]">Import Products</h2>
-                                <button
-                                    onClick={() => !importing && setImportOpen(false)}
-                                    className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center hover:bg-[#F8F9FB] text-[#7C7C7C] hover:text-[#181725] transition-all"
-                                >
-                                    <X size={18} />
-                                </button>
-                            </div>
-
-                            {/* Modal Body */}
-                            <div className="px-8 py-8 space-y-6 overflow-y-auto flex-1">
-                                {/* Vendor selection */}
-                                <div>
-                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                        Vendor <span className="text-[#E74C3C]">*</span>
-                                    </label>
-                                    <select
-                                        value={importVendorId}
-                                        onChange={e => setImportVendorId(e.target.value)}
-                                        className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white cursor-pointer"
-                                    >
-                                        <option value="">Select vendor for imported products</option>
-                                        {vendors.map(v => (
-                                            <option key={v.id} value={v.id}>{v.businessName}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {/* File upload */}
-                                <div>
-                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                        File <span className="text-[#E74C3C]">*</span>
-                                    </label>
-                                    <div
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="w-full border-2 border-dashed border-[#EEEEEE] rounded-[14px] p-8 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-[#299E60]/40 hover:bg-[#F8F9FB] transition-all"
-                                    >
-                                        <div className="w-[48px] h-[48px] bg-[#EEF8F1] rounded-[14px] flex items-center justify-center text-[#299E60]">
-                                            <Upload size={22} />
-                                        </div>
-                                        {importFile ? (
-                                            <div className="text-center">
-                                                <p className="text-[14px] font-bold text-[#181725]">{importFile.name}</p>
-                                                <p className="text-[12px] text-[#AEAEAE] font-medium mt-1">
-                                                    {(importFile.size / 1024).toFixed(1)} KB
-                                                </p>
-                                            </div>
-                                        ) : (
-                                            <div className="text-center">
-                                                <p className="text-[14px] font-semibold text-[#181725]">
-                                                    Click to upload file
-                                                </p>
-                                                <p className="text-[12px] text-[#AEAEAE] font-medium mt-1">
-                                                    Supports .xlsx and .csv
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <input
-                                        ref={fileInputRef}
-                                        type="file"
-                                        accept=".xlsx,.csv"
-                                        className="hidden"
-                                        onChange={e => {
-                                            const file = e.target.files?.[0] ?? null;
-                                            setImportFile(file);
-                                            e.target.value = '';
-                                        }}
-                                    />
-                                </div>
-
-                                {/* Download Template */}
-                                <button
-                                    onClick={downloadTemplate}
-                                    className="text-[13px] font-bold text-[#299E60] hover:underline flex items-center gap-2"
-                                >
-                                    <Download size={14} />
-                                    Download Import Template
-                                </button>
-
-                                {/* Import Result */}
-                                {importResult && (
-                                    <div className="space-y-4">
-                                        <div
-                                            className={cn(
-                                                'rounded-[12px] p-5 text-[13px] font-semibold',
-                                                importResult.created > 0
-                                                    ? 'bg-[#EEF8F1] text-[#299E60]'
-                                                    : 'bg-[#FFF7E6] text-[#976538]',
-                                            )}
-                                        >
-                                            {importResult.created} product{importResult.created !== 1 ? 's' : ''} created
-                                            {importResult.errors.length > 0 &&
-                                                `, ${importResult.errors.length} error${importResult.errors.length !== 1 ? 's' : ''}`}
-                                        </div>
-
-                                        {importResult.errors.length > 0 && (
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-left border-collapse text-[13px]">
-                                                    <thead>
-                                                        <tr className="bg-[#FFF0F0]">
-                                                            <th className="px-4 py-3 font-bold text-[#E74C3C] rounded-l-[10px]">Row</th>
-                                                            <th className="px-4 py-3 font-bold text-[#E74C3C] rounded-r-[10px]">Error</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-[#EEEEEE]">
-                                                        {importResult.errors.map((err, idx) => (
-                                                            <tr key={idx}>
-                                                                <td className="px-4 py-3 font-bold text-[#181725]">{err.row || '--'}</td>
-                                                                <td className="px-4 py-3 text-[#7C7C7C] font-medium">{err.message}</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Modal Footer */}
-                            <div className="px-8 py-6 border-t border-[#EEEEEE] shrink-0 flex items-center gap-4">
-                                <button
-                                    onClick={() => setImportOpen(false)}
-                                    disabled={importing}
-                                    className="flex-1 h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[12px] text-[14px] font-bold hover:bg-[#EEEEEE] transition-all disabled:opacity-60"
-                                >
-                                    {importResult ? 'Close' : 'Cancel'}
-                                </button>
-                                {!importResult && (
-                                    <button
-                                        onClick={handleImport}
-                                        disabled={importing || !importFile || !importVendorId}
-                                        className="flex-1 h-[48px] bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-2 shadow-sm shadow-[#299E60]/20 disabled:opacity-60 disabled:cursor-not-allowed"
-                                    >
-                                        {importing && <Loader2 size={16} className="animate-spin" />}
-                                        Upload & Import
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
+            <ProductImportModal
+                open={importOpen}
+                onClose={() => setImportOpen(false)}
+                vendors={vendors}
+                onComplete={handleImportComplete}
+            />
 
             {/* ============================================================= */}
             {/* Delete Confirmation Modal                                       */}

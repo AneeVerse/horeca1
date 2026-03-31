@@ -132,9 +132,20 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 
     const nextCursor = hasMore ? products[products.length - 1].id : null;
 
+    // Compute stats from ALL deduplicated products (not just current page)
+    const totalCount = catalogEntries.length;
+    const approvedCount = catalogEntries.filter(e => e.product.approvalStatus === 'approved').length;
+    const pendingCount = catalogEntries.filter(e => e.product.approvalStatus === 'pending').length;
+    const rejectedCount = catalogEntries.filter(e => e.product.approvalStatus === 'rejected').length;
+
     return NextResponse.json({
       success: true,
-      data: { products, nextCursor, hasMore },
+      data: {
+        products,
+        nextCursor,
+        hasMore,
+        stats: { total: totalCount, approved: approvedCount, pending: pendingCount, rejected: rejectedCount },
+      },
     });
   } catch (error) {
     return errorResponse(error);

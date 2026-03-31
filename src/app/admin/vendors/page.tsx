@@ -12,6 +12,8 @@ import {
     ShoppingBag,
     CheckCircle,
     XCircle,
+    LayoutGrid,
+    List,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -40,6 +42,7 @@ export default function VendorsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [vendors, setVendors] = useState<AdminVendor[]>([]);
     const [loading, setLoading] = useState(true);
+    const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
     useEffect(() => {
         fetch('/api/v1/admin/vendors?limit=50')
@@ -91,6 +94,27 @@ export default function VendorsPage() {
                             className="h-[44px] w-full bg-white border border-[#EEEEEE] rounded-[12px] pl-10 pr-4 text-[13px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 shadow-sm"
                         />
                     </div>
+                    {/* Grid / Table toggle */}
+                    <div className="flex items-center bg-white border border-[#EEEEEE] rounded-[10px] p-1 shadow-sm">
+                        <button
+                            onClick={() => setViewMode('grid')}
+                            className={cn(
+                                "p-2 rounded-[8px] transition-all",
+                                viewMode === 'grid' ? "bg-[#299E60] text-white shadow-sm" : "text-[#AEAEAE] hover:text-[#181725]"
+                            )}
+                        >
+                            <LayoutGrid size={18} />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('table')}
+                            className={cn(
+                                "p-2 rounded-[8px] transition-all",
+                                viewMode === 'table' ? "bg-[#299E60] text-white shadow-sm" : "text-[#AEAEAE] hover:text-[#181725]"
+                            )}
+                        >
+                            <List size={18} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -103,7 +127,8 @@ export default function VendorsPage() {
                     {searchQuery ? `No vendors found matching "${searchQuery}"` : 'No vendors yet'}
                 </div>
             ) : (
-            /* Vendors Grid */
+            /* Vendors — Grid or Table view */
+            viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-[24px]">
                 {filteredVendors.map((vendor) => (
                     <div
@@ -211,6 +236,83 @@ export default function VendorsPage() {
                     </div>
                 ))}
             </div>
+            ) : (
+            /* Table View */
+            <div className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                {/* Table Header */}
+                <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-[#FAFAFA] border-b border-[#EEEEEE] text-[12px] font-bold text-[#AEAEAE] uppercase">
+                    <div className="col-span-1">#</div>
+                    <div className="col-span-3">Vendor</div>
+                    <div className="col-span-2">Owner</div>
+                    <div className="col-span-2">Contact</div>
+                    <div className="col-span-1 text-center">Products</div>
+                    <div className="col-span-1 text-center">Orders</div>
+                    <div className="col-span-2 text-center">Actions</div>
+                </div>
+                {filteredVendors.map((vendor, i) => (
+                    <div
+                        key={vendor.id}
+                        className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#F5F5F5] items-center hover:bg-[#FAFAFA] transition-colors"
+                    >
+                        <div className="col-span-1 text-[13px] font-bold text-[#AEAEAE]">{i + 1}</div>
+                        <div className="col-span-3 flex items-center gap-3">
+                            <div className="w-[40px] h-[40px] rounded-full bg-[#F1F4F9] overflow-hidden shrink-0 flex items-center justify-center">
+                                {vendor.logoUrl ? (
+                                    <img src={vendor.logoUrl} alt={vendor.businessName} className="w-full h-full object-cover" />
+                                ) : (
+                                    <span className="text-[16px] font-black text-[#299E60]">{vendor.businessName.charAt(0)}</span>
+                                )}
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[14px] font-bold text-[#181725] truncate">{vendor.businessName}</p>
+                                <div className="flex items-center gap-1 mt-0.5">
+                                    <Star size={11} fill="#F59E0B" className="text-[#F59E0B]" />
+                                    <span className="text-[11px] font-bold text-[#7C7C7C]">{Number(vendor.rating).toFixed(1)}</span>
+                                    <span className={cn(
+                                        "ml-1 text-[10px] font-[900] px-1.5 py-0.5 rounded-full",
+                                        vendor.isVerified ? "bg-[#EEF8F1] text-[#299E60]" : "bg-[#FFF4E5] text-[#976538]"
+                                    )}>
+                                        {vendor.isVerified ? 'Verified' : 'Pending'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-span-2 text-[13px] font-medium text-[#4B4B4B] truncate">{vendor.user.fullName}</div>
+                        <div className="col-span-2 min-w-0">
+                            <p className="text-[12px] font-medium text-[#4B4B4B] truncate">{vendor.user.email}</p>
+                            {vendor.user.phone && <p className="text-[11px] text-[#AEAEAE] font-medium mt-0.5">{vendor.user.phone}</p>}
+                        </div>
+                        <div className="col-span-1 text-center text-[14px] font-bold text-[#181725]">{vendor._count.products}</div>
+                        <div className="col-span-1 text-center text-[14px] font-bold text-[#181725]">{vendor._count.orders}</div>
+                        <div className="col-span-2 flex items-center justify-center gap-2">
+                            <Link
+                                href={`/admin/vendors/${vendor.id}`}
+                                className="h-[34px] px-4 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center"
+                            >
+                                View
+                            </Link>
+                            {!vendor.isVerified ? (
+                                <button
+                                    onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
+                                    className="h-[34px] px-3 bg-[#EEF8F1] text-[#299E60] rounded-[8px] text-[12px] font-bold hover:bg-[#e0f0e5] transition-all flex items-center justify-center gap-1"
+                                >
+                                    <CheckCircle size={13} />
+                                    Approve
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
+                                    className="h-[34px] px-3 bg-[#FFF0F0] text-[#E74C3C] rounded-[8px] text-[12px] font-bold hover:bg-[#ffe5e5] transition-all flex items-center justify-center gap-1"
+                                >
+                                    <XCircle size={13} />
+                                    Revoke
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+            )
             )}
         </div>
     );
