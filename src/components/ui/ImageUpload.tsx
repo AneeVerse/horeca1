@@ -11,6 +11,7 @@ interface ImageUploadProps {
     label?: string;
     className?: string;
     size?: 'sm' | 'md' | 'lg';
+    disabled?: boolean;
 }
 
 interface MultiImageUploadProps {
@@ -19,6 +20,7 @@ interface MultiImageUploadProps {
     folder?: 'products' | 'categories' | 'vendors' | 'banners' | 'misc';
     label?: string;
     max?: number;
+    disabled?: boolean;
 }
 
 async function uploadFile(file: File, folder: string): Promise<string> {
@@ -45,6 +47,7 @@ export function ImageUpload({
     label,
     className,
     size = 'md',
+    disabled,
 }: ImageUploadProps) {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
@@ -102,12 +105,13 @@ export function ImageUpload({
             )}
 
             {value ? (
-                <div className={cn('relative rounded-[12px] overflow-hidden border border-[#EEEEEE] group', s.box)}>
+                <div className={cn('relative rounded-[12px] overflow-hidden border border-[#EEEEEE] group', s.box, disabled && 'opacity-60')}>
                     <img
                         src={value}
                         alt="Uploaded"
                         className="w-full h-full object-cover"
                     />
+                    {!disabled && (
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                         <button
                             type="button"
@@ -126,6 +130,7 @@ export function ImageUpload({
                             <X size={14} />
                         </button>
                     </div>
+                    )}
                     {uploading && (
                         <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
                             <Loader2 size={20} className="animate-spin text-[#299E60]" />
@@ -134,10 +139,10 @@ export function ImageUpload({
                 </div>
             ) : (
                 <div
-                    onClick={() => !uploading && inputRef.current?.click()}
-                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                    onClick={() => !uploading && !disabled && inputRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)}
-                    onDrop={handleDrop}
+                    onDrop={(e) => { if (!disabled) handleDrop(e); else e.preventDefault(); }}
                     className={cn(
                         'rounded-[12px] border-2 border-dashed flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all',
                         s.box,
@@ -145,6 +150,7 @@ export function ImageUpload({
                             ? 'border-[#299E60] bg-[#EEF8F1]'
                             : 'border-[#DCDCDC] hover:border-[#299E60]/40 hover:bg-[#F8F9FB]',
                         uploading && 'pointer-events-none opacity-60',
+                        disabled && 'pointer-events-none opacity-60 cursor-not-allowed',
                     )}
                 >
                     {uploading ? (
@@ -183,6 +189,7 @@ export function MultiImageUpload({
     folder = 'misc',
     label,
     max = 8,
+    disabled,
 }: MultiImageUploadProps) {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
@@ -229,8 +236,9 @@ export function MultiImageUpload({
 
             <div className="flex flex-wrap gap-3">
                 {values.map((url, idx) => (
-                    <div key={idx} className="relative w-[80px] h-[80px] rounded-[10px] overflow-hidden border border-[#EEEEEE] group">
+                    <div key={idx} className={cn('relative w-[80px] h-[80px] rounded-[10px] overflow-hidden border border-[#EEEEEE] group', disabled && 'opacity-60')}>
                         <img src={url} alt="" className="w-full h-full object-cover" />
+                        {!disabled && (
                         <button
                             type="button"
                             onClick={() => removeImage(idx)}
@@ -238,10 +246,11 @@ export function MultiImageUpload({
                         >
                             <X size={12} />
                         </button>
+                        )}
                     </div>
                 ))}
 
-                {values.length < max && (
+                {values.length < max && !disabled && (
                     <div
                         onClick={() => !uploading && inputRef.current?.click()}
                         className={cn(

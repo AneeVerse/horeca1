@@ -123,14 +123,23 @@ export class CatalogService {
   }) {
     const { basedOnProductId, ...productData } = data;
 
-    // If based on an existing approved product, auto-approve
+    // If based on an existing approved product, auto-approve and lock name/brand/images
     let approvalStatus: 'pending' | 'approved' = 'pending';
     if (basedOnProductId) {
       const source = await prisma.product.findFirst({
         where: { id: basedOnProductId, approvalStatus: 'approved' },
-        select: { id: true },
+        select: { id: true, name: true, brand: true, imageUrl: true, images: true },
       });
-      if (source) approvalStatus = 'approved';
+      if (source) {
+        approvalStatus = 'approved';
+        // Force name, brand, images from the approved source — vendors cannot override these
+        productData.name = source.name;
+        if (source.brand) productData.brand = source.brand;
+        if (source.imageUrl) productData.imageUrl = source.imageUrl;
+        if (source.images && Array.isArray(source.images) && (source.images as string[]).length > 0) {
+          productData.images = source.images as string[];
+        }
+      }
     }
 
     return prisma.product.create({
@@ -143,6 +152,14 @@ export class CatalogService {
       where: { id: productId, vendorId },
     });
     if (!product) throw Errors.notFound('Product');
+
+    // Vendors cannot change name, brand, or images on approved products
+    if (product.approvalStatus === 'approved') {
+      delete data.name;
+      delete data.brand;
+      delete data.imageUrl;
+      delete data.images;
+    }
 
     return prisma.product.update({ where: { id: productId }, data });
   }
