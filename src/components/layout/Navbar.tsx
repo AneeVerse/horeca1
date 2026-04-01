@@ -229,36 +229,36 @@ export function Navbar() {
 
                         {/* Mobile Header Layout */}
                         <div className="md:hidden space-y-3 pt-3">
-                            {/* Row 1: Location, Logo, Wishlist & Cart */}
+                            {/* Row 1: Logo (Left), Location (Center), Wishlist & Cart (Right) */}
                             <div className="flex items-center justify-between px-1">
-                                {/* Location Button (Left) */}
-                                <div className="flex-1 flex justify-start">
-                                    <button
-                                        onClick={() => setIsLocationOverlayOpen(true)}
-                                        className="flex items-center gap-1 px-2.5 py-1 border border-gray-100 rounded-full bg-[#F7F7F7] shadow-sm hover:bg-gray-100 transition-colors cursor-pointer"
-                                    >
-                                        <MapPin size={12} className="text-[#53B175]" />
-                                        <span className="text-[11px] font-bold text-gray-500 truncate max-w-[60px]">
-                                            {selectedAddress?.shortAddress || 'Select'}
-                                        </span>
-                                        <ChevronDown size={12} className="text-gray-400" />
-                                    </button>
-                                </div>
-
-                                {/* Logo (Center) */}
-                                <Link href="/" className="flex justify-center">
+                                {/* Logo (Left) */}
+                                <Link href="/" className="flex items-center">
                                     <Image
-                                        src="/Horeca1.png"
+                                        src="/horeca1_logo.jpg"
                                         alt="Horeca1"
-                                        width={80}
-                                        height={20}
-                                        className="h-[20px] w-auto object-contain"
+                                        width={40}
+                                        height={40}
+                                        className="h-[40px] w-[40px] object-contain rounded-lg"
                                         priority
                                     />
                                 </Link>
 
+                                {/* Location Button (Center) */}
+                                <div className="flex-1 flex justify-center px-2 max-w-[190px]">
+                                    <button
+                                        onClick={() => setIsLocationOverlayOpen(true)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-100 rounded-full bg-[#F7F7F7] shadow-sm hover:bg-gray-100 transition-colors cursor-pointer w-full justify-center"
+                                    >
+                                        <MapPin size={13} className="text-[#53B175] shrink-0" />
+                                        <span className="text-[12px] font-bold text-gray-600 truncate max-w-[140px]">
+                                            {selectedAddress?.shortAddress || 'Select Location'}
+                                        </span>
+                                        <ChevronDown size={13} className="text-gray-400 shrink-0" />
+                                    </button>
+                                </div>
+
                                 {/* Wishlist & Cart (Right) */}
-                                <div className="flex-1 flex justify-end items-center gap-2">
+                                <div className="flex items-center gap-2">
                                     <Link
                                         href="/wishlist"
                                         className="relative p-1 cursor-pointer"

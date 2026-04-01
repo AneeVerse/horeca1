@@ -34,6 +34,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "HorecaHub - B2B E-commerce for Restaurant Products",
   description: "High speed, optimized B2B platform for restaurant and eating products.",
+  icons: {
+    icon: "/horeca1_logo.jpg",
+    shortcut: "/horeca1_logo.jpg",
+    apple: "/horeca1_logo.jpg",
+  },
 };
 
 export default function RootLayout({
