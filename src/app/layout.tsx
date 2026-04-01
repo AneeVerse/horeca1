@@ -4,7 +4,7 @@ import { Quicksand, Poppins } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { Inter } from "next/font/google";
+import { Inter, Playfair_Display } from "next/font/google";
 import { CartProvider } from "@/context/CartContext";
 import { GoogleMapsProvider } from "@/components/providers/GoogleMapsProvider";
 import { AddressProvider } from "@/context/AddressContext";
@@ -31,6 +31,12 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+  variable: "--font-playfair",
+});
+
 export const metadata: Metadata = {
   title: "HorecaHub - B2B E-commerce for Restaurant Products",
   description: "High speed, optimized B2B platform for restaurant and eating products.",
@@ -48,7 +54,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${quicksand.variable} ${inter.variable} ${poppins.variable} font-sans antialiased bg-background`}>
+      <body className={`${quicksand.variable} ${inter.variable} ${poppins.variable} ${playfair.variable} font-sans antialiased bg-background`}>
         <AuthProvider>
         <GoogleMapsProvider>
           <AddressProvider>

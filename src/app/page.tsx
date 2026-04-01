@@ -33,7 +33,7 @@ export default function Home() {
       {/* Shop By Store Alt (Design 2 - Popular Chains white clean style) */}
       {/* <ShopByStoreAlt /> */}
 
-      {/* Vendors Nearby (Repurposed Promo Banner) */}
+      {/* Shop by Brand — grid of brand/category cards */}
       <ShopByStorePromo />
 
       {/* Collections: Italian Kitchen, Oriental, etc. */}

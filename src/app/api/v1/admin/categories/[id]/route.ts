@@ -20,7 +20,7 @@ const updateCategorySchema = z.object({
   name: z.string().min(1).optional(),
   slug: z.string().min(1).optional(),
   parentId: z.string().uuid().nullable().optional(),
-  imageUrl: z.string().url().nullable().optional(),
+  imageUrl: z.string().nullable().optional(),
   sortOrder: z.number().int().optional(),
   isActive: z.boolean().optional(),
 });
