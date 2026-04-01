@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
-import { Upload, X, Loader2, ImageIcon, Plus } from 'lucide-react';
+import { Upload, X, Loader2, ImageIcon, Plus, Link2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ImageUploadProps {
@@ -52,7 +52,24 @@ export function ImageUpload({
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
     const [dragOver, setDragOver] = useState(false);
+    const [showUrlInput, setShowUrlInput] = useState(false);
+    const [urlValue, setUrlValue] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const handleUrlSubmit = useCallback(() => {
+        const trimmed = urlValue.trim();
+        if (!trimmed) return;
+        try {
+            new URL(trimmed);
+        } catch {
+            setError('Please enter a valid URL');
+            return;
+        }
+        setError('');
+        onChange(trimmed);
+        setUrlValue('');
+        setShowUrlInput(false);
+    }, [urlValue, onChange]);
 
     const sizeMap = {
         sm: { box: 'w-[80px] h-[80px]', icon: 16, text: '10px' },
@@ -137,31 +154,75 @@ export function ImageUpload({
                         </div>
                     )}
                 </div>
+            ) : showUrlInput ? (
+                <div className={cn('rounded-[12px] border border-[#DCDCDC] p-3 flex flex-col gap-2', size === 'sm' ? 'w-[200px]' : size === 'md' ? 'w-[280px]' : 'w-full')}>
+                    <div className="flex items-center gap-2">
+                        <Link2 size={14} className="text-[#299E60] shrink-0" />
+                        <span className="text-[12px] font-semibold text-[#555]">Paste image URL</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                        <input
+                            type="url"
+                            value={urlValue}
+                            onChange={(e) => { setUrlValue(e.target.value); setError(''); }}
+                            onKeyDown={(e) => e.key === 'Enter' && handleUrlSubmit()}
+                            placeholder="https://..."
+                            className="flex-1 min-w-0 px-2.5 py-1.5 text-[12px] border border-[#DCDCDC] rounded-[8px] outline-none focus:border-[#299E60] transition-colors"
+                            autoFocus
+                        />
+                        <button
+                            type="button"
+                            onClick={handleUrlSubmit}
+                            className="px-2.5 py-1.5 rounded-[8px] bg-[#299E60] text-white hover:bg-[#238551] transition-colors"
+                        >
+                            <Check size={14} />
+                        </button>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => { setShowUrlInput(false); setUrlValue(''); setError(''); }}
+                        className="text-[11px] text-[#AEAEAE] hover:text-[#555] self-start transition-colors"
+                    >
+                        Back to file upload
+                    </button>
+                </div>
             ) : (
-                <div
-                    onClick={() => !uploading && !disabled && inputRef.current?.click()}
-                    onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragOver(true); }}
-                    onDragLeave={() => setDragOver(false)}
-                    onDrop={(e) => { if (!disabled) handleDrop(e); else e.preventDefault(); }}
-                    className={cn(
-                        'rounded-[12px] border-2 border-dashed flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all',
-                        s.box,
-                        dragOver
-                            ? 'border-[#299E60] bg-[#EEF8F1]'
-                            : 'border-[#DCDCDC] hover:border-[#299E60]/40 hover:bg-[#F8F9FB]',
-                        uploading && 'pointer-events-none opacity-60',
-                        disabled && 'pointer-events-none opacity-60 cursor-not-allowed',
-                    )}
-                >
-                    {uploading ? (
-                        <Loader2 size={s.icon} className="animate-spin text-[#299E60]" />
-                    ) : (
-                        <>
-                            <ImageIcon size={s.icon} className="text-[#AEAEAE]" />
-                            <span className={cn('text-[#AEAEAE] font-medium', `text-[${s.text}]`)}>
-                                {size === 'sm' ? 'Upload' : 'Click or drop image'}
-                            </span>
-                        </>
+                <div className="flex flex-col gap-1.5">
+                    <div
+                        onClick={() => !uploading && !disabled && inputRef.current?.click()}
+                        onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragOver(true); }}
+                        onDragLeave={() => setDragOver(false)}
+                        onDrop={(e) => { if (!disabled) handleDrop(e); else e.preventDefault(); }}
+                        className={cn(
+                            'rounded-[12px] border-2 border-dashed flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all',
+                            s.box,
+                            dragOver
+                                ? 'border-[#299E60] bg-[#EEF8F1]'
+                                : 'border-[#DCDCDC] hover:border-[#299E60]/40 hover:bg-[#F8F9FB]',
+                            uploading && 'pointer-events-none opacity-60',
+                            disabled && 'pointer-events-none opacity-60 cursor-not-allowed',
+                        )}
+                    >
+                        {uploading ? (
+                            <Loader2 size={s.icon} className="animate-spin text-[#299E60]" />
+                        ) : (
+                            <>
+                                <ImageIcon size={s.icon} className="text-[#AEAEAE]" />
+                                <span className={cn('text-[#AEAEAE] font-medium', `text-[${s.text}]`)}>
+                                    {size === 'sm' ? 'Upload' : 'Click or drop image'}
+                                </span>
+                            </>
+                        )}
+                    </div>
+                    {!disabled && (
+                        <button
+                            type="button"
+                            onClick={() => setShowUrlInput(true)}
+                            className="flex items-center justify-center gap-1.5 text-[11px] text-[#AEAEAE] hover:text-[#299E60] font-medium transition-colors"
+                        >
+                            <Link2 size={12} />
+                            <span>Use image URL</span>
+                        </button>
                     )}
                 </div>
             )}
@@ -193,7 +254,28 @@ export function MultiImageUpload({
 }: MultiImageUploadProps) {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
+    const [showUrlInput, setShowUrlInput] = useState(false);
+    const [urlValue, setUrlValue] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const handleUrlSubmit = useCallback(() => {
+        const trimmed = urlValue.trim();
+        if (!trimmed) return;
+        try {
+            new URL(trimmed);
+        } catch {
+            setError('Please enter a valid URL');
+            return;
+        }
+        if (values.length >= max) {
+            setError(`Maximum ${max} images allowed`);
+            return;
+        }
+        setError('');
+        onChange([...values, trimmed]);
+        setUrlValue('');
+        setShowUrlInput(false);
+    }, [urlValue, onChange, values, max]);
 
     const handleFiles = useCallback(async (files: FileList) => {
         const remaining = max - values.length;
@@ -250,22 +332,52 @@ export function MultiImageUpload({
                     </div>
                 ))}
 
-                {values.length < max && !disabled && (
-                    <div
-                        onClick={() => !uploading && inputRef.current?.click()}
-                        className={cn(
-                            'w-[80px] h-[80px] rounded-[10px] border-2 border-dashed border-[#DCDCDC] flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-[#299E60]/40 hover:bg-[#F8F9FB] transition-all',
-                            uploading && 'pointer-events-none opacity-60',
-                        )}
-                    >
-                        {uploading ? (
-                            <Loader2 size={16} className="animate-spin text-[#299E60]" />
-                        ) : (
-                            <>
-                                <Plus size={16} className="text-[#AEAEAE]" />
-                                <span className="text-[10px] text-[#AEAEAE] font-medium">Add</span>
-                            </>
-                        )}
+                {values.length < max && !disabled && !showUrlInput && (
+                    <div className="flex flex-col gap-1">
+                        <div
+                            onClick={() => !uploading && inputRef.current?.click()}
+                            className={cn(
+                                'w-[80px] h-[80px] rounded-[10px] border-2 border-dashed border-[#DCDCDC] flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-[#299E60]/40 hover:bg-[#F8F9FB] transition-all',
+                                uploading && 'pointer-events-none opacity-60',
+                            )}
+                        >
+                            {uploading ? (
+                                <Loader2 size={16} className="animate-spin text-[#299E60]" />
+                            ) : (
+                                <>
+                                    <Plus size={16} className="text-[#AEAEAE]" />
+                                    <span className="text-[10px] text-[#AEAEAE] font-medium">Add</span>
+                                </>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowUrlInput(true)}
+                            className="flex items-center justify-center gap-1 text-[10px] text-[#AEAEAE] hover:text-[#299E60] font-medium transition-colors"
+                        >
+                            <Link2 size={10} />
+                            <span>URL</span>
+                        </button>
+                    </div>
+                )}
+
+                {showUrlInput && values.length < max && !disabled && (
+                    <div className="flex items-center gap-1.5 min-w-[220px]">
+                        <input
+                            type="url"
+                            value={urlValue}
+                            onChange={(e) => { setUrlValue(e.target.value); setError(''); }}
+                            onKeyDown={(e) => e.key === 'Enter' && handleUrlSubmit()}
+                            placeholder="https://..."
+                            className="flex-1 min-w-0 px-2.5 py-1.5 text-[12px] border border-[#DCDCDC] rounded-[8px] outline-none focus:border-[#299E60] transition-colors"
+                            autoFocus
+                        />
+                        <button type="button" onClick={handleUrlSubmit} className="p-1.5 rounded-[8px] bg-[#299E60] text-white hover:bg-[#238551] transition-colors">
+                            <Check size={14} />
+                        </button>
+                        <button type="button" onClick={() => { setShowUrlInput(false); setUrlValue(''); setError(''); }} className="p-1.5 rounded-[8px] text-[#AEAEAE] hover:text-[#555] transition-colors">
+                            <X size={14} />
+                        </button>
                     </div>
                 )}
             </div>

@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+
 import { dal } from '@/lib/dal';
 import type { Category } from '@/types';
 
@@ -26,10 +27,6 @@ export function CategoryShowcase() {
     const [categories, setCategories] = useState<(Category & { bgColor: string })[]>([]);
     const [isMobileExpanded, setIsMobileExpanded] = useState(false);
     const [isDesktopExpanded, setIsDesktopExpanded] = useState(false);
-    const desktopScrollRef = useRef<HTMLDivElement>(null);
-    const [canScrollLeft, setCanScrollLeft] = useState(false);
-    const [canScrollRight, setCanScrollRight] = useState(true);
-
     useEffect(() => {
         dal.categories.list().then((cats) => {
             setCategories(cats.map(c => ({
@@ -38,25 +35,6 @@ export function CategoryShowcase() {
             })));
         }).catch(console.error);
     }, []);
-
-    const checkScroll = () => {
-        if (desktopScrollRef.current) {
-            const { scrollLeft, scrollWidth, clientWidth } = desktopScrollRef.current;
-            setCanScrollLeft(scrollLeft > 5);
-            setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 5);
-        }
-    };
-
-    const scroll = (direction: 'left' | 'right') => {
-        if (desktopScrollRef.current) {
-            const amount = 500;
-            desktopScrollRef.current.scrollBy({
-                left: direction === 'left' ? -amount : amount,
-                behavior: 'smooth'
-            });
-            setTimeout(checkScroll, 350);
-        }
-    };
 
     if (categories.length === 0) return null;
 
@@ -69,12 +47,12 @@ export function CategoryShowcase() {
                 className="w-full aspect-square rounded-[22px] flex items-center justify-center mb-3 overflow-hidden relative border border-gray-50 shadow-sm transition-all group-hover:shadow-md group-hover:-translate-y-1"
                 style={{ backgroundColor: cat.bgColor }}
             >
-                <div className="relative w-[70%] h-[70%] transition-transform duration-500 group-hover:scale-110">
+                <div className="relative w-[70%] h-[70%] rounded-[12px] overflow-hidden transition-transform duration-500 group-hover:scale-110">
                     <Image
                         src={cat.image || '/images/category/vegitable.png'}
                         alt={cat.name}
                         fill
-                        className="object-contain"
+                        className="object-cover"
                     />
                 </div>
             </div>
@@ -100,6 +78,7 @@ export function CategoryShowcase() {
                         >
                             {isDesktopExpanded ? "Show Less" : "See All"}
                         </button>
+
                         <button
                             onClick={() => setIsMobileExpanded(!isMobileExpanded)}
                             className="text-[#53B175] font-black text-sm transition-opacity hover:opacity-80 md:hidden"
@@ -113,64 +92,33 @@ export function CategoryShowcase() {
                 <div className="relative">
                     {/* Mobile: collapsed = 2-row horizontal scroll, expanded = wrapping grid */}
                     <div className="md:hidden">
-                        {isMobileExpanded ? (
-                            <div className="grid grid-cols-4 sm:grid-cols-4 gap-x-3 gap-y-6 pb-4 px-6 md:px-[var(--container-padding)]">
+                        <div className={cn(
+                            "overflow-x-auto no-scrollbar scroll-smooth w-full",
+                            isMobileExpanded && "overflow-x-visible"
+                        )}>
+                            <div className={cn(
+                                "grid auto-cols-[100px] gap-x-4 gap-y-6 pb-6 px-6",
+                                isMobileExpanded
+                                    ? "grid-cols-3 w-auto"
+                                    : "grid-rows-2 grid-flow-col w-max max-w-none"
+                            )}>
                                 {categories.map((cat) => (
                                     <CategoryCard key={cat.id} cat={cat} />
                                 ))}
                             </div>
-                        ) : (
-                            <div className="overflow-x-auto no-scrollbar scroll-smooth w-full">
-                                <div className="grid grid-rows-2 grid-flow-col auto-cols-[100px] gap-x-4 gap-y-6 pb-6 px-6 md:px-[var(--container-padding)] w-max max-w-none">
-                                    {categories.map((cat) => (
-                                        <CategoryCard key={cat.id} cat={cat} />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                        </div>
                     </div>
 
-                    {/* Desktop: collapsed = 2-row horizontal scroll, expanded = wrapping grid */}
+                    {/* Desktop: collapsed = single row, expanded = full wrapping grid */}
                     <div className="hidden md:block relative w-full">
-                        {!isDesktopExpanded && (
-                            <button
-                                onClick={() => scroll('left')}
-                                disabled={!canScrollLeft}
-                                className="absolute -left-2 top-[45%] -translate-y-1/2 z-20 w-11 h-11 bg-white rounded-full shadow-[0_10px_30px_-5px_rgba(0,0,0,0.15)] flex items-center justify-center hover:scale-110 active:scale-95 transition-all border border-gray-100 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:scale-100"
-                            >
-                                <ChevronLeft size={24} className="text-[#181725]" strokeWidth={2.5} />
-                            </button>
-                        )}
-
-                        {isDesktopExpanded ? (
-                            <div className="grid grid-cols-[repeat(auto-fill,115px)] lg:grid-cols-[repeat(auto-fill,135px)] justify-between gap-x-5 gap-y-10 pb-4 px-6 md:px-[var(--container-padding)]">
-                                {categories.map((cat) => (
-                                    <CategoryCard key={cat.id} cat={cat} />
-                                ))}
-                            </div>
-                        ) : (
-                            <div
-                                ref={desktopScrollRef}
-                                onScroll={checkScroll}
-                                className="overflow-x-auto no-scrollbar scroll-smooth w-full"
-                            >
-                                <div className="grid grid-rows-2 grid-flow-col auto-cols-[125px] lg:auto-cols-[145px] gap-x-6 gap-y-10 pb-8 px-6 md:px-[var(--container-padding)] w-max max-w-none">
-                                    {categories.map((cat) => (
-                                        <CategoryCard key={cat.id} cat={cat} />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {!isDesktopExpanded && (
-                            <button
-                                onClick={() => scroll('right')}
-                                disabled={!canScrollRight}
-                                className="absolute -right-2 top-[45%] -translate-y-1/2 z-20 w-11 h-11 bg-white rounded-full shadow-[0_10px_30px_-5px_rgba(0,0,0,0.15)] flex items-center justify-center hover:scale-110 active:scale-95 transition-all border border-gray-100 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:scale-100"
-                            >
-                                <ChevronRight size={24} className="text-[#181725]" strokeWidth={2.5} />
-                            </button>
-                        )}
+                        <div className={cn(
+                            "grid grid-cols-[repeat(auto-fill,minmax(115px,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-x-5 gap-y-8 pb-4 px-6 md:px-[var(--container-padding)]",
+                            !isDesktopExpanded && "max-h-[200px] overflow-hidden"
+                        )}>
+                            {categories.map((cat) => (
+                                <CategoryCard key={cat.id} cat={cat} />
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>

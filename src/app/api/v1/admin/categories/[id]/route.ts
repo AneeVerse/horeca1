@@ -1,6 +1,6 @@
 // GET    /api/v1/admin/categories/:id — Category detail with children and product count
 // PATCH  /api/v1/admin/categories/:id — Update category fields
-// DELETE /api/v1/admin/categories/:id — Soft-delete (set isActive: false)
+// DELETE /api/v1/admin/categories/:id — Permanently delete category
 // WHY: Admin needs to manage individual categories — view hierarchy, edit, deactivate
 // PROTECTED: Admin only
 
@@ -85,7 +85,7 @@ export const PATCH = adminOnly(async (req: NextRequest, _ctx) => {
   }
 });
 
-// DELETE — soft-delete (set isActive: false)
+// DELETE — permanently remove category
 export const DELETE = adminOnly(async (req: NextRequest, _ctx) => {
   try {
     const id = extractId(req);
@@ -96,12 +96,11 @@ export const DELETE = adminOnly(async (req: NextRequest, _ctx) => {
     });
     if (!existing) throw Errors.notFound('Category');
 
-    await prisma.category.update({
+    await prisma.category.delete({
       where: { id },
-      data: { isActive: false },
     });
 
-    return NextResponse.json({ success: true, data: { id, isActive: false } });
+    return NextResponse.json({ success: true, data: { id, deleted: true } });
   } catch (error) {
     return errorResponse(error);
   }
