@@ -141,29 +141,30 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
                         {errors.password && <p className="text-[10px] text-red-500 ml-1">{errors.password}</p>}
                     </div>
 
-                    {/* Demo credentials hint */}
-                    <p className="text-[11px] text-gray-400 ml-1 mb-6">
-                        Demo: <span className="font-bold">chef@tajpalace.com</span> / <span className="font-bold">customer123</span>
-                    </p>
 
-                    {/* Submit Button */}
-                    <button
-                        onClick={handleSubmit}
-                        disabled={isSubmitting}
-                        className={cn(
-                            "w-full bg-[#53B175] text-white font-bold py-4 rounded-xl shadow-lg shadow-green-100 active:scale-[0.98] transition-all text-[15px]",
-                            isSubmitting ? "opacity-70 cursor-not-allowed" : "hover:bg-[#48a068]"
-                        )}
-                    >
-                        {isSubmitting ? (
-                            <span className="flex items-center justify-center gap-2">
-                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                Signing in...
-                            </span>
-                        ) : (
-                            'Login'
-                        )}
-                    </button>
+
+                    {/* Login Buttons */}
+                    <div className="flex flex-col gap-3">
+                        <button
+                            onClick={handleSubmit}
+                            disabled={isSubmitting}
+                            className={cn(
+                                "w-full bg-[#53B175] text-white font-bold py-4 rounded-xl shadow-lg shadow-green-100 active:scale-[0.98] transition-all text-[15px]",
+                                isSubmitting ? "opacity-70 cursor-not-allowed" : "hover:bg-[#48a068]"
+                            )}
+                        >
+                            {isSubmitting ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    Signing in...
+                                </span>
+                            ) : (
+                                'Login'
+                            )}
+                        </button>
+
+
+                    </div>
 
                     {/* Register hint */}
                     <p className="text-[13px] text-gray-400 text-center mt-5">

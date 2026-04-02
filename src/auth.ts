@@ -23,9 +23,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         switchToken: { label: 'Switch Token', type: 'text' },
       },
       async authorize(credentials) {
+
+
         // ── Switch token flow (account switcher) ──
         if (credentials?.switchToken) {
-          const link = await prisma.linkedAccount.findUnique({
+          const client = prisma as any;
+          const link = await client.linkedAccount.findUnique({
             where: { switchToken: credentials.switchToken as string },
             include: {
               linkedUser: {
@@ -37,9 +40,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           if (!link || !link.linkedUser.isActive) return null;
 
           // Rotate the switch token (one-time use)
-          await prisma.linkedAccount.update({
+          await client.linkedAccount.update({
             where: { id: link.id },
-            data: { switchToken: crypto.randomUUID() },
+            data: { switchToken: typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).substring(2) },
           });
 
           return {

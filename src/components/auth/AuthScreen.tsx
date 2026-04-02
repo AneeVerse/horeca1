@@ -297,10 +297,9 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                                 {errors.password && <p className="text-[10px] text-red-500 ml-1 mt-0.5">{errors.password}</p>}
                             </div>
 
-                            {/* Quick login hint */}
-                            <p className="text-[11px] text-gray-400 ml-1">
-                                Demo: <span className="font-bold">chef@tajpalace.com</span> / <span className="font-bold">customer123</span>
-                            </p>
+
+
+
                         </>
                     ) : (
                         /* ── REGISTER FORM ── */
