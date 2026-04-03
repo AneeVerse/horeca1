@@ -75,8 +75,8 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
         <Link
             href={isOutOfStock ? '#' : `/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`}
             className={cn(
-                "bg-white rounded-[16px] md:rounded-[24px] border border-gray-100 overflow-hidden transition-all duration-500 group p-3 min-[340px]:p-4 relative flex flex-col gap-2 h-full",
-                isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-xl hover:shadow-gray-200/40"
+                "bg-white rounded-[24px] md:rounded-[32px] border border-gray-200 overflow-hidden transition-all duration-700 group p-4 min-[340px]:p-5 relative flex flex-col gap-3 h-full",
+                isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_20px_50px_rgba(0,0,0,0.06)] hover:-translate-y-2 hover:border-[#53B175]/20"
             )}
             onClick={(e) => {
                 if (isOutOfStock) {
@@ -85,10 +85,10 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                 }
             }}
         >
-            {/* Top Icons: Wishlist & Share */}
-            <div className="absolute top-3 right-3 z-10 flex items-center gap-2.5">
+            {/* Top Quick Actions - Glass Icons */}
+            <div className="absolute top-4 right-4 z-10 flex flex-col gap-2.5 translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-500">
                 <button
-                    className="p-1 rounded-full hover:bg-gray-50 transition-colors shadow-sm bg-white/80"
+                    className="p-2 rounded-xl backdrop-blur-md bg-white/70 border border-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:bg-[#FF4D4D]/10 hover:text-[#FF4D4D] transition-all"
                     onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -96,154 +96,121 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                     }}
                 >
                     <Heart 
-                        size={13} 
+                        size={15} 
                         className={cn("transition-colors", isLiked ? "text-red-500 fill-red-500" : "text-gray-400")} 
-                        strokeWidth={1.5} 
+                        strokeWidth={2.5} 
                     />
                 </button>
                 <button
-                    className="p-1 rounded-full hover:bg-gray-50 transition-colors shadow-sm bg-white/80"
+                    className="p-2 rounded-xl backdrop-blur-md bg-white/70 border border-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:bg-[#53B175]/10 hover:text-[#53B175] transition-all"
                     onClick={handleShare}
                 >
-                    <Share2 size={13} className="text-gray-400" strokeWidth={1.5} />
+                    <Share2 size={15} className="text-gray-400" strokeWidth={2.5} />
                 </button>
             </div>
 
-            {/* ── ROW 1: IMAGE ── */}
-            <div className="relative aspect-square overflow-hidden">
+            {/* ── IMAGE SECTION ── */}
+            <div className="relative aspect-square overflow-hidden rounded-2xl bg-gray-50/50 flex items-center justify-center">
                 <img
                     src={product.images[0] || '/images/recom-product/product-img10.png'}
                     alt={product.name}
                     className={cn(
-                        "w-full h-full object-contain transition-transform duration-500 ease-out p-1",
-                        isOutOfStock ? "grayscale" : "group-hover:scale-105"
+                        "w-[85%] h-[85%] object-contain transition-transform duration-700 ease-out p-1",
+                        isOutOfStock ? "grayscale" : ""
                     )}
                 />
-                <div className="absolute top-0 left-0 flex flex-col gap-0.5">
+                <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
                     {isOutOfStock ? (
-                        <span className="bg-gray-500 text-white text-[8px] min-[340px]:text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm uppercase">
-                            Out of Stock
+                        <span className="bg-gray-800 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-wider">
+                            OUT
                         </span>
                     ) : (
                         <>
                             {product.isDeal && (
-                                <span className="bg-[#FF4D4D] text-white text-[8px] min-[340px]:text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                                <span className="bg-[#FF4D4D] text-white text-[9px] font-black px-2 py-1 rounded-lg shadow-lg shadow-red-500/10 tracking-wider">
                                     DEAL
                                 </span>
                             )}
                             {product.frequentlyOrdered && (
-                                <span className="bg-[#FBC02D] text-white text-[8px] min-[340px]:text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
-                                    POPULAR
+                                <span className="bg-[#FBC02D] text-white text-[9px] font-black px-2 py-1 rounded-lg shadow-lg shadow-yellow-500/10 tracking-wider">
+                                    TOP
                                 </span>
                             )}
                         </>
                     )}
                 </div>
                 {product.creditBadge && !isOutOfStock && (
-                    <div className="absolute bottom-0 left-0 flex items-center gap-0.5 bg-[#F3E5F5] text-[#7B1FA2] px-1.5 py-0.5 rounded-full">
-                        <CreditCard size={8} />
-                        <span className="text-[7px] min-[340px]:text-[9px] font-bold uppercase tracking-wider">Credit</span>
+                    <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1 bg-[#F3E5F5]/80 backdrop-blur-md text-[#7B1FA2] px-2 py-1 rounded-lg border border-purple-100/50">
+                        <CreditCard size={10} strokeWidth={2.5} />
+                        <span className="text-[9px] font-black uppercase tracking-tight">Credit</span>
                     </div>
                 )}
             </div>
 
-            {/* ── ROW 2: TITLE ── */}
-            <div className="overflow-hidden min-h-[42px]">
+            {/* ── CONTENT SECTION ── */}
+            <div className="flex flex-col gap-1.5">
                 <h3 className={cn(
-                    "text-[12px] min-[340px]:text-[14px] md:text-[17px] font-bold leading-tight line-clamp-2",
+                    "text-[14px] md:text-[17px] font-[900] leading-[1.3] line-clamp-2 h-[2.6em]",
                     isOutOfStock ? "text-gray-400" : "text-[#181725]"
                 )}>
                     {product.name}
                 </h3>
-            </div>
-
-            {/* ── ROW 3: PACK SIZE ── */}
-            <div className="overflow-hidden flex items-start min-h-[18px]">
-                <p className="text-[10px] min-[340px]:text-[12px] md:text-[14px] text-gray-400 font-medium truncate w-full">
+                <p className="text-[11px] md:text-[13px] text-gray-400 font-extrabold uppercase tracking-widest truncate">
                     {product.packSize}
                 </p>
             </div>
 
-            {/* ── ROW 4: BULK TIER 1 ── */}
-            {bulk1 && (
-                <div className="overflow-hidden flex items-center min-h-[28px]">
-                    <div className={cn(
-                        "rounded-[8px] border px-1.5 min-[340px]:px-2 py-0.5 flex items-center justify-between gap-0.5 w-full h-full",
-                        isOutOfStock ? "bg-gray-50 border-gray-100" : "bg-[#F1F9F4] border-[#E1F2E8]"
-                    )}>
-                        <span className={cn(
-                            "text-[8px] min-[340px]:text-[10px] md:text-[12px] font-bold leading-none whitespace-nowrap",
-                            isOutOfStock ? "text-gray-300" : "text-[#299E60]"
+            {/* ── BULK TIERS ── */}
+            {(bulk1 || bulk2) && (
+                <div className="flex flex-col gap-1.5 mt-1">
+                    {[bulk1, bulk2].map((tier, i) => tier && (
+                        <div key={i} className={cn(
+                            "rounded-xl border px-3 py-1.5 flex items-center justify-between gap-2 transition-colors",
+                            isOutOfStock ? "bg-gray-50 border-gray-100" : "bg-[#F7FBF8] border-[#EAF5ED] hover:border-[#53B175]/30"
                         )}>
-                            ₹{bulk1.price} ({bulk1.minQty}+)
-                        </span>
-                        {!isOutOfStock && (
-                            <button
-                                onClick={(e) => handleAdd(e, bulk1.minQty)}
-                                className="bg-white border border-[#299E60]/20 text-[#299E60] font-bold text-[7px] min-[340px]:text-[9px] md:text-[11px] px-1 min-[340px]:px-1.5 py-0.5 rounded-full hover:bg-gray-50 hover:border-[#299E60] transition-all flex items-center gap-0.5 shrink-0 whitespace-nowrap"
-                            >
-                                + ADD
-                            </button>
-                        )}
-                    </div>
+                            <span className={cn(
+                                "text-[11px] font-black tracking-tight",
+                                isOutOfStock ? "text-gray-300" : "text-[#1B5E20]"
+                            )}>
+                                ₹{tier.price} <span className="opacity-60 text-[9px]">({tier.minQty}+ pcs)</span>
+                            </span>
+                            {!isOutOfStock && (
+                                <button
+                                    onClick={(e) => handleAdd(e, tier.minQty)}
+                                    className="text-[#53B175] text-[10px] font-black uppercase tracking-widest hover:text-[#2c7a2c] transition-colors"
+                                >
+                                    + Add
+                                </button>
+                            )}
+                        </div>
+                    ))}
                 </div>
             )}
 
-            {/* ── ROW 5: BULK TIER 2 ── */}
-            {bulk2 && (
-                <div className="overflow-hidden flex items-center min-h-[28px]">
-                    <div className={cn(
-                        "rounded-[8px] border px-1.5 min-[340px]:px-2 py-0.5 flex items-center justify-between gap-0.5 w-full h-full",
-                        isOutOfStock ? "bg-gray-50 border-gray-100" : "bg-[#F1F9F4] border-[#E1F2E8]"
-                    )}>
-                        <span className={cn(
-                            "text-[8px] min-[340px]:text-[10px] md:text-[12px] font-bold leading-none whitespace-nowrap",
-                            isOutOfStock ? "text-gray-300" : "text-[#299E60]"
-                        )}>
-                            ₹{bulk2.price} ({bulk2.minQty}+)
-                        </span>
-                        {!isOutOfStock && (
-                            <button
-                                onClick={(e) => handleAdd(e, bulk2.minQty)}
-                                className="bg-white border border-[#299E60]/20 text-[#299E60] font-bold text-[7px] min-[340px]:text-[9px] md:text-[11px] px-1 min-[340px]:px-1.5 py-0.5 rounded-full hover:bg-gray-50 hover:border-[#299E60] transition-all flex items-center gap-0.5 shrink-0 whitespace-nowrap"
-                            >
-                                + ADD
-                            </button>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* ── SPACER: pushes price + cart to bottom ── */}
-            <div className="flex-1" />
-
-            {/* ── ROW 6: PRICE ── */}
-            <div className="overflow-hidden flex items-center min-h-[30px]">
-                <div className="flex items-baseline gap-0.5">
+            {/* ── FOOTER: PRICE + CTA ── */}
+            <div className="mt-auto pt-4 flex flex-col gap-4">
+                <div className="flex items-baseline gap-1.5">
                     <span className={cn(
-                        "text-[15px] min-[340px]:text-[18px] md:text-[22px] font-black",
+                        "text-[18px] md:text-[26px] font-[1000] tracking-tighter leading-none",
                         isOutOfStock ? "text-gray-300" : "text-[#181725]"
                     )}>
                         ₹ {product.price}
                     </span>
-                    <span className="text-[9px] min-[340px]:text-[11px] md:text-[14px] font-bold text-gray-400">/pc</span>
+                    <span className="text-[11px] md:text-[14px] font-black text-gray-400 uppercase">/ unit</span>
                 </div>
-            </div>
 
-            {/* ── ROW 7: ADD TO CART ── */}
-            <div className="overflow-hidden flex items-end min-h-[42px]">
                 <button
                     disabled={isOutOfStock}
                     onClick={(e) => handleAdd(e, 1)}
                     className={cn(
-                        "w-full h-full rounded-[10px] min-[340px]:rounded-[14px] md:rounded-[18px] font-extrabold text-[11px] min-[340px]:text-[13px] md:text-[15px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] border",
+                        "w-full py-4 rounded-2xl font-black text-[13px] md:text-[15px] flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-95 border uppercase tracking-[0.05em]",
                         isOutOfStock 
-                            ? "bg-gray-50 text-gray-400 border-gray-100 cursor-not-allowed" 
-                            : "bg-[#F1F9F4] hover:bg-[#E1F2E8] text-[#299E60] border-[#E1F2E8]"
+                            ? "bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed" 
+                            : "bg-[#53B175] text-white border-[#53B175] shadow-[0_8px_25px_rgba(83,177,117,0.2)] hover:bg-[#489d67] hover:shadow-[0_12px_30px_rgba(83,177,117,0.3)]"
                     )}
                 >
-                    {isOutOfStock ? 'Out of Stock' : 'Add To Cart'}
-                    <ShoppingCart size={14} className="shrink-0" />
+                    {isOutOfStock ? 'Sold Out' : 'Quick Add'}
+                    {!isOutOfStock && <ShoppingCart size={16} strokeWidth={3} className="shrink-0" />}
                 </button>
             </div>
         </Link>
