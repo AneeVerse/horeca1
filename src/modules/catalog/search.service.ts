@@ -1,20 +1,24 @@
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 
 export class SearchService {
   async search(query: string, pincode?: string, cursor?: string, limit = 20) {
-    // Basic text search using Prisma (upgrade to FTS + pgvector later)
-    const where: Record<string, unknown> = {
+    // Text search across product name, category name, and vendor name
+    const vendorFilter: Prisma.ProductWhereInput = pincode
+      ? { vendor: { isActive: true, serviceAreas: { some: { pincode, isActive: true } } } }
+      : {};
+
+    const where: Prisma.ProductWhereInput = {
       isActive: true,
       approvalStatus: 'approved',
-      name: { contains: query, mode: 'insensitive' },
+      ...vendorFilter,
+      OR: [
+        { name: { contains: query, mode: 'insensitive' } },
+        { category: { name: { contains: query, mode: 'insensitive' } } },
+        { vendor: { businessName: { contains: query, mode: 'insensitive' } } },
+        { tags: { has: query.toLowerCase() } },
+      ],
     };
-
-    if (pincode) {
-      where.vendor = {
-        isActive: true,
-        serviceAreas: { some: { pincode, isActive: true } },
-      };
-    }
 
     const products = await prisma.product.findMany({
       where,
