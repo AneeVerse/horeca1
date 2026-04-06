@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Star, Clock, CreditCard, Package, Search } from 'lucide-react';
-import Link from 'next/link';
+import { ChevronLeft } from 'lucide-react';
 import { dal } from '@/lib/dal';
 import type { Vendor } from '@/types';
+import { VendorCard } from '@/components/features/homepage/VendorCardShared';
 
 export default function VendorsPage() {
     const router = useRouter();
@@ -20,92 +20,36 @@ export default function VendorsPage() {
     }, []);
 
     return (
-        <div className="min-h-screen bg-gray-50/50">
+        <div className="min-h-screen bg-[#F8F9FA]">
             {/* Header */}
-            <div className="bg-white border-b border-gray-100 sticky top-0 z-50">
-                <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-3 min-[340px]:py-4">
-                    <div className="flex items-center gap-2">
+            <div className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-gray-100">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                    <div className="flex items-center gap-4">
                         <button 
                             onClick={() => router.push('/')} 
-                            className="p-1 min-[340px]:p-2 -ml-1 min-[340px]:-ml-2 hover:bg-gray-50 rounded-full transition-colors shrink-0 cursor-pointer"
+                            className="p-2.5 hover:bg-gray-100/80 rounded-2xl transition-all duration-300 group active:scale-95 shrink-0"
                         >
-                            <ChevronLeft size={22} className="text-[#181725]" />
+                            <ChevronLeft size={22} className="text-gray-700 group-hover:-translate-x-0.5 transition-transform" />
                         </button>
-                        <div className="min-w-0 flex-1 px-1">
-                            <h1 className="text-[18px] min-[340px]:text-[20px] font-bold text-[#181725] leading-tight text-center">
-                                All Vendors
-                            </h1>
-                        </div>
-                        <div className="w-10 min-[340px]:w-12" /> {/* Spacer for centering */}
-                    </div>
-                </div>
-            </div>
-
-            {/* Search Bar */}
-            <div className="bg-white px-[var(--container-padding)] py-4 border-b border-gray-100">
-                <div className="max-w-[var(--container-max)] mx-auto">
-                    <div className="relative">
-                        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input 
-                            type="text" 
-                            placeholder="Find a vendor or category..."
-                            className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 pl-12 pr-4 text-[14px] outline-none focus:ring-1 focus:ring-[#299e60] focus:bg-white transition-all shadow-sm"
-                        />
+                        <h1 className="text-[22px] font-extrabold text-[#1A1C1E] tracking-tight">
+                            All Vendors
+                        </h1>
                     </div>
                 </div>
             </div>
 
             {/* Vendor Grid */}
-            <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-6 pb-24">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-32">
                 {isLoading ? (
-                    <div className="flex items-center justify-center py-20">
-                        <div className="w-10 h-10 border-4 border-[#299e60] border-t-transparent rounded-full animate-spin" />
+                    <div className="flex items-center justify-center py-32">
+                        <div className="w-10 h-10 border-[3px] border-[#22844f]/10 border-t-[#22844f] rounded-full animate-spin" />
                     </div>
                 ) : (
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
-                    {allVendors.map((vendor) => (
-                        <Link
-                            key={vendor.id}
-                            href={`/vendor/${vendor.id}`}
-                            className="flex items-start gap-4 bg-white rounded-3xl p-5 border border-gray-100 hover:shadow-xl hover:shadow-gray-200/50 hover:border-gray-200 transition-all group relative overflow-hidden"
-                        >
-                            {/* Logo */}
-                            <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center p-3 shrink-0 border border-gray-100 relative z-10">
-                                <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300" />
-                            </div>
-
-                            {/* Info */}
-                            <div className="flex-1 min-w-0 relative z-10">
-                                <h3 className="text-[15px] md:text-[17px] font-bold text-[#181725] line-clamp-1">{vendor.name}</h3>
-                                <p className="text-[12px] text-gray-400 font-medium mt-1 line-clamp-1">
-                                    {vendor.categories.join(', ')}
-                                </p>
-
-                                {/* Badges */}
-                                <div className="flex flex-wrap items-center gap-2 mt-3">
-                                    <div className="flex items-center gap-1 bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded-full">
-                                        <Star size={11} fill="currentColor" />
-                                        <span className="text-[11px] font-bold">{vendor.rating}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold text-[11px]">
-                                        <Clock size={11} />
-                                        {vendor.deliveryTime}
-                                    </div>
-                                    <div className="flex items-center gap-1 bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full font-bold text-[11px]">
-                                        <Package size={11} />
-                                        ₹{vendor.minOrderValue}+
-                                    </div>
-                                    {vendor.creditEnabled && (
-                                        <div className="flex items-center gap-1 bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full font-bold text-[11px]">
-                                            <CreditCard size={11} />
-                                            Credit
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </Link>
-                    ))}
-                </div>
+                    <div className="grid grid-cols-1 min-[500px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                        {allVendors.map((vendor, index) => (
+                            <VendorCard key={vendor.id} vendor={vendor} index={index} fluid />
+                        ))}
+                    </div>
                 )}
             </div>
         </div>

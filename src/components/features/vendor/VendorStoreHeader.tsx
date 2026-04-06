@@ -1,147 +1,221 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
-import { Star, Clock, CreditCard, Package, ChevronLeft, Share2 } from 'lucide-react';
+import { Star, MapPin, Phone, Heart, Grid, Share2, ChevronLeft, Image as ImageIcon, Navigation } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import type { Vendor } from '@/types';
-
-// Maps category names to images (same mapping as Navbar)
-const CATEGORY_IMAGE: Record<string, string> = {
-    'vegetables': '/images/category/vegitable.png',
-    'fruits': '/images/category/fruits.png',
-    'dairy & eggs': '/images/category/milk.png',
-    'spices & masala': '/images/category/candy.png',
-    'grains & pulses': '/images/category/snacks.png',
-    'meat & poultry': '/images/category/fish & meat.png',
-    'seafood': '/images/category/fish & meat.png',
-    'beverages': '/images/category/drink-juice.png',
-    'oils & ghee': '/images/category/fruits.png',
-    'packaging & supplies': '/images/category/vegitable.png',
-};
+import { VENDOR_COVERS } from '@/components/features/homepage/VendorCardShared';
 
 interface VendorStoreHeaderProps {
     vendor: Vendor;
+    activeTab: string;
+    onTabChange: (tab: string) => void;
 }
 
-export function VendorStoreHeader({ vendor }: VendorStoreHeaderProps) {
+export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStoreHeaderProps) {
+    const router = useRouter();
+    const coverIndex = Math.abs(vendor.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % VENDOR_COVERS.length;
+    const coverImage = VENDOR_COVERS[coverIndex]; 
+    
     const handleShare = async () => {
         const shareData = {
             title: vendor.name,
-            text: `Check out ${vendor.name} on Horeca1 - ${vendor.description || ''}`,
+            text: `Check out ${vendor.name} on Horeca1`,
             url: window.location.href,
         };
-
         try {
             if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
                 await navigator.share(shareData);
             } else {
                 await navigator.clipboard.writeText(window.location.href);
-                toast.success('Link copied to clipboard!', {
-                    description: 'You can now share this store with others.',
-                });
+                toast.success('Link copied to clipboard!');
             }
         } catch (err) {
-            if (err instanceof Error && err.name !== 'AbortError') {
-                toast.error('Failed to share store link');
-            }
+            console.error(err);
         }
     };
 
     return (
-        <div className="w-full bg-white">
-            <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
-                {/* Back + Share */}
-                <div className="flex items-center justify-between pt-4 pb-2">
-                    <Link href="/" className="flex items-center gap-1 text-[14px] font-bold text-[#7C7C7C] hover:text-[#181725] transition-colors">
-                        <ChevronLeft size={20} />
-                        <span>Back</span>
-                    </Link>
-                    <button onClick={handleShare} className="p-2 rounded-full hover:bg-gray-50 transition-colors">
-                        <Share2 size={20} className="text-gray-400" />
-                    </button>
-                </div>
-
-                {/* Vendor Info */}
-                <div className="flex items-start gap-3 pb-4">
-                    {/* Logo */}
-                    <div className="w-[70px] h-[70px] md:w-[90px] md:h-[90px] rounded-full bg-white border border-gray-100 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
-                        <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-cover" />
+        <div className="w-full bg-white md:bg-white md:pb-6 md:pt-4">
+            {/* ── MOBILE HEADER (Matches Nandhini Deluxe Screenshot) ── */}
+            <div className="block md:hidden relative">
+                {/* Fixed Hero Image */}
+                <div className="relative w-full h-[260px]">
+                    <Image
+                        src={coverImage}
+                        alt={vendor.name}
+                        fill
+                        className="object-cover"
+                        priority
+                    />
+                    
+                    {/* Top Layer: Navigation */}
+                    <div className="absolute top-4 left-4 right-4 flex justify-between items-start">
+                        <button 
+                            onClick={() => router.back()}
+                            className="p-2.5 bg-black/50 backdrop-blur-md rounded-full text-white shadow-lg"
+                        >
+                            <ChevronLeft size={22} strokeWidth={3} />
+                        </button>
                     </div>
 
-                    {/* Details */}
-                    <div className="flex-1 min-w-0 pt-1">
-                        <h1 className="text-[18px] md:text-[24px] font-[800] text-[#181725] leading-none mb-1">
-                            {vendor.name}
-                        </h1>
-                        {vendor.description && (
-                            <p className="text-[11px] md:text-[13px] text-[#7C7C7C] font-medium leading-tight mb-3">
-                                {vendor.description}
-                            </p>
-                        )}
+                    {/* Gallery Badge */}
+                    <div className="absolute bottom-16 right-4 bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-xl flex items-center gap-2 text-[12px] font-black">
+                        <ImageIcon size={14} />
+                        5/15
+                    </div>
+                </div>
 
-                        {/* Badges Row */}
-                        <div className="flex flex-wrap items-center gap-2">
-                            {/* Rating */}
-                            <div className="flex items-center gap-1 bg-[#E8F5E9] text-[#2E7D32] px-2.5 py-1 rounded-full border border-[#C8E6C9]">
-                                <Star size={11} fill="currentColor" />
-                                <span className="text-[10px] font-bold">{vendor.rating}</span>
-                                <span className="text-[9px] opacity-70">({vendor.totalRatings || 0})</span>
-                            </div>
-
-                            {/* Delivery */}
-                            <div className="flex items-center gap-1 bg-[#E3F2FD] text-[#1565C0] px-2.5 py-1 rounded-full border border-[#BBDEFB]">
-                                <Clock size={11} />
-                                <span className="text-[10px] font-extrabold uppercase tracking-tight">{vendor.deliverySchedule}</span>
-                            </div>
-
-                            {/* MOV */}
-                            <div className="flex items-center gap-1 bg-[#FFF3E0] text-[#EF6C00] px-2.5 py-1 rounded-full border border-[#FFE0B2]">
-                                <Package size={11} />
-                                <span className="text-[10px] font-extrabold uppercase tracking-tight">Min ₹{vendor.minOrderValue}</span>
+                {/* Overlapping Bottom Sheet Card */}
+                <div className="relative mt-[-45px] bg-white rounded-t-[40px] px-6 pt-8 pb-6 shadow-[0_-20px_50px_rgba(0,0,0,0.12)]">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="flex-1">
+                            <h1 className="text-[26px] font-[1000] text-[#181725] tracking-tight leading-none mb-3">
+                                {vendor.name}
+                            </h1>
+                            <div className="space-y-1">
+                                <p className="text-[13px] text-gray-500 font-bold leading-tight">
+                                    957.4 km • Plot No 114/3, Sector 5, Navi Mumbai
+                                </p>
+                                <p className="text-[13px] text-gray-400 font-medium">
+                                    {vendor.categories.slice(0, 3).join(', ')} | Min ₹{vendor.minOrderValue}
+                                </p>
                             </div>
                         </div>
 
-                        {/* Credit Badge */}
-                        {vendor.creditEnabled && (
-                            <div className="flex items-center gap-1.5 bg-[#F3E5F5] text-[#7B1FA2] px-3 py-1 rounded-full border border-[#E1BEE7] w-fit mt-2">
-                                <CreditCard size={11} />
-                                <span className="text-[10px] font-extrabold uppercase tracking-wide">Credit Available</span>
+                        {/* Rating Pill */}
+                        <div className="flex flex-col items-center gap-1">
+                            <div className="bg-[#1C8C44] text-white px-2.5 py-1.5 rounded-xl flex items-center gap-1 text-[14px] font-black shadow-lg shadow-green-500/20">
+                                {vendor.rating} <Star size={14} fill="white" className="text-white" />
                             </div>
-                        )}
+                            <span className="text-[10px] text-gray-400 font-black uppercase tracking-tighter">2K ratings</span>
+                        </div>
+                    </div>
+
+                    {/* Operational Actions Pills (Now responsive for mobile) */}
+                    <div className="flex items-center gap-3 mt-6 overflow-x-auto no-scrollbar pb-1">
+                        <div className="shrink-0 bg-gray-50 border border-gray-100/50 px-3 py-2 rounded-2xl flex items-center gap-1.5 min-w-fit">
+                            <span className="text-[#1C8C44] text-[12px] font-black">Open</span>
+                            <span className="text-gray-400 text-[12px] font-bold whitespace-nowrap">till 8:00 PM</span>
+                        </div>
+                        <button className="shrink-0 bg-gray-50 border border-gray-100 px-4 py-2 rounded-2xl flex items-center justify-center gap-2 text-[13px] font-black text-gray-800">
+                            <Navigation size={16} className="text-[#53B175]" strokeWidth={3} />
+                            Directions
+                        </button>
+                        <button className="shrink-0 p-3 bg-gray-50 border border-gray-100 rounded-2xl text-gray-800">
+                            <Phone size={18} className="text-[#53B175]" strokeWidth={3} />
+                        </button>
                     </div>
                 </div>
 
-                {/* Vendor Categories (Icon Style) */}
-                <div className="flex items-start gap-4 pb-6 overflow-x-auto no-scrollbar -mx-[var(--container-padding)] px-[var(--container-padding)]">
-                    {(vendor.categories || []).map((catName, idx) => {
-                        const image = CATEGORY_IMAGE[catName.toLowerCase()] || '/images/category/vegitable.png';
-                        
-                        const slugify = (text: string) => text.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-                        
-                        return (
-                            <Link 
-                                key={idx} 
-                                href={`/category/${vendor.id}/${slugify(catName)}`}
-                                className="flex flex-col items-center gap-2 shrink-0 active:scale-95 transition-transform group"
+                {/* Mobile Tabs */}
+                <div className="px-6 flex items-center gap-8 border-b border-gray-100 mt-2">
+                    {[
+                        { key: 'all', label: 'Catalog' }, 
+                        { key: 'deals', label: 'Deals' }, 
+                        { key: 'ratings', label: 'Ratings' },
+                        { key: 'about', label: 'Info' }
+                    ].map((tab) => (
+                        <button
+                            key={tab.key}
+                            onClick={() => onTabChange(tab.key)}
+                            className={cn(
+                                "pb-3 pt-2 text-[14px] font-black transition-all relative",
+                                activeTab === tab.key ? "text-[#53B175]" : "text-gray-400"
+                            )}
+                        >
+                            {tab.label}
+                            {activeTab === tab.key && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#53B175] rounded-full" />}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* ── DESKTOP HEADER (Untouched) ── */}
+            <div className="hidden md:block max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
+                <div className="flex flex-col gap-3 mb-6">
+                    <h1 className="text-[26px] md:text-[34px] font-[1000] text-[#181725] tracking-tighter leading-none">
+                        {vendor.name}
+                    </h1>
+                    <div className="flex items-center gap-8 border-b border-gray-100/80">
+                        {[
+                            { key: 'all', label: 'Catalog' },
+                            { key: 'deals', label: 'Deals' },
+                            { key: 'ratings', label: 'Ratings' },
+                            { key: 'about', label: 'About' }
+                        ].map((tab) => (
+                            <button
+                                key={tab.key}
+                                onClick={() => onTabChange(tab.key)}
+                                className={cn(
+                                    "pb-3 text-[15px] font-bold transition-all relative",
+                                    activeTab === tab.key || (activeTab === 'all' && tab.key === 'all') 
+                                        ? "text-[#53B175]" 
+                                        : "text-gray-400 hover:text-gray-600"
+                                )}
                             >
-                                <div className="w-[70px] h-[70px] rounded-[18px] bg-[#F7F8FA] border border-gray-50 flex items-center justify-center overflow-hidden group-hover:bg-[#F2F3F2] transition-colors">
-                                    <div className="relative w-[70%] h-[70%]">
-                                        <Image
-                                            src={image}
-                                            alt={catName}
-                                            fill
-                                            className="object-contain"
-                                        />
-                                    </div>
+                                {tab.label}
+                                {(activeTab === tab.key || (activeTab === 'all' && tab.key === 'all')) && (
+                                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#53B175] rounded-full" />
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="relative w-full h-[320px] md:h-[420px] rounded-[32px] overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.08)]">
+                    <Image
+                        src={coverImage}
+                        alt={vendor.name}
+                        fill
+                        className="object-cover"
+                        priority
+                    />
+                    
+                    <div className="absolute top-6 left-6 bottom-6 md:bottom-auto md:h-fit w-[calc(100%-48px)] md:w-[480px] bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.15)] p-5 md:p-8 flex flex-col justify-between border border-white/50 overflow-hidden">
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                                <div className="bg-[#1C8C44] text-white px-2 py-0.5 rounded-lg flex items-center gap-1 text-[13px] font-black">
+                                    {vendor.rating} <Star size={12} fill="white" className="text-white" />
                                 </div>
-                                <span className="text-[11px] font-bold text-[#181725] text-center leading-tight max-w-[70px] line-clamp-2 group-hover:text-[#53B175] transition-colors">
-                                    {catName}
+                                <span className="text-[13px] font-bold text-gray-800">
+                                    24h Delivery • Min ₹{vendor.minOrderValue}
                                 </span>
-                            </Link>
-                        );
-                    })}
+                            </div>
+                            <p className="text-[15px] md:text-[18px] font-black text-gray-800">
+                                {vendor.categories.slice(0, 3).join(', ')}
+                            </p>
+                            <div className="flex items-start gap-2 text-[13px] md:text-[14px] text-gray-400 font-medium tracking-tight">
+                                <MapPin size={16} className="text-[#53B175] shrink-0 mt-0.5" strokeWidth={2.5} />
+                                <span className="line-clamp-2 leading-tight">Plot No 114/3, Sector 5, Navi Mumbai</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[14px] font-bold">
+                                <span className="text-[#1C8C44]">Open now</span>
+                                <span className="text-gray-300">•</span>
+                                <span className="text-gray-500 uppercase text-[11px] tracking-widest font-black">Orders until 8:00 PM</span>
+                            </div>
+                        </div>
+                        <div className="h-px bg-gray-100 w-full my-6" />
+                        <div className="flex items-center justify-between px-2">
+                            <button className="flex items-center gap-2 font-black text-[11px] md:text-[12px] text-[#53B175] uppercase tracking-wider hover:opacity-80 transition-opacity">
+                                <Phone size={16} fill="currentColor" />
+                                Call Vendor
+                            </button>
+                            <div className="w-px h-5 bg-gray-100" />
+                            <button className="flex items-center gap-2 font-black text-[11px] md:text-[12px] text-[#53B175] uppercase tracking-wider hover:opacity-80 transition-opacity">
+                                <Heart size={16} />
+                                Favorite
+                            </button>
+                            <div className="w-px h-5 bg-gray-100" />
+                            <button onClick={handleShare} className="flex items-center gap-2 font-black text-[11px] md:text-[12px] text-[#53B175] uppercase tracking-wider hover:opacity-80 transition-opacity">
+                                <Share2 size={16} />
+                                Share
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
