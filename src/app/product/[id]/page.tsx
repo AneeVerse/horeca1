@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
     ArrowLeft,
     Heart,
@@ -424,8 +425,15 @@ export default function ProductDetailPage() {
                 <main className="mx-0 bg-white pt-2 pb-8 px-5 rounded-b-[30px] shadow-sm">
                     {/* Image Section */}
                     <div className="relative flex flex-col items-center pt-4">
-                        <div className="w-[240px] h-[240px] flex items-center justify-center p-4">
-                            <img src={product.image} alt={product.name} className="w-full h-full object-contain" />
+                        <div className="relative w-[240px] h-[240px] flex items-center justify-center p-4">
+                            <Image
+                                src={product.image}
+                                alt={product.name}
+                                fill
+                                sizes="240px"
+                                priority
+                                className="object-contain p-4"
+                            />
                         </div>
                         <div className="flex gap-1.5 mt-4">
                             <div className="w-[18px] h-[6px] bg-[#7C7C7C] rounded-full" />
@@ -509,7 +517,14 @@ export default function ProductDetailPage() {
                         {/* Left: Professional Showcase */}
                         <div className="col-span-12 lg:col-span-5">
                             <div className="w-full aspect-square bg-[#F8F9FB]/50 rounded-[48px] flex items-center justify-center p-12 relative overflow-hidden group border border-gray-50/50 shadow-[0_15px_60px_-15px_rgba(0,0,0,0.03)]">
-                                <img src={product.image} alt={product.name} className="w-full h-full object-contain transition-all duration-700 group-hover:scale-110" />
+                                <Image
+                                    src={product.image}
+                                    alt={product.name}
+                                    fill
+                                    sizes="(max-width: 1024px) 100vw, 40vw"
+                                    priority
+                                    className="object-contain p-12 transition-all duration-700 group-hover:scale-110"
+                                />
                                 <div className="absolute bottom-10 flex gap-2.5">
                                     <div className="w-8 h-1.5 bg-[#53B175] rounded-full" />
                                     <div className="w-2 h-1.5 bg-[#E2E2E2] rounded-full" />

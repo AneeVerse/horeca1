@@ -3,6 +3,7 @@
 import React from 'react';
 import { CreditCard, Share2, ShoppingCart, Heart } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { VendorProduct } from '@/types';
@@ -111,14 +112,18 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
 
             {/* ── IMAGE SECTION ── */}
             <div className="relative aspect-square overflow-hidden rounded-2xl bg-gray-50/50 flex items-center justify-center">
-                <img
-                    src={product.images[0] || '/images/recom-product/product-img10.png'}
-                    alt={product.name}
-                    className={cn(
-                        "w-[85%] h-[85%] object-contain transition-transform duration-700 ease-out p-1",
-                        isOutOfStock ? "grayscale" : ""
-                    )}
-                />
+                <div className="relative w-[85%] h-[85%]">
+                    <Image
+                        src={product.images[0] || '/images/recom-product/product-img10.png'}
+                        alt={product.name}
+                        fill
+                        sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 280px"
+                        className={cn(
+                            "object-contain transition-transform duration-700 ease-out p-1",
+                            isOutOfStock ? "grayscale" : ""
+                        )}
+                    />
+                </div>
                 <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
                     {isOutOfStock ? (
                         <span className="bg-gray-800 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-wider">

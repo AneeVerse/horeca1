@@ -134,36 +134,12 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                 </div>
             </div>
 
-            {/* ── DESKTOP HEADER (Untouched) ── */}
+            {/* ── DESKTOP HEADER ── */}
             <div className="hidden md:block max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
                 <div className="flex flex-col gap-3 mb-6">
                     <h1 className="text-[26px] md:text-[34px] font-[1000] text-[#181725] tracking-tighter leading-none">
                         {vendor.name}
                     </h1>
-                    <div className="flex items-center gap-8 border-b border-gray-100/80">
-                        {[
-                            { key: 'all', label: 'Catalog' },
-                            { key: 'deals', label: 'Deals' },
-                            { key: 'ratings', label: 'Ratings' },
-                            { key: 'about', label: 'About' }
-                        ].map((tab) => (
-                            <button
-                                key={tab.key}
-                                onClick={() => onTabChange(tab.key)}
-                                className={cn(
-                                    "pb-3 text-[15px] font-bold transition-all relative",
-                                    activeTab === tab.key || (activeTab === 'all' && tab.key === 'all') 
-                                        ? "text-[#53B175]" 
-                                        : "text-gray-400 hover:text-gray-600"
-                                )}
-                            >
-                                {tab.label}
-                                {(activeTab === tab.key || (activeTab === 'all' && tab.key === 'all')) && (
-                                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#53B175] rounded-full" />
-                                )}
-                            </button>
-                        ))}
-                    </div>
                 </div>
 
                 <div className="relative w-full h-[320px] md:h-[420px] rounded-[32px] overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.08)]">
@@ -216,6 +192,32 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                             </button>
                         </div>
                     </div>
+                </div>
+
+                {/* Desktop Tabs — below hero, matching mobile placement */}
+                <div className="flex items-center gap-8 border-b border-gray-100/80 mt-8">
+                    {[
+                        { key: 'all', label: 'Catalog' },
+                        { key: 'deals', label: 'Deals' },
+                        { key: 'ratings', label: 'Ratings' },
+                        { key: 'about', label: 'About' }
+                    ].map((tab) => (
+                        <button
+                            key={tab.key}
+                            onClick={() => onTabChange(tab.key)}
+                            className={cn(
+                                "pb-3 text-[15px] font-bold transition-all relative",
+                                activeTab === tab.key || (activeTab === 'all' && tab.key === 'all')
+                                    ? "text-[#53B175]"
+                                    : "text-gray-400 hover:text-gray-600"
+                            )}
+                        >
+                            {tab.label}
+                            {(activeTab === tab.key || (activeTab === 'all' && tab.key === 'all')) && (
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#53B175] rounded-full" />
+                            )}
+                        </button>
+                    ))}
                 </div>
             </div>
         </div>
