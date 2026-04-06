@@ -118,22 +118,27 @@ export function CategoryShowcase({ filterByProducts, title = "Shop By Category",
 
                 {/* Content Area */}
                 <div className="relative">
-                    {/* Mobile: collapsed = 2-row horizontal scroll, expanded = wrapping grid */}
+                    {/* Mobile: collapsed = single-row horizontal scroll, expanded = wrapping grid */}
                     <div className="md:hidden">
                         <div className={cn(
                             "overflow-x-auto no-scrollbar scroll-smooth w-full",
                             isMobileExpanded && "overflow-x-visible"
                         )}>
-                            <div className={cn(
-                                "grid auto-cols-[100px] gap-x-4 gap-y-6 pb-6 px-6",
-                                isMobileExpanded
-                                    ? "grid-cols-3 w-auto"
-                                    : "grid-rows-2 grid-flow-col w-max max-w-none"
-                            )}>
-                                {categories.map((cat) => (
-                                    <CategoryCard key={cat.id} cat={cat} />
-                                ))}
-                            </div>
+                            {isMobileExpanded ? (
+                                <div className="grid grid-cols-3 auto-cols-[100px] gap-x-4 gap-y-6 pb-6 px-6 w-auto">
+                                    {categories.map((cat) => (
+                                        <CategoryCard key={cat.id} cat={cat} />
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="flex items-start gap-4 pb-6 px-6 w-max">
+                                    {categories.map((cat) => (
+                                        <div key={cat.id} className="w-[100px] shrink-0">
+                                            <CategoryCard cat={cat} />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
 
