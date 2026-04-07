@@ -24,35 +24,38 @@ function VendorCategoryPageContent() {
     const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Fetch vendor by slug (which may be an ID)
+    // Fetch vendor + products + categories in one chain — loading stays true until ALL data is ready
     useEffect(() => {
         if (!slug) return;
         setLoading(true);
-        // Try fetching by ID first (slug param could be vendor ID)
-        dal.vendors.getById(slug)
-            .then(setVendor)
+
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
+
+        const findVendor = isUUID
+            ? dal.vendors.getById(slug)
+            : dal.vendors.list().then(res => {
+                const found = res.vendors.find(v =>
+                    slugify(v.slug) === slugify(slug) ||
+                    slugify(v.name) === slugify(slug) ||
+                    v.id === slug
+                );
+                if (!found) throw new Error('Vendor not found');
+                return found;
+            });
+
+        Promise.all([findVendor, dal.categories.list()])
+            .then(async ([v, cats]) => {
+                setVendor(v);
+                setCategories(cats);
+                const res = await dal.vendors.getProducts(v.id);
+                setProducts(res.products);
+            })
             .catch(() => {
-                // Fallback: search vendors list for matching slug
-                dal.vendors.list().then(res => {
-                    const found = res.vendors.find(v => slugify(v.slug) === slugify(slug) || v.id === slug);
-                    setVendor(found || null);
-                }).catch(() => setVendor(null));
+                setVendor(null);
+                setProducts([]);
             })
             .finally(() => setLoading(false));
     }, [slug]);
-
-    // Fetch categories for sidebar
-    useEffect(() => {
-        dal.categories.list().then(setCategories).catch(() => {});
-    }, []);
-
-    // Fetch products for this vendor (optionally filtered)
-    useEffect(() => {
-        if (!vendor) return;
-        dal.vendors.getProducts(vendor.id).then(res => {
-            setProducts(res.products);
-        }).catch(() => setProducts([]));
-    }, [vendor]);
 
     // Find active category by slug match
     const activeCategory = useMemo(() => {

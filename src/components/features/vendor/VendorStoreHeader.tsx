@@ -134,15 +134,11 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                 </div>
             </div>
 
-            {/* ── DESKTOP HEADER ── */}
+            {/* ── DESKTOP HEADER — Full-image hero with gradient overlay (Zomato/DoorDash style) ── */}
             <div className="hidden md:block max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
-                <div className="flex flex-col gap-3 mb-6">
-                    <h1 className="text-[26px] md:text-[34px] font-[1000] text-[#181725] tracking-tighter leading-none">
-                        {vendor.name}
-                    </h1>
-                </div>
 
-                <div className="relative w-full h-[320px] md:h-[420px] rounded-[32px] overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.08)]">
+                {/* ── HERO IMAGE — full visible, name on gradient ── */}
+                <div className="relative w-full h-[440px] lg:h-[520px] rounded-[32px] overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.14)]">
                     <Image
                         src={coverImage}
                         alt={vendor.name}
@@ -150,52 +146,84 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                         className="object-cover"
                         priority
                     />
-                    
-                    <div className="absolute top-6 left-6 bottom-6 md:bottom-auto md:h-fit w-[calc(100%-48px)] md:w-[480px] bg-white rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.15)] p-5 md:p-8 flex flex-col justify-between border border-white/50 overflow-hidden">
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-2">
-                                <div className="bg-[#1C8C44] text-white px-2 py-0.5 rounded-lg flex items-center gap-1 text-[13px] font-black">
-                                    {vendor.rating} <Star size={12} fill="white" className="text-white" />
-                                </div>
-                                <span className="text-[13px] font-bold text-gray-800">
-                                    24h Delivery • Min ₹{vendor.minOrderValue}
-                                </span>
-                            </div>
-                            <p className="text-[15px] md:text-[18px] font-black text-gray-800">
-                                {vendor.categories.slice(0, 3).join(', ')}
-                            </p>
-                            <div className="flex items-start gap-2 text-[13px] md:text-[14px] text-gray-400 font-medium tracking-tight">
-                                <MapPin size={16} className="text-[#53B175] shrink-0 mt-0.5" strokeWidth={2.5} />
-                                <span className="line-clamp-2 leading-tight">Plot No 114/3, Sector 5, Navi Mumbai</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-[14px] font-bold">
-                                <span className="text-[#1C8C44]">Open now</span>
-                                <span className="text-gray-300">•</span>
-                                <span className="text-gray-500 uppercase text-[11px] tracking-widest font-black">Orders until 8:00 PM</span>
-                            </div>
+
+                    {/* Gradient: transparent top → dark bottom */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+
+                    {/* Top-right: gallery badge */}
+                    <div className="absolute top-5 right-5 flex items-center gap-2">
+                        <div className="bg-black/50 backdrop-blur-md text-white px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-[12px] font-black">
+                            <ImageIcon size={13} />
+                            5/15
                         </div>
-                        <div className="h-px bg-gray-100 w-full my-6" />
-                        <div className="flex items-center justify-between px-2">
-                            <button className="flex items-center gap-2 font-black text-[11px] md:text-[12px] text-[#53B175] uppercase tracking-wider hover:opacity-80 transition-opacity">
-                                <Phone size={16} fill="currentColor" />
-                                Call Vendor
-                            </button>
-                            <div className="w-px h-5 bg-gray-100" />
-                            <button className="flex items-center gap-2 font-black text-[11px] md:text-[12px] text-[#53B175] uppercase tracking-wider hover:opacity-80 transition-opacity">
-                                <Heart size={16} />
-                                Favorite
-                            </button>
-                            <div className="w-px h-5 bg-gray-100" />
-                            <button onClick={handleShare} className="flex items-center gap-2 font-black text-[11px] md:text-[12px] text-[#53B175] uppercase tracking-wider hover:opacity-80 transition-opacity">
-                                <Share2 size={16} />
-                                Share
-                            </button>
+                    </div>
+
+                    {/* Bottom: vendor identity + stats */}
+                    <div className="absolute bottom-0 left-0 right-0 px-8 pb-7 pt-20">
+                        {/* Status + rating badges */}
+                        <div className="flex items-center gap-2.5 mb-4">
+                            <div className="flex items-center gap-1.5 bg-[#1C8C44] text-white px-3 py-1.5 rounded-xl text-[13px] font-black shadow-lg shadow-green-900/30">
+                                {vendor.rating} <Star size={13} fill="white" className="text-white" />
+                            </div>
+                            <span className="text-white/70 text-[13px] font-bold">2K ratings</span>
+                            <span className="text-white/30 text-lg leading-none">•</span>
+                            <span className="bg-white/15 backdrop-blur-sm border border-white/20 text-white text-[12px] font-black px-3 py-1 rounded-lg">
+                                Open till 8:00 PM
+                            </span>
+                            <span className="text-white/30 text-lg leading-none">•</span>
+                            <span className="text-white/70 text-[13px] font-bold">24h Delivery</span>
+                        </div>
+
+                        {/* Vendor name */}
+                        <h1 className="text-[44px] lg:text-[56px] font-[1000] text-white tracking-tighter leading-[0.95] mb-4 drop-shadow-lg">
+                            {vendor.name}
+                        </h1>
+
+                        {/* Cuisine + delivery info row */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                            {vendor.categories.slice(0, 3).map((cat, i) => (
+                                <span key={cat} className="flex items-center gap-2">
+                                    <span className="text-white/85 text-[14px] font-bold">{cat}</span>
+                                    {i < Math.min(vendor.categories.length, 3) - 1 && (
+                                        <span className="text-white/30">•</span>
+                                    )}
+                                </span>
+                            ))}
+                            <span className="text-white/30">|</span>
+                            <span className="text-white/85 text-[14px] font-bold">Min ₹{vendor.minOrderValue}</span>
                         </div>
                     </div>
                 </div>
 
-                {/* Desktop Tabs — below hero, matching mobile placement */}
-                <div className="flex items-center gap-8 border-b border-gray-100/80 mt-8">
+                {/* ── INFO BAR — address left, actions right ── */}
+                <div className="flex items-center justify-between px-1 pt-5 pb-4 border-b border-gray-100">
+                    {/* Left: address */}
+                    <div className="flex items-center gap-2 min-w-0">
+                        <MapPin size={16} className="text-[#53B175] shrink-0" strokeWidth={2.5} />
+                        <span className="text-[14px] font-medium text-gray-500 truncate">
+                            Plot No 114/3, Sector 5, Navi Mumbai
+                        </span>
+                    </div>
+
+                    {/* Right: action buttons */}
+                    <div className="flex items-center gap-2.5 shrink-0 ml-6">
+                        <button className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gray-50 border border-gray-100 text-[13px] font-black text-gray-700 hover:bg-[#53B175]/5 hover:border-[#53B175]/40 hover:text-[#53B175] transition-all duration-200">
+                            <Phone size={15} strokeWidth={2.5} />
+                            Call Vendor
+                        </button>
+                        <button className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gray-50 border border-gray-100 text-[13px] font-black text-gray-700 hover:bg-[#53B175]/5 hover:border-[#53B175]/40 hover:text-[#53B175] transition-all duration-200">
+                            <Heart size={15} strokeWidth={2.5} />
+                            Favourite
+                        </button>
+                        <button onClick={handleShare} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gray-50 border border-gray-100 text-[13px] font-black text-gray-700 hover:bg-[#53B175]/5 hover:border-[#53B175]/40 hover:text-[#53B175] transition-all duration-200">
+                            <Share2 size={15} strokeWidth={2.5} />
+                            Share
+                        </button>
+                    </div>
+                </div>
+
+                {/* ── TABS ── */}
+                <div className="flex items-center gap-8">
                     {[
                         { key: 'all', label: 'Catalog' },
                         { key: 'deals', label: 'Deals' },
@@ -206,15 +234,15 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                             key={tab.key}
                             onClick={() => onTabChange(tab.key)}
                             className={cn(
-                                "pb-3 text-[15px] font-bold transition-all relative",
+                                "pb-3 pt-3 text-[15px] font-bold transition-all relative",
                                 activeTab === tab.key || (activeTab === 'all' && tab.key === 'all')
                                     ? "text-[#53B175]"
-                                    : "text-gray-400 hover:text-gray-600"
+                                    : "text-gray-400 hover:text-gray-700"
                             )}
                         >
                             {tab.label}
                             {(activeTab === tab.key || (activeTab === 'all' && tab.key === 'all')) && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#53B175] rounded-full" />
+                                <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#53B175] rounded-full" />
                             )}
                         </button>
                     ))}

@@ -66,8 +66,9 @@ export class VendorService {
   }
 
   async getById(id: string) {
-    const vendor = await prisma.vendor.findUnique({
-      where: { id },
+    // Accept either UUID or slug so frontend links work regardless of format
+    const vendor = await prisma.vendor.findFirst({
+      where: { OR: [{ id }, { slug: id }] },
       include: {
         serviceAreas: { where: { isActive: true }, select: { pincode: true } },
         deliverySlots: { where: { isActive: true } },
