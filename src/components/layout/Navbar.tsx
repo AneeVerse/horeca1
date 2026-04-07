@@ -88,7 +88,8 @@ export function Navbar() {
             dal.categories.list().then((cats) => {
                 setApiCategories(cats.map(c => ({
                     ...c,
-                    image: CATEGORY_STYLE[c.slug]?.image || DEFAULT_STYLE.image,
+                    // Prefer the real image stored in DB (Cloudinary); fall back to slug map then default
+                    image: c.image || CATEGORY_STYLE[c.slug]?.image || DEFAULT_STYLE.image,
                     bgColor: CATEGORY_STYLE[c.slug]?.bgColor || DEFAULT_STYLE.bgColor,
                 })));
             }),
