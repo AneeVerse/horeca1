@@ -54,17 +54,14 @@ export function CategoryShowcase({ filterByProducts, title = "Shop By Category",
 
     const CategoryCard = ({ cat }: { cat: (typeof categories)[0] }) => {
         const isActive = activeCategory === `cat:${cat.name}`;
-        
-        return (
-            <button
-                onClick={() => onCategoryClick ? onCategoryClick(cat.name) : null}
-                className="flex flex-col items-center group transition-transform active:scale-95 w-full"
-            >
+        const sharedClass = "flex flex-col items-center group transition-transform active:scale-95 w-full";
+        const content = (
+            <>
                 <div
                     className={cn(
                         "w-full aspect-square rounded-[22px] flex items-center justify-center mb-3 overflow-hidden relative border transition-all duration-300",
-                        isActive 
-                            ? "border-[#53B175] shadow-[0_15px_40px_rgba(83,177,117,0.18)] ring-2 ring-[#53B175]/10 bg-white" 
+                        isActive
+                            ? "border-[#53B175] shadow-[0_15px_40px_rgba(83,177,117,0.18)] ring-2 ring-[#53B175]/10 bg-white"
                             : "border-gray-100 shadow-sm group-hover:shadow-[0_15px_30px_rgba(83,177,117,0.08)] group-hover:border-[#53B175]/30"
                     )}
                     style={{ backgroundColor: isActive ? 'white' : cat.bgColor }}
@@ -84,7 +81,20 @@ export function CategoryShowcase({ filterByProducts, title = "Shop By Category",
                 )}>
                     {cat.name}
                 </h3>
-            </button>
+            </>
+        );
+
+        if (onCategoryClick) {
+            return (
+                <button onClick={() => onCategoryClick(cat.name)} className={sharedClass}>
+                    {content}
+                </button>
+            );
+        }
+        return (
+            <Link href={`/category/${cat.slug}`} className={sharedClass}>
+                {content}
+            </Link>
         );
     };
 
