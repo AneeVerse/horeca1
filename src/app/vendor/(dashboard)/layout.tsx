@@ -18,6 +18,7 @@ import {
     ChevronRight,
     Loader2,
     ShieldAlert,
+    Home,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AccountSwitcherDropdown } from '@/components/account-switcher/AccountSwitcherDropdown';
@@ -155,6 +156,21 @@ export default function VendorLayout({
                             );
                         })}
                     </nav>
+
+                    {/* View Storefront */}
+                    <div className="px-4 pb-3">
+                        <Link
+                            href="/"
+                            title={isCollapsed ? 'View Storefront' : ''}
+                            className={cn(
+                                'flex items-center rounded-[10px] transition-all text-[14px] overflow-hidden leading-none text-[#299E60] hover:bg-[#E8F7EF] font-semibold',
+                                isCollapsed ? 'justify-center h-[48px] px-0' : 'gap-3.5 px-5 py-3.5'
+                            )}
+                        >
+                            <Home size={22} className="shrink-0" />
+                            {!isCollapsed && <span className="whitespace-nowrap">View Storefront</span>}
+                        </Link>
+                    </div>
 
                     {/* Collapse Toggle Footer */}
                     <div className="p-4 border-t border-[#EEEEEE] flex justify-center">

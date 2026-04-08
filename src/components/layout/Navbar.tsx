@@ -322,6 +322,18 @@ export function Navbar() {
                                 <Image src="/Horeca1.png" alt="Horeca1" width={104} height={26} className="h-[26px] w-auto object-contain" priority />
                             </Link>
 
+                            {/* Location Button - Desktop */}
+                            <button
+                                onClick={() => setIsLocationOverlayOpen(true)}
+                                className="hidden lg:flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-full bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer shrink-0 max-w-[180px]"
+                            >
+                                <MapPin size={14} className="text-[#53B175] shrink-0" />
+                                <span className="text-[13px] font-semibold text-gray-600 truncate">
+                                    {selectedAddress?.shortAddress || 'Select Location'}
+                                </span>
+                                <ChevronDown size={13} className="text-gray-400 shrink-0" />
+                            </button>
+
                             {!pathname?.startsWith('/vendor/') && (
                                 <div className="flex flex-1 max-w-[320px] lg:max-w-[720px] items-center relative group">
                                     <div className="flex items-center gap-2 lg:gap-3 px-3 lg:px-5 py-2.5 lg:py-3.5 bg-gray-50 border-2 border-gray-100 rounded-xl w-full focus-within:border-primary/50 transition-all duration-300 shadow-sm">

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ArrowLeft, Search, User, MapPin, Home, Briefcase, Loader2, Navigation, X, Trash2 } from 'lucide-react';
+import { ArrowLeft, Search, MapPin, Home, Briefcase, Loader2, Navigation, X, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAddress, Address } from '@/context/AddressContext';
 import { useGooglePlacesAutocomplete, PlacePrediction } from '@/hooks/useGooglePlacesAutocomplete';
@@ -76,19 +76,26 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
 
     return (
         <>
-            <div className="fixed inset-0 z-[11000] bg-white flex flex-col animate-in fade-in slide-in-from-right duration-300">
+            {/* Desktop backdrop */}
+            <div
+                className="hidden md:block fixed inset-0 z-[11000] bg-black/50 animate-in fade-in duration-200"
+                onClick={onClose}
+            />
+
+            {/* Panel: full-screen on mobile, centered modal on desktop */}
+            <div className="fixed inset-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-[11001] bg-white flex flex-col md:w-[480px] md:max-h-[80vh] md:rounded-2xl md:shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom md:slide-in-from-bottom-4 duration-300">
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b border-gray-50">
-                    <button onClick={onClose} className="p-1 -ml-1">
+                <div className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b border-gray-100 shrink-0">
+                    <button onClick={onClose} className="p-1 -ml-1 md:hidden">
                         <ArrowLeft size={24} className="text-gray-700" />
                     </button>
                     <h2 className="text-xl font-bold text-gray-800">Select a location</h2>
-                    <button className="p-1 -mr-1">
-                        <User size={24} className="text-gray-700" />
+                    <button onClick={onClose} className="p-1 -mr-1 hover:bg-gray-100 rounded-full transition-colors">
+                        <X size={22} className="text-gray-600" />
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-4 pt-2 pb-24">
+                <div className="flex-1 overflow-y-auto px-4 pt-2 pb-24 md:pb-4">
                     {/* Search Bar */}
                     <div className="mb-6 relative">
                         <div className="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-lg w-full shadow-sm focus-within:border-[#33a852]/50 transition-colors">
@@ -227,7 +234,7 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
                 </div>
 
                 {/* Sticky Bottom Button */}
-                <div className="p-4 bg-white border-t border-gray-50 sticky bottom-0">
+                <div className="p-4 bg-white border-t border-gray-100 shrink-0">
                     <button
                         onClick={() => {
                             setInitialCoords({});
