@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
     Search,
     Star,
@@ -14,6 +15,7 @@ import {
     XCircle,
     LayoutGrid,
     List,
+    LayoutDashboard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -39,10 +41,20 @@ interface AdminVendor {
 }
 
 export default function VendorsPage() {
+    const router = useRouter();
     const [searchQuery, setSearchQuery] = useState('');
     const [vendors, setVendors] = useState<AdminVendor[]>([]);
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+    const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
+
+    const viewDashboard = async (vendorId: string) => {
+        await fetch('/api/v1/admin/impersonate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vendorId }),
+        });
+        router.push('/vendor/dashboard');
+    };
 
     useEffect(() => {
         fetch('/api/v1/admin/vendors?limit=50')
@@ -79,8 +91,8 @@ export default function VendorsPage() {
             {/* Page Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-[28px] font-bold text-[#000000] leading-none mb-1">Sellers List</h1>
-                    <p className="text-[#000000] text-[13px] font-medium opacity-70">Whole data about your Vendors/Sellers</p>
+                    <h1 className="text-[28px] font-bold text-[#000000] leading-none mb-1">Vendors List</h1>
+                    <p className="text-[#000000] text-[13px] font-medium opacity-70">Whole data about your Vendors</p>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -88,7 +100,7 @@ export default function VendorsPage() {
                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={16} />
                         <input
                             type="text"
-                            placeholder="Search Sellers..."
+                            placeholder="Search Vendors..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="h-[44px] w-full bg-white border border-[#EEEEEE] rounded-[12px] pl-10 pr-4 text-[13px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 shadow-sm"
@@ -208,30 +220,39 @@ export default function VendorsPage() {
                         </div>
 
                         {/* Footer Buttons */}
-                        <div className="p-6 border-t border-[#EEEEEE] flex items-center gap-3">
+                        <div className="p-6 border-t border-[#EEEEEE] flex flex-col gap-2">
+                            <button
+                                onClick={() => viewDashboard(vendor.id)}
+                                className="w-full h-[42px] bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center justify-center gap-2"
+                            >
+                                <LayoutDashboard size={14} />
+                                View Dashboard
+                            </button>
+                            <div className="flex items-center gap-2">
                             <Link
                                 href={`/admin/vendors/${vendor.id}`}
-                                className="flex-1 h-[44px] bg-[#299E60] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center justify-center"
+                                className="flex-1 h-[38px] bg-[#EEF8F1] text-[#299E60] rounded-[10px] text-[13px] font-bold hover:bg-[#e0f0e5] transition-all flex items-center justify-center"
                             >
-                                View Details
+                                Details
                             </Link>
                             {!vendor.isVerified ? (
                                 <button
                                     onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
-                                    className="flex-1 h-[44px] bg-[#EEF8F1] text-[#299E60] rounded-[10px] text-[14px] font-bold hover:bg-[#e0f0e5] transition-all flex items-center justify-center gap-2"
+                                    className="flex-1 h-[38px] bg-[#EEF8F1] text-[#299E60] rounded-[10px] text-[13px] font-bold hover:bg-[#e0f0e5] transition-all flex items-center justify-center gap-1.5"
                                 >
-                                    <CheckCircle size={16} />
+                                    <CheckCircle size={14} />
                                     Approve
                                 </button>
                             ) : (
                                 <button
                                     onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
-                                    className="flex-1 h-[44px] bg-[#FFF0F0] text-[#E74C3C] rounded-[10px] text-[14px] font-bold hover:bg-[#ffe5e5] transition-all flex items-center justify-center gap-2"
+                                    className="flex-1 h-[38px] bg-[#FFF0F0] text-[#E74C3C] rounded-[10px] text-[13px] font-bold hover:bg-[#ffe5e5] transition-all flex items-center justify-center gap-1.5"
                                 >
                                     <XCircle size={16} />
                                     Revoke
                                 </button>
                             )}
+                            </div>
                         </div>
                     </div>
                 ))}
@@ -242,12 +263,12 @@ export default function VendorsPage() {
                 {/* Table Header */}
                 <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-[#FAFAFA] border-b border-[#EEEEEE] text-[12px] font-bold text-[#AEAEAE] uppercase">
                     <div className="col-span-1">#</div>
-                    <div className="col-span-3">Vendor</div>
+                    <div className="col-span-2">Vendor</div>
                     <div className="col-span-2">Owner</div>
                     <div className="col-span-2">Contact</div>
                     <div className="col-span-1 text-center">Products</div>
                     <div className="col-span-1 text-center">Orders</div>
-                    <div className="col-span-2 text-center">Actions</div>
+                    <div className="col-span-3 text-center">Actions</div>
                 </div>
                 {filteredVendors.map((vendor, i) => (
                     <div
@@ -255,7 +276,7 @@ export default function VendorsPage() {
                         className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#F5F5F5] items-center hover:bg-[#FAFAFA] transition-colors"
                     >
                         <div className="col-span-1 text-[13px] font-bold text-[#AEAEAE]">{i + 1}</div>
-                        <div className="col-span-3 flex items-center gap-3">
+                        <div className="col-span-2 flex items-center gap-3">
                             <div className="w-[40px] h-[40px] rounded-full bg-[#F1F4F9] overflow-hidden shrink-0 flex items-center justify-center">
                                 {vendor.logoUrl ? (
                                     <img src={vendor.logoUrl} alt={vendor.businessName} className="w-full h-full object-cover" />
@@ -284,12 +305,19 @@ export default function VendorsPage() {
                         </div>
                         <div className="col-span-1 text-center text-[14px] font-bold text-[#181725]">{vendor._count.products}</div>
                         <div className="col-span-1 text-center text-[14px] font-bold text-[#181725]">{vendor._count.orders}</div>
-                        <div className="col-span-2 flex items-center justify-center gap-2">
+                        <div className="col-span-3 flex items-center justify-center gap-2">
+                            <button
+                                onClick={() => viewDashboard(vendor.id)}
+                                className="h-[34px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-1"
+                            >
+                                <LayoutDashboard size={12} />
+                                Dashboard
+                            </button>
                             <Link
                                 href={`/admin/vendors/${vendor.id}`}
-                                className="h-[34px] px-4 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center"
+                                className="h-[34px] px-3 bg-[#EEF8F1] text-[#299E60] rounded-[8px] text-[12px] font-bold hover:bg-[#e0f0e5] transition-all flex items-center justify-center"
                             >
-                                View
+                                Details
                             </Link>
                             {!vendor.isVerified ? (
                                 <button

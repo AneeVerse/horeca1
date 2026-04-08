@@ -12,6 +12,7 @@ import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { CatalogService } from '@/modules/catalog/catalog.service';
 import { emitEvent } from '@/events/emitter';
+import { resolveVendorId } from '@/lib/resolveVendorId';
 
 // Validation schema for product creation
 const createProductSchema = z.object({
@@ -48,13 +49,7 @@ const createProductSchema = z.object({
 // GET — list all vendor products (includes inactive for management)
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    // Resolve vendorId from session — never trust client-supplied vendorId
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true },
-    });
-    if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');
-    const vendorId = vendor.id;
+    const vendorId = await resolveVendorId(ctx, req);
 
     // Parse query params
     const params = req.nextUrl.searchParams;
@@ -81,13 +76,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 // POST — create a new product and initialize its inventory record
 export const POST = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    // Resolve vendorId from session — never trust client-supplied vendorId
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true },
-    });
-    if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');
-    const vendorId = vendor.id;
+    const vendorId = await resolveVendorId(ctx, req);
 
     const body = await req.json();
     const data = createProductSchema.parse(body);

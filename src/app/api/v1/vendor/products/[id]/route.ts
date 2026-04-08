@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { CatalogService } from '@/modules/catalog/catalog.service';
+import { resolveVendorId } from '@/lib/resolveVendorId';
 
 // Validation schema for product updates (all fields optional)
 const updateProductSchema = z.object({
@@ -51,13 +52,7 @@ function extractId(req: NextRequest): string {
 // PATCH — update product fields
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    // Resolve vendorId from session — never trust client-supplied vendorId
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true },
-    });
-    if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');
-    const vendorId = vendor.id;
+    const vendorId = await resolveVendorId(ctx, req);
 
     const productId = extractId(req);
     const body = await req.json();
@@ -95,15 +90,11 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
 // GET — fetch a single product with price slabs (for edit form)
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true },
-    });
-    if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');
+    const vendorId = await resolveVendorId(ctx, req);
 
     const productId = extractId(req);
     const product = await prisma.product.findFirst({
-      where: { id: productId, vendorId: vendor.id },
+      where: { id: productId, vendorId },
       include: {
         priceSlabs: { orderBy: { sortOrder: 'asc' } },
         inventory: { select: { qtyAvailable: true, qtyReserved: true } },
@@ -121,13 +112,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 // DELETE — soft-delete by setting isActive = false
 export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    // Resolve vendorId from session — never trust client-supplied vendorId
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true },
-    });
-    if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');
-    const vendorId = vendor.id;
+    const vendorId = await resolveVendorId(ctx, req);
 
     const productId = extractId(req);
 

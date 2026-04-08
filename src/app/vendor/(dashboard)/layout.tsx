@@ -19,6 +19,8 @@ import {
     Loader2,
     ShieldAlert,
     Home,
+    Eye,
+    LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AccountSwitcherDropdown } from '@/components/account-switcher/AccountSwitcherDropdown';
@@ -40,6 +42,17 @@ export default function VendorLayout({
     const router = useRouter();
     const { data: session, status } = useSession();
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [adminVendorName, setAdminVendorName] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        const match = document.cookie.match(/(?:^|;\s*)admin_impersonate_vendor_name=([^;]+)/);
+        setAdminVendorName(match ? decodeURIComponent(match[1]) : null);
+    }, []);
+
+    const handleExitAdminView = async () => {
+        await fetch('/api/v1/admin/impersonate', { method: 'DELETE' });
+        router.push('/admin/vendors');
+    };
 
     // Show loading while checking auth
     if (status === 'loading') {
@@ -68,10 +81,13 @@ export default function VendorLayout({
         );
     }
 
+    const bannerHeight = 0; // Banner is now fixed/floating — no layout space needed
+
     return (
         <div className="flex flex-col min-h-screen bg-[#F8F9FB] font-[family-name:var(--font-poppins)]">
+
             {/* Full-width Top Header */}
-            <header className="h-[80px] bg-white border-b border-[#EEEEEE] flex items-center px-8 sticky top-0 z-50 shrink-0">
+            <header className="h-[80px] bg-white border-b border-[#EEEEEE] flex items-center px-8 shrink-0 sticky top-0 z-50">
                 {/* Logo Section - same width as sidebar */}
                 <div className={cn(
                     "shrink-0 flex items-center gap-3 transition-all duration-300 ease-in-out",
@@ -125,11 +141,39 @@ export default function VendorLayout({
             {/* Body: Sidebar + Content */}
             <div className="flex flex-1">
                 {/* Sidebar */}
-                <aside className={cn(
-                    "bg-white border-r border-[#EEEEEE] flex flex-col shrink-0 sticky top-[80px] h-[calc(100vh-80px)] overflow-y-auto transition-all duration-300 ease-in-out z-40",
+                <aside
+                    style={{ top: 80, height: 'calc(100vh - 80px)' }}
+                    className={cn(
+                    "bg-white border-r border-[#EEEEEE] flex flex-col shrink-0 sticky overflow-y-auto transition-all duration-300 ease-in-out z-40",
                     isCollapsed ? "w-[80px]" : "w-[240px]"
                 )}>
                     <nav className="flex-1 px-4 py-6 space-y-2">
+                        {/* Admin View Indicator */}
+                        {adminVendorName && (
+                            <div className={cn(
+                                "mb-3 bg-amber-50 border border-amber-200 rounded-[10px] overflow-hidden",
+                                isCollapsed ? "flex justify-center py-2" : "p-3"
+                            )}>
+                                {isCollapsed ? (
+                                    <Eye size={18} className="text-amber-500" />
+                                ) : (
+                                    <>
+                                        <div className="flex items-center gap-1.5 mb-2">
+                                            <Eye size={13} className="text-amber-500 shrink-0" />
+                                            <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wide">Admin View</span>
+                                        </div>
+                                        <p className="text-[12px] font-semibold text-amber-800 truncate mb-2">{adminVendorName}</p>
+                                        <button
+                                            onClick={handleExitAdminView}
+                                            className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-1.5 rounded-[6px] transition-colors"
+                                        >
+                                            <LogOut size={11} />
+                                            Exit Admin View
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        )}
                         {SIDEBAR_LINKS.map((link) => {
                             const isActive = pathname === link.href;
                             return (

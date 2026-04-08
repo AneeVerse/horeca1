@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
+import { resolveVendorId } from '@/lib/resolveVendorId';
 
 const addSchema = z.object({
   pincode: z.string().min(4).max(10),
@@ -21,19 +22,10 @@ const deleteSchema = z.object({
   id: z.string().uuid(),
 });
 
-async function resolveVendorId(userId: string) {
-  const vendor = await prisma.vendor.findUnique({
-    where: { userId },
-    select: { id: true },
-  });
-  if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');
-  return vendor.id;
-}
-
 // POST — add new service area pincode
 export const POST = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx.userId);
+    const vendorId = await resolveVendorId(ctx, req);
     const body = await req.json();
     const { pincode } = addSchema.parse(body);
 
@@ -57,7 +49,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
 // PATCH — toggle active/inactive
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx.userId);
+    const vendorId = await resolveVendorId(ctx, req);
     const body = await req.json();
     const { id, isActive } = updateSchema.parse(body);
 
@@ -82,7 +74,7 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
 // DELETE — remove service area
 export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx.userId);
+    const vendorId = await resolveVendorId(ctx, req);
     const body = await req.json();
     const { id } = deleteSchema.parse(body);
 

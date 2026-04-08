@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
+import { resolveVendorId } from '@/lib/resolveVendorId';
 
 // Validation schema for profile updates — whitelist of allowed fields
 const updateSettingsSchema = z.object({
@@ -21,15 +22,9 @@ const updateSettingsSchema = z.object({
 });
 
 // GET — full vendor profile with service areas, delivery slots, and account info
-export const GET = vendorOnly(async (_req: NextRequest, ctx) => {
+export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    // Resolve vendorId from session — never trust client-supplied vendorId
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true },
-    });
-    if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');
-    const vendorId = vendor.id;
+    const vendorId = await resolveVendorId(ctx, req);
 
     const profile = await prisma.vendor.findUnique({
       where: { id: vendorId },
@@ -65,13 +60,7 @@ export const GET = vendorOnly(async (_req: NextRequest, ctx) => {
 // PATCH — update whitelisted vendor profile fields
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    // Resolve vendorId from session — never trust client-supplied vendorId
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true },
-    });
-    if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');
-    const vendorId = vendor.id;
+    const vendorId = await resolveVendorId(ctx, req);
 
     const body = await req.json();
     const allowedFields = updateSettingsSchema.parse(body);

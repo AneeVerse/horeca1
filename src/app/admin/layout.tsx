@@ -32,7 +32,7 @@ const SIDEBAR_LINKS = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
     { name: 'Orders', icon: ShoppingBag, href: '/admin/orders' },
     { name: 'Customers', icon: Users, href: '/admin/customers' },
-    { name: 'Sellers', icon: Store, href: '/admin/vendors' },
+    { name: 'Vendors', icon: Store, href: '/admin/vendors' },
     { name: 'Products', icon: Package, href: '/admin/products' },
     { name: 'Categories', icon: Tag, href: '/admin/categories' },
     { name: 'Approvals', icon: CheckSquare, href: '/admin/approvals' },

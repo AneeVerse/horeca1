@@ -10,6 +10,7 @@ import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { OrderService } from '@/modules/order/order.service';
 import { updateStatusSchema } from '@/modules/order/order.validator';
+import { resolveVendorId } from '@/lib/resolveVendorId';
 
 // Helper: extract the [id] segment from /api/v1/vendor/orders/{id}
 function extractId(req: NextRequest): string {
@@ -20,13 +21,7 @@ function extractId(req: NextRequest): string {
 // GET — full order with items, payments, customer, delivery slot
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    // Resolve vendorId from session — never trust client-supplied vendorId
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true },
-    });
-    if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');
-    const vendorId = vendor.id;
+    const vendorId = await resolveVendorId(ctx, req);
 
     const orderId = extractId(req);
 
@@ -96,13 +91,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 // PATCH — update order status through fulfillment lifecycle
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    // Resolve vendorId from session — never trust client-supplied vendorId
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true },
-    });
-    if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');
-    const vendorId = vendor.id;
+    const vendorId = await resolveVendorId(ctx, req);
 
     const orderId = extractId(req);
     const body = await req.json();

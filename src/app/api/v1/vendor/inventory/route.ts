@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { InventoryService } from '@/modules/inventory/inventory.service';
+import { resolveVendorId } from '@/lib/resolveVendorId';
 
 // Validation schema for inventory updates
 const updateInventorySchema = z.object({
@@ -19,15 +20,9 @@ const updateInventorySchema = z.object({
 });
 
 // GET — list all inventory rows with product info + low-stock flag
-export const GET = vendorOnly(async (_req: NextRequest, ctx) => {
+export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    // Resolve vendorId from session — never trust client-supplied vendorId
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true },
-    });
-    if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');
-    const vendorId = vendor.id;
+    const vendorId = await resolveVendorId(ctx, req);
 
     const inventory = await prisma.inventory.findMany({
       where: { vendorId },
@@ -54,13 +49,7 @@ export const GET = vendorOnly(async (_req: NextRequest, ctx) => {
 // PATCH — update stock quantity or low-stock threshold for a product
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    // Resolve vendorId from session — never trust client-supplied vendorId
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true },
-    });
-    if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');
-    const vendorId = vendor.id;
+    const vendorId = await resolveVendorId(ctx, req);
 
     const body = await req.json();
     const { productId, qtyAvailable, lowStockThreshold } = updateInventorySchema.parse(body);
