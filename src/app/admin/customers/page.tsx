@@ -152,12 +152,10 @@ export default function CustomersPage() {
                                     <tr key={user.id} className="hover:bg-gray-50/50 transition-colors group">
                                         <td className="p-4">
                                             <Link href={`/admin/customers/${user.id}`} className="flex items-center gap-3 group/name cursor-pointer w-fit">
-                                                <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-100 shrink-0 border border-transparent group-hover/name:border-[#299E60]/30 transition-all">
-                                                    <img
-                                                        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.fullName}`}
-                                                        alt={user.fullName}
-                                                        className="w-full h-full object-cover"
-                                                    />
+                                                <div className="w-9 h-9 rounded-full overflow-hidden bg-[#53B175]/10 shrink-0 border border-transparent group-hover/name:border-[#299E60]/30 transition-all flex items-center justify-center">
+                                                    <span className="text-[13px] font-black text-[#299E60]">
+                                                        {(user.fullName || 'U').charAt(0).toUpperCase()}
+                                                    </span>
                                                 </div>
                                                 <span className="text-[14px] font-[800] text-[#181725] tracking-tight">
                                                     {user.fullName}

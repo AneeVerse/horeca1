@@ -10,6 +10,7 @@ import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { CategoryShowcase } from '@/components/features/CategoryShowcase';
 import { dal } from '@/lib/dal';
 import { cn } from '@/lib/utils';
+import { useCart } from '@/context/CartContext';
 import type { Vendor, VendorProduct } from '@/types';
 import { Package, Star, CheckCircle, Clock } from 'lucide-react';
 
@@ -17,6 +18,7 @@ export default function VendorStorePage() {
     const params = useParams();
     const vendorId = params.id as string;
     const { status: sessionStatus } = useSession();
+    const { addToCart } = useCart();
     const [vendor, setVendor] = useState<Vendor | null>(null);
     const [products, setProducts] = useState<VendorProduct[]>([]);
     const [loading, setLoading] = useState(true);
@@ -205,7 +207,14 @@ export default function VendorStorePage() {
                                         ))}
                                     </div>
                                     <button
-                                        onClick={() => { (order.items || []).forEach((item: any) => { if (item.productId) { /* addToCart logic */ } }); }}
+                                        onClick={() => {
+                                            (order.items || []).forEach((item: any) => {
+                                                const productId = item.productId || item.product?.id;
+                                                if (!productId) return;
+                                                const found = products.find(p => p.id === productId);
+                                                if (found) addToCart(found, item.quantity || 1);
+                                            });
+                                        }}
                                         className="w-full py-2.5 bg-[#53B175] text-white rounded-xl text-[13px] font-black hover:bg-[#48a068] transition-colors"
                                     >
                                         Reorder All Items

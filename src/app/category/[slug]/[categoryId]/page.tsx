@@ -67,11 +67,12 @@ function VendorCategoryPageContent() {
         ) || null;
     }, [categoryId, categories]);
 
-    // Filter products by category name match
+    // Filter products by category ID (exact match) with name as fallback
     const filteredProducts = useMemo(() => {
         if (!activeCategory) return products;
         return products.filter(p =>
-            (p.category || '').toLowerCase().includes(activeCategory.name.toLowerCase())
+            (p as unknown as { categoryId?: string }).categoryId === activeCategory.id ||
+            p.category === activeCategory.name
         );
     }, [products, activeCategory]);
 

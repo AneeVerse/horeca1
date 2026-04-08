@@ -15,6 +15,8 @@ export const GET = adminOnly(async (_req: NextRequest, _ctx) => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    const eightMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 7, 1);
+
     const [
       totalUsers,
       totalVendors,
@@ -26,6 +28,7 @@ export const GET = adminOnly(async (_req: NextRequest, _ctx) => {
       pendingProducts,
       pendingCategories,
       pendingVendors,
+      monthlyOrders,
     ] = await Promise.all([
       // Total users (all roles)
       prisma.user.count(),
@@ -77,6 +80,18 @@ export const GET = adminOnly(async (_req: NextRequest, _ctx) => {
       prisma.product.count({ where: { approvalStatus: 'pending' } }),
       prisma.category.count({ where: { approvalStatus: 'pending' } }),
       prisma.vendor.count({ where: { isVerified: false } }),
+
+      // Monthly order count + revenue for past 8 months
+      prisma.$queryRaw<Array<{ month: string; orders: bigint; revenue: number }>>`
+        SELECT
+          TO_CHAR(created_at AT TIME ZONE 'UTC', 'Mon YYYY') AS month,
+          COUNT(*)::bigint AS orders,
+          COALESCE(SUM(total_amount), 0)::float AS revenue
+        FROM orders
+        WHERE created_at >= ${eightMonthsAgo}
+        GROUP BY DATE_TRUNC('month', created_at), TO_CHAR(created_at AT TIME ZONE 'UTC', 'Mon YYYY')
+        ORDER BY DATE_TRUNC('month', created_at) ASC
+      `,
     ]);
 
     // Transform ordersByStatus into a clean map: { pending: 5, confirmed: 12, ... }
@@ -103,6 +118,11 @@ export const GET = adminOnly(async (_req: NextRequest, _ctx) => {
           total: pendingProducts + pendingCategories + pendingVendors,
         },
         recentOrders,
+        monthlyData: monthlyOrders.map(r => ({
+          month: r.month,
+          orders: Number(r.orders),
+          revenue: Number(r.revenue),
+        })),
       },
     });
   } catch (error) {

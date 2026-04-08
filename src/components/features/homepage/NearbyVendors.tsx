@@ -18,38 +18,11 @@ const VENDOR_COVERS = [
     '/images/vendors/young-kane-kSDOJRNol9E-unsplash.webp',
 ];
 
-// Mock distances and addresses for nearby vendors
-const VENDOR_LOCATIONS = [
-    { distance: '2.3km', address: 'MG Road, Sector 5, Near Metro Station' },
-    { distance: '3.1km', address: 'Trade Center, Industrial Area, Phase 2' },
-    { distance: '5.7km', address: 'Korum Mall, Khopat, Thane West' },
-    { distance: '1.8km', address: 'Station Road, Shop No 12, Main Market' },
-    { distance: '4.2km', address: 'Linking Road, Near Signal, Bandra' },
-    { distance: '6.5km', address: 'APMC Market, Vashi, Navi Mumbai' },
-    { distance: '3.8km', address: 'Hill Road, Near Temple, Dadar' },
-    { distance: '2.9km', address: 'LBS Marg, Mulund Check Naka' },
-    { distance: '7.1km', address: 'Hiranandani Estate, Thane' },
-    { distance: '11km', address: 'Seawoods Grand Central, Nerul' },
-    { distance: '4.5km', address: 'Powai Plaza, Chandivali' },
-    { distance: '5.2km', address: 'R City Mall, Ghatkopar West' },
-];
-
-// Mock offer tags
-const VENDOR_OFFERS = [
-    'Flat 30% OFF + FLAT ₹250 OFF',
-    'Flat 20% OFF + FREE Delivery',
-    'Flat 25% OFF on First Order',
-    'Buy 2 Get 1 FREE',
-    'Flat ₹500 OFF on ₹2000+',
-    'Flat 15% OFF + FLAT ₹100 OFF',
-];
 
 function VendorCard({ vendor, index }: { vendor: Vendor; index: number }) {
     const cover = VENDOR_COVERS[index % VENDOR_COVERS.length];
-    const location = VENDOR_LOCATIONS[index % VENDOR_LOCATIONS.length];
-    const offer = VENDOR_OFFERS[index % VENDOR_OFFERS.length];
     const cuisineLabel = vendor.categories.slice(0, 2).join(' • ');
-    const priceForTwo = `₹${vendor.minOrderValue} f...`;
+    const addressLine = vendor.address ? `${vendor.address.city}${vendor.address.state ? ', ' + vendor.address.state : ''}` : null;
 
     return (
         <Link
@@ -65,13 +38,6 @@ function VendorCard({ vendor, index }: { vendor: Vendor; index: number }) {
                     sizes="(max-width: 768px) 230px, 270px"
                     className="object-cover"
                 />
-                {/* Offer Badge */}
-                <div className="absolute bottom-2 left-2 right-2">
-                    <span className="inline-flex items-center gap-1 bg-[#2c7a2c]/90 backdrop-blur-sm text-white text-[10px] md:text-[11px] font-bold px-2.5 py-1 rounded-md shadow-sm">
-                        <span className="w-1.5 h-1.5 bg-[#4ADE80] rounded-full inline-block" />
-                        {offer}
-                    </span>
-                </div>
             </div>
 
             {/* Info */}
@@ -89,23 +55,28 @@ function VendorCard({ vendor, index }: { vendor: Vendor; index: number }) {
                     </button>
                 </div>
 
-                {/* Rating + Cuisine + Price */}
+                {/* Rating + Cuisine */}
                 <div className="flex items-center gap-1.5 text-[12px] md:text-[13px] text-gray-600 mb-1.5">
                     <div className="flex items-center gap-0.5 bg-[#53B175] text-white rounded-md px-1.5 py-0.5 text-[11px] font-bold">
                         {vendor.rating}
                         <Star size={10} fill="white" className="text-white" />
                     </div>
-                    <span className="font-semibold text-gray-700 truncate">{cuisineLabel}</span>
-                    <span className="text-gray-300">•</span>
-                    <span className="font-semibold text-gray-700 truncate">{priceForTwo}</span>
+                    {cuisineLabel && <span className="font-semibold text-gray-700 truncate">{cuisineLabel}</span>}
+                    {vendor.minOrderValue > 0 && (
+                        <>
+                            <span className="text-gray-300">•</span>
+                            <span className="font-semibold text-gray-700">MOV ₹{vendor.minOrderValue}</span>
+                        </>
+                    )}
                 </div>
 
-                {/* Distance + Address */}
-                <div className="flex items-center gap-1 text-[11px] md:text-[12px] text-gray-500">
-                    <MapPin size={11} className="shrink-0 text-gray-500" />
-                    <span className="font-bold text-gray-600">{location.distance}</span>
-                    <span className="truncate">{location.address}</span>
-                </div>
+                {/* Address (real data only) */}
+                {addressLine && (
+                    <div className="flex items-center gap-1 text-[11px] md:text-[12px] text-gray-500">
+                        <MapPin size={11} className="shrink-0 text-gray-500" />
+                        <span className="truncate">{addressLine}</span>
+                    </div>
+                )}
             </div>
         </Link>
     );

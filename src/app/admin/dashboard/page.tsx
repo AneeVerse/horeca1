@@ -30,45 +30,6 @@ function formatINR(val: number): string {
     return '₹ ' + val.toLocaleString('en-IN');
 }
 
-const SALES_DATA = [
-    { month: 'Jan', value: 30000 },
-    { month: 'Feb', value: 38000 },
-    { month: 'Mar', value: 55000 },
-    { month: 'Apr', value: 65000 },
-    { month: 'May', value: 75000 },
-    { month: 'Jun', value: 95000 },
-    { month: 'Jul', value: 98000 },
-    { month: 'Oct', value: 120000 },
-];
-
-const REVENUE_DATA = [
-    { month: 'Jan', value: 60000 },
-    { month: 'Feb', value: 50000 },
-    { month: 'Mar', value: 78000 },
-    { month: 'Apr', value: 60000 },
-    { month: 'May', value: 85000 },
-    { month: 'Jun', value: 70000 },
-    { month: 'Jul', value: 80000 },
-    { month: 'Oct', value: 110000 },
-];
-
-const TOP_PRODUCTS = [
-    { name: 'Amul Butter 100 gms', sold: '1204 sold', change: '5.89%', image: '/images/dairy/amul-butter.png' },
-    { name: 'TATA Salt 1 kg', sold: '1199 sold', change: '5.89%', image: '/images/masala-salt/tata-salt.png' },
-    { name: 'Amul Butter 100 gms', sold: '987 sold', change: '5.89%', image: '/images/dairy/amul-butter.png' },
-    { name: 'TATA Salt 1 kg', sold: '788 sold', change: '5.89%', image: '/images/masala-salt/tata-salt.png' },
-    { name: 'Amul Butter 100 gms', sold: '453 sold', change: '5.89%', image: '/images/dairy/amul-butter.png' },
-    { name: 'TATA Salt 1 kg', sold: '233 sold', change: '5.89%', image: '/images/masala-salt/tata-salt.png' },
-];
-
-const BEST_SELLERS = [
-    { name: 'Emarket', category: 'Grocery & Vegetables', rating: '4.8', image: '/images/admin/dashboard/ecommerce-logo-template_658705-117 2.png' },
-    { name: 'Groceri', category: 'Grocery & Fruits', rating: '4.6', image: '/images/admin/dashboard/grociri.png' },
-    { name: 'Emarket', category: 'Grocery & Vegetables', rating: '4.5', image: '/images/admin/dashboard/ecommerce-logo-template_658705-117 2.png' },
-    { name: 'Groceri', category: 'Grocery & Fruits', rating: '4.3', image: '/images/admin/dashboard/grociri.png' },
-    { name: 'Emarket', category: 'Grocery & Vegetables', rating: '3.7', image: '/images/admin/dashboard/ecommerce-logo-template_658705-117 2.png' },
-    { name: 'Groceri', category: 'Grocery & Fruits', rating: '3.5', image: '/images/admin/dashboard/grociri.png' },
-];
 
 interface DashboardData {
     stats: {
@@ -79,6 +40,7 @@ interface DashboardData {
         newUsersThisMonth: number;
     };
     ordersByStatus: Record<string, number>;
+    monthlyData: { month: string; orders: number; revenue: number }[];
     recentOrders: {
         id: string;
         orderNumber: string;
@@ -195,10 +157,16 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Sales Overview - Area Chart */}
                 <div className="bg-white p-10 rounded-[14px] border border-[#EEEEEE] shadow-sm min-h-[411px]">
-                    <h3 className="text-[18px] font-bold text-[#181725] mb-6">Sales Overview</h3>
+                    <h3 className="text-[18px] font-bold text-[#181725] mb-6">Orders Overview</h3>
                     <div className="h-[340px] w-full">
+                        {(!data?.monthlyData || data.monthlyData.length === 0) ? (
+                            <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                                <TrendingUp size={40} className="mb-3 opacity-30" />
+                                <p className="text-[14px] font-medium">No order data yet</p>
+                            </div>
+                        ) : (
                         <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={SALES_DATA} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                            <AreaChart data={data.monthlyData.map(d => ({ month: d.month, value: d.orders }))} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                                 <defs>
                                     <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="0%" stopColor="#299E60" />
@@ -220,12 +188,9 @@ export default function DashboardPage() {
                                     axisLine={false}
                                     tickLine={false}
                                     tick={{ fontSize: 11, fill: '#7C7C7C', fontWeight: 500 }}
-                                    tickFormatter={formatYAxis}
-                                    width={65}
-                                    domain={[0, 120000]}
-                                    ticks={[0, 20000, 40000, 60000, 80000, 100000, 120000]}
+                                    width={40}
                                 />
-                                <Tooltip content={<CustomTooltip />} />
+                                <Tooltip formatter={(val: any) => [val, 'Orders']} />
                                 <Area
                                     type="monotone"
                                     dataKey="value"
@@ -237,6 +202,7 @@ export default function DashboardPage() {
                                 />
                             </AreaChart>
                         </ResponsiveContainer>
+                        )}
                     </div>
                 </div>
 
@@ -244,8 +210,14 @@ export default function DashboardPage() {
                 <div className="bg-white p-10 rounded-[14px] border border-[#EEEEEE] shadow-sm min-h-[411px]">
                     <h3 className="text-[18px] font-bold text-[#181725] mb-6">Monthly Revenue</h3>
                     <div className="h-[340px] w-full">
+                        {(!data?.monthlyData || data.monthlyData.length === 0) ? (
+                            <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                                <Wallet size={40} className="mb-3 opacity-30" />
+                                <p className="text-[14px] font-medium">No revenue data yet</p>
+                            </div>
+                        ) : (
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={REVENUE_DATA} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                            <BarChart data={data.monthlyData.map(d => ({ month: d.month, value: d.revenue }))} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                                 <defs>
                                     <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="0%" stopColor="#55DB94" stopOpacity={1} />
@@ -266,8 +238,6 @@ export default function DashboardPage() {
                                     tick={{ fontSize: 11, fill: '#7C7C7C', fontWeight: 500 }}
                                     tickFormatter={formatYAxis}
                                     width={65}
-                                    domain={[0, 120000]}
-                                    ticks={[0, 20000, 40000, 60000, 80000, 100000, 120000]}
                                 />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Bar
@@ -277,79 +247,73 @@ export default function DashboardPage() {
                                 />
                             </BarChart>
                         </ResponsiveContainer>
+                        )}
                     </div>
                 </div>
             </div>
 
-            {/* Top Products & Best Sellers */}
+            {/* Order Status Breakdown & Recent Vendors */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm w-full max-w-[646px] h-fit">
+                {/* Order Status Breakdown */}
+                <div className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm h-fit">
                     <div className="flex items-center justify-between mb-8">
-                        <h3 className="text-[18px] font-bold text-[#000000]">Top Products</h3>
-                        <Link href="#" className="text-[#299E60] text-[12px] font-bold hover:underline">See All</Link>
+                        <h3 className="text-[18px] font-bold text-[#000000]">Orders by Status</h3>
+                        <Link href="/admin/orders" className="text-[#299E60] text-[12px] font-bold hover:underline">See All</Link>
                     </div>
+                    {Object.keys(data?.ordersByStatus || {}).length === 0 ? (
+                        <div className="py-10 text-center text-gray-400 text-[14px]">No orders yet</div>
+                    ) : (
                     <div className="space-y-3">
-                        {TOP_PRODUCTS.map((prod, i) => (
-                            <div key={i} className="grid grid-cols-[250px_1fr_110px] items-center px-4 h-[75px] border border-[#EEEEEE] rounded-[10px] hover:shadow-sm transition-all cursor-pointer bg-white">
-                                {/* Product Info */}
-                                <div className="flex items-center gap-4 min-w-0">
-                                    <div className="w-[67px] h-[67px] flex items-center justify-center shrink-0">
-                                        <img src={prod.image} alt="" className="w-full h-full object-contain" />
+                        {Object.entries(data?.ordersByStatus || {}).map(([status, count]) => {
+                            const total = Object.values(data?.ordersByStatus || {}).reduce((a, b) => a + b, 0);
+                            const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                            const colorMap: Record<string, string> = {
+                                pending: 'bg-yellow-400',
+                                confirmed: 'bg-blue-400',
+                                processing: 'bg-purple-400',
+                                out_for_delivery: 'bg-orange-400',
+                                delivered: 'bg-[#299E60]',
+                                cancelled: 'bg-red-400',
+                            };
+                            return (
+                                <div key={status} className="flex items-center gap-3">
+                                    <span className="text-[13px] font-medium text-[#7C7C7C] w-[140px] capitalize shrink-0">{status.replace(/_/g, ' ')}</span>
+                                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                                        <div className={`h-full rounded-full ${colorMap[status] || 'bg-gray-400'}`} style={{ width: `${pct}%` }} />
                                     </div>
-                                    <div className="min-w-0">
-                                        <p className="text-[14px] font-bold text-[#181725] leading-tight mb-0.5 whitespace-nowrap">{prod.name}</p>
-                                        <p className="text-[11px] text-[#7C7C7C] font-medium">{prod.sold}</p>
-                                    </div>
+                                    <span className="text-[13px] font-bold text-[#181725] w-[40px] text-right shrink-0">{count}</span>
                                 </div>
-
-                                {/* Logo in Middle */}
-                                <div className="flex justify-center">
-                                    <div className="w-[65px] h-[65px] flex items-center justify-center">
-                                        <img
-                                            src="/images/admin/dashboard/ecommerce-logo-template_658705-117 2.png"
-                                            alt="Emarket"
-                                            className="w-full h-full object-contain"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Stats on Right */}
-                                <div className="flex items-center justify-end gap-2">
-                                    <span className="text-[13px] font-bold text-[#181725]">{prod.change}</span>
-                                    <TrendingUp size={16} className="text-[#299E60]" />
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
+                    )}
                 </div>
 
-                <div className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm w-full max-w-[646px] h-fit">
+                {/* Active Vendors from recent orders */}
+                <div className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm h-fit">
                     <div className="flex items-center justify-between mb-8">
-                        <h3 className="text-[18px] font-bold text-[#000000]">Best Store Sellers</h3>
-                        <Link href="#" className="text-[#299E60] text-[12px] font-bold hover:underline">See All</Link>
+                        <h3 className="text-[18px] font-bold text-[#000000]">Active Vendors</h3>
+                        <Link href="/admin/vendors" className="text-[#299E60] text-[12px] font-bold hover:underline">See All</Link>
                     </div>
+                    {(!data?.recentOrders || data.recentOrders.length === 0) ? (
+                        <div className="py-10 text-center text-gray-400 text-[14px]">No vendor activity yet</div>
+                    ) : (
                     <div className="space-y-3">
-                        {BEST_SELLERS.map((seller, i) => (
-                            <div key={i} className="flex items-center justify-between px-4 h-[75px] border border-[#EEEEEE] rounded-[10px] hover:shadow-sm transition-all cursor-pointer bg-white">
-                                <div className="flex items-center gap-4 flex-1 min-w-0">
-                                    <div className="w-[67px] h-[67px] flex items-center justify-center shrink-0">
-                                        <img src={seller.image} alt="" className="w-full h-full object-contain" />
+                        {Array.from(new Map(data.recentOrders.map(o => [o.vendor.id, o.vendor])).values()).slice(0, 6).map((vendor) => (
+                            <div key={vendor.id} className="flex items-center justify-between px-4 h-[56px] border border-[#EEEEEE] rounded-[10px] hover:shadow-sm transition-all bg-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-lg bg-[#53B175]/10 flex items-center justify-center shrink-0">
+                                        <Store size={16} className="text-[#299E60]" />
                                     </div>
-                                    <div className="min-w-0">
-                                        <p className="text-[14px] font-bold text-[#181725] leading-tight mb-0.5 truncate">{seller.name}</p>
-                                        <p className="text-[11px] text-[#7C7C7C] font-medium">{seller.category}</p>
-                                    </div>
+                                    <p className="text-[14px] font-bold text-[#181725]">{vendor.businessName}</p>
                                 </div>
-                                <div className="flex items-center gap-4">
-                                    <div className="flex items-center gap-1.5 bg-[#299E60] text-white text-[12px] px-3 py-1 rounded-full font-bold min-w-[54px] justify-center">
-                                        <Star size={11} fill="white" className="text-white" />
-                                        <span>{seller.rating}</span>
-                                    </div>
-                                    <TrendingUp size={16} className="text-[#299E60]" />
-                                </div>
+                                <Link href={`/admin/vendors/${vendor.id}`} className="text-[12px] font-bold text-[#299E60] hover:underline">
+                                    View
+                                </Link>
                             </div>
                         ))}
                     </div>
+                    )}
                 </div>
             </div>
 

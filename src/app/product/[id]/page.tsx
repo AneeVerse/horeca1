@@ -10,16 +10,15 @@ import {
     ChevronUp,
     Plus,
     ShoppingCart,
-    Search,
-    X,
     Share2,
     Info,
     ShieldCheck,
     Leaf,
     ArrowRight,
-    Store
+    Store,
+    Loader2,
 } from 'lucide-react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { PromotionBanners } from '@/components/features/PromotionBanners';
 import { DeliveryPoster } from '@/components/features/DeliveryPoster';
@@ -29,356 +28,148 @@ import { toast } from 'sonner';
 import { dal } from '@/lib/dal';
 import type { Vendor as DalVendor, VendorProduct } from '@/types';
 
-// --- Types ---
-interface Vendor {
-    id: number;
+// --- API Product Type ---
+interface ApiProduct {
+    id: string;
     name: string;
-    price: string;
-    stock: number;
-    minQty: number;
+    description: string | null;
+    basePrice: number;
+    originalPrice: number | null;
+    promoPrice: number | null;
+    imageUrl: string | null;
+    images: string[];
+    packSize: string | null;
+    unit: string | null;
+    brand: string | null;
+    tags: string[];
+    category: { id: string; name: string; slug: string } | null;
+    vendor: { id: string; businessName: string; slug: string; logoUrl: string | null; rating: number; minOrderValue: number } | null;
+    priceSlabs: { minQty: number; maxQty: number | null; price: number }[];
+    inventory: { qtyAvailable: number } | null;
 }
-
-interface Product {
-    id: number;
-    name: string;
-    category: string;
-    image: string;
-    description: string;
-    vendors: Vendor[];
-    sideBanner?: string;
-    weight?: string;
-    price?: number;
-}
-
-interface SimilarProduct {
-    id: number;
-    name: string;
-    image: string;
-    vendorCount: number;
-}
-
-// --- Mock Data ---
-const PRODUCTS_DATA: Record<string, Product> = {
-    '1': {
-        id: 1,
-        name: 'Kissan Fresh Tomato ketchup 2kg',
-        category: 'Masala, Oils & Ghee',
-        image: '/images/product/product-img1.png',
-        description: 'Rich and tangy tomato ketchup made from fresh tomatoes. Perfect for adding flavor to your favorite snacks and meals. Contains no artificial preservatives.',
-        vendors: [
-            { id: 1, name: 'G-Mart', price: '₹188/pc', stock: 74, minQty: 12 },
-            { id: 2, name: 'Family Supermarket', price: '₹188/pc', stock: 20, minQty: 5 },
-            { id: 3, name: 'Bee Mart', price: '₹188/pc', stock: 50, minQty: 10 },
-        ],
-        sideBanner: 'Ketchup',
-        weight: '2 kg'
-    },
-    // Fruits & Vegetables (from ProductCategories)
-    '1001': {
-        id: 1001, name: 'Onion 1 kg', category: 'Vegetables', image: '/images/fruits-vegetables/onion.png', description: 'Fresh onions.',
-        vendors: [
-            { id: 1, name: 'G-Mart', price: '₹35/kg', stock: 100, minQty: 1 },
-            { id: 2, name: 'Family Supermarket', price: '₹38/kg', stock: 40, minQty: 2 },
-            { id: 3, name: 'Bee Mart', price: '₹34/kg', stock: 60, minQty: 1 },
-        ], sideBanner: 'Onion', weight: '1 kg'
-    },
-    '1002': {
-        id: 1002, name: 'Coriander 200 gms Bunch', category: 'Vegetables', image: '/images/fruits-vegetables/corriander.png', description: 'Fresh coriander.',
-        vendors: [
-            { id: 1, name: 'G-Mart', price: '₹15/pc', stock: 30, minQty: 1 },
-            { id: 2, name: 'Family Supermarket', price: '₹18/pc', stock: 15, minQty: 1 },
-            { id: 3, name: 'Bee Mart', price: '₹14/pc', stock: 20, minQty: 1 },
-        ], sideBanner: 'Herb', weight: '200 g'
-    },
-
-    // Dairy (from ProductCategories)
-    '1003': {
-        id: 1003, name: 'Amul Butter 100 gms', category: 'Dairy', image: '/images/dairy/amul-butter.png', description: 'Amul Butter.',
-        vendors: [
-            { id: 1, name: 'G-Mart', price: '₹55/pc', stock: 80, minQty: 1 },
-            { id: 2, name: 'Family Supermarket', price: '₹58/pc', stock: 30, minQty: 1 },
-            { id: 3, name: 'Bee Mart', price: '₹55/pc', stock: 45, minQty: 1 },
-        ], sideBanner: 'Butter', weight: '100 g'
-    },
-    '1004': {
-        id: 1004, name: 'Amul Cheese Block 400 gms', category: 'Dairy', image: '/images/dairy/amul-cheese.png', description: 'Amul Cheese.',
-        vendors: [
-            { id: 1, name: 'G-Mart', price: '₹320/pc', stock: 40, minQty: 1 },
-            { id: 2, name: 'Family Supermarket', price: '₹335/pc', stock: 20, minQty: 1 },
-            { id: 3, name: 'Bee Mart', price: '₹315/pc', stock: 25, minQty: 1 },
-        ], sideBanner: 'Cheese', weight: '400 g'
-    },
-
-    // Edible Oil (from RecommendedCategories)
-    '2001': {
-        id: 2001, name: 'Safoola Gold Oil - 1 L', category: 'Edible Oil', image: '/images/edible-oil/saffola-gold-oil.png', description: 'Saffola Gold Oil.',
-        vendors: [
-            { id: 1, name: 'G-Mart', price: '₹195/L', stock: 200, minQty: 1 },
-            { id: 2, name: 'Family Supermarket', price: '₹205/L', stock: 100, minQty: 1 },
-            { id: 3, name: 'Bee Mart', price: '₹190/L', stock: 80, minQty: 1 },
-        ], sideBanner: 'Oil', weight: '1 L'
-    },
-    '2002': {
-        id: 2002, name: 'Gemini Refined Sunflower Oil - 5 L', category: 'Edible Oil', image: '/images/edible-oil/gemini.png', description: 'Gemini Oil.',
-        vendors: [
-            { id: 1, name: 'G-Mart', price: '₹680/can', stock: 150, minQty: 1 },
-            { id: 2, name: 'Family Supermarket', price: '₹710/can', stock: 60, minQty: 1 },
-            { id: 3, name: 'Bee Mart', price: '₹675/can', stock: 50, minQty: 1 },
-        ], sideBanner: 'Oil', weight: '5 L'
-    },
-
-    // Masala & Salt (from RecommendedCategories)
-    '2003': {
-        id: 2003, name: 'Everest Meat Masala - 50 gms Box', category: 'Masala & Salt', image: '/images/masala-salt/everest-masala.png', description: 'Everest Masala.',
-        vendors: [
-            { id: 1, name: 'G-Mart', price: '₹45/box', stock: 300, minQty: 1 },
-            { id: 2, name: 'Family Supermarket', price: '₹48/box', stock: 150, minQty: 2 },
-            { id: 3, name: 'Bee Mart', price: '₹44/box', stock: 200, minQty: 1 },
-        ], sideBanner: 'Masala', weight: '50 g'
-    },
-    '2004': {
-        id: 2004,
-        name: 'TATA Salt - 1 kg',
-        category: 'Masala & Salt',
-        image: '/images/masala-salt/tata-salt.png',
-        description: 'Tata Salt.',
-        vendors: [
-            { id: 1, name: 'G-Mart', price: '₹28/kg', stock: 74, minQty: 12 },
-            { id: 2, name: 'Family Supermarket', price: '₹32/kg', stock: 20, minQty: 5 },
-            { id: 3, name: 'Bee Mart', price: '₹30/kg', stock: 50, minQty: 10 },
-        ],
-        sideBanner: 'Salt',
-        weight: '1 kg'
-    },
-
-    // Vegetable Page Items (from CategoryPage)
-    '3001': { id: 3001, name: 'Ladies Finger 1 kg', category: 'Vegetables', image: '/images/product/product-img1.png', description: 'Fresh Okra (Bhindi).', vendors: [{ id: 1, name: 'G-Mart', price: '₹40/kg', stock: 50, minQty: 1 }], sideBanner: 'Veggie', weight: '1 kg' },
-    '3002': { id: 3002, name: 'Desi Fresh Tomato 1 kg', category: 'Vegetables', image: '/images/product/product-img3.png', description: 'Fresh Tomatoes.', vendors: [{ id: 1, name: 'G-Mart', price: '₹22/kg', stock: 100, minQty: 1 }], sideBanner: 'Tomato', weight: '1 kg' },
-    '3003': { id: 3003, name: 'Onion 1 kg', category: 'Vegetables', image: '/images/fruits-vegetables/onion.png', description: 'Fresh Onions.', vendors: [{ id: 1, name: 'G-Mart', price: '₹35/kg', stock: 100, minQty: 1 }], sideBanner: 'Onion', weight: '1 kg' },
-    '3004': { id: 3004, name: 'Coriander 200 gms Bunch', category: 'Vegetables', image: '/images/fruits-vegetables/corriander.png', description: 'Fresh Coriander.', vendors: [{ id: 1, name: 'G-Mart', price: '₹15/pc', stock: 30, minQty: 1 }], sideBanner: 'Herb', weight: '200 g' },
-    '3005': { id: 3005, name: 'Fresh Carrots', category: 'Vegetables', image: '/images/product/product-img5.png', description: 'Sweet Carrots.', vendors: [{ id: 1, name: 'G-Mart', price: '₹45/kg', stock: 40, minQty: 1 }], sideBanner: 'Carrot', weight: '1 kg' },
-    '3006': { id: 3006, name: 'Green Broccoli', category: 'Vegetables', image: '/images/product/brokali.png', description: 'Fresh Broccoli.', vendors: [{ id: 1, name: 'G-Mart', price: '₹95/pc', stock: 25, minQty: 1 }], sideBanner: 'Broccoli', weight: '500 g' },
-
-    // Fruit Page Items (from CategoryPage)
-    '4001': { id: 4001, name: 'Nagpur Oranges 1 kg', category: 'Fruits', image: '/images/category/fruits.png', description: 'Nagpur Oranges.', vendors: [{ id: 1, name: 'G-Mart', price: '₹80/kg', stock: 60, minQty: 1 }], sideBanner: 'Orange', weight: '1 kg' },
-    '4002': { id: 4002, name: 'Kashmir Apple 1 kg', category: 'Fruits', image: '/images/recom-product/product-img10.png', description: 'Kashmir Apples.', vendors: [{ id: 1, name: 'G-Mart', price: '₹160/kg', stock: 40, minQty: 1 }], sideBanner: 'Apple', weight: '1 kg' },
-    '4003': { id: 4003, name: 'Nagpur Oranges 1 kg', category: 'Fruits', image: '/images/category/fruits.png', description: 'Nagpur Oranges.', vendors: [{ id: 1, name: 'G-Mart', price: '₹80/kg', stock: 60, minQty: 1 }], sideBanner: 'Orange', weight: '1 kg' },
-    '4004': { id: 4004, name: 'Kashmir Apple 1 kg', category: 'Fruits', image: '/images/recom-product/product-img10.png', description: 'Kashmir Apples.', vendors: [{ id: 1, name: 'G-Mart', price: '₹160/kg', stock: 40, minQty: 1 }], sideBanner: 'Apple', weight: '1 kg' },
-    'default': {
-        id: 0,
-        name: 'Fresh Organic Product',
-        category: 'Organic Store',
-        image: '/images/product/product-img3.png',
-        description: 'Premium quality organic product sourced directly from local farms. Guarantees fresh taste and maximum nutrition.',
-        vendors: [
-            { id: 1, name: 'Eco Mart', price: '₹149/pc', stock: 50, minQty: 1 },
-        ],
-        sideBanner: 'Fresh',
-        weight: '1 kg'
-    }
-};
-
-const SIMILAR_ITEMS_MOCK = [
-    { id: 5001, name: 'Maggi Ketchup', image: '/images/product/product-img1.png', category: 'Masala, Oils & Ghee', vendorCount: 3 },
-    { id: 5002, name: 'Heinz Ketchup', image: '/images/product/product-img1.png', category: 'Masala, Oils & Ghee', vendorCount: 5 },
-    { id: 5003, name: 'Del Monte Ketchup', image: '/images/product/product-img1.png', category: 'Masala, Oils & Ghee', vendorCount: 2 },
-    { id: 5004, name: 'Kissan Chotu', image: '/images/product/product-img1.png', category: 'Masala, Oils & Ghee', vendorCount: 4 },
-];
 
 export default function ProductDetailPage() {
     const params = useParams();
     const router = useRouter();
     const id = params.id as string;
-    const searchParams = useSearchParams();
-    
-    // Get real data from search params
-    const vendorName = searchParams.get('v') || 'emarket';
-    const productName = searchParams.get('n') || 'Fresh Organic Product';
-    const productPrice = searchParams.get('p') || '49';
-    const productImage = searchParams.get('i') || '/images/product/product-img3.png';
-    const productCategory = searchParams.get('c') || 'Organic Store';
-    const productUnit = searchParams.get('u') || '1 kg';
 
-    const product = useMemo(() => {
-        const base = PRODUCTS_DATA[id] || PRODUCTS_DATA['default'];
-        return {
-            ...base,
-            name: productName,
-            price: parseFloat(productPrice) || base.price,
-            image: productImage,
-            category: productCategory,
-            weight: productUnit
-        };
-    }, [id, productName, productPrice, productImage, productCategory, productUnit]);
-
+    const [apiProduct, setApiProduct] = useState<ApiProduct | null>(null);
+    const [pageLoading, setPageLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [isDetailsExpanded, setIsDetailsExpanded] = useState(true);
     const { addToCart, groups, updateQuantity } = useCart();
     const { isInWishlist, toggleWishlist } = useWishlist();
 
+    useEffect(() => {
+        fetch(`/api/v1/products/${id}`)
+            .then(r => r.json())
+            .then(json => { if (json.success) setApiProduct(json.data); else setLoadError(true); })
+            .catch(() => setLoadError(true))
+            .finally(() => setPageLoading(false));
+    }, [id]);
+
+    // Derived display values
+    const productName = apiProduct?.name || '';
+    const vendorName = apiProduct?.vendor?.businessName || '';
+    const productPrice = apiProduct?.priceSlabs?.[0]?.price ?? apiProduct?.basePrice ?? 0;
+    const productImage = apiProduct?.imageUrl || apiProduct?.images?.[0] || '/images/product/product-img3.png';
+    const productCategory = apiProduct?.category?.name || '';
+    const productUnit = apiProduct?.packSize || '1 unit';
+    const productDescription = apiProduct?.description || 'Premium quality product sourced for professional kitchens.';
+    const bulkPrices = apiProduct?.priceSlabs || [];
+    const stockQty = apiProduct?.inventory?.qtyAvailable ?? 0;
+
+    // Derive product object matching old UI shape
+    const product = useMemo(() => ({
+        id: 0,
+        name: productName,
+        category: productCategory,
+        image: productImage,
+        description: productDescription,
+        vendors: [],
+        weight: productUnit,
+        price: productPrice,
+    }), [productName, productCategory, productImage, productDescription, productUnit, productPrice]);
+
     const vendorProductForContext: VendorProduct = useMemo(() => ({
-        id: product.id.toString(),
-        vendorId: product.vendors?.[0]?.id.toString() || '0',
-        vendorName: vendorName,
-        name: product.name,
-        description: product.description,
-        category: product.category,
-        price: product.price || 0,
-        images: [product.image],
-        packSize: product.weight || '1 kg',
-        unit: product.weight || '1 kg',
-        stock: product.vendors?.[0]?.stock || 10,
+        id: apiProduct?.id || id,
+        vendorId: apiProduct?.vendor?.id || '',
+        vendorName: apiProduct?.vendor?.businessName || '',
+        vendorLogo: apiProduct?.vendor?.logoUrl || '',
+        name: productName,
+        description: productDescription,
+        category: productCategory,
+        price: productPrice,
+        originalPrice: apiProduct?.originalPrice ?? productPrice,
+        images: [productImage],
+        packSize: productUnit,
+        unit: apiProduct?.unit || productUnit,
+        stock: stockQty,
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
-        bulkPrices: [
-            { minQty: 3, price: 147 },
-            { minQty: 5, price: 245 }
-        ],
+        bulkPrices: bulkPrices.map(s => ({ minQty: s.minQty, price: s.price })),
         creditBadge: false,
-        minOrderQuantity: 1,
-    }), [product, vendorName]);
+        minOrderQuantity: bulkPrices[0]?.minQty || 1,
+    }), [apiProduct, id, productName, productDescription, productCategory, productPrice, productImage, productUnit, stockQty, bulkPrices]);
 
     const isLiked = isInWishlist(vendorProductForContext.id);
 
-    // Fetch vendors from DAL for recently-viewed tracking
+    // Track recently viewed vendor for "Continue Ordering" section
     const [dalVendors, setDalVendors] = useState<DalVendor[]>([]);
     useEffect(() => {
         dal.vendors.list().then(({ vendors }) => setDalVendors(vendors)).catch(() => {});
     }, []);
 
-    // Track recently viewed vendor for "Continue Ordering" section
     useEffect(() => {
-        if (!vendorName) return;
+        if (!apiProduct || !vendorName) return;
         try {
-            const matched = dalVendors.find(v => v.name.toLowerCase() === vendorName.toLowerCase() || v.slug === vendorName.toLowerCase());
-
-            const vId = matched?.id || `product-vendor-${vendorName}`;
-            const vName = matched?.name || vendorName;
-            const vLogo = matched?.logo || '';
+            const matched = dalVendors.find(v => v.id === apiProduct.vendor?.id);
+            const vId = apiProduct.vendor?.id || `product-vendor-${vendorName}`;
+            const vName = apiProduct.vendor?.businessName || vendorName;
+            const vLogo = matched?.logo || apiProduct.vendor?.logoUrl || '';
 
             const KEY = 'horeca_recently_viewed';
             const saved = localStorage.getItem(KEY);
             let entries: any[] = [];
             if (saved) entries = JSON.parse(saved);
 
-            // Get existing entry to merge products
             const existing = entries.find((e: any) => e.vendorId === vId);
             const existingProducts = existing?.viewedProducts || [];
+            const currentProduct = { id: apiProduct.id, name: productName, image: productImage, price: productPrice, unit: productUnit };
 
-            // Build the current product entry
-            const currentProduct = {
-                id: product.id.toString(),
-                name: productName,
-                image: productImage,
-                price: parseFloat(productPrice) || 0,
-                unit: productUnit,
-            };
-
-            // Merge: put current product first, then existing (dedup by id)
             const seenIds = new Set<string>();
             const mergedProducts: any[] = [];
             [currentProduct, ...existingProducts].forEach((p: any) => {
-                if (!seenIds.has(p.id)) {
-                    seenIds.add(p.id);
-                    mergedProducts.push(p);
-                }
+                if (!seenIds.has(p.id)) { seenIds.add(p.id); mergedProducts.push(p); }
             });
 
             entries = entries.filter((e: any) => e.vendorId !== vId);
-            entries.unshift({
-                vendorId: vId,
-                vendorName: vName,
-                vendorLogo: vLogo,
-                viewedProducts: mergedProducts.slice(0, 20),
-                viewedAt: Date.now(),
-            });
+            entries.unshift({ vendorId: vId, vendorName: vName, vendorLogo: vLogo, viewedProducts: mergedProducts.slice(0, 20), viewedAt: Date.now() });
             if (entries.length > 20) entries = entries.slice(0, 20);
             localStorage.setItem(KEY, JSON.stringify(entries));
-        } catch (e) {
-            console.error('Failed to save recently viewed vendor:', e);
-        }
-    }, [vendorName, productName, dalVendors]);
+        } catch (e) { console.error('Failed to save recently viewed:', e); }
+    }, [apiProduct, vendorName, dalVendors, productName, productImage, productPrice, productUnit]);
 
     const handleAdd = (qty: number = 1) => {
-        // Find if item already in cart to update quantity
-        const vendorGroup = groups.find(g => g.vendorName === vendorName || g.vendorId === product.vendors?.[0]?.id.toString());
-        const cartItem = vendorGroup?.items.find(i => i.productId === product.id.toString());
+        if (!apiProduct) return;
+        const vendorGroup = groups.find(g => g.vendorId === apiProduct.vendor?.id);
+        const cartItem = vendorGroup?.items.find(i => i.productId === apiProduct.id);
         const currentQty = cartItem?.quantity || 0;
 
-        const vendorProduct: VendorProduct = {
-            id: product.id.toString(),
-            vendorId: product.vendors?.[0]?.id.toString() || '0',
-            vendorName: vendorName,
-            name: product.name,
-            description: product.description,
-            category: product.category,
-            price: parseFloat(product.vendors?.[0]?.price.replace('₹', '').split('/')[0]) || 0,
-            images: [product.image],
-            packSize: product.weight || '1 kg',
-            unit: product.weight || '1 kg',
-            stock: product.vendors?.[0]?.stock || 10,
-            isActive: true,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            bulkPrices: [
-                { minQty: 3, price: 147 },
-                { minQty: 5, price: 245 }
-            ],
-            creditBadge: false,
-            minOrderQuantity: 1,
-        };
-
         if (currentQty > 0) {
-            updateQuantity(vendorProduct.id, currentQty + qty);
+            updateQuantity(apiProduct.id, currentQty + qty);
         } else {
-            addToCart(vendorProduct, qty);
+            addToCart(vendorProductForContext, qty);
         }
 
-        toast.success(`${product.name} added to cart!`, {
-            description: `Quantity: ${currentQty + qty} ${product.weight || ''}`,
+        toast.success(`${productName} added to cart!`, {
+            description: `Quantity: ${currentQty + qty} ${productUnit}`,
             duration: 2000,
         });
     };
 
-    // Dynamic similar items based on category
-    let similarItemsList = Object.values(PRODUCTS_DATA)
-        .filter(p => p.id !== product.id && p.id !== 0) // Exclude current and default
-        .filter(p => p.category === product.category)
-        .slice(0, 4)
-        .map(p => ({
-            id: p.id,
-            originalId: p.id,
-            name: p.name,
-            image: p.image,
-            vendorCount: p.vendors.length
-        }));
-
-    // If current category has no other items, use fallback
-    if (similarItemsList.length === 0) {
-        similarItemsList = Object.values(PRODUCTS_DATA)
-            .filter(p => p.id !== product.id && p.id !== 0)
-            .slice(0, 4)
-            .map(p => ({
-                id: p.id,
-                originalId: p.id,
-                name: p.name,
-                image: p.image,
-                vendorCount: p.vendors.length
-            }));
-    }
-
-    // "Spam" items if fewer than 4 to fill the carousel as requested
-    const baseItems = [...similarItemsList];
-    if (baseItems.length > 0) {
-        while (similarItemsList.length < 4) {
-            const nextBatch = baseItems.map(item => ({
-                ...item,
-                id: item.id + (Math.random() * 100000) // Ensure unique keys for identical items
-            }));
-            similarItemsList.push(...nextBatch);
-        }
-    }
-    similarItemsList = similarItemsList.slice(0, 4);
+    const similarItemsList: any[] = []; // Similar items loaded from API in a future iteration
 
     const handleShare = async () => {
         const shareData = {
@@ -403,6 +194,25 @@ export default function ProductDetailPage() {
             }
         }
     };
+
+    if (pageLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-white">
+                <Loader2 size={36} className="animate-spin text-[#53B175]" />
+            </div>
+        );
+    }
+
+    if (loadError || !apiProduct) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-white">
+                <div className="text-center p-8">
+                    <p className="text-[18px] font-bold text-gray-800 mb-2">Product not found</p>
+                    <button onClick={() => router.back()} className="text-[#53B175] font-bold">Go Back</button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-[#FFFFFF] min-h-screen">
@@ -459,20 +269,18 @@ export default function ProductDetailPage() {
                         <p className="text-[15px] font-medium text-[#7C7C7C] mb-6">{product.weight || '1 kg'}</p>
 
                         {/* Mobile Tiered Pricing Box */}
+                        {bulkPrices.length > 0 && (
                         <div className="bg-[#F1FBF4]/40 border border-[#53B175]/15 rounded-[22px] overflow-hidden mb-6">
-                            <div className="flex items-center justify-between px-4 py-3 border-b border-[#53B175]/10">
-                                <span className="text-[15px] font-bold text-[#53B175]">₹ 147/kg for 3 kg</span>
-                                <button onClick={() => handleAdd(3)} className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 shadow-sm">
-                                    <Plus size={16} strokeWidth={3} /> ADD
-                                </button>
-                            </div>
-                            <div className="flex items-center justify-between px-4 py-3">
-                                <span className="text-[15px] font-bold text-[#53B175]">₹ 245/kg for 5 kg</span>
-                                <button onClick={() => handleAdd(5)} className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 shadow-sm">
-                                    <Plus size={16} strokeWidth={3} /> ADD
-                                </button>
-                            </div>
+                            {bulkPrices.map((slab, i) => (
+                                <div key={i} className="flex items-center justify-between px-4 py-3 border-b border-[#53B175]/10 last:border-b-0">
+                                    <span className="text-[15px] font-bold text-[#53B175]">₹ {slab.price}/{productUnit} for {slab.minQty}+</span>
+                                    <button onClick={() => handleAdd(slab.minQty)} className="bg-white border border-gray-100 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#53B175] active:scale-95 shadow-sm">
+                                        <Plus size={16} strokeWidth={3} /> ADD
+                                    </button>
+                                </div>
+                            ))}
                         </div>
+                        )}
 
                         <div className="flex items-baseline gap-1.5 mb-6">
                             <span className="text-[22px] font-black text-[#181725]">₹ {productPrice}</span>
@@ -566,38 +374,31 @@ export default function ProductDetailPage() {
                             </div>
 
                             {/* Desktop Professional Pricing Cards */}
+                            {bulkPrices.length > 0 && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-12">
-                                <div className="bg-[#F1FBF4]/40 border border-[#53B175]/15 rounded-[32px] p-7 transition-all hover:bg-[#F1FBF4]/60">
+                                {bulkPrices.slice(0, 2).map((slab, i) => (
+                                <div key={i} className="bg-[#F1FBF4]/40 border border-[#53B175]/15 rounded-[32px] p-7 transition-all hover:bg-[#F1FBF4]/60">
                                     <div className="flex items-center justify-between mb-5">
-                                        <span className="text-[13px] font-black text-[#53B175] uppercase tracking-widest">Standard Bulk</span>
-                                        <span className="bg-[#53B175] text-white px-3 py-1 rounded-lg text-[10px] font-black tracking-wide">3 KG MIN</span>
+                                        <span className="text-[13px] font-black text-[#53B175] uppercase tracking-widest">
+                                            {i === 0 ? 'Standard Bulk' : 'Institutional'}
+                                        </span>
+                                        <span className="bg-[#53B175] text-white px-3 py-1 rounded-lg text-[10px] font-black tracking-wide">
+                                            {slab.minQty}+ {productUnit.toUpperCase()} MIN
+                                        </span>
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <div className="flex flex-col">
-                                            <span className="text-[24px] font-black text-[#181725]">₹ 147<span className="text-[15px] text-gray-400">/kg</span></span>
-                                            <span className="text-[12px] text-[#53B175] font-bold">Recommended</span>
+                                            <span className="text-[24px] font-black text-[#181725]">₹ {slab.price}<span className="text-[15px] text-gray-400">/{productUnit}</span></span>
+                                            <span className="text-[12px] text-[#53B175] font-bold">{i === 0 ? 'Recommended' : 'Best Value'}</span>
                                         </div>
-                                        <button onClick={() => handleAdd(3)} className="bg-[#53B175] text-white rounded-full px-7 py-3 flex items-center gap-2 text-[13px] font-black active:scale-95 transition-all shadow-lg shadow-green-200">
+                                        <button onClick={() => handleAdd(slab.minQty)} className="bg-[#53B175] text-white rounded-full px-7 py-3 flex items-center gap-2 text-[13px] font-black active:scale-95 transition-all shadow-lg shadow-green-200">
                                             <Plus size={16} strokeWidth={3} /> ADD
                                         </button>
                                     </div>
                                 </div>
-                                <div className="bg-[#F1FBF4]/40 border border-[#53B175]/15 rounded-[32px] p-7 transition-all hover:bg-[#F1FBF4]/60">
-                                    <div className="flex items-center justify-between mb-5">
-                                        <span className="text-[13px] font-black text-[#53B175] uppercase tracking-widest">Institutional</span>
-                                        <span className="bg-[#53B175] text-white px-3 py-1 rounded-lg text-[10px] font-black tracking-wide">5 KG MIN</span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex flex-col">
-                                            <span className="text-[24px] font-black text-[#181725]">₹ 245<span className="text-[15px] text-gray-400">/kg</span></span>
-                                            <span className="text-[12px] text-[#53B175] font-bold">Best Value</span>
-                                        </div>
-                                        <button onClick={() => handleAdd(5)} className="bg-[#53B175] text-white rounded-full px-7 py-3 flex items-center gap-2 text-[13px] font-black active:scale-95 transition-all shadow-lg shadow-green-200">
-                                            <Plus size={16} strokeWidth={3} /> ADD
-                                        </button>
-                                    </div>
-                                </div>
+                                ))}
                             </div>
+                            )}
 
                             {/* Desktop Action Summary */}
                             <div className="flex items-center gap-8 pt-2">

@@ -190,7 +190,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                         </p>
                         <button
                             onClick={() => { setAuthMode('login'); setStep('form'); }}
-                            className="mt-8 bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-3 px-8 rounded-xl transition-all"
+                            className="mt-8 bg-[#53B175] hover:bg-[#48a068] text-white font-bold py-3 px-8 rounded-xl transition-all"
                         >
                             Go to Login
                         </button>
@@ -225,7 +225,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                         onClick={() => { setAuthMode('login'); setApiError(''); setErrors({}); }}
                         className={cn(
                             "flex-1 py-3 text-sm font-bold rounded-lg transition-all",
-                            authMode === 'login' ? "bg-[#33a852] text-white shadow-md" : "text-gray-400 hover:text-gray-600"
+                            authMode === 'login' ? "bg-[#53B175] text-white shadow-md" : "text-gray-400 hover:text-gray-600"
                         )}
                     >
                         Login
@@ -234,7 +234,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                         onClick={() => { setAuthMode('register'); setApiError(''); setErrors({}); }}
                         className={cn(
                             "flex-1 py-3 text-sm font-bold rounded-lg transition-all",
-                            authMode === 'register' ? "bg-[#33a852] text-white shadow-md" : "text-gray-400 hover:text-gray-600"
+                            authMode === 'register' ? "bg-[#53B175] text-white shadow-md" : "text-gray-400 hover:text-gray-600"
                         )}
                     >
                         Register
@@ -256,7 +256,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                             <div className="space-y-1.5">
                                 <label className="text-[13px] font-semibold text-gray-400 ml-1 tracking-tight">Email</label>
                                 <div className="relative">
-                                    <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#33a852]" />
+                                    <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#53B175]" />
                                     <input
                                         type="email"
                                         value={loginEmail}
@@ -264,7 +264,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                                         placeholder="Enter your email"
                                         className={cn(
                                             "w-full pl-12 pr-4 py-4 bg-white border rounded-lg text-sm font-bold outline-none transition-colors",
-                                            errors.email ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                            errors.email ? "border-red-500" : "border-gray-200 focus:border-[#53B175]"
                                         )}
                                     />
                                 </div>
@@ -275,7 +275,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                             <div className="space-y-1.5">
                                 <label className="text-[13px] font-semibold text-gray-400 ml-1 tracking-tight">Password</label>
                                 <div className="relative">
-                                    <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#33a852]" />
+                                    <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#53B175]" />
                                     <input
                                         type={showPassword ? 'text' : 'password'}
                                         value={loginPassword}
@@ -283,7 +283,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                                         placeholder="Enter your password"
                                         className={cn(
                                             "w-full pl-12 pr-12 py-4 bg-white border rounded-lg text-sm font-bold outline-none transition-colors",
-                                            errors.password ? "border-red-500" : "border-gray-200 focus:border-[#33a852]"
+                                            errors.password ? "border-red-500" : "border-gray-200 focus:border-[#53B175]"
                                         )}
                                     />
                                     <button
@@ -311,7 +311,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                                     value={fullName}
                                     onChange={(e) => { setFullName(e.target.value); if (errors.fullName) setErrors(prev => ({ ...prev, fullName: '' })); }}
                                     placeholder="Enter your name"
-                                    className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.fullName ? "border-red-500" : "border-gray-200 focus:border-[#33a852]")}
+                                    className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.fullName ? "border-red-500" : "border-gray-200 focus:border-[#53B175]")}
                                 />
                                 {errors.fullName && <p className="text-[10px] text-red-500 ml-1">{errors.fullName}</p>}
                             </div>
@@ -323,7 +323,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                                     value={email}
                                     onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(prev => ({ ...prev, email: '' })); }}
                                     placeholder="Enter your email"
-                                    className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.email ? "border-red-500" : "border-gray-200 focus:border-[#33a852]")}
+                                    className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.email ? "border-red-500" : "border-gray-200 focus:border-[#53B175]")}
                                 />
                                 {errors.email && <p className="text-[10px] text-red-500 ml-1">{errors.email}</p>}
                             </div>
@@ -336,7 +336,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                                         value={password}
                                         onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors(prev => ({ ...prev, password: '' })); }}
                                         placeholder="Min 6 characters"
-                                        className={cn("w-full px-4 pr-12 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.password ? "border-red-500" : "border-gray-200 focus:border-[#33a852]")}
+                                        className={cn("w-full px-4 pr-12 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.password ? "border-red-500" : "border-gray-200 focus:border-[#53B175]")}
                                     />
                                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
                                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -352,7 +352,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                                     value={phoneNumber}
                                     onChange={(e) => { setPhoneNumber(e.target.value); if (errors.phone) setErrors(prev => ({ ...prev, phone: '' })); }}
                                     placeholder="10 digit mobile number"
-                                    className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.phone ? "border-red-500" : "border-gray-200 focus:border-[#33a852]")}
+                                    className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.phone ? "border-red-500" : "border-gray-200 focus:border-[#53B175]")}
                                 />
                                 {errors.phone && <p className="text-[10px] text-red-500 ml-1">{errors.phone}</p>}
                             </div>
@@ -365,7 +365,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                                         value={businessName}
                                         onChange={(e) => { setBusinessName(e.target.value); if (errors.businessName) setErrors(prev => ({ ...prev, businessName: '' })); }}
                                         placeholder="Enter your restaurant/business name"
-                                        className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.businessName ? "border-red-500" : "border-gray-200 focus:border-[#33a852]")}
+                                        className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.businessName ? "border-red-500" : "border-gray-200 focus:border-[#53B175]")}
                                     />
                                     {errors.businessName && <p className="text-[10px] text-red-500 ml-1">{errors.businessName}</p>}
                                 </div>
@@ -377,7 +377,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                                         value={pincode}
                                         onChange={(e) => { setPincode(e.target.value); if (errors.pincode) setErrors(prev => ({ ...prev, pincode: '' })); }}
                                         placeholder="Your delivery pincode"
-                                        className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.pincode ? "border-red-500" : "border-gray-200 focus:border-[#33a852]")}
+                                        className={cn("w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.pincode ? "border-red-500" : "border-gray-200 focus:border-[#53B175]")}
                                     />
                                     {errors.pincode && <p className="text-[10px] text-red-500 ml-1">{errors.pincode}</p>}
                                 </div>
@@ -390,7 +390,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                 <button
                     onClick={handleSubmit}
                     disabled={isLoading}
-                    className="w-full bg-[#33a852] hover:bg-[#2d9448] text-white font-bold py-4 rounded-lg shadow-lg shadow-green-100 mt-10 md:mt-8 active:scale-[0.98] transition-all text-base tracking-wide disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full bg-[#53B175] hover:bg-[#48a068] text-white font-bold py-4 rounded-lg shadow-lg shadow-green-100 mt-10 md:mt-8 active:scale-[0.98] transition-all text-base tracking-wide disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                     {isLoading && <Loader2 size={18} className="animate-spin" />}
                     {authMode === 'login' ? 'Login' : 'Create Account'}
@@ -400,7 +400,7 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                 {authMode === 'register' && (
                     <div className="mt-8 shrink-0 pb-10 md:pb-4 text-center">
                         <p className="text-[14px] text-gray-500">
-                            Onboard as <button onClick={handleRoleSwitch} className="text-[#33a852] font-[800] underline ml-1">
+                            Onboard as <button onClick={handleRoleSwitch} className="text-[#53B175] font-[800] underline ml-1">
                                 {userRole === 'customer' ? 'Vendor.' : 'Customer.'}
                             </button>
                         </p>

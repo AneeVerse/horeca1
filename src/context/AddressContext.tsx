@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useGoogleMaps } from '@/components/providers/GoogleMapsProvider';
+import { toast } from 'sonner';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -167,7 +168,7 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
 
     const detectCurrentLocation = useCallback(async (): Promise<Address | null> => {
         if (!navigator.geolocation) {
-            alert('Geolocation is not supported by your browser');
+            toast.error('Geolocation is not supported by your browser');
             return null;
         }
 
@@ -206,11 +207,11 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
         } catch (error: any) {
             setIsDetectingLocation(false);
             if (error.code === 1) {
-                alert('Location access denied. Please enable location permissions in your browser settings.');
+                toast.error('Location access denied. Enable location permissions in your browser settings.');
             } else if (error.code === 2) {
-                alert('Unable to determine your location. Please try again.');
+                toast.error('Unable to determine your location. Please try again.');
             } else if (error.code === 3) {
-                alert('Location request timed out. Please try again.');
+                toast.error('Location request timed out. Please try again.');
             }
             console.error('Geolocation error:', error);
             return null;

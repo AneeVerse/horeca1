@@ -10,10 +10,12 @@ import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { toast } from 'sonner';
+import { useSession } from 'next-auth/react';
 import { CreateListOverlay } from '@/components/features/order-lists/CreateListOverlay';
 
 export default function OrderListsPage() {
     const router = useRouter();
+    const { data: session } = useSession();
     const { totalItems, addToCart } = useCart();
     const { wishlist } = useWishlist();
     const [allLists, setAllLists] = React.useState<OrderList[]>([]);
@@ -130,7 +132,7 @@ export default function OrderListsPage() {
             const newList: OrderList = {
                 id: `custom-${Date.now()}`,
                 name: data.name,
-                userId: 'u1',
+                userId: session?.user?.id || '',
                 vendorId: primaryVendor.id,
                 vendorName,
                 vendorLogo: primaryVendor.logo,

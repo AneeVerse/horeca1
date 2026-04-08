@@ -3,8 +3,9 @@
 import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Search, ChevronRight, ChevronDown, ChevronUp, Plus, Minus, X, Percent, FileText, AlertTriangle, Check, Home, ShoppingCart, Truck, CreditCard, Trash2, Store, Zap, FileCheck, Banknote, BadgePercent, Wallet } from 'lucide-react';
+import { ArrowLeft, Search, ChevronRight, ChevronDown, ChevronUp, Plus, Minus, X, Percent, FileText, AlertTriangle, Check, Home, ShoppingCart, Truck, CreditCard, Trash2, Store, Zap, FileCheck, Banknote, BadgePercent, Wallet, Loader2 } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
+import { dal } from '@/lib/dal';
 import { cn } from '@/lib/utils';
 
 export default function CartPage() {
@@ -13,6 +14,8 @@ export default function CartPage() {
     const router = useRouter();
     const [expandedVendors, setExpandedVendors] = useState<Record<string, boolean>>({});
     const [paymentMethod, setPaymentMethod] = useState('razorpay');
+    const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+    const [orderError, setOrderError] = useState<string | null>(null);
 
     // Initialize all vendors as expanded by default
     const toggleVendor = (vendorId: string) => {
@@ -131,27 +134,25 @@ export default function CartPage() {
         },
     ] as const;
 
-    const confirmOrder = () => {
-        const newOrders = shipments.map((shipment, idx) => ({
-            id: `ORD-${Date.now()}-${idx}`,
-            status: 'Order Placed',
-            date: `Placed at ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
-            price: getShipmentTotal(shipment.items),
-            items: shipment.items.map((item: any) => ({
-                id: item.id,
-                image: item.image,
-                fullProduct: cart.find(ci => String(ci.productId) === String(item.id))?.product
-            })),
-            canRate: false
-        }));
+    const confirmOrder = async () => {
+        setIsPlacingOrder(true);
+        setOrderError(null);
         try {
-            const existingOrders = JSON.parse(localStorage.getItem('horeca_orders') || '[]');
-            localStorage.setItem('horeca_orders', JSON.stringify([...newOrders, ...existingOrders]));
-        } catch (e) {
-            console.error('Failed to save orders:', e);
+            const vendorOrders = groups.map(group => ({
+                vendorId: group.vendorId,
+                items: group.items.map(item => ({
+                    productId: item.productId,
+                    quantity: item.quantity,
+                })),
+            }));
+            await dal.orders.create(vendorOrders, paymentMethod);
+            clearCart();
+            setScreen('success');
+        } catch (err: any) {
+            setOrderError(err?.message || 'Order failed. Please try again.');
+        } finally {
+            setIsPlacingOrder(false);
         }
-        clearCart();
-        setScreen('success');
     };
 
     if (screen === 'payment') {
@@ -259,7 +260,7 @@ export default function CartPage() {
                                     </div>
                                     <div className="flex justify-between items-center">
                                         <span className="text-[15px] text-[#4C4F4D] font-medium">Delivery</span>
-                                        <span className="text-[15px] font-bold text-primary">FREE</span>
+                                        <span className="text-[15px] font-bold text-[#181725]">₹{deliveryFee}</span>
                                     </div>
                                     <div className="flex justify-between items-center">
                                         <span className="text-[15px] text-[#4C4F4D] font-medium">Handling Fee</span>
@@ -277,11 +278,17 @@ export default function CartPage() {
                                 </div>
                             </div>
 
+                            {orderError && (
+                                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-[13px] font-semibold text-red-600">
+                                    {orderError}
+                                </div>
+                            )}
                             <button
                                 onClick={confirmOrder}
-                                className="w-full bg-[#53B175] text-white py-5 rounded-2xl font-bold text-[18px] transition-all hover:bg-[#48a068] active:scale-[0.98] shadow-lg shadow-[#53B175]/20"
+                                disabled={isPlacingOrder}
+                                className="w-full bg-[#53B175] text-white py-5 rounded-2xl font-bold text-[18px] transition-all hover:bg-[#48a068] active:scale-[0.98] shadow-lg shadow-[#53B175]/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
-                                Confirm Order
+                                {isPlacingOrder ? <><Loader2 size={20} className="animate-spin" /> Placing Order...</> : 'Confirm Order'}
                             </button>
                         </div>
 
@@ -304,6 +311,10 @@ export default function CartPage() {
                                     <span className="text-[14px] font-bold text-[#181725]">₹{itemTotal.toFixed(0)}</span>
                                 </div>
                                 <div className="flex justify-between">
+                                    <span className="text-[14px] text-gray-500 font-medium">Delivery Fee</span>
+                                    <span className="text-[14px] font-bold text-[#181725]">₹{deliveryFee}</span>
+                                </div>
+                                <div className="flex justify-between">
                                     <span className="text-[14px] text-gray-500 font-medium">Handling Fee</span>
                                     <span className="text-[14px] font-bold text-[#181725]">₹{handlingFee}</span>
                                 </div>
@@ -317,12 +328,18 @@ export default function CartPage() {
                 </div>
 
                 {/* Fixed bottom bar — mobile + tablet */}
-                <div className="lg:hidden fixed bottom-0 left-0 right-0 px-4 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50">
+                <div className="lg:hidden fixed bottom-0 left-0 right-0 px-4 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50 space-y-2">
+                    {orderError && (
+                        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 text-[12px] font-semibold text-red-600 text-center">
+                            {orderError}
+                        </div>
+                    )}
                     <button
                         onClick={confirmOrder}
-                        className="w-full bg-[#53B175] text-white py-[18px] rounded-[16px] font-bold text-[17px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20 hover:bg-[#48a068]"
+                        disabled={isPlacingOrder}
+                        className="w-full bg-[#53B175] text-white py-[18px] rounded-[16px] font-bold text-[17px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20 hover:bg-[#48a068] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                        Confirm & Pay ₹{totalPay.toFixed(2)}
+                        {isPlacingOrder ? <><Loader2 size={20} className="animate-spin" /> Placing Order...</> : `Confirm & Pay ₹${totalPay.toFixed(2)}`}
                     </button>
                 </div>
             </div>
@@ -592,7 +609,7 @@ export default function CartPage() {
                                         <span className="text-[15px] text-[#4C4F4D] font-medium">Delivery charge</span>
                                         <Truck size={14} className="text-primary" />
                                     </div>
-                                    <span className="text-[15px] font-bold text-primary">FREE</span>
+                                    <span className="text-[15px] font-bold text-[#181725]">₹{deliveryFee}</span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="text-[15px] text-[#4C4F4D] font-medium">Handling Fee</span>
@@ -605,10 +622,7 @@ export default function CartPage() {
                                 <div className="border-t border-dashed border-[#D0D0D0] pt-5">
                                     <div className="flex justify-between items-baseline">
                                         <span className="text-[18px] font-bold text-[#181725]">Total</span>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-[24px] font-black text-[#181725]">₹{totalPay.toFixed(2)}</span>
-                                            <span className="text-[12px] text-primary font-bold mt-0.5">Savings: ₹ 131</span>
-                                        </div>
+                                        <span className="text-[24px] font-black text-[#181725]">₹{totalPay.toFixed(2)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -661,7 +675,6 @@ export default function CartPage() {
                                 <span className="text-[16px] font-bold text-[#181725]">To Pay</span>
                                 <div className="flex flex-col items-end">
                                     <span className="text-[20px] font-extrabold text-[#181725]">₹ {totalPay.toFixed(2)}</span>
-                                    <span className="text-[11px] text-[#53B175] font-bold">Savings: ₹ 131</span>
                                 </div>
                             </div>
                         </div>
