@@ -40,7 +40,7 @@ const MOBILE_HERO = {
 
 export function Hero() {
     const { status } = useSession();
-    const isAuthenticated = status === 'authenticated';
+    const _isAuthenticated = status === 'authenticated'; // reserved for future use
 
     const [currentSlide, setCurrentSlide] = useState(0);
     const [animationState, setAnimationState] = useState<'idle' | 'exiting' | 'entering'>('idle');
@@ -82,97 +82,57 @@ export function Hero() {
         return '';
     };
 
-    // === AUTHENTICATED DESKTOP BANNER (Image 1 structure) ===
-    if (isAuthenticated) {
-        return (
-            <section className="w-full max-w-full pt-[var(--space-md)] pb-8 relative px-[var(--container-padding)]">
-                <div className="relative w-full max-w-[var(--container-max)] mx-auto">
-                    
-                    {/* Desktop View: Horizontal Banner */}
-                    <div className="hidden md:block">
-                        <div className="relative w-full h-[180px] lg:h-[220px] rounded-[32px] md:rounded-[40px] overflow-hidden bg-gradient-to-r from-[#22844f] via-[#299e60] to-[#22c55e] flex items-center px-6 md:px-10 lg:px-20 shadow-lg">
-                            
-                            {/* Subtle Decorative Circle Pattern */}
-                            <div className="absolute left-0 top-0 w-full h-full opacity-10 pointer-events-none">
-                                <svg width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <circle cx="10%" cy="50%" r="150" stroke="white" strokeWidth="2" />
-                                    <circle cx="90%" cy="20%" r="80" stroke="white" strokeWidth="2" />
-                                </svg>
-                            </div>
-
-                            {/* Dynamic Content Wrapper for Animation */}
-                            <div className={`flex items-center w-full transition-all duration-300 ${getAnimationClass()}`}>
-                                {/* Product Images (Left) */}
-                                <div className="flex-shrink-0 mr-4 md:mr-8 lg:mr-16 translate-y-2 relative z-10">
-                                    <img 
-                                        src={SLIDES[currentSlide].image} 
-                                        alt={SLIDES[currentSlide].title} 
-                                        className="h-[120px] md:h-[140px] lg:h-[200px] w-auto object-contain drop-shadow-2xl brightness-110 mt-2"
-                                    />
-                                </div>
-
-                                {/* Center Content */}
-                                <div className="flex-grow flex flex-col items-start justify-center text-white relative z-10">
-                                    <h1 className="text-[1.8rem] md:text-[2.2rem] lg:text-[3rem] font-[900] leading-[1.1] tracking-tight drop-shadow-md">
-                                        {SLIDES[currentSlide].title}
-                                    </h1>
-                                    <p className="text-[0.8rem] md:text-[0.95rem] lg:text-[1.1rem] font-medium opacity-90 max-w-[500px] mt-1">
-                                        {SLIDES[currentSlide].description}
-                                    </p>
-                                </div>
-
-                                {/* Shop Here Button (Right) */}
-                                <div className="flex-shrink-0 ml-4 relative z-10">
-                                    <button className="bg-[#181725] text-white px-5 md:px-8 py-2 md:py-3 rounded-xl md:rounded-2xl flex items-center gap-2 md:gap-3 text-[0.9rem] md:text-[1.1rem] font-bold hover:scale-105 transition-all shadow-xl whitespace-nowrap">
-                                        Shop here
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Slider Navigation Icons (Circular arrows) */}
-                            <button 
-                                onClick={() => handleSlideChange('left')}
-                                className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 lg:w-12 lg:h-12 bg-white/90 rounded-full flex items-center justify-center text-[#299e60] shadow-md hover:scale-110 hover:bg-white transition-all border border-green-100 z-20"
-                            >
-                                <ChevronLeft size={24} strokeWidth={3} />
-                            </button>
-                            <button 
-                                onClick={() => handleSlideChange('right')}
-                                className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 lg:w-12 lg:h-12 bg-white/90 rounded-full flex items-center justify-center text-[#299e60] shadow-md hover:scale-110 hover:bg-white transition-all border border-green-100 z-20"
-                            >
-                                <ChevronRight size={24} strokeWidth={3} />
-                            </button>
+    // === DEFAULT BANNER (compact dark-green, shown for everyone) ===
+    return (
+        <section className="w-full max-w-full pt-[var(--space-md)] pb-8 relative px-[var(--container-padding)]">
+            <div className="relative w-full max-w-[var(--container-max)] mx-auto">
+                <div className="hidden md:block">
+                    <div className="relative w-full h-[180px] lg:h-[220px] rounded-[32px] md:rounded-[40px] overflow-hidden bg-gradient-to-r from-[#22844f] via-[#299e60] to-[#22c55e] flex items-center px-6 md:px-10 lg:px-20 shadow-lg">
+                        <div className="absolute left-0 top-0 w-full h-full opacity-10 pointer-events-none">
+                            <svg width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="10%" cy="50%" r="150" stroke="white" strokeWidth="2" />
+                                <circle cx="90%" cy="20%" r="80" stroke="white" strokeWidth="2" />
+                            </svg>
                         </div>
-                    </div>
-
-                    {/* Mobile View / Guest View Fallback for Authenticated */}
-                    <div className="md:hidden">
-                        <div className="relative w-full rounded-[20px] overflow-hidden" style={{ backgroundColor: '#eff9f0' }}>
-                            <div className="flex items-center px-5 py-6">
-                                <div className="flex-1 pr-2">
-                                    <h2 className="text-[0.95rem] font-[800] text-[#0f172a] leading-[1.25] mb-5 max-w-[260px]">
-                                        {MOBILE_HERO.title}
-                                    </h2>
-                                    <button className="bg-[#5cb85c] text-white px-5 py-2 rounded-[10px] text-[13px] font-medium transition-all active:scale-95">
-                                        Shop Now
-                                    </button>
-                                </div>
-                                <div className="flex-shrink-0 w-[40%]">
-                                    <img src={MOBILE_HERO.image} alt="Mobile Hero" className="w-full h-auto object-contain" />
-                                </div>
+                        <div className={`flex items-center w-full transition-all duration-300 ${getAnimationClass()}`}>
+                            <div className="flex-shrink-0 mr-4 md:mr-8 lg:mr-16 translate-y-2 relative z-10">
+                                <img src={SLIDES[currentSlide].image} alt={SLIDES[currentSlide].title} className="h-[120px] md:h-[140px] lg:h-[200px] w-auto object-contain drop-shadow-2xl brightness-110 mt-2" />
+                            </div>
+                            <div className="flex-grow flex flex-col items-start justify-center text-white relative z-10">
+                                <h1 className="text-[1.8rem] md:text-[2.2rem] lg:text-[3rem] font-[900] leading-[1.1] tracking-tight drop-shadow-md">{SLIDES[currentSlide].title}</h1>
+                                <p className="text-[0.8rem] md:text-[0.95rem] lg:text-[1.1rem] font-medium opacity-90 max-w-[500px] mt-1">{SLIDES[currentSlide].description}</p>
+                            </div>
+                            <div className="flex-shrink-0 ml-4 relative z-10">
+                                <button className="bg-[#181725] text-white px-5 md:px-8 py-2 md:py-3 rounded-xl md:rounded-2xl flex items-center gap-2 md:gap-3 text-[0.9rem] md:text-[1.1rem] font-bold hover:scale-105 transition-all shadow-xl whitespace-nowrap">
+                                    Shop here
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                                </button>
                             </div>
                         </div>
+                        <button onClick={() => handleSlideChange('left')} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 lg:w-12 lg:h-12 bg-white/90 rounded-full flex items-center justify-center text-[#299e60] shadow-md hover:scale-110 hover:bg-white transition-all border border-green-100 z-20"><ChevronLeft size={24} strokeWidth={3} /></button>
+                        <button onClick={() => handleSlideChange('right')} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 lg:w-12 lg:h-12 bg-white/90 rounded-full flex items-center justify-center text-[#299e60] shadow-md hover:scale-110 hover:bg-white transition-all border border-green-100 z-20"><ChevronRight size={24} strokeWidth={3} /></button>
                     </div>
-
-                    {/* Down Button removed for Login state */}
-
                 </div>
-            </section>
-        );
-    }
+                <div className="md:hidden">
+                    <div className="relative w-full rounded-[20px] overflow-hidden" style={{ backgroundColor: '#eff9f0' }}>
+                        <div className="flex items-center px-5 py-6">
+                            <div className="flex-1 pr-2">
+                                <h2 className="text-[0.95rem] font-[800] text-[#0f172a] leading-[1.25] mb-5 max-w-[260px]">{MOBILE_HERO.title}</h2>
+                                <button className="bg-[#5cb85c] text-white px-5 py-2 rounded-[10px] text-[13px] font-medium transition-all active:scale-95">Shop Now</button>
+                            </div>
+                            <div className="flex-shrink-0 w-[40%]">
+                                <img src={MOBILE_HERO.image} alt="Mobile Hero" className="w-full h-auto object-contain" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    );
 
-    // === GUEST / LOGOUT STATE (Original Design) ===
+    // === LARGE GUEST HERO SLIDER — kept below as dead code (unreachable after return above) ===
+    // To restore: remove the return block above and uncomment this one
+    // eslint-disable-next-line no-unreachable
     return (
         <section className="w-full max-w-full pt-[var(--space-md)] pb-8 md:pb-10 xl:pb-20 relative px-[var(--container-padding)]">
             <div className="relative w-full max-w-[var(--container-max)] mx-auto overflow-visible">
