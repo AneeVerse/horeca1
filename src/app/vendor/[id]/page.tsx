@@ -23,6 +23,12 @@ export default function VendorStorePage() {
     const [activeTab, setActiveTab] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [prevOrders, setPrevOrders] = useState<any[]>([]);
+    const [reviewsData, setReviewsData] = useState<{
+        reviews: Array<{ id: string; rating: number; comment?: string; createdAt: string; reviewerName: string }>;
+        distribution: Record<string, number>;
+        totalCount: number;
+    } | null>(null);
+    const [reviewsLoading, setReviewsLoading] = useState(false);
 
     // Ensure page starts at the top on entry
     useEffect(() => {
@@ -86,6 +92,16 @@ export default function VendorStorePage() {
     useEffect(() => {
         if (activeTab === 'orders') loadPrevOrders();
     }, [activeTab, loadPrevOrders]);
+
+    // Load reviews when ratings tab is activated
+    useEffect(() => {
+        if (activeTab !== 'ratings' || !vendorId || reviewsData) return;
+        setReviewsLoading(true);
+        dal.reviews.getVendorReviews(vendorId)
+            .then(data => setReviewsData(data))
+            .catch(() => setReviewsData({ reviews: [], distribution: {}, totalCount: 0 }))
+            .finally(() => setReviewsLoading(false));
+    }, [activeTab, vendorId, reviewsData]);
 
     const filteredProducts = useMemo(() => {
         let result = products;
@@ -216,51 +232,71 @@ export default function VendorStorePage() {
                     )
                 ) : activeTab === 'ratings' ? (
                     <div className="max-w-4xl mx-auto space-y-8">
-                        {/* Rating Summary Card */}
-                        <div className="bg-white rounded-[32px] border border-gray-100 p-8 flex flex-col md:flex-row items-center gap-10 shadow-sm">
-                            <div className="text-center md:text-left flex flex-col items-center md:items-start">
-                                <span className="text-[64px] font-[1000] text-[#181725] leading-none mb-2">{vendor.rating}</span>
-                                <div className="flex items-center gap-1 mb-2">
-                                    {[1, 2, 3, 4, 5].map((s) => (
-                                        <Star key={s} size={20} fill={s <= Math.floor(Number(vendor.rating)) ? "#FBC02D" : "none"} className={s <= Math.floor(Number(vendor.rating)) ? "text-[#FBC02D]" : "text-gray-200"} />
-                                    ))}
-                                </div>
-                                <p className="text-gray-400 font-bold uppercase text-[12px] tracking-widest">Based on 2.4k reviews</p>
+                        {reviewsLoading ? (
+                            <div className="flex items-center justify-center py-16">
+                                <div className="w-8 h-8 border-4 border-gray-200 border-t-[#53B175] rounded-full animate-spin" />
                             </div>
-                            
-                            <div className="flex-1 w-full space-y-3">
-                                {[
-                                    { s: 5, p: 85 }, { s: 4, p: 12 }, { s: 3, p: 2 }, { s: 2, p: 1 }, { s: 1, p: 0 }
-                                ].map((row) => (
-                                    <div key={row.s} className="flex items-center gap-4">
-                                        <span className="text-[14px] font-black w-4">{row.s}</span>
-                                        <div className="flex-1 h-2.5 bg-gray-50 rounded-full overflow-hidden">
-                                            <div className="h-full bg-[#53B175] rounded-full transition-all duration-1000" style={{ width: `${row.p}%` }} />
+                        ) : (
+                            <>
+                                {/* Rating Summary Card */}
+                                <div className="bg-white rounded-[32px] border border-gray-100 p-8 flex flex-col md:flex-row items-center gap-10 shadow-sm">
+                                    <div className="text-center md:text-left flex flex-col items-center md:items-start">
+                                        <span className="text-[64px] font-[1000] text-[#181725] leading-none mb-2">{vendor.rating}</span>
+                                        <div className="flex items-center gap-1 mb-2">
+                                            {[1, 2, 3, 4, 5].map((s) => (
+                                                <Star key={s} size={20} fill={s <= Math.floor(Number(vendor.rating)) ? "#FBC02D" : "none"} className={s <= Math.floor(Number(vendor.rating)) ? "text-[#FBC02D]" : "text-gray-200"} />
+                                            ))}
                                         </div>
-                                        <span className="text-[13px] font-bold text-gray-400 w-10 text-right">{row.p}%</span>
+                                        <p className="text-gray-400 font-bold uppercase text-[12px] tracking-widest">
+                                            Based on {(reviewsData?.totalCount ?? vendor.totalRatings ?? 0).toLocaleString('en-IN')} reviews
+                                        </p>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
 
-                        {/* Recent Reviews (Dummy) */}
-                        <div className="space-y-6">
-                            {[
-                                { name: "Rajesh Kumar", date: "Oct 12, 2026", msg: "Excellent quality grains. The delivery was fast and the packaging was top-notch. Highly recommended for bulk ordering." },
-                                { name: "Ananya Sharma", date: "Sep 28, 2026", msg: "Great deals on spices! Saved 10% on my monthly stock. The vendor was very professional and easy to communicate with." }
-                            ].map((review, i) => (
-                                <div key={i} className="bg-white rounded-[28px] border border-gray-100 p-6 shadow-sm">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <span className="font-black text-[16px] text-[#181725]">{review.name}</span>
-                                        <span className="text-gray-400 font-bold text-[12px]">{review.date}</span>
+                                    <div className="flex-1 w-full space-y-3">
+                                        {[5, 4, 3, 2, 1].map((s) => {
+                                            const pct = reviewsData?.distribution?.[s] ?? 0;
+                                            return (
+                                                <div key={s} className="flex items-center gap-4">
+                                                    <span className="text-[14px] font-black w-4">{s}</span>
+                                                    <div className="flex-1 h-2.5 bg-gray-50 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-[#53B175] rounded-full transition-all duration-1000" style={{ width: `${pct}%` }} />
+                                                    </div>
+                                                    <span className="text-[13px] font-bold text-gray-400 w-10 text-right">{pct}%</span>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                    <div className="flex items-center gap-1 mb-3">
-                                        {[1, 2, 3, 4, 5].map((s) => <Star key={s} size={14} fill="#FBC02D" className="text-[#FBC02D]" />)}
-                                    </div>
-                                    <p className="text-gray-600 font-medium leading-relaxed">{review.msg}</p>
                                 </div>
-                            ))}
-                        </div>
+
+                                {/* Reviews */}
+                                {reviewsData && reviewsData.reviews.length > 0 ? (
+                                    <div className="space-y-6">
+                                        {reviewsData.reviews.map((review) => (
+                                            <div key={review.id} className="bg-white rounded-[28px] border border-gray-100 p-6 shadow-sm">
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <span className="font-black text-[16px] text-[#181725]">{review.reviewerName}</span>
+                                                    <span className="text-gray-400 font-bold text-[12px]">
+                                                        {new Date(review.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-1 mb-3">
+                                                    {[1, 2, 3, 4, 5].map((s) => (
+                                                        <Star key={s} size={14} fill={s <= review.rating ? "#FBC02D" : "none"} className={s <= review.rating ? "text-[#FBC02D]" : "text-gray-200"} />
+                                                    ))}
+                                                </div>
+                                                {review.comment && (
+                                                    <p className="text-gray-600 font-medium leading-relaxed">{review.comment}</p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12 text-gray-400 font-bold">
+                                        No reviews yet. Be the first to review!
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                 ) : (
                     <div className="max-w-4xl mx-auto space-y-8">

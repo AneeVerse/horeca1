@@ -2,11 +2,12 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, CreditCard, Smartphone, Building2, FileText, Clock, CheckCircle2, Shield, User } from 'lucide-react';
+import { ChevronLeft, CreditCard, Smartphone, Building2, FileText, Clock, CheckCircle2, Shield, User, Loader2 } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { useSession } from 'next-auth/react';
 import { AuthScreen } from '@/components/auth/AuthScreen';
+import { dal } from '@/lib/dal';
 
 type CheckoutStep = 'review' | 'payment' | 'confirmation';
 
@@ -26,6 +27,9 @@ export default function CheckoutPage() {
     const [showAuthScreen, setShowAuthScreen] = useState(false);
     const [availableCredit, setAvailableCredit] = useState<number | null>(null);
     const [creditDueDate, setCreditDueDate] = useState<string | null>(null);
+    const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+    const [orderError, setOrderError] = useState<string | null>(null);
+    const [placedOrderIds, setPlacedOrderIds] = useState<string[]>([]);
 
     // Load real credit info when payment step is reached
     React.useEffect(() => {
@@ -41,38 +45,37 @@ export default function CheckoutPage() {
             .catch(() => {}); // silently fall back to null
     }, [step, sessionStatus]);
 
-    const handlePlaceOrder = () => {
-        // Capture a snapshot of the current cart before clearing
-        setOrderSnapshot({
-            groups: [...groups],
-            total: totalAmount,
-            count: vendorCount
-        });
-
-        // Save to Orders History in LocalStorage
-        const newOrders = groups.map((group, idx) => ({
-            id: `ORD-${Date.now()}-${idx}`,
-            status: 'Order Placed',
-            date: `Placed at ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
-            price: group.subtotal,
-            items: group.items.map(item => ({
-                id: item.productId,
-                image: item.product.images[0] || '/images/recom-product/product-img10.png',
-                fullProduct: item.product
-            })),
-            canRate: false
-        }));
-
+    const handlePlaceOrder = async () => {
+        setIsPlacingOrder(true);
+        setOrderError(null);
         try {
-            const existingOrders = JSON.parse(localStorage.getItem('horeca_orders') || '[]');
-            localStorage.setItem('horeca_orders', JSON.stringify([...newOrders, ...existingOrders]));
-        } catch (e) {
-            console.error('Failed to save orders:', e);
+            // Build vendor order payloads from cart groups
+            const vendorOrders = groups.map(group => ({
+                vendorId: group.vendorId,
+                items: group.items.map(item => ({
+                    productId: item.productId,
+                    quantity: item.quantity,
+                })),
+            }));
+
+            const result = await dal.orders.create(vendorOrders, selectedPayment) as { orders: Array<{ id: string; orderNumber: string }> };
+            setPlacedOrderIds((result.orders || []).map((o) => o.orderNumber || o.id));
+
+            // Capture snapshot for confirmation screen
+            setOrderSnapshot({
+                groups: [...groups],
+                total: totalAmount,
+                count: vendorCount,
+            });
+
+            setStep('confirmation');
+            clearCart();
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Failed to place order. Please try again.';
+            setOrderError(msg);
+        } finally {
+            setIsPlacingOrder(false);
         }
-        
-        setStep('confirmation');
-        // Clear the cart immediately as requested
-        clearCart();
     };
 
     if (groups.length === 0) {
@@ -292,16 +295,26 @@ export default function CheckoutPage() {
                             </div>
                         </div>
 
+                        {orderError && (
+                            <div className="text-[13px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3 font-medium">
+                                {orderError}
+                            </div>
+                        )}
                         <button
                             onClick={handlePlaceOrder}
-                            disabled={!selectedPayment}
-                            className={`w-full py-3.5 text-[14px] font-bold rounded-xl shadow-lg transition-all ${
-                                selectedPayment
+                            disabled={!selectedPayment || isPlacingOrder}
+                            className={`w-full py-3.5 text-[14px] font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${
+                                selectedPayment && !isPlacingOrder
                                     ? 'bg-[#299e60] text-white shadow-green-200/50 hover:bg-[#22844f] active:scale-[0.99]'
                                     : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
                             }`}
                         >
-                            Place Order →
+                            {isPlacingOrder ? (
+                                <>
+                                    <Loader2 size={16} className="animate-spin" />
+                                    Placing Order...
+                                </>
+                            ) : 'Place Order →'}
                         </button>
                     </div>
                 )}
@@ -322,7 +335,7 @@ export default function CheckoutPage() {
                             {(orderSnapshot?.groups || []).map((group, idx) => (
                                 <div key={group.vendorId} className="bg-white rounded-2xl border border-gray-100 p-4">
                                     <div className="flex items-center justify-between mb-2">
-                                        <span className="text-[12px] font-bold text-gray-400">PO-2026-{String(idx + 3).padStart(3, '0')}</span>
+                                        <span className="text-[12px] font-bold text-gray-400">{placedOrderIds[idx] || `PO-${idx + 1}`}</span>
                                         <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Pending Confirmation</span>
                                     </div>
                                     <p className="text-[14px] font-bold text-[#181725]">{group.vendorName}</p>

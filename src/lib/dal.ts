@@ -314,6 +314,32 @@ export const dal = {
     },
   },
 
+  reviews: {
+    /** Submit a review for a delivered order */
+    async submit(orderId: string, rating: number, comment?: string) {
+      return apiFetch(`/api/v1/orders/${orderId}/review`, {
+        method: 'POST',
+        body: JSON.stringify({ rating, comment }),
+      });
+    },
+
+    /** Get existing review for an order */
+    async getOrderReview(orderId: string) {
+      return apiFetch<{ rating: number; comment?: string; createdAt: string } | null>(`/api/v1/orders/${orderId}/review`);
+    },
+
+    /** Get paginated reviews + rating distribution for a vendor */
+    async getVendorReviews(vendorId: string, cursor?: string) {
+      const qs = cursor ? `?cursor=${cursor}` : '';
+      return apiFetch<{
+        reviews: Array<{ id: string; rating: number; comment?: string; createdAt: string; reviewerName: string }>;
+        distribution: Record<string, number>;
+        totalCount: number;
+        pagination: { hasMore: boolean; nextCursor: string | null };
+      }>(`/api/v1/vendors/${vendorId}/reviews${qs}`);
+    },
+  },
+
   notifications: {
     /** List notifications */
     async list(options?: { cursor?: string }) {

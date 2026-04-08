@@ -1,10 +1,17 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
 import type { VendorProduct, CartItem, VendorCartGroup } from '@/types';
+import { dal } from '@/lib/dal';
+
+// CartItem extended with API item ID (needed for PATCH/DELETE on server cart)
+interface CartItemWithId extends CartItem {
+    cartItemId?: string; // DB id from server cart
+}
 
 interface CartContextType {
-    cart: CartItem[];
+    cart: CartItemWithId[];
     groups: VendorCartGroup[];
     addToCart: (product: VendorProduct, quantity?: number) => void;
     removeFromCart: (productId: string) => void;
@@ -12,101 +19,188 @@ interface CartContextType {
     clearCart: () => void;
     totalItems: number;
     subtotal: number;
-    totalAmount: number; // Aliases subtotal for backward compatibility
+    totalAmount: number;
     vendorCount: number;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+// ---- HELPERS ----
+
+function buildGroups(cart: CartItemWithId[]): VendorCartGroup[] {
+    const grouped: Record<string, VendorCartGroup> = {};
+    cart.forEach(item => {
+        if (!item.product) return;
+        const vId = item.product.vendorId;
+        if (!grouped[vId]) {
+            grouped[vId] = {
+                vendorId: vId,
+                vendorName: item.product.vendorName,
+                vendorLogo: item.product.vendorLogo,
+                items: [],
+                subtotal: 0,
+                minOrderValue: item.product.minOrderQuantity || 0,
+                meetsMinOrder: false
+            };
+        }
+        grouped[vId].items.push(item);
+        grouped[vId].subtotal += (item.product.price || 0) * item.quantity;
+        grouped[vId].meetsMinOrder = grouped[vId].subtotal >= grouped[vId].minOrderValue;
+    });
+    return Object.values(grouped);
+}
+
+// Transform API cart response into local CartItemWithId[]
+// The API returns vendor-grouped items; we flatten them
+function fromApiCart(apiData: { vendorGroups: unknown[]; total: number }): CartItemWithId[] {
+    const items: CartItemWithId[] = [];
+    for (const group of (apiData.vendorGroups || []) as Array<Record<string, unknown>>) {
+        for (const raw of ((group.items || []) as Array<Record<string, unknown>>)) {
+            const product = raw.product as Record<string, unknown> | null;
+            if (!product) continue;
+            const priceSlabs = (product.priceSlabs as Array<Record<string, unknown>>) || [];
+            const vendor = (product.vendor as Record<string, unknown>) || {};
+            const inventory = product.inventory as Record<string, unknown> | null;
+            const vp: VendorProduct = {
+                id: product.id as string,
+                name: (product.name as string) || '',
+                description: (product.description as string) || '',
+                price: priceSlabs.length > 0 ? Number(priceSlabs[0].price) : Number(product.basePrice) || 0,
+                originalPrice: Number(product.basePrice) || 0,
+                images: product.imageUrl ? [product.imageUrl as string] : [],
+                category: '',
+                packSize: (product.packSize as string) || '1 unit',
+                unit: (product.unit as string) || 'unit',
+                stock: inventory ? Number((inventory as Record<string, unknown>).qtyAvailable) || 0 : 0,
+                isActive: true,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                vendorId: (product.vendorId as string) || (vendor.id as string) || '',
+                vendorName: (vendor.businessName as string) || (group.vendorName as string) || '',
+                vendorLogo: (vendor.logoUrl as string) || (group.vendorLogo as string) || '',
+                bulkPrices: priceSlabs.map(s => ({ minQty: Number(s.minQty), price: Number(s.price) })),
+                creditBadge: (product.creditEligible as boolean) || false,
+                minOrderQuantity: priceSlabs.length > 0 ? Number(priceSlabs[0].minQty) : 1,
+                frequentlyOrdered: false,
+                isDeal: false,
+            };
+            items.push({
+                productId: vp.id,
+                product: vp,
+                quantity: Number(raw.quantity) || 1,
+                cartItemId: raw.id as string,
+            });
+        }
+    }
+    return items;
+}
+
+const STORAGE_KEY = 'horeca_cart';
+
+function loadLocalCart(): CartItemWithId[] {
+    try {
+        const s = localStorage.getItem(STORAGE_KEY);
+        return s ? JSON.parse(s) : [];
+    } catch { return []; }
+}
+
+function saveLocalCart(cart: CartItemWithId[]) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cart)); } catch { /* ignore */ }
+}
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
-    const [cart, setCart] = useState<CartItem[]>([]);
+    const { status: sessionStatus } = useSession();
+    const isLoggedIn = sessionStatus === 'authenticated';
+    const [cart, setCart] = useState<CartItemWithId[]>([]);
     const [isInitialized, setIsInitialized] = useState(false);
 
-    // Initial load from localStorage
+    // On mount: load cart (API if logged in, localStorage if guest)
     useEffect(() => {
-        const storedCart = localStorage.getItem('horeca_cart');
-        if (storedCart) {
-            try {
-                const parsed = JSON.parse(storedCart);
-                setCart(parsed);
-            } catch (err) {
-                console.error('Failed to load cart:', err);
-            }
+        if (sessionStatus === 'loading') return;
+        if (isLoggedIn) {
+            dal.cart.get()
+                .then(apiData => {
+                    const items = fromApiCart(apiData as { vendorGroups: unknown[]; total: number });
+                    setCart(items);
+                })
+                .catch(() => {
+                    // Fallback to localStorage if API fails
+                    setCart(loadLocalCart());
+                })
+                .finally(() => setIsInitialized(true));
+        } else {
+            setCart(loadLocalCart());
+            setIsInitialized(true);
         }
-        setIsInitialized(true);
-    }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessionStatus]);
 
-    // Persist to localStorage
+    // Persist to localStorage only for guest users
     useEffect(() => {
-        if (isInitialized) {
-            localStorage.setItem('horeca_cart', JSON.stringify(cart));
-        }
-    }, [cart, isInitialized]);
+        if (!isInitialized || isLoggedIn) return;
+        saveLocalCart(cart);
+    }, [cart, isInitialized, isLoggedIn]);
 
     const addToCart = useCallback((product: VendorProduct, quantity: number = 1) => {
-        setCart(prev => {
-            const existing = prev.find(item => item.productId === product.id);
-            if (existing) {
-                return prev.map(item =>
-                    item.productId === product.id
-                        ? { ...item, quantity: item.quantity + quantity }
-                        : item
-                );
-            }
-            return [...prev, { productId: product.id, product, quantity }];
-        });
-    }, []);
+        if (isLoggedIn) {
+            dal.cart.addItem(product.id, product.vendorId, quantity)
+                .then(async () => {
+                    // Refresh cart from API to get the cartItemId
+                    const apiData = await dal.cart.get();
+                    const items = fromApiCart(apiData as { vendorGroups: unknown[]; total: number });
+                    setCart(items);
+                })
+                .catch(() => {
+                    // Optimistic update on API failure
+                    setCart(prev => {
+                        const existing = prev.find(i => i.productId === product.id);
+                        if (existing) return prev.map(i => i.productId === product.id ? { ...i, quantity: i.quantity + quantity } : i);
+                        return [...prev, { productId: product.id, product, quantity }];
+                    });
+                });
+        } else {
+            setCart(prev => {
+                const existing = prev.find(i => i.productId === product.id);
+                if (existing) return prev.map(i => i.productId === product.id ? { ...i, quantity: i.quantity + quantity } : i);
+                return [...prev, { productId: product.id, product, quantity }];
+            });
+        }
+    }, [isLoggedIn]);
 
     const removeFromCart = useCallback((productId: string) => {
-        setCart(prev => prev.filter(item => item.productId !== productId));
-    }, []);
+        setCart(prev => {
+            const item = prev.find(i => i.productId === productId);
+            if (isLoggedIn && item?.cartItemId) {
+                dal.cart.removeItem(item.cartItemId).catch(() => {});
+            }
+            return prev.filter(i => i.productId !== productId);
+        });
+    }, [isLoggedIn]);
 
     const updateQuantity = useCallback((productId: string, quantity: number) => {
         if (quantity <= 0) {
             removeFromCart(productId);
             return;
         }
-        setCart(prev => prev.map(item =>
-            item.productId === productId ? { ...item, quantity } : item
-        ));
-    }, [removeFromCart]);
+        setCart(prev => {
+            const item = prev.find(i => i.productId === productId);
+            if (isLoggedIn && item?.cartItemId) {
+                dal.cart.updateItem(item.cartItemId, quantity).catch(() => {});
+            }
+            return prev.map(i => i.productId === productId ? { ...i, quantity } : i);
+        });
+    }, [isLoggedIn, removeFromCart]);
 
     const clearCart = useCallback(() => {
+        if (isLoggedIn) {
+            dal.cart.clear().catch(() => {});
+        }
         setCart([]);
-    }, []);
+    }, [isLoggedIn]);
 
-    // Derived: Groups by Vendor
-    const groups = useMemo(() => {
-        const grouped: Record<string, VendorCartGroup> = {};
-        cart.forEach(item => {
-            if (!item.product) return;
-            const vId = item.product.vendorId;
-            if (!grouped[vId]) {
-                grouped[vId] = {
-                    vendorId: vId,
-                    vendorName: item.product.vendorName,
-                    vendorLogo: item.product.vendorLogo,
-                    items: [],
-                    subtotal: 0,
-                    minOrderValue: item.product.minOrderQuantity || 0, // Simplified MOV
-                    meetsMinOrder: false
-                };
-            }
-            grouped[vId].items.push(item);
-            grouped[vId].subtotal += (item.product.price || 0) * item.quantity;
-            grouped[vId].meetsMinOrder = grouped[vId].subtotal >= grouped[vId].minOrderValue;
-        });
-        return Object.values(grouped);
-    }, [cart]);
-
-    const totalItems = useMemo(() => cart.reduce((sum, item) => sum + (item.quantity || 0), 0), [cart]);
-    
-    const subtotal = useMemo(() => cart.reduce((sum, item) => {
-        if (!item.product) return sum;
-        const price = item.product.price || 0;
-        return sum + (price * item.quantity);
-    }, 0), [cart]);
-
+    const groups = useMemo(() => buildGroups(cart), [cart]);
+    const totalItems = useMemo(() => cart.reduce((sum, i) => sum + (i.quantity || 0), 0), [cart]);
+    const subtotal = useMemo(() => cart.reduce((sum, i) => sum + ((i.product?.price || 0) * i.quantity), 0), [cart]);
     const totalAmount = subtotal;
     const vendorCount = groups.length;
 

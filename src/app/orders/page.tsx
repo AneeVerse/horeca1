@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Heart, ShoppingCart, Star, Home, Package, LogIn } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Heart, ShoppingCart, Star, Home, Package, LogIn, X, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useCart } from '@/context/CartContext';
@@ -39,6 +39,10 @@ export default function OrderHistoryPage() {
     const [ordersLoading, setOrdersLoading] = React.useState(true);
     const [allProducts, setAllProducts] = React.useState<VendorProduct[]>([]);
     const [vendorsList, setVendorsList] = React.useState<Vendor[]>([]);
+    const [ratingModal, setRatingModal] = React.useState<{ orderId: string } | null>(null);
+    const [selectedStars, setSelectedStars] = React.useState(0);
+    const [ratingComment, setRatingComment] = React.useState('');
+    const [isSubmittingRating, setIsSubmittingRating] = React.useState(false);
 
     React.useEffect(() => {
         if (!isLoggedIn) return;
@@ -107,6 +111,31 @@ export default function OrderHistoryPage() {
             }
             toast.success('Saved as Order List!', { description: 'Find it in My Order Lists.' });
         } catch { toast.error('Failed to save as order list'); }
+    };
+
+    const openRatingModal = (orderId: string) => {
+        setSelectedStars(0);
+        setRatingComment('');
+        setRatingModal({ orderId });
+    };
+
+    const handleSubmitRating = async () => {
+        if (!ratingModal || selectedStars === 0) return;
+        setIsSubmittingRating(true);
+        try {
+            await dal.reviews.submit(ratingModal.orderId, selectedStars, ratingComment || undefined);
+            // Update order locally so the "Rate Order" button disappears
+            setOrders(prev => prev.map(o =>
+                o.id === ratingModal.orderId ? { ...o, rating: selectedStars } : o
+            ));
+            toast.success('Review submitted!', { description: 'Thank you for your feedback.' });
+            setRatingModal(null);
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Failed to submit review';
+            toast.error(msg);
+        } finally {
+            setIsSubmittingRating(false);
+        }
     };
 
     const handleOrderAgain = (order: Order) => {
@@ -279,7 +308,10 @@ export default function OrderHistoryPage() {
                                 {/* Footer Split Actions */}
                                 {order.rating === undefined && (
                                     <div className="flex items-center border-t border-[#F2F3F2] mt-auto">
-                                        <button className="flex-1 py-4 text-center font-black text-[#4C4F4D] text-[13px] active:bg-gray-50 transition-colors md:hover:bg-gray-50 uppercase tracking-wider">
+                                        <button
+                                            onClick={() => openRatingModal(order.id)}
+                                            className="flex-1 py-4 text-center font-black text-[#4C4F4D] text-[13px] active:bg-gray-50 transition-colors md:hover:bg-gray-50 uppercase tracking-wider"
+                                        >
                                             Rate Order
                                         </button>
                                         <div className="w-[1px] h-10 bg-[#F2F3F2]" />
@@ -313,6 +345,64 @@ export default function OrderHistoryPage() {
                     scrollbar-width: none;
                 }
             `}</style>
+
+            {/* Rating Modal */}
+            {ratingModal && (
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+                    <div className="bg-white rounded-[28px] w-full max-w-sm p-6 shadow-2xl">
+                        <div className="flex items-center justify-between mb-5">
+                            <h3 className="text-[18px] font-black text-[#181725]">Rate Your Order</h3>
+                            <button
+                                onClick={() => setRatingModal(null)}
+                                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        {/* Star selector */}
+                        <div className="flex items-center justify-center gap-3 mb-5">
+                            {[1, 2, 3, 4, 5].map(s => (
+                                <button
+                                    key={s}
+                                    onClick={() => setSelectedStars(s)}
+                                    className="transition-transform active:scale-90"
+                                >
+                                    <Star
+                                        size={36}
+                                        className={s <= selectedStars ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200 fill-none'}
+                                    />
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-center text-[13px] font-bold text-gray-400 mb-5">
+                            {selectedStars === 0 ? 'Tap to rate' : selectedStars === 5 ? 'Excellent!' : selectedStars === 4 ? 'Good' : selectedStars === 3 ? 'Average' : selectedStars === 2 ? 'Poor' : 'Very Poor'}
+                        </p>
+
+                        {/* Optional comment */}
+                        <textarea
+                            value={ratingComment}
+                            onChange={e => setRatingComment(e.target.value)}
+                            maxLength={200}
+                            placeholder="Add a comment (optional)..."
+                            rows={3}
+                            className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-[13px] font-medium text-[#181725] placeholder-gray-300 resize-none focus:outline-none focus:border-[#53B175] transition-colors mb-4"
+                        />
+
+                        <button
+                            onClick={handleSubmitRating}
+                            disabled={selectedStars === 0 || isSubmittingRating}
+                            className={`w-full py-3.5 rounded-2xl text-[14px] font-black transition-all flex items-center justify-center gap-2 ${
+                                selectedStars > 0 && !isSubmittingRating
+                                    ? 'bg-[#53B175] text-white shadow-lg shadow-green-200/50 hover:bg-[#48a068]'
+                                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            }`}
+                        >
+                            {isSubmittingRating ? <><Loader2 size={16} className="animate-spin" /> Submitting...</> : 'Submit Review'}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
