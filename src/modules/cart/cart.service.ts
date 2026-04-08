@@ -8,8 +8,15 @@ export class CartService {
       include: {
         items: {
           include: {
-            product: { select: { id: true, name: true, imageUrl: true, basePrice: true, packSize: true } },
-            vendor: { select: { id: true, businessName: true, slug: true, minOrderValue: true } },
+            product: {
+              select: {
+                id: true, name: true, imageUrl: true, basePrice: true, packSize: true,
+                unit: true, creditEligible: true,
+                priceSlabs: { orderBy: { minQty: 'asc' as const }, select: { minQty: true, maxQty: true, price: true } },
+                inventory: { select: { qtyAvailable: true } },
+              },
+            },
+            vendor: { select: { id: true, businessName: true, slug: true, minOrderValue: true, logoUrl: true } },
           },
         },
       },

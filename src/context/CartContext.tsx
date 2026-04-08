@@ -51,33 +51,44 @@ function buildGroups(cart: CartItemWithId[]): VendorCartGroup[] {
 }
 
 // Transform API cart response into local CartItemWithId[]
-// The API returns vendor-grouped items; we flatten them
+// API shape: { vendorGroups: [{ vendor, items: [{ id, quantity, unitPrice, product, vendor }], subtotal, meetsMov }], total }
 function fromApiCart(apiData: { vendorGroups: unknown[]; total: number }): CartItemWithId[] {
     const items: CartItemWithId[] = [];
     for (const group of (apiData.vendorGroups || []) as Array<Record<string, unknown>>) {
+        // vendor info lives at group.vendor (not group.vendorName)
+        const groupVendor = (group.vendor as Record<string, unknown>) || {};
+
         for (const raw of ((group.items || []) as Array<Record<string, unknown>>)) {
             const product = raw.product as Record<string, unknown> | null;
             if (!product) continue;
+
+            // Each item also has a vendor relation for logo/name
+            const itemVendor = (raw.vendor as Record<string, unknown>) || groupVendor;
             const priceSlabs = (product.priceSlabs as Array<Record<string, unknown>>) || [];
-            const vendor = (product.vendor as Record<string, unknown>) || {};
             const inventory = product.inventory as Record<string, unknown> | null;
+
+            const unitPrice = Number(raw.unitPrice) || 0;
+            const price = unitPrice > 0 ? unitPrice
+                : priceSlabs.length > 0 ? Number(priceSlabs[0].price)
+                : Number(product.basePrice) || 0;
+
             const vp: VendorProduct = {
                 id: product.id as string,
                 name: (product.name as string) || '',
-                description: (product.description as string) || '',
-                price: priceSlabs.length > 0 ? Number(priceSlabs[0].price) : Number(product.basePrice) || 0,
+                description: '',
+                price,
                 originalPrice: Number(product.basePrice) || 0,
                 images: product.imageUrl ? [product.imageUrl as string] : [],
                 category: '',
                 packSize: (product.packSize as string) || '1 unit',
                 unit: (product.unit as string) || 'unit',
-                stock: inventory ? Number((inventory as Record<string, unknown>).qtyAvailable) || 0 : 0,
+                stock: inventory ? Number(inventory.qtyAvailable) || 0 : 0,
                 isActive: true,
                 createdAt: new Date(),
                 updatedAt: new Date(),
-                vendorId: (product.vendorId as string) || (vendor.id as string) || '',
-                vendorName: (vendor.businessName as string) || (group.vendorName as string) || '',
-                vendorLogo: (vendor.logoUrl as string) || (group.vendorLogo as string) || '',
+                vendorId: (raw.vendorId as string) || (itemVendor.id as string) || '',
+                vendorName: (itemVendor.businessName as string) || '',
+                vendorLogo: (itemVendor.logoUrl as string) || '',
                 bulkPrices: priceSlabs.map(s => ({ minQty: Number(s.minQty), price: Number(s.price) })),
                 creditBadge: (product.creditEligible as boolean) || false,
                 minOrderQuantity: priceSlabs.length > 0 ? Number(priceSlabs[0].minQty) : 1,
@@ -88,7 +99,7 @@ function fromApiCart(apiData: { vendorGroups: unknown[]; total: number }): CartI
                 productId: vp.id,
                 product: vp,
                 quantity: Number(raw.quantity) || 1,
-                cartItemId: raw.id as string,
+                cartItemId: raw.id as string, // cart item DB id for PATCH/DELETE
             });
         }
     }
