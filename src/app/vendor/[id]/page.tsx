@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { VendorStoreHeader } from '@/components/features/vendor/VendorStoreHeader';
 import { VendorCatalogNav } from '@/components/features/vendor/VendorCatalogNav';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
@@ -15,11 +16,13 @@ import { Package, Star, CheckCircle, Clock } from 'lucide-react';
 export default function VendorStorePage() {
     const params = useParams();
     const vendorId = params.id as string;
+    const { status: sessionStatus } = useSession();
     const [vendor, setVendor] = useState<Vendor | null>(null);
     const [products, setProducts] = useState<VendorProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [prevOrders, setPrevOrders] = useState<any[]>([]);
 
     // Ensure page starts at the top on entry
     useEffect(() => {
@@ -66,6 +69,23 @@ export default function VendorStorePage() {
             console.error('Failed to save recently viewed vendor:', e);
         }
     }, [vendor]);
+
+    // Fetch previous orders from this vendor when "orders" tab activated
+    const loadPrevOrders = useCallback(async () => {
+        if (sessionStatus !== 'authenticated' || !vendorId) return;
+        try {
+            const res = await fetch('/api/v1/orders');
+            const json = await res.json();
+            const vendorOrders = (json.data || json.orders || []).filter((o: any) =>
+                o.vendorId === vendorId || o.vendor?.id === vendorId
+            );
+            setPrevOrders(vendorOrders);
+        } catch { setPrevOrders([]); }
+    }, [vendorId, sessionStatus]);
+
+    useEffect(() => {
+        if (activeTab === 'orders') loadPrevOrders();
+    }, [activeTab, loadPrevOrders]);
 
     const filteredProducts = useMemo(() => {
         let result = products;
@@ -125,7 +145,7 @@ export default function VendorStorePage() {
             />
 
             {/* ── DYNAMIC CATEGORY SHOWCASE & NAVIGATION (Only shown in shop views) ── */}
-            {activeTab !== 'ratings' && activeTab !== 'about' && (
+            {activeTab !== 'ratings' && activeTab !== 'about' && activeTab !== 'orders' && (
                 <>
                     <CategoryShowcase 
                         filterByProducts={products} 
@@ -146,7 +166,39 @@ export default function VendorStorePage() {
 
             {/* Main Content Area */}
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] pb-8 pt-2">
-                {activeTab === 'all' || activeTab === 'deals' || activeTab === 'frequent' || activeTab.startsWith('cat:') ? (
+                {activeTab === 'orders' ? (
+                    <div className="max-w-2xl mx-auto space-y-4 py-4">
+                        <h3 className="text-[18px] font-black text-[#181725] mb-4">My Previous Orders</h3>
+                        {sessionStatus !== 'authenticated' ? (
+                            <div className="text-center py-16 text-gray-400 font-bold">Please log in to see your orders from this vendor.</div>
+                        ) : prevOrders.length === 0 ? (
+                            <div className="text-center py-16 text-gray-400 font-bold">No previous orders from this vendor yet.</div>
+                        ) : (
+                            prevOrders.map((order: any) => (
+                                <div key={order.id} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div>
+                                            <p className="text-[13px] font-black text-[#181725]">Order #{order.id?.slice(-8)}</p>
+                                            <p className="text-[12px] text-gray-400 font-medium mt-0.5">{order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN') : order.date}</p>
+                                        </div>
+                                        <span className="text-[13px] font-black text-[#53B175]">₹{order.totalAmount || order.price}</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5 mb-3">
+                                        {(order.items || []).slice(0, 4).map((item: any, i: number) => (
+                                            <span key={i} className="text-[11px] font-bold text-gray-500 bg-gray-50 px-2 py-1 rounded-lg">{item.name || item.productName}</span>
+                                        ))}
+                                    </div>
+                                    <button
+                                        onClick={() => { (order.items || []).forEach((item: any) => { if (item.productId) { /* addToCart logic */ } }); }}
+                                        className="w-full py-2.5 bg-[#53B175] text-white rounded-xl text-[13px] font-black hover:bg-[#48a068] transition-colors"
+                                    >
+                                        Reorder All Items
+                                    </button>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                ) : activeTab === 'all' || activeTab === 'deals' || activeTab === 'frequent' || activeTab.startsWith('cat:') ? (
                     filteredProducts.length > 0 ? (
                         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 md:gap-8">
                             {filteredProducts.map((product) => (

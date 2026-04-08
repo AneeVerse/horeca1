@@ -83,6 +83,32 @@ export default function OrderHistoryPage() {
             });
     }, [isLoggedIn, isLoading]);
 
+    const handleSaveAsOrderList = async (order: Order) => {
+        try {
+            const vendorId = order.items[0]?.fullProduct?.vendorId;
+            if (!vendorId) { toast.error('Could not determine vendor for this order'); return; }
+            const res = await fetch('/api/v1/lists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: `Order #${order.id.slice(-6)} List`, vendorId }),
+            });
+            const json = await res.json();
+            const listId = json.data?.id;
+            if (!listId) throw new Error('No list ID');
+            for (const item of order.items) {
+                const pid = item.id || item.fullProduct?.id;
+                if (pid && vendorId) {
+                    await fetch(`/api/v1/lists/${listId}/items`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ productId: pid, vendorId, defaultQty: 1 }),
+                    });
+                }
+            }
+            toast.success('Saved as Order List!', { description: 'Find it in My Order Lists.' });
+        } catch { toast.error('Failed to save as order list'); }
+    };
+
     const handleOrderAgain = (order: Order) => {
         let itemsAdded = 0;
         
@@ -250,18 +276,25 @@ export default function OrderHistoryPage() {
                                     )}
                                 </div>
 
-                                {/* Footer Split Actions (for unrated orders) */}
+                                {/* Footer Split Actions */}
                                 {order.rating === undefined && (
                                     <div className="flex items-center border-t border-[#F2F3F2] mt-auto">
-                                        <button className="flex-1 py-4 md:py-5 text-center font-black text-[#4C4F4D] text-[14px] md:text-[15px] active:bg-gray-50 transition-colors md:hover:bg-gray-50 uppercase tracking-wider">
+                                        <button className="flex-1 py-4 text-center font-black text-[#4C4F4D] text-[13px] active:bg-gray-50 transition-colors md:hover:bg-gray-50 uppercase tracking-wider">
                                             Rate Order
                                         </button>
                                         <div className="w-[1px] h-10 bg-[#F2F3F2]" />
-                                        <button 
-                                            onClick={() => handleOrderAgain(order)}
-                                            className="flex-1 py-4 md:py-5 text-center font-black text-red-500 text-[14px] md:text-[15px] active:bg-red-50/50 transition-colors md:hover:bg-red-50 uppercase tracking-wider"
+                                        <button
+                                            onClick={() => handleSaveAsOrderList(order)}
+                                            className="flex-1 py-4 text-center font-black text-[#53B175] text-[13px] active:bg-green-50/50 transition-colors md:hover:bg-green-50 uppercase tracking-wider"
                                         >
-                                            Order Again
+                                            Save as List
+                                        </button>
+                                        <div className="w-[1px] h-10 bg-[#F2F3F2]" />
+                                        <button
+                                            onClick={() => handleOrderAgain(order)}
+                                            className="flex-1 py-4 text-center font-black text-red-500 text-[13px] active:bg-red-50/50 transition-colors md:hover:bg-red-50 uppercase tracking-wider"
+                                        >
+                                            Reorder
                                         </button>
                                     </div>
                                 )}

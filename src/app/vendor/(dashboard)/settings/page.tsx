@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 
 interface ServiceArea {
     id: string;
@@ -343,23 +344,21 @@ export default function VendorSettingsPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Logo URL</label>
-                            <input
-                                type="text"
+                            <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Store Logo</label>
+                            <ImageUpload
                                 value={logoUrl}
-                                onChange={(e) => setLogoUrl(e.target.value)}
-                                className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40"
-                                placeholder="https://..."
+                                onChange={(url) => setLogoUrl(url)}
+                                folder="vendors"
+                                label="Upload Logo"
                             />
                         </div>
                         <div>
-                            <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Banner URL</label>
-                            <input
-                                type="text"
+                            <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Store Cover / Banner</label>
+                            <ImageUpload
                                 value={bannerUrl}
-                                onChange={(e) => setBannerUrl(e.target.value)}
-                                className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40"
-                                placeholder="https://..."
+                                onChange={(url) => setBannerUrl(url)}
+                                folder="vendors"
+                                label="Upload Cover Image"
                             />
                         </div>
                     </div>

@@ -40,15 +40,38 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 // ---- TRANSFORMERS ----
 // These convert API response shapes → frontend type shapes
 
+function nextDeliveryLabel(slots: Array<{ dayOfWeek: number; slotStart: string }>): string {
+  if (!slots || slots.length === 0) return 'Tomorrow 7:00 AM';
+  const now = new Date();
+  const todayDay = now.getDay(); // 0=Sun
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  let bestDiff = Infinity;
+  let bestLabel = '';
+  for (const slot of slots) {
+    const [h, m] = slot.slotStart.split(':').map(Number);
+    const slotMinutes = h * 60 + m;
+    let diff = (slot.dayOfWeek - todayDay + 7) % 7;
+    if (diff === 0 && slotMinutes <= nowMinutes) diff = 7; // passed today
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      const label = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][slot.dayOfWeek];
+      bestLabel = `${label} ${slot.slotStart}`;
+    }
+  }
+  return bestLabel || 'Tomorrow 7:00 AM';
+}
+
 function toVendor(v: Record<string, unknown>): Vendor {
+  const slots = Array.isArray(v.deliverySlots) ? (v.deliverySlots as Array<{ dayOfWeek: number; slotStart: string }>) : [];
   return {
     id: v.id as string,
     name: (v.businessName as string) || '',
     slug: (v.slug as string) || '',
     logo: (v.logoUrl as string) || '/images/top vendors/emarket.png',
+    coverImage: (v.bannerUrl as string) || '',
     rating: Number(v.rating) || 0,
     totalRatings: 0,
-    deliverySchedule: 'Tomorrow 7:00 AM',
+    deliverySchedule: nextDeliveryLabel(slots),
     deliveryTime: '24 hrs',
     minOrderValue: Number(v.minOrderValue) || 0,
     creditEnabled: (v.creditEnabled as boolean) || false,

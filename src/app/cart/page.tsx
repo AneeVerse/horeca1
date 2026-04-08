@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 
 export default function CartPage() {
     const [screen, setScreen] = useState<'cart' | 'payment' | 'success'>('cart');
-    const { cart, removeFromCart, updateQuantity, totalItems, subtotal, clearCart } = useCart();
+    const { cart, groups, removeFromCart, updateQuantity, totalItems, subtotal, clearCart } = useCart();
     const router = useRouter();
     const [expandedVendors, setExpandedVendors] = useState<Record<string, boolean>>({});
     const [paymentMethod, setPaymentMethod] = useState('razorpay');
@@ -484,6 +484,24 @@ export default function CartPage() {
                                             </button>
                                         </div>
                                     </div>
+
+                                    {/* MOV Warning */}
+                                    {(() => {
+                                        const g = groups.find(gr => gr.vendorId === shipment.id);
+                                        if (!g || g.meetsMinOrder || g.minOrderValue === 0) return null;
+                                        const remaining = g.minOrderValue - g.subtotal;
+                                        return (
+                                            <div className="flex items-center gap-3 px-7 py-3 bg-amber-50 border-t border-amber-100">
+                                                <AlertTriangle size={16} className="text-amber-500 shrink-0" />
+                                                <p className="text-[13px] font-bold text-amber-700">
+                                                    Add ₹{remaining.toFixed(0)} more to meet {shipment.vendor}&apos;s minimum order of ₹{g.minOrderValue}
+                                                </p>
+                                                <Link href={`/vendor/${shipment.id}`} className="ml-auto text-[12px] font-black text-amber-600 whitespace-nowrap hover:underline">
+                                                    Add Items →
+                                                </Link>
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* Items List - Collapsible */}
                                     {isVendorExpanded(shipment.id) && (

@@ -2,9 +2,11 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, CreditCard, Smartphone, Building2, FileText, Clock, CheckCircle2, Shield } from 'lucide-react';
+import { ChevronLeft, CreditCard, Smartphone, Building2, FileText, Clock, CheckCircle2, Shield, User } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
+import { useSession } from 'next-auth/react';
+import { AuthScreen } from '@/components/auth/AuthScreen';
 
 type CheckoutStep = 'review' | 'payment' | 'confirmation';
 
@@ -17,9 +19,27 @@ const PAYMENT_OPTIONS = [
 
 export default function CheckoutPage() {
     const { groups, totalAmount, totalItems, vendorCount, clearCart } = useCart();
+    const { status: sessionStatus } = useSession();
     const [step, setStep] = useState<CheckoutStep>('review');
     const [selectedPayment, setSelectedPayment] = useState('');
     const [orderSnapshot, setOrderSnapshot] = useState<{ groups: any[], total: number, count: number } | null>(null);
+    const [showAuthScreen, setShowAuthScreen] = useState(false);
+    const [availableCredit, setAvailableCredit] = useState<number | null>(null);
+    const [creditDueDate, setCreditDueDate] = useState<string | null>(null);
+
+    // Load real credit info when payment step is reached
+    React.useEffect(() => {
+        if (step !== 'payment' || sessionStatus !== 'authenticated') return;
+        fetch('/api/v1/credit/check')
+            .then(r => r.json())
+            .then(d => {
+                if (d.data) {
+                    setAvailableCredit(d.data.availableCredit ?? d.data.creditLimit ?? null);
+                    setCreditDueDate(d.data.nextDueDate ?? null);
+                }
+            })
+            .catch(() => {}); // silently fall back to null
+    }, [step, sessionStatus]);
 
     const handlePlaceOrder = () => {
         // Capture a snapshot of the current cart before clearing
@@ -65,6 +85,37 @@ export default function CheckoutPage() {
                         Browse vendors
                     </Link>
                 </div>
+            </div>
+        );
+    }
+
+    // Guest wall — prompt login before checkout
+    if (sessionStatus === 'unauthenticated') {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50/50 px-4">
+                <div className="bg-white rounded-[32px] shadow-[0_20px_60px_rgba(0,0,0,0.08)] p-10 max-w-md w-full text-center border border-gray-100">
+                    <div className="w-16 h-16 bg-[#53B175]/10 rounded-full flex items-center justify-center mx-auto mb-5">
+                        <User size={28} className="text-[#53B175]" strokeWidth={2} />
+                    </div>
+                    <h2 className="text-[22px] font-[1000] text-[#181725] tracking-tight mb-2">Sign in to Checkout</h2>
+                    <p className="text-gray-400 text-[14px] font-medium mb-8 leading-relaxed">
+                        Create a free account or log in to place your order, track deliveries, and access order lists.
+                    </p>
+                    <button
+                        onClick={() => setShowAuthScreen(true)}
+                        className="w-full bg-[#53B175] text-white font-black py-4 rounded-2xl shadow-lg shadow-green-500/20 mb-3 hover:bg-[#48a068] transition-all"
+                    >
+                        Log In / Sign Up
+                    </button>
+                    <Link href="/" className="text-[13px] text-gray-400 font-bold hover:text-gray-600 transition-colors">
+                        Continue browsing
+                    </Link>
+                </div>
+                <AuthScreen
+                    isOpen={showAuthScreen}
+                    onClose={() => setShowAuthScreen(false)}
+                    onLoginSuccess={() => { setShowAuthScreen(false); }}
+                />
             </div>
         );
     }
@@ -215,7 +266,9 @@ export default function CheckoutPage() {
                                 <div className="space-y-1.5">
                                     <div className="flex justify-between text-[12px]">
                                         <span className="text-purple-600">Available credit</span>
-                                        <span className="font-bold text-purple-800">₹25,000</span>
+                                        <span className="font-bold text-purple-800">
+                                            {availableCredit !== null ? `₹${availableCredit.toLocaleString('en-IN')}` : 'Loading...'}
+                                        </span>
                                     </div>
                                     <div className="flex justify-between text-[12px]">
                                         <span className="text-purple-600">This order</span>
@@ -223,7 +276,9 @@ export default function CheckoutPage() {
                                     </div>
                                     <div className="flex justify-between text-[12px]">
                                         <span className="text-purple-600">Next due date</span>
-                                        <span className="font-bold text-purple-800">25 Mar 2026</span>
+                                        <span className="font-bold text-purple-800">
+                                            {creditDueDate ? new Date(creditDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                                        </span>
                                     </div>
                                 </div>
                             </div>

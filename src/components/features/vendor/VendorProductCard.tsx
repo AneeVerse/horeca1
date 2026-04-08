@@ -1,10 +1,11 @@
 'use client';
 
-import React from 'react';
-import { CreditCard, Share2, ShoppingCart, Heart } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { CreditCard, Share2, ShoppingCart, Heart, ListPlus, Plus, Check } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { toast } from 'sonner';
+import { useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import type { VendorProduct } from '@/types';
 import { useCart } from '@/context/CartContext';
@@ -17,7 +18,68 @@ interface VendorProductCardProps {
 export const VendorProductCard = React.memo(function VendorProductCard({ product }: VendorProductCardProps) {
     const { addToCart, groups, updateQuantity } = useCart();
     const { isInWishlist, toggleWishlist } = useWishlist();
+    const { status: sessionStatus } = useSession();
     const isLiked = isInWishlist(product.id);
+
+    // Save to Order List state
+    const [showListPicker, setShowListPicker] = useState(false);
+    const [lists, setLists] = useState<{ id: string; name: string }[]>([]);
+    const [listLoading, setListLoading] = useState(false);
+    const [addedToList, setAddedToList] = useState<string | null>(null);
+    const pickerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!showListPicker) return;
+        const handler = (e: MouseEvent) => {
+            if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+                setShowListPicker(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showListPicker]);
+
+    const openListPicker = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (sessionStatus !== 'authenticated') {
+            toast.error('Please log in to save to an order list');
+            return;
+        }
+        setShowListPicker(true);
+        setListLoading(true);
+        try {
+            const res = await fetch('/api/v1/lists');
+            const json = await res.json();
+            setLists(json.data || []);
+        } catch { setLists([]); }
+        finally { setListLoading(false); }
+    };
+
+    const addToList = async (listId: string, listName: string) => {
+        try {
+            await fetch(`/api/v1/lists/${listId}/items`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ productId: product.id, vendorId: product.vendorId, defaultQty: 1 }),
+            });
+            setAddedToList(listId);
+            toast.success(`Added to "${listName}"`);
+            setTimeout(() => { setShowListPicker(false); setAddedToList(null); }, 1200);
+        } catch { toast.error('Failed to add to list'); }
+    };
+
+    const createAndAdd = async () => {
+        try {
+            const res = await fetch('/api/v1/lists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: `${product.name} List`, vendorId: product.vendorId }),
+            });
+            const json = await res.json();
+            if (json.data?.id) await addToList(json.data.id, json.data.name);
+        } catch { toast.error('Failed to create list'); }
+    };
 
     const vendorGroup = groups.find(g => g.vendorId === product.vendorId);
     const cartItem = vendorGroup?.items.find(i => i.productId === product.id);
@@ -90,18 +152,43 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
             <div className="absolute top-4 right-4 z-10 flex flex-col gap-2.5 translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-500">
                 <button
                     className="p-2 rounded-xl backdrop-blur-md bg-white/70 border border-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:bg-[#FF4D4D]/10 hover:text-[#FF4D4D] transition-all"
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleWishlist(product);
-                    }}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleWishlist(product); }}
                 >
-                    <Heart 
-                        size={15} 
-                        className={cn("transition-colors", isLiked ? "text-red-500 fill-red-500" : "text-gray-400")} 
-                        strokeWidth={2.5} 
-                    />
+                    <Heart size={15} className={cn("transition-colors", isLiked ? "text-red-500 fill-red-500" : "text-gray-400")} strokeWidth={2.5} />
                 </button>
+                {/* Save to Order List */}
+                <div className="relative" ref={pickerRef}>
+                    <button
+                        className="p-2 rounded-xl backdrop-blur-md bg-white/70 border border-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:bg-[#53B175]/10 hover:text-[#53B175] transition-all"
+                        onClick={openListPicker}
+                        title="Save to Order List"
+                    >
+                        <ListPlus size={15} className="text-gray-400" strokeWidth={2.5} />
+                    </button>
+                    {showListPicker && (
+                        <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden z-50">
+                            <p className="text-[11px] font-black text-gray-400 uppercase tracking-wider px-3 pt-3 pb-1">Save to List</p>
+                            {listLoading ? (
+                                <p className="text-[12px] text-gray-400 px-3 py-2">Loading...</p>
+                            ) : lists.length === 0 ? (
+                                <p className="text-[12px] text-gray-400 px-3 py-2">No lists yet</p>
+                            ) : (
+                                lists.map(l => (
+                                    <button key={l.id} onClick={() => addToList(l.id, l.name)}
+                                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 text-left transition-colors">
+                                        <span className="text-[13px] font-bold text-[#181725] truncate">{l.name}</span>
+                                        {addedToList === l.id && <Check size={14} className="text-[#53B175] shrink-0" />}
+                                    </button>
+                                ))
+                            )}
+                            <button onClick={createAndAdd}
+                                className="w-full flex items-center gap-2 px-3 py-2.5 border-t border-gray-50 hover:bg-[#53B175]/5 transition-colors">
+                                <Plus size={13} className="text-[#53B175]" strokeWidth={3} />
+                                <span className="text-[13px] font-black text-[#53B175]">Create & Add</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
                 <button
                     className="p-2 rounded-xl backdrop-blur-md bg-white/70 border border-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:bg-[#53B175]/10 hover:text-[#53B175] transition-all"
                     onClick={handleShare}

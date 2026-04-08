@@ -81,23 +81,7 @@ function SearchPageContent() {
                     </div>
                 ) : (
                     <div className="space-y-8">
-                        {/* == PRODUCTS BLOCK == */}
-                        {results.products.length > 0 && (
-                            <section>
-                                <div className="flex items-center justify-between mb-4">
-                                    <h2 className="text-[18px] font-bold text-[#181725]">Products</h2>
-                                    <span className="text-[14px] font-semibold text-[#299e60]">View all</span>
-                                </div>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                                    {results.products.map((product) => (
-                                        <VendorProductCard key={product.id} product={product} />
-                                    ))}
-                                </div>
-                            </section>
-                        )}
-
-
-                        {/* == VENDORS BLOCK (Primary Path) == */}
+                        {/* == VENDORS BLOCK (Primary Path — shown first per V2.2) == */}
                         {results.vendors.length > 0 && (
                             <section>
                                 <h2 className="text-[15px] font-bold text-[#181725] mb-3">Vendors</h2>
@@ -148,6 +132,21 @@ function SearchPageContent() {
                                             </Link>
                                         );
                                     })}
+                                </div>
+                            </section>
+                        )}
+
+                        {/* == PRODUCTS BLOCK (Quick Access — secondary per V2.2) == */}
+                        {results.products.length > 0 && (
+                            <section>
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-[18px] font-bold text-[#181725]">Quick Access Products</h2>
+                                    <span className="text-[13px] font-semibold text-gray-400">From vendors above</span>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                                    {results.products.slice(0, 6).map((product) => (
+                                        <VendorProductCard key={product.id} product={product} />
+                                    ))}
                                 </div>
                             </section>
                         )}

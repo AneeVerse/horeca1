@@ -18,7 +18,7 @@ interface VendorStoreHeaderProps {
 export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStoreHeaderProps) {
     const router = useRouter();
     const coverIndex = Math.abs(vendor.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % VENDOR_COVERS.length;
-    const coverImage = VENDOR_COVERS[coverIndex]; 
+    const coverImage = vendor.coverImage || VENDOR_COVERS[coverIndex];
     
     const handleShare = async () => {
         const shareData = {
@@ -112,10 +112,11 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                 </div>
 
                 {/* Mobile Tabs */}
-                <div className="px-6 flex items-center gap-8 border-b border-gray-100 mt-2">
+                <div className="px-6 flex items-center gap-6 border-b border-gray-100 mt-2 overflow-x-auto no-scrollbar">
                     {[
-                        { key: 'all', label: 'Catalog' }, 
-                        { key: 'deals', label: 'Deals' }, 
+                        { key: 'all', label: 'Catalog' },
+                        { key: 'deals', label: 'Deals' },
+                        { key: 'orders', label: 'My Orders' },
                         { key: 'ratings', label: 'Ratings' },
                         { key: 'about', label: 'Info' }
                     ].map((tab) => (
@@ -171,7 +172,7 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                                 Open till 8:00 PM
                             </span>
                             <span className="text-white/30 text-lg leading-none">•</span>
-                            <span className="text-white/70 text-[13px] font-bold">24h Delivery</span>
+                            <span className="text-white/70 text-[13px] font-bold">Next: {vendor.deliverySchedule}</span>
                         </div>
 
                         {/* Vendor name */}
@@ -181,7 +182,10 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
 
                         {/* Cuisine + delivery info row */}
                         <div className="flex items-center gap-3 flex-wrap">
-                            {vendor.categories.slice(0, 3).map((cat, i) => (
+                            {vendor.deliverySchedule && (
+                        <span className="text-white/60 text-[12px] font-bold">📦 Next: {vendor.deliverySchedule}</span>
+                    )}
+                    {vendor.categories.slice(0, 3).map((cat, i) => (
                                 <span key={cat} className="flex items-center gap-2">
                                     <span className="text-white/85 text-[14px] font-bold">{cat}</span>
                                     {i < Math.min(vendor.categories.length, 3) - 1 && (
@@ -223,10 +227,11 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                 </div>
 
                 {/* ── TABS ── */}
-                <div className="flex items-center gap-8">
+                <div className="flex items-center gap-8 overflow-x-auto no-scrollbar">
                     {[
                         { key: 'all', label: 'Catalog' },
                         { key: 'deals', label: 'Deals' },
+                        { key: 'orders', label: 'My Orders' },
                         { key: 'ratings', label: 'Ratings' },
                         { key: 'about', label: 'About' }
                     ].map((tab) => (

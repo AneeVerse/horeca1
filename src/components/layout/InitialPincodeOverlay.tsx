@@ -15,6 +15,7 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
     const [isVisible, setIsVisible] = useState(false);
     const [pincode, setPincode] = useState('');
     const [error, setError] = useState('');
+    const [checking, setChecking] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
 
     useEffect(() => {
@@ -29,16 +30,30 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
 
     if (!isMounted || !isVisible) return null;
 
-    const handleSubmit = (e?: React.FormEvent) => {
+    const handleSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        
-        if (pincode === '400708') {
+        if (pincode.length !== 6) { setError('Please enter a valid 6-digit pincode'); return; }
+        setChecking(true);
+        setError('');
+        try {
+            const res = await fetch(`/api/v1/vendors/serviceability?pincode=${pincode}`);
+            const data = await res.json();
+            if (data.serviceable || data.vendor_count > 0) {
+                localStorage.setItem('pincode_interacted', 'true');
+                localStorage.setItem('user_pincode', pincode);
+                setIsVisible(false);
+                onComplete(pincode);
+            } else {
+                setError('Sorry, we don\'t deliver to this pincode yet.');
+            }
+        } catch {
+            // Fallback: accept and continue if API unreachable
             localStorage.setItem('pincode_interacted', 'true');
             localStorage.setItem('user_pincode', pincode);
             setIsVisible(false);
             onComplete(pincode);
-        } else {
-            setError('pin code is not servicable');
+        } finally {
+            setChecking(false);
         }
     };
 
@@ -91,9 +106,10 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
 
                         <button
                             type="submit"
-                            className="w-full bg-[#53B175] hover:bg-[#48a068] text-white font-bold py-4 rounded-xl shadow-lg shadow-green-100 transition-all active:scale-[0.98]"
+                            disabled={checking}
+                            className="w-full bg-[#53B175] hover:bg-[#48a068] disabled:opacity-70 text-white font-bold py-4 rounded-xl shadow-lg shadow-green-100 transition-all active:scale-[0.98]"
                         >
-                            Confirm Pincode
+                            {checking ? 'Checking...' : 'Confirm Pincode'}
                         </button>
                     </form>
 
