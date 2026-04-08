@@ -16,7 +16,7 @@ const COOKIE_MAX_AGE = 60 * 60 * 4; // 4 hours
 export const POST = adminOnly(async (req: NextRequest, _ctx) => {
   try {
     const { vendorId } = await req.json();
-    if (!vendorId) throw Errors.badRequest('vendorId is required');
+    if (!vendorId) throw Errors.forbidden('vendorId is required');
 
     const vendor = await prisma.vendor.findUnique({
       where: { id: vendorId },
