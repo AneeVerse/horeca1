@@ -63,7 +63,7 @@ export function Navbar() {
 
     React.useEffect(() => {
         const handleScroll = () => {
-            setIsScrolled(window.scrollY > 50);
+            setIsScrolled(window.scrollY > 10);
         };
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
@@ -217,11 +217,8 @@ export function Navbar() {
 
 
 
-            {/* Persistent 12px Top Green Bar - Now part of Navbar for easy toggling */}
-            <div className={cn(
-                "w-full h-[12px] bg-[#53B175] sticky top-0 z-[10000] transition-transform duration-300",
-                isScrolled && "-translate-y-full"
-            )} />
+            {/* Green Bar — mobile only (desktop green bar lives inside the unified sticky wrapper below) */}
+            <div className="md:hidden w-full h-[12px] bg-[#53B175] sticky top-0 z-[10000]" />
 
             {/* Top Header - Scrolls Away */}
             <header className="w-full bg-white relative z-[1000]">
@@ -316,8 +313,8 @@ export function Navbar() {
                                 )}
                         </div>
 
-                        {/* Desktop Header Content (Hidden on Mobile) */}
-                        <div className="hidden md:flex items-center justify-between gap-3 lg:gap-6">
+                        {/* Desktop Header Content — moved to single sticky nav below */}
+                        <div className="hidden">
                             <Link href="/" className="flex-shrink-0">
                                 <Image src="/Horeca1.png" alt="Horeca1" width={104} height={26} className="h-[26px] w-auto object-contain" priority />
                             </Link>
@@ -403,15 +400,33 @@ export function Navbar() {
                 </div>
             </header>
 
-            {/* Main Navigation - Desktop Only */}
-            <nav className={cn(
-                "hidden md:block w-full border-b border-gray-100 bg-white sticky z-[900] transition-all duration-300",
-                isScrolled ? "top-0 shadow-md" : "top-[12px]"
+            {/* Desktop Navbar — unified sticky wrapper (green bar + navbar as one block) */}
+            <div className={cn(
+                "hidden md:block sticky top-0 z-[10000] transition-transform duration-300 ease-in-out",
+                isScrolled ? "-translate-y-[12px]" : "translate-y-0"
             )}>
-                <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-4 lg:gap-8">
+                {/* Green bar inside the wrapper */}
+                <div className="w-full h-[12px] bg-[#53B175]" />
+
+            <nav className={cn(
+                "w-full bg-white border-b border-gray-100 transition-shadow duration-300",
+                isScrolled && "shadow-[0_4px_24px_rgba(0,0,0,0.06)]"
+            )}>
+                <div className={cn("w-full max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]", "pt-4 pb-2")}>
+                    {/* ─── Row 1: Logo | Browse | Location | Search | Icons | Phone ─── */}
+                    <div className={cn(
+                        "flex items-center gap-4 lg:gap-5 transition-all duration-300 ease-out",
+                        isScrolled ? "h-[68px]" : "h-[76px]"
+                    )}>
+
+                        {/* Logo */}
+                        <Link href="/" className="shrink-0">
+                            <Image src="/Horeca1.png" alt="Horeca1" width={92} height={22} className="h-[22px] w-auto object-contain" priority />
+                        </Link>
+
+                        {/* Browse All Categories */}
                         <div
-                            className="relative"
+                            className="relative shrink-0"
                             onMouseLeave={() => {
                                 setIsBrowseAllOpen(false);
                                 setHoveredCategory(null);
@@ -423,11 +438,11 @@ export function Navbar() {
                                     setIsBrowseAllOpen(!isBrowseAllOpen);
                                 }}
                                 onMouseEnter={() => setIsBrowseAllOpen(true)}
-                                className="bg-primary text-white px-4 lg:px-6 py-3 lg:py-4 flex items-center gap-2 lg:gap-3 font-bold text-[13px] lg:text-[var(--text-sm)] rounded-lg transition-all active:scale-95 cursor-pointer"
+                                className="bg-primary hover:bg-primary-dark text-white px-5 py-3 flex items-center gap-2.5 font-bold text-[13px] rounded-xl transition-all active:scale-95 cursor-pointer whitespace-nowrap shadow-sm shadow-primary/20"
                             >
-                                <Menu size={20} className="w-4 h-4 lg:w-5 lg:h-5 text-white" />
-                                <span className="whitespace-nowrap text-white">Browse All Categories</span>
-                                <ChevronDown size={14} className={cn("transition-transform text-white", isBrowseAllOpen && "rotate-180")} />
+                                <Menu size={18} className="text-white shrink-0" />
+                                <span className="text-white">Browse All Categories</span>
+                                <ChevronDown size={14} className={cn("transition-transform text-white shrink-0", isBrowseAllOpen && "rotate-180")} />
                             </button>
 
                             <div className={cn(
@@ -505,26 +520,152 @@ export function Navbar() {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-4 lg:gap-6 text-[var(--text-sm)] font-semibold text-text-muted">
-                            {isLoggedIn && (session?.user as { role?: string })?.role === 'vendor' && (
-                                <Link href="/vendor/dashboard" className="hover:text-primary py-4 cursor-pointer text-primary font-bold">Dashboard</Link>
-                            )}
-                            {isLoggedIn && (session?.user as { role?: string })?.role === 'admin' && (
-                                <Link href="/admin/dashboard" className="hover:text-primary py-4 cursor-pointer text-primary font-bold">Dashboard</Link>
-                            )}
-                            <Link href="/" className="hover:text-primary py-4 cursor-pointer">Home</Link>
-                            <Link href="/vendors" className="hover:text-primary cursor-pointer">Vendors</Link>
-                            <Link href="/under-construction" className="hover:text-primary cursor-pointer">Blog</Link>
-                            <Link href="/under-construction" className="hover:text-primary cursor-pointer">Contact Us</Link>
+                        {/* Location */}
+                        <button
+                            onClick={() => setIsLocationOverlayOpen(true)}
+                            className="flex items-center gap-2.5 px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 hover:bg-gray-100 hover:border-gray-300 transition-all cursor-pointer shrink-0 w-[200px]"
+                        >
+                            <MapPin size={16} className="text-[#53B175] shrink-0" />
+                            <div className="flex flex-col items-start min-w-0 flex-1">
+                                <span className="text-[9px] uppercase font-bold text-gray-400 tracking-wider leading-none">Deliver to</span>
+                                <span className="text-[12px] font-bold text-gray-800 truncate leading-tight mt-0.5 w-full text-left">
+                                    {selectedAddress?.shortAddress || 'Select Location'}
+                                </span>
+                            </div>
+                            <ChevronDown size={13} className="text-gray-400 shrink-0" />
+                        </button>
+
+                        {/* Search Bar — fills available space */}
+                        {!pathname?.startsWith('/vendor/') && (
+                            <div className="flex flex-1 items-center min-w-0">
+                                <div className="w-full max-w-[700px]">
+                                    <div className="flex items-center gap-2 pl-5 pr-2 py-2 bg-gray-50 border-2 border-gray-100 rounded-full w-full focus-within:border-primary/50 focus-within:bg-white transition-all duration-300 shadow-sm">
+                                        <Search size={17} className="text-gray-400 shrink-0" />
+                                        <input
+                                            type="text"
+                                            value={navSearchQuery}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setNavSearchQuery(val);
+                                                if (val.trim()) {
+                                                    openSearch('items', val);
+                                                }
+                                            }}
+                                            placeholder="Search for a product or brand"
+                                            className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-gray-400 min-w-0"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                if (navSearchQuery.trim()) {
+                                                    openSearch('items', navSearchQuery);
+                                                }
+                                            }}
+                                            className="bg-primary hover:bg-primary-dark px-4 py-2 rounded-full text-white font-semibold text-[12px] transition-all shadow-sm cursor-pointer shrink-0"
+                                        >
+                                            Search
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="flex-1" />
+                            </div>
+                        )}
+                        {pathname?.startsWith('/vendor/') && <div className="flex-1" />}
+
+                        {/* Divider */}
+                        <div className="h-9 w-px bg-gray-200 shrink-0" />
+
+                        {/* Action Icons */}
+                        <div className="flex items-center gap-1 shrink-0">
+                            <Link href="/wishlist" className="p-2.5 hover:bg-gray-50 rounded-full transition-all relative group cursor-pointer">
+                                <Heart size={22} className="text-text group-hover:text-primary transition-colors" />
+                                {wishlist.length > 0 && (
+                                    <span className="absolute top-0.5 right-0.5 bg-orange-500 text-white text-[10px] w-[18px] h-[18px] flex items-center justify-center rounded-full font-bold border-2 border-white">
+                                        {wishlist.length}
+                                    </span>
+                                )}
+                            </Link>
+                            <Link href="/cart" className="p-2.5 hover:bg-gray-50 rounded-full transition-all relative group cursor-pointer">
+                                <ShoppingCart size={22} className="text-text group-hover:text-primary transition-colors" />
+                                <span className="absolute top-0.5 right-0.5 bg-primary text-white text-[10px] w-[18px] h-[18px] flex items-center justify-center rounded-full font-bold border-2 border-white">
+                                    {totalItems}
+                                </span>
+                            </Link>
+                            <button
+                                onClick={() => {
+                                    if (isLoggedIn) {
+                                        router.push('/profile');
+                                    } else {
+                                        setIsLoginOverlayOpen(true);
+                                    }
+                                }}
+                                className="p-2.5 hover:bg-gray-50 rounded-full transition-all group cursor-pointer"
+                            >
+                                <User size={22} className="text-text group-hover:text-primary transition-colors" />
+                            </button>
                         </div>
+
+                        {/* Phone Button */}
+                        <Link
+                            href="/under-construction"
+                            className="hidden xl:flex items-center gap-2.5 bg-primary hover:bg-primary-dark text-white px-4 py-3 rounded-xl shadow-sm shadow-primary/20 transition-all active:scale-95 shrink-0"
+                        >
+                            <PhoneCall size={16} className="text-white shrink-0" />
+                            <span className="font-bold text-[13px] whitespace-nowrap text-white">01- 234 567 890</span>
+                        </Link>
+
                     </div>
 
-                    <div className="bg-primary hover:bg-primary-dark transition-all text-white px-4 lg:px-6 py-3 lg:py-4 flex items-center gap-2 lg:gap-3 rounded-lg shadow-lg shadow-primary/20 shrink-0">
-                        <PhoneCall size={18} className="lg:w-5 lg:h-5" />
-                        <span className="font-bold text-[13px] lg:text-[var(--text-sm)] whitespace-nowrap">01- 234 567 890</span>
+                    {/* ─── Row 2: Nav Links with active underline ─── */}
+                    <div className="flex items-center justify-between h-[48px] border-t border-gray-50">
+                        <div className="flex items-center gap-1">
+                            {[
+                                ...(isLoggedIn && (session?.user as { role?: string })?.role === 'vendor'
+                                    ? [{ name: 'Dashboard', href: '/vendor/dashboard' }]
+                                    : []),
+                                ...(isLoggedIn && (session?.user as { role?: string })?.role === 'admin'
+                                    ? [{ name: 'Dashboard', href: '/admin/dashboard' }]
+                                    : []),
+                                { name: 'Home', href: '/' },
+                                { name: 'Vendors', href: '/vendors' },
+                                { name: 'Offers', href: '/under-construction' },
+                                { name: 'Order Lists', href: '/order-lists' },
+                                { name: 'Orders', href: '/orders' },
+                                { name: 'Blog', href: '/under-construction' },
+                                { name: 'Contact Us', href: '/under-construction' },
+                            ].map((link) => {
+                                const isActive = pathname === link.href;
+                                return (
+                                    <Link
+                                        key={link.name}
+                                        href={link.href}
+                                        className={cn(
+                                            "relative px-4 py-3 text-[13px] font-semibold whitespace-nowrap transition-colors",
+                                            isActive ? "text-primary" : "text-text-muted hover:text-text"
+                                        )}
+                                    >
+                                        {link.name}
+                                        {isActive && (
+                                            <span className="absolute bottom-0 left-4 right-4 h-[2.5px] bg-primary rounded-full" />
+                                        )}
+                                    </Link>
+                                );
+                            })}
+                        </div>
+
+                        {/* Right side: small promo/info chips */}
+                        <div className="hidden lg:flex items-center gap-2 text-[12px] font-semibold text-text-muted">
+                            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F4FBF6] text-primary rounded-full border border-primary/10">
+                                <span className="w-1.5 h-1.5 bg-primary rounded-full" />
+                                Free delivery over ₹2000
+                            </span>
+                            <Link href="/under-construction" className="hover:text-primary transition-colors whitespace-nowrap">
+                                Help Center
+                            </Link>
+                        </div>
                     </div>
                 </div>
             </nav>
+            </div>{/* end desktop sticky wrapper */}
 
             {/* Mobile Bottom-Sheet - Categories */}
             <div
