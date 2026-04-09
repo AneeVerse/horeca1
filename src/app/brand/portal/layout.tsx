@@ -17,6 +17,7 @@ import {
     ShieldAlert,
     Home,
     LogOut,
+    Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { signOut } from 'next-auth/react';
@@ -33,6 +34,17 @@ export default function BrandPortalLayout({ children }: { children: React.ReactN
     const router = useRouter();
     const { data: session, status } = useSession();
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [adminBrandName, setAdminBrandName] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        const match = document.cookie.match(/(?:^|;\s*)admin_impersonate_brand_name=([^;]+)/);
+        setAdminBrandName(match ? decodeURIComponent(match[1]) : null);
+    }, []);
+
+    const handleExitAdminView = async () => {
+        await fetch('/api/v1/admin/impersonate/brand', { method: 'DELETE' });
+        router.push('/admin/brands');
+    };
 
     if (status === 'loading') {
         return (
@@ -43,7 +55,7 @@ export default function BrandPortalLayout({ children }: { children: React.ReactN
     }
 
     const userRole = (session?.user as { role?: string })?.role;
-    if (status === 'unauthenticated' || userRole !== 'brand') {
+    if (status === 'unauthenticated' || (userRole !== 'brand' && userRole !== 'admin')) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-[#F8F9FB] gap-4">
                 <ShieldAlert size={48} className="text-[#E74C3C]" />
@@ -113,6 +125,32 @@ export default function BrandPortalLayout({ children }: { children: React.ReactN
                     isCollapsed ? 'w-[72px]' : 'w-[220px]'
                 )}>
                     <nav className="flex-1 px-3 py-5 space-y-1">
+                        {/* Admin View Indicator */}
+                        {adminBrandName && (
+                            <div className={cn(
+                                'mb-3 bg-amber-50 border border-amber-200 rounded-[10px] overflow-hidden',
+                                isCollapsed ? 'flex justify-center py-2' : 'p-3'
+                            )}>
+                                {isCollapsed ? (
+                                    <Eye size={18} className="text-amber-500" />
+                                ) : (
+                                    <>
+                                        <div className="flex items-center gap-1.5 mb-2">
+                                            <Eye size={13} className="text-amber-500 shrink-0" />
+                                            <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wide">Admin View</span>
+                                        </div>
+                                        <p className="text-[12px] font-semibold text-amber-800 truncate mb-2">{adminBrandName}</p>
+                                        <button
+                                            onClick={handleExitAdminView}
+                                            className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-1.5 rounded-[6px] transition-colors"
+                                        >
+                                            <LogOut size={11} />
+                                            Exit Admin View
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        )}
                         {SIDEBAR_LINKS.map((link) => {
                             const isActive = link.href === '/brand/portal'
                                 ? pathname === '/brand/portal'
@@ -175,7 +213,7 @@ export default function BrandPortalLayout({ children }: { children: React.ReactN
                     </div>
                 </aside>
 
-                <main className="flex-1 p-6 min-w-0">
+                <main className="flex-1 min-w-0 p-6">
                     {children}
                 </main>
             </div>

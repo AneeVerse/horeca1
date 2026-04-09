@@ -3,10 +3,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Check, X, Search, Clock, CheckCircle, Loader2, ClipboardList, Store,
-    GitMerge, MessageSquare, Package, ExternalLink,
+    GitMerge, MessageSquare, Package, ExternalLink, LayoutDashboard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface Brand {
     id: string;
@@ -51,6 +52,7 @@ function getInitials(name: string) {
 }
 
 export default function AdminBrandsPage() {
+    const router = useRouter();
     const [sectionTab, setSectionTab] = useState<SectionTab>('Brands');
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
@@ -78,6 +80,16 @@ export default function AdminBrandsPage() {
     }, []);
 
     useEffect(() => { fetchData(); }, [fetchData]);
+
+    // ── Impersonation ──
+    const viewBrandPortal = async (brand: Brand) => {
+        await fetch('/api/v1/admin/impersonate/brand', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ brandId: brand.id }),
+        });
+        router.push('/brand/portal');
+    };
 
     // ── Brand actions ──
     const handleApproveBrand = async (brand: Brand) => {
@@ -308,6 +320,13 @@ export default function AdminBrandsPage() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => viewBrandPortal(brand)}
+                                                        className="flex items-center gap-1 h-[32px] px-3 bg-[#F0F4FF] text-[#3B82F6] rounded-[8px] text-[12px] font-bold hover:bg-[#3B82F6] hover:text-white transition-colors"
+                                                        title="View Brand Portal"
+                                                    >
+                                                        <LayoutDashboard size={13} /> Portal
+                                                    </button>
                                                     {brand.approvalStatus !== 'approved' && (
                                                         <button onClick={() => handleApproveBrand(brand)} disabled={!!actionLoading}
                                                             className="flex items-center gap-1 h-[32px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">

@@ -161,9 +161,10 @@ export function Navbar() {
     const isAdminPage = pathname?.startsWith('/admin');
     const vendorDashboardPaths = ['/vendor/dashboard', '/vendor/orders', '/vendor/products', '/vendor/inventory', '/vendor/settings'];
     const isVendorDashboard = vendorDashboardPaths.some(p => pathname?.startsWith(p));
+    const isBrandPortal = pathname?.startsWith('/brand/portal');
 
     // Completely hide navbar on dashboard and shipment pages
-    if (isAdminPage || isVendorDashboard || isShipmentPage) return null;
+    if (isAdminPage || isVendorDashboard || isBrandPortal || isShipmentPage) return null;
 
     return (
         <>
