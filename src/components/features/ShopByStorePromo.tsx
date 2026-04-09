@@ -113,26 +113,19 @@ export function ShopByStorePromo() {
                         </div>
                     </div>
 
-                    {/* Desktop: 6-column grid */}
+                    {/* Desktop: 6-column grid — no card border, images directly on green */}
                     <div className="hidden md:grid md:grid-cols-6 gap-4">
                         {BRANDS.map((brand) => (
                             <Link
                                 key={brand.name}
                                 href={brand.href}
-                                className="flex flex-col bg-white rounded-[16px] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+                                className="flex flex-col items-center hover:-translate-y-1 transition-all duration-200"
                             >
-                                <div className="flex-1 flex items-center justify-center p-3 min-h-[100px]">
-                                    <img
-                                        src={brand.image}
-                                        alt={brand.name}
-                                        className="w-full h-auto object-contain"
-                                    />
-                                </div>
-                                <div className="bg-[#53B175] py-2 text-center">
-                                    <span className="text-[10px] font-black text-white uppercase tracking-wide block truncate px-2">
-                                        {brand.tag}
-                                    </span>
-                                </div>
+                                <img
+                                    src={brand.image}
+                                    alt={brand.name}
+                                    className="w-full h-auto object-contain rounded-[16px]"
+                                />
                             </Link>
                         ))}
                     </div>
