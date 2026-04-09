@@ -360,4 +360,45 @@ export const dal = {
       return apiFetch('/api/v1/notifications/read-all', { method: 'POST' });
     },
   },
+
+  // ── BRANDS ────────────────────────────────────────────────
+  brands: {
+    /** List approved brands (homepage / discovery) */
+    async list(options?: { limit?: number; cursor?: string }) {
+      const qs = new URLSearchParams();
+      if (options?.limit) qs.set('limit', String(options.limit));
+      if (options?.cursor) qs.set('cursor', options.cursor);
+      const q = qs.toString();
+      return apiFetch<{
+        brands: Array<{
+          id: string; name: string; slug: string;
+          logo: string | null; banner: string | null;
+          tagline: string | null; productCount: number;
+        }>;
+        hasMore: boolean; nextCursor: string | null;
+      }>(`/api/v1/brands${q ? '?' + q : ''}`);
+    },
+
+    /** Get brand store page data (products + distributor availability) */
+    async getBySlug(slug: string) {
+      return apiFetch<{
+        id: string; name: string; slug: string;
+        logo: string | null; banner: string | null;
+        tagline: string | null; description: string | null;
+        products: Array<{
+          id: string; name: string; description: string | null;
+          image: string | null; packSize: string | null; category: string;
+          distributors: Array<{
+            vendorId: string; price: number; inStock: boolean;
+            distributorProductId: string;
+          }>;
+        }>;
+        vendors: Array<{
+          id: string; name: string; slug: string; logo: string | null;
+          pincodes: string[]; productIds: string[];
+          prices: Record<string, number>;
+        }>;
+      }>(`/api/v1/brands/${slug}`);
+    },
+  },
 };

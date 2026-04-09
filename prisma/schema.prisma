@@ -74,6 +74,7 @@ model User {
   linkedBy        LinkedAccount[] @relation("LinkedToMe")
 
   vendor          Vendor?
+  brand           Brand?
   cart            Cart?
   wallet          Wallet?
   orders          Order[]
@@ -100,6 +101,7 @@ enum Role {
   customer
   vendor
   admin
+  brand
 }
 
 // ═══ LINKED ACCOUNTS (multi-account switcher) ════════
@@ -226,6 +228,7 @@ model Category {
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children Category[] @relation("CategoryTree")
   products Product[]
+  brandMasterProducts BrandMasterProduct[]
 
   @@index([parentId])
   @@index([slug])
@@ -273,6 +276,7 @@ model Product {
   orderItems          OrderItem[]
   quickOrderListItems QuickOrderListItem[]
   collectionProducts  CollectionProduct[]
+  brandMappings       BrandProductMapping[]
 
   @@unique([vendorId, slug])
   @@index([vendorId])
@@ -657,4 +661,94 @@ enum NotificationStatus {
   pending
   sent
   failed
+}
+
+// ═══════════════════════════════════════════════════════
+//  BRAND STORE — Phase 1
+// ═══════════════════════════════════════════════════════
+
+// The brand company entity (e.g. "Kissan", "Everest")
+model Brand {
+  id             String         @id @default(uuid()) @db.Uuid
+  userId         String         @unique @map("user_id") @db.Uuid
+  name           String         @unique @db.VarChar(255)
+  slug           String         @unique @db.VarChar(255)
+  description    String?        @db.Text
+  logoUrl        String?        @map("logo_url") @db.VarChar(512)
+  bannerUrl      String?        @map("banner_url") @db.VarChar(512)
+  website        String?        @db.VarChar(512)
+  tagline        String?        @db.VarChar(512)
+  approvalStatus ApprovalStatus @default(pending) @map("approval_status")
+  isActive       Boolean        @default(true) @map("is_active")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user            User                  @relation(fields: [userId], references: [id])
+  masterProducts  BrandMasterProduct[]
+  productMappings BrandProductMapping[]
+
+  @@index([slug])
+  @@index([approvalStatus])
+  @@map("brands")
+}
+
+// Brand's canonical product catalog (the truth layer — no pricing)
+model BrandMasterProduct {
+  id          String  @id @default(uuid()) @db.Uuid
+  brandId     String  @map("brand_id") @db.Uuid
+  categoryId  String? @map("category_id") @db.Uuid
+  name        String  @db.VarChar(255)          // canonical name e.g. "Kissan Tomato Ketchup 1kg"
+  description String? @db.Text
+  imageUrl    String? @map("image_url") @db.VarChar(512)
+  packSize    String? @map("pack_size") @db.VarChar(100)
+  unit        String? @db.VarChar(50)
+  sku         String? @db.VarChar(100)          // brand's own SKU reference
+  isActive    Boolean @default(true) @map("is_active")
+  sortOrder   Int     @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  brand    Brand             @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  category Category?         @relation(fields: [categoryId], references: [id])
+  mappings BrandProductMapping[]
+
+  @@index([brandId])
+  @@index([categoryId])
+  @@map("brand_master_products")
+}
+
+// Bridge: BrandMasterProduct ↔ Distributor Product (auto-detected or manually verified)
+model BrandProductMapping {
+  id                   String        @id @default(uuid()) @db.Uuid
+  brandId              String        @map("brand_id") @db.Uuid
+  brandMasterProductId String        @map("brand_master_product_id") @db.Uuid
+  distributorProductId String        @map("distributor_product_id") @db.Uuid
+  confidenceScore      Decimal       @default(0) @map("confidence_score") @db.Decimal(4, 3) // 0.000–1.000
+  status               MappingStatus @default(pending_review) @map("status")
+  matchedBy            MatchMethod   @map("matched_by")
+  reviewedBy           String?       @map("reviewed_by") @db.Uuid
+  reviewNote           String?       @map("review_note") @db.Text
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  brand               Brand               @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  brandMasterProduct  BrandMasterProduct  @relation(fields: [brandMasterProductId], references: [id], onDelete: Cascade)
+  distributorProduct  Product             @relation(fields: [distributorProductId], references: [id], onDelete: Cascade)
+
+  @@unique([brandMasterProductId, distributorProductId])
+  @@index([brandId])
+  @@index([status])
+  @@map("brand_product_mappings")
+}
+
+enum MappingStatus {
+  auto_mapped
+  pending_review
+  verified
+  rejected
+}
+
+enum MatchMethod {
+  rule_based
+  manually_verified
 }

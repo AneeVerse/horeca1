@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, MapPin, Store, ArrowLeft, Search, X } from 'lucide-react';
@@ -299,10 +299,55 @@ function TabBar({
 
 export function BrandStore({ brandId }: BrandStoreProps) {
     const router = useRouter();
-    const brand = BRAND_DATA[brandId];
     const [activeTab, setActiveTab] = useState<ActiveTab>('items');
     const [selectedProduct, setSelectedProduct] = useState<BrandProduct | null>(null);
+    const [brand, setBrand] = useState<BrandStoreData | null>(BRAND_DATA[brandId] ?? null);
+    const [loading, setLoading] = useState(!BRAND_DATA[brandId]);
     const [searchQuery, setSearchQuery] = useState('');
+
+    // Try real API; fall back to mock data silently
+    useEffect(() => {
+        if (BRAND_DATA[brandId]) return; // mock data covers this brand
+        setLoading(true);
+        fetch(`/api/v1/brands/${brandId}`)
+            .then(r => r.json())
+            .then(json => {
+                if (json.success && json.data) {
+                    const d = json.data;
+                    // Shape API response → BrandStoreData
+                    setBrand({
+                        id: d.id,
+                        name: d.name,
+                        bannerImage: d.banner ?? '',
+                        tagline: d.tagline ?? '',
+                        products: d.products.map((p: any) => ({
+                            id: p.id,
+                            name: p.name,
+                            image: p.image ?? '',
+                            category: p.category,
+                        })),
+                        vendors: d.vendors.map((v: any) => ({
+                            id: v.id,
+                            name: v.name,
+                            logo: v.logo ?? '',
+                            location: v.pincodes?.[0] ?? 'India',
+                            productIds: v.productIds,
+                            prices: v.prices,
+                        })),
+                    });
+                }
+            })
+            .catch(() => {/* stay null, show not-found */})
+            .finally(() => setLoading(false));
+    }, [brandId]);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                <div className="w-8 h-8 border-2 border-[#53B175] border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     if (!brand) {
         return (
@@ -330,6 +375,10 @@ export function BrandStore({ brandId }: BrandStoreProps) {
         if (tab === 'items') setSelectedProduct(null);
     };
 
+    const vendorsForProduct = selectedProduct
+        ? brand.vendors.filter((v) => v.productIds.includes(selectedProduct.id))
+        : brand.vendors;
+
     const filteredProducts = useMemo(() => {
         if (!searchQuery.trim()) return brand.products;
         const q = searchQuery.toLowerCase();
@@ -337,10 +386,6 @@ export function BrandStore({ brandId }: BrandStoreProps) {
             (p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
         );
     }, [brand.products, searchQuery]);
-
-    const vendorsForProduct = selectedProduct
-        ? brand.vendors.filter((v) => v.productIds.includes(selectedProduct.id))
-        : brand.vendors;
 
     const fallbackSvg = (size: number) =>
         `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}"%3E%3Crect fill="%23f5f5f5" width="${size}" height="${size}"/%3E%3C/svg%3E`;

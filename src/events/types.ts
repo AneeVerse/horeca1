@@ -141,6 +141,33 @@ export interface CategoryRejectedPayload {
   reason?: string;
 }
 
+export interface BrandCreatedPayload {
+  brandId: string;
+  userId: string;
+  brandName: string;
+}
+
+export interface BrandApprovedPayload {
+  brandId: string;
+  brandName: string;
+  approvedBy: string;
+}
+
+export interface BrandProductCreatedPayload {
+  brandMasterProductId: string;
+  brandId: string;
+  productName: string;
+}
+
+export interface BrandProductMappedPayload {
+  mappingId: string;
+  brandId: string;
+  brandMasterProductId: string;
+  distributorProductId: string;
+  confidenceScore: number;
+  status: string;
+}
+
 // Event map: event name → payload type
 export interface EventMap {
   OrderCreated: OrderCreatedPayload;
@@ -163,6 +190,10 @@ export interface EventMap {
   CategorySuggested: CategorySuggestedPayload;
   CategoryApproved: CategoryApprovedPayload;
   CategoryRejected: CategoryRejectedPayload;
+  BrandCreated: BrandCreatedPayload;
+  BrandApproved: BrandApprovedPayload;
+  BrandProductCreated: BrandProductCreatedPayload;
+  BrandProductMapped: BrandProductMappedPayload;
 }
 
 export type EventName = keyof EventMap;

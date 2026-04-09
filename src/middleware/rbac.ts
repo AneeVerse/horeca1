@@ -35,3 +35,7 @@ export function vendorOnly(handler: (req: NextRequest, ctx: AuthContext) => Prom
 export function customerOnly(handler: (req: NextRequest, ctx: AuthContext) => Promise<Response>) {
   return withRole(['customer', 'admin'], handler);
 }
+
+export function brandOnly(handler: (req: NextRequest, ctx: AuthContext) => Promise<Response>) {
+  return withRole(['brand', 'admin'], handler);
+}
