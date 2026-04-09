@@ -7,32 +7,32 @@ const BRANDS = [
     {
         name: 'Kitchen Smith',
         image: '/images/brand/03b885b1-5477-4aa9-af03-d948165745e61771835977.png',
-        href: '/search?brand=kitchen-smith',
+        href: '/brand/kitchen-smith',
     },
     {
         name: 'Kissan',
         image: '/images/brand/dc458c67-3702-4da8-8cb8-8011f0d3e17a1767094486.png',
-        href: '/search?brand=kissan',
+        href: '/brand/kissan',
     },
     {
         name: 'Dhampure',
         image: '/images/brand/a9559b8a-60e4-4f54-aa70-30f0752505301767094501.png',
-        href: '/search?brand=dhampure',
+        href: '/brand/dhampure',
     },
     {
         name: 'Marim Bula',
         image: '/images/brand/ef12f3b4-b55f-4042-a2ae-2d1083071fd61767094388.png',
-        href: '/search?brand=marim-bula',
+        href: '/brand/marim-bula',
     },
     {
         name: 'Everest',
         image: '/images/brand/cd69ab10-d9a6-4756-a99a-d330bad80ad41767094494.png',
-        href: '/search?brand=everest',
+        href: '/brand/everest',
     },
     {
         name: 'Alu-Freshh',
         image: '/images/brand/b82cb9a4-f54b-4cee-b2da-27216caf0f0d1768981196.png',
-        href: '/search?brand=alu-freshh',
+        href: '/brand/alu-freshh',
     },
 ];
 

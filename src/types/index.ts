@@ -245,6 +245,34 @@ export interface PaginatedResponse<T> {
     };
 }
 
+// ---- BRAND STORE MODULE ----
+
+export interface BrandProduct {
+    id: string;
+    name: string;
+    image: string;
+    category: string;
+}
+
+export interface BrandVendor {
+    id: string;
+    name: string;
+    logo: string;
+    location: string;
+    productIds: string[];
+    prices: Record<string, string>;
+}
+
+export interface BrandStore {
+    id: string;
+    name: string;
+    bannerImage: string;
+    logo: string;
+    productCount: number;
+    products: BrandProduct[];
+    vendors: BrandVendor[];
+}
+
 // ---- COMPONENT PROPS ----
 
 export interface BaseProps {

@@ -282,6 +282,8 @@ export function Navbar() {
                                 !pathname?.startsWith('/order-lists') &&
                                 !pathname?.startsWith('/category/') &&
                                 !pathname?.startsWith('/product/') &&
+                                !pathname?.startsWith('/vendor/') &&
+                                !pathname?.startsWith('/brand/') &&
                                 pathname !== '/orders' &&
                                 pathname !== '/wishlist' &&
                                 pathname !== '/cart' &&

@@ -2,7 +2,7 @@
 // Horeca1 V2.2 — Mock Data for UI Development
 // ============================================================
 
-import type { Vendor, VendorProduct, Category, OrderList, PurchaseOrder, VendorSummary } from '@/types';
+import type { Vendor, VendorProduct, Category, OrderList, PurchaseOrder, VendorSummary, BrandStore } from '@/types';
 
 // ---- VENDORS ----
 
@@ -554,3 +554,97 @@ export const MOCK_COLLECTIONS = [
     { id: 'col5', name: 'Bakery Essentials', icon: '🧁', description: 'Flour, chocolate, cream & more', slug: 'bakery-essentials', color: '#FCE7F3' },
     { id: 'col6', name: 'Tandoor & Grill', icon: '🔥', description: 'Marinades, charcoal & tandoor items', slug: 'tandoor-grill', color: '#FED7AA' },
 ];
+
+// ---- BRAND STORES ----
+
+export const BRAND_STORE_DATA: Record<string, BrandStore> = {
+    'kitchen-smith': {
+        id: 'kitchen-smith',
+        name: 'Kitchen Smith',
+        bannerImage: '/images/brand/kitchen-smith-banner.png',
+        logo: '/images/brand/03b885b1-5477-4aa9-af03-d948165745e61771835977.png',
+        productCount: 12,
+        products: [
+            { id: 'ks-1', name: 'Kitchen Smith All Purpose Flour 1kg', image: '/images/shope by brand/brand-img1.png', category: 'Flour & Grains' },
+            { id: 'ks-2', name: 'Kitchen Smith Basmati Rice 5kg', image: '/images/shope by brand/brand-img2.png', category: 'Rice & Grains' },
+            { id: 'ks-3', name: 'Kitchen Smith Turmeric Powder 500g', image: '/images/shope by brand/brand-img3.png', category: 'Spices' },
+            { id: 'ks-4', name: 'Kitchen Smith Chili Powder 250g', image: '/images/shope by brand/brand-img4.png', category: 'Spices' },
+            { id: 'ks-5', name: 'Kitchen Smith Cumin Seeds 100g', image: '/images/shope by brand/brand-img1.png', category: 'Spices' },
+            { id: 'ks-6', name: 'Kitchen Smith Black Pepper 100g', image: '/images/shope by brand/brand-img2.png', category: 'Spices' },
+            { id: 'ks-7', name: 'Kitchen Smith Coriander Powder 250g', image: '/images/shope by brand/brand-img3.png', category: 'Spices' },
+            { id: 'ks-8', name: 'Kitchen Smith Garam Masala 100g', image: '/images/shope by brand/brand-img4.png', category: 'Spices' },
+            { id: 'ks-9', name: 'Kitchen Smith Mustard Seeds 100g', image: '/images/shope by brand/brand-img1.png', category: 'Spices' },
+            { id: 'ks-10', name: 'Kitchen Smith Fenugreek Seeds 100g', image: '/images/shope by brand/brand-img2.png', category: 'Spices' },
+        ],
+        vendors: [
+            {
+                id: 'v1',
+                name: 'Emarket',
+                logo: '/images/top vendors/emarket.png',
+                location: 'Mumbai',
+                productIds: ['ks-1', 'ks-2', 'ks-3', 'ks-4', 'ks-5'],
+                prices: { 'ks-1': '120', 'ks-2': '450', 'ks-3': '85', 'ks-4': '95', 'ks-5': '110' },
+            },
+            {
+                id: 'v2',
+                name: 'Whole Food Market',
+                logo: '/images/top vendors/whole-foods-market.png',
+                location: 'Mumbai',
+                productIds: ['ks-1', 'ks-2', 'ks-3', 'ks-6', 'ks-7', 'ks-8'],
+                prices: { 'ks-1': '125', 'ks-2': '480', 'ks-3': '90', 'ks-6': '120', 'ks-7': '100', 'ks-8': '140' },
+            },
+            {
+                id: 'v3',
+                name: 'M Mart',
+                logo: '/images/top vendors/m-mart.png',
+                location: 'Mumbai',
+                productIds: ['ks-2', 'ks-3', 'ks-4', 'ks-5', 'ks-9', 'ks-10'],
+                prices: { 'ks-2': '440', 'ks-3': '80', 'ks-4': '90', 'ks-5': '105', 'ks-9': '115', 'ks-10': '125' },
+            },
+        ],
+    },
+    'kissan': {
+        id: 'kissan',
+        name: 'Kissan',
+        bannerImage: '/images/brand/kissan-banner.png',
+        logo: '/images/brand/dc458c67-3702-4da8-8cb8-8011f0d3e17a1767094486.png',
+        productCount: 10,
+        products: [
+            { id: 'k-1', name: 'Kissan Tomato Ketchup 1kg', image: '/images/shope by brand/brand-img4.png', category: 'Condiments' },
+            { id: 'k-2', name: 'Kissan Chilli Sauce 500g', image: '/images/shope by brand/brand-img1.png', category: 'Condiments' },
+            { id: 'k-3', name: 'Kissan Mango Pickle 500g', image: '/images/shope by brand/brand-img2.png', category: 'Pickles' },
+            { id: 'k-4', name: 'Kissan Mixed Pickle 500g', image: '/images/shope by brand/brand-img3.png', category: 'Pickles' },
+            { id: 'k-5', name: 'Kissan Lime Pickle 500g', image: '/images/shope by brand/brand-img4.png', category: 'Pickles' },
+            { id: 'k-6', name: 'Kissan Strawberry Jam 500g', image: '/images/shope by brand/brand-img1.png', category: 'Spreads' },
+            { id: 'k-7', name: 'Kissan Mango Pulp 1kg', image: '/images/shope by brand/brand-img2.png', category: 'Pulps' },
+            { id: 'k-8', name: 'Kissan Pineapple Jam 500g', image: '/images/shope by brand/brand-img3.png', category: 'Spreads' },
+            { id: 'k-9', name: 'Kissan Tomato Sauce 1kg', image: '/images/shope by brand/brand-img4.png', category: 'Condiments' },
+        ],
+        vendors: [
+            {
+                id: 'v1',
+                name: 'Emarket',
+                logo: '/images/top vendors/emarket.png',
+                location: 'Mumbai',
+                productIds: ['k-1', 'k-2', 'k-3', 'k-4'],
+                prices: { 'k-1': '180', 'k-2': '150', 'k-3': '120', 'k-4': '130' },
+            },
+            {
+                id: 'v2',
+                name: 'Whole Food Market',
+                logo: '/images/top vendors/whole-foods-market.png',
+                location: 'Mumbai',
+                productIds: ['k-1', 'k-3', 'k-5', 'k-6', 'k-7'],
+                prices: { 'k-1': '190', 'k-3': '125', 'k-5': '135', 'k-6': '160', 'k-7': '220' },
+            },
+            {
+                id: 'v3',
+                name: 'M Mart',
+                logo: '/images/top vendors/m-mart.png',
+                location: 'Mumbai',
+                productIds: ['k-2', 'k-4', 'k-7', 'k-8', 'k-9'],
+                prices: { 'k-2': '145', 'k-4': '125', 'k-7': '210', 'k-8': '155', 'k-9': '200' },
+            },
+        ],
+    },
+};
