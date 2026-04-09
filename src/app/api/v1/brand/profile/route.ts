@@ -7,7 +7,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { BrandService } from '@/modules/brand/brand.service';
 import { createBrandSchema, updateBrandSchema } from '@/modules/brand/brand.validator';
 import { brandOnly } from '@/middleware/rbac';
-import { errorResponse } from '@/middleware/errorHandler';
 import { resolveUserId } from '@/lib/resolveBrandId';
 import type { AuthContext } from '@/middleware/auth';
 
@@ -35,6 +34,3 @@ export const PATCH = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
   return NextResponse.json({ success: true, data: brand });
 });
 
-export function handleError(error: unknown) {
-  return errorResponse(error);
-}
