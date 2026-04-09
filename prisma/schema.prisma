@@ -698,20 +698,23 @@ model BrandMasterProduct {
   brandId     String  @map("brand_id") @db.Uuid
   categoryId  String? @map("category_id") @db.Uuid
   name        String  @db.VarChar(255)          // canonical name e.g. "Kissan Tomato Ketchup 1kg"
+  slug        String  @db.VarChar(255)          // url-safe slug derived from name
   description String? @db.Text
   imageUrl    String? @map("image_url") @db.VarChar(512)
   packSize    String? @map("pack_size") @db.VarChar(100)
   unit        String? @db.VarChar(50)
   sku         String? @db.VarChar(100)          // brand's own SKU reference
+  category    String? @db.VarChar(100)          // display category label
   isActive    Boolean @default(true) @map("is_active")
   sortOrder   Int     @default(0) @map("sort_order")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  brand    Brand             @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  category Category?         @relation(fields: [categoryId], references: [id])
-  mappings BrandProductMapping[]
+  brand       Brand             @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  categoryRel Category?         @relation(fields: [categoryId], references: [id])
+  mappings    BrandProductMapping[]
 
+  @@unique([brandId, slug])
   @@index([brandId])
   @@index([categoryId])
   @@map("brand_master_products")

@@ -97,7 +97,7 @@ export class BrandService {
           where: { isActive: true },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
           include: {
-            category: { select: { id: true, name: true } },
+            categoryRel: { select: { id: true, name: true } },
             mappings: {
               where: { status: { in: ['auto_mapped', 'verified'] } },
               include: {
@@ -176,7 +176,7 @@ export class BrandService {
         description: mp.description,
         image: mp.imageUrl,
         packSize: mp.packSize,
-        category: mp.category?.name ?? 'General',
+        category: mp.categoryRel?.name ?? (mp as any).category ?? 'General',
         distributors,
       };
     });
@@ -259,7 +259,7 @@ export class BrandService {
       where: { brandId, isActive: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: {
-        category: { select: { id: true, name: true } },
+        categoryRel: { select: { id: true, name: true } },
         _count: {
           select: {
             mappings: { where: { status: { in: ['auto_mapped', 'verified'] } } },
@@ -274,7 +274,7 @@ export class BrandService {
     const brandId = await this.getBrandIdForUser(userId);
 
     const product = await prisma.brandMasterProduct.create({
-      data: { brandId, ...input },
+      data: { brandId, slug: slugify(input.name), ...input },
     });
 
     emitEvent('BrandProductCreated', {
@@ -316,25 +316,23 @@ export class BrandService {
     return prisma.brandMasterProduct.update({ where: { id: productId }, data: { isActive: false } });
   }
 
-  // ── Brand: get distributor coverage (which vendors carry their products) ──
+  // ── Brand: get product-level coverage (for portal mappings page) ──────
   async getDistributorCoverage(userId: string) {
     const brandId = await this.getBrandIdForUser(userId);
 
-    const mappings = await prisma.brandProductMapping.findMany({
-      where: { brandId, status: { in: ['auto_mapped', 'verified'] } },
+    // Get all master products with their mappings
+    const masterProducts = await prisma.brandMasterProduct.findMany({
+      where: { brandId, isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: {
-        brandMasterProduct: { select: { name: true } },
-        distributorProduct: {
-          select: {
-            id: true,
-            name: true,
-            basePrice: true,
-            vendor: {
+        mappings: {
+          include: {
+            distributorProduct: {
               select: {
                 id: true,
-                businessName: true,
-                logoUrl: true,
-                serviceAreas: { where: { isActive: true }, select: { pincode: true } },
+                name: true,
+                basePrice: true,
+                vendor: { select: { id: true, businessName: true, logoUrl: true } },
               },
             },
           },
@@ -342,28 +340,22 @@ export class BrandService {
       },
     });
 
-    // Group by vendor
-    const byVendor = new Map<string, {
-      vendorId: string; vendorName: string; logo: string | null;
-      pincodes: string[]; products: string[];
-    }>();
-
-    for (const m of mappings) {
-      const v = m.distributorProduct.vendor;
-      if (!v) continue;
-      if (!byVendor.has(v.id)) {
-        byVendor.set(v.id, {
-          vendorId: v.id,
-          vendorName: v.businessName,
-          logo: v.logoUrl,
-          pincodes: v.serviceAreas.map(sa => sa.pincode),
-          products: [],
-        });
-      }
-      byVendor.get(v.id)!.products.push(m.brandMasterProduct.name);
-    }
-
-    return [...byVendor.values()];
+    return masterProducts.map(mp => ({
+      masterProductId: mp.id,
+      masterProductName: mp.name,
+      packSize: mp.packSize,
+      mappings: mp.mappings.map(m => ({
+        id: m.id,
+        status: m.status,
+        confidenceScore: Number(m.confidenceScore),
+        distributorProduct: {
+          id: m.distributorProduct.id,
+          name: m.distributorProduct.name,
+          basePrice: Number(m.distributorProduct.basePrice),
+          vendor: m.distributorProduct.vendor,
+        },
+      })),
+    }));
   }
 
   // ── Brand: trigger manual re-mapping ──────────────────────
@@ -379,7 +371,7 @@ export class BrandService {
       where: status ? { approvalStatus: status as 'pending' | 'approved' | 'rejected' } : undefined,
       orderBy: { createdAt: 'desc' },
       include: {
-        user: { select: { email: true, fullName: true } },
+        user: { select: { id: true, email: true, fullName: true } },
         _count: { select: { masterProducts: true, productMappings: true } },
       },
     });
@@ -411,14 +403,20 @@ export class BrandService {
       take: limit,
       orderBy: { confidenceScore: 'desc' },
       include: {
-        brand: { select: { name: true } },
-        brandMasterProduct: { select: { name: true, packSize: true } },
+        brandMasterProduct: {
+          select: {
+            id: true,
+            name: true,
+            packSize: true,
+            brand: { select: { id: true, name: true, slug: true } },
+          },
+        },
         distributorProduct: {
           select: {
+            id: true,
             name: true,
-            brand: true,
-            packSize: true,
-            vendor: { select: { businessName: true } },
+            basePrice: true,
+            vendor: { select: { id: true, businessName: true, logoUrl: true } },
           },
         },
       },

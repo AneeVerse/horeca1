@@ -387,6 +387,117 @@ async function main() {
   }
   console.log(`  Collections: ${collectionData.length} created`);
 
+  // ═══ BRAND USERS + BRAND PROFILES ═══
+  const brandPw = await hash('brand123', 12);
+
+  const brandData = [
+    {
+      email: 'brand@kitchensmith.com',
+      fullName: 'Rohit Joshi',
+      phone: '+919876700001',
+      brand: {
+        name: 'Kitchen Smith',
+        slug: 'kitchen-smith',
+        tagline: 'Premium Spices & Grains for Professional Kitchens',
+        logoUrl: '/images/shope by brand/brand-img1.png',
+        bannerUrl: '/images/brand/03b885b1-5477-4aa9-af03-d948165745e61771835977.png',
+        approvalStatus: 'approved' as const,
+      },
+      products: [
+        { name: 'All Purpose Flour 1kg', packSize: '1 kg', category: 'Flour & Grains', imageUrl: '/images/shope by brand/brand-img1.png' },
+        { name: 'Basmati Rice 5kg', packSize: '5 kg', category: 'Rice', imageUrl: '/images/shope by brand/brand-img2.png' },
+        { name: 'Turmeric Powder 500g', packSize: '500 g', category: 'Spices', imageUrl: '/images/shope by brand/brand-img3.png' },
+        { name: 'Chili Powder 250g', packSize: '250 g', category: 'Spices', imageUrl: '/images/shope by brand/brand-img4.png' },
+        { name: 'Cumin Seeds 100g', packSize: '100 g', category: 'Spices', imageUrl: '/images/shope by brand/brand-img7.png' },
+      ],
+    },
+    {
+      email: 'brand@kissan.com',
+      fullName: 'Kavita Shah',
+      phone: '+919876700002',
+      brand: {
+        name: 'Kissan',
+        slug: 'kissan',
+        tagline: 'Jams, Ketchups & Condiments',
+        logoUrl: '/images/shope by brand/brand-img2.png',
+        bannerUrl: '/images/brand/dc458c67-3702-4da8-8cb8-8011f0d3e17a1767094486.png',
+        approvalStatus: 'approved' as const,
+      },
+      products: [
+        { name: 'Tomato Ketchup 1kg', packSize: '1 kg', category: 'Condiments', imageUrl: '/images/shope by brand/brand-img1.png' },
+        { name: 'Chilli Sauce 500g', packSize: '500 g', category: 'Condiments', imageUrl: '/images/shope by brand/brand-img2.png' },
+        { name: 'Mango Pickle 500g', packSize: '500 g', category: 'Pickles', imageUrl: '/images/shope by brand/brand-img3.png' },
+        { name: 'Strawberry Jam 500g', packSize: '500 g', category: 'Jams', imageUrl: '/images/shope by brand/brand-img4.png' },
+      ],
+    },
+    {
+      email: 'brand@everest.com',
+      fullName: 'Sanjay Mehta',
+      phone: '+919876700003',
+      brand: {
+        name: 'Everest',
+        slug: 'everest',
+        tagline: "India's Favourite Masala Brand",
+        logoUrl: '/images/shope by brand/brand-img5.png',
+        bannerUrl: '/images/brand/cd69ab10-d9a6-4756-a99a-d330bad80ad41767094494.png',
+        approvalStatus: 'approved' as const,
+      },
+      products: [
+        { name: 'Garam Masala 100g', packSize: '100 g', category: 'Masalas', imageUrl: '/images/shope by brand/brand-img5.png' },
+        { name: 'Chana Masala 100g', packSize: '100 g', category: 'Masalas', imageUrl: '/images/shope by brand/brand-img6.png' },
+        { name: 'Kitchen King Masala 100g', packSize: '100 g', category: 'Masalas', imageUrl: '/images/shope by brand/brand-img7.png' },
+      ],
+    },
+  ];
+
+  for (const b of brandData) {
+    const brandUser = await prisma.user.upsert({
+      where: { email: b.email },
+      update: {},
+      create: {
+        email: b.email,
+        password: brandPw,
+        fullName: b.fullName,
+        phone: b.phone,
+        role: 'brand',
+        emailVerified: new Date(),
+      },
+    });
+
+    const brand = await prisma.brand.upsert({
+      where: { userId: brandUser.id },
+      update: {},
+      create: {
+        userId: brandUser.id,
+        name: b.brand.name,
+        slug: b.brand.slug,
+        tagline: b.brand.tagline,
+        logoUrl: b.brand.logoUrl,
+        bannerUrl: b.brand.bannerUrl,
+        approvalStatus: b.brand.approvalStatus,
+        isActive: true,
+      },
+    });
+
+    for (const p of b.products) {
+      const pSlug = p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      await prisma.brandMasterProduct.upsert({
+        where: { brandId_slug: { brandId: brand.id, slug: pSlug } },
+        update: {},
+        create: {
+          brandId: brand.id,
+          name: p.name,
+          slug: pSlug,
+          packSize: p.packSize,
+          category: p.category,
+          imageUrl: p.imageUrl,
+        },
+      });
+    }
+
+    console.log(`  Brand: ${b.brand.name} (${b.email})`);
+  }
+
   // ═══ CREDIT ACCOUNTS ═══
   await prisma.creditAccount.upsert({
     where: { userId_vendorId: { userId: customers[0], vendorId: vendors[0].id } },
@@ -426,6 +537,9 @@ async function main() {
   console.log('\nLogin credentials:');
   console.log('  Admin:    admin@horeca1.com / admin123');
   console.log('  Vendor:   fresh@dailyfreshfoods.com / vendor123');
+  console.log('  Brand:    brand@kitchensmith.com / brand123');
+  console.log('  Brand:    brand@kissan.com / brand123');
+  console.log('  Brand:    brand@everest.com / brand123');
   console.log('  Customer: chef@tajpalace.com / customer123');
 }
 
