@@ -39,20 +39,40 @@ const BRANDS = [
 export function ShopByStorePromo() {
     return (
         <section className="w-full py-6 md:py-10">
-            <div className="max-w-[var(--container-max)] mx-auto">
-                {/* Heading */}
-                <h2 className="text-[20px] md:text-[24px] font-[800] text-[#181725] px-4 md:px-[var(--container-padding)] mb-4">
-                    Shop by Brand
-                </h2>
+            <div className="max-w-[var(--container-max)] mx-auto px-4 md:px-[var(--container-padding)]">
+                {/* Green background container */}
+                <div className="bg-gradient-to-b from-[#4CAF50] to-[#45a049] rounded-[20px] p-6 md:p-8 shadow-lg">
+                    {/* Heading */}
+                    <h2 className="text-[20px] md:text-[24px] font-[800] text-white mb-4">
+                        Shop by Brand
+                    </h2>
 
-                {/* Mobile: single-row horizontal scroll */}
-                <div className="md:hidden overflow-x-auto scrollbar-hide px-4 pb-2">
-                    <div className="flex gap-3">
+                    {/* Mobile: single-row horizontal scroll */}
+                    <div className="md:hidden overflow-x-auto scrollbar-hide pb-2 -mx-6 px-6">
+                        <div className="flex gap-3">
+                            {BRANDS.map((brand) => (
+                                <Link
+                                    key={brand.name}
+                                    href={brand.href}
+                                    className="block flex-shrink-0 w-[156px] rounded-[18px] overflow-hidden hover:shadow-md active:scale-95 transition-all duration-200"
+                                >
+                                    <img
+                                        src={brand.image}
+                                        alt={brand.name}
+                                        className="w-full block"
+                                    />
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Desktop: 6-column grid */}
+                    <div className="hidden md:grid md:grid-cols-6 gap-4">
                         {BRANDS.map((brand) => (
                             <Link
                                 key={brand.name}
                                 href={brand.href}
-                                className="block flex-shrink-0 w-[156px] rounded-[18px] overflow-hidden hover:shadow-md active:scale-95 transition-all duration-200"
+                                className="block rounded-[18px] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
                             >
                                 <img
                                     src={brand.image}
@@ -62,23 +82,6 @@ export function ShopByStorePromo() {
                             </Link>
                         ))}
                     </div>
-                </div>
-
-                {/* Desktop: 6-column grid */}
-                <div className="hidden md:grid md:grid-cols-6 gap-4 px-[var(--container-padding)]">
-                    {BRANDS.map((brand) => (
-                        <Link
-                            key={brand.name}
-                            href={brand.href}
-                            className="block rounded-[18px] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
-                        >
-                            <img
-                                src={brand.image}
-                                alt={brand.name}
-                                className="w-full block"
-                            />
-                        </Link>
-                    ))}
                 </div>
             </div>
         </section>
