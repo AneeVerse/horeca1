@@ -12,7 +12,8 @@ import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { CatalogService } from '@/modules/catalog/catalog.service';
 import { emitEvent } from '@/events/emitter';
-import { resolveVendorId } from '@/lib/resolveVendorId';
+import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
+import { requireVendorPerm } from '@/lib/teamPermissions';
 
 // Validation schema for product creation
 const createProductSchema = z.object({
@@ -76,7 +77,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 // POST — create a new product and initialize its inventory record
 export const POST = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx, req);
+    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
+    requireVendorPerm(teamRole, 'products:write');
 
     const body = await req.json();
     const data = createProductSchema.parse(body);

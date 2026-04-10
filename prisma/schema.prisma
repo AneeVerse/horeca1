@@ -84,6 +84,13 @@ model User {
   notifications   Notification[]
   reviews         Review[]
 
+  vendorMemberships VendorTeamMember[] @relation("VendorMemberships")
+  vendorInvitesSent VendorTeamMember[] @relation("VendorInvites")
+  brandMemberships  BrandTeamMember[]  @relation("BrandMemberships")
+  brandInvitesSent  BrandTeamMember[]  @relation("BrandInvites")
+  adminMembership   AdminTeamMember?   @relation("AdminMembership")
+  adminInvitesSent  AdminTeamMember[]  @relation("AdminInvites")
+
   @@index([email])
   @@index([phone])
   @@index([pincode])
@@ -102,6 +109,13 @@ enum Role {
   vendor
   admin
   brand
+}
+
+enum TeamRole {
+  owner
+  manager
+  editor
+  viewer
 }
 
 // ═══ LINKED ACCOUNTS (multi-account switcher) ════════
@@ -156,6 +170,7 @@ model Vendor {
   customerVendors    CustomerVendor[]
   collectionProducts CollectionProduct[]
   reviews            Review[]
+  teamMembers        VendorTeamMember[]
 
   @@index([slug])
   @@index([isActive])
@@ -686,6 +701,7 @@ model Brand {
   user            User                  @relation(fields: [userId], references: [id])
   masterProducts  BrandMasterProduct[]
   productMappings BrandProductMapping[]
+  teamMembers     BrandTeamMember[]
 
   @@index([slug])
   @@index([approvalStatus])
@@ -754,4 +770,53 @@ enum MappingStatus {
 enum MatchMethod {
   rule_based
   manually_verified
+}
+
+// ═══ TEAM MEMBERS (per-entity sub-accounts with scoped permissions) ═══
+
+model VendorTeamMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  vendorId  String   @map("vendor_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      TeamRole @default(viewer)
+  invitedBy String?  @map("invited_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  vendor    Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  user      User     @relation("VendorMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  inviter   User?    @relation("VendorInvites", fields: [invitedBy], references: [id])
+
+  @@unique([vendorId, userId])
+  @@index([userId])
+  @@map("vendor_team_members")
+}
+
+model BrandTeamMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  brandId   String   @map("brand_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      TeamRole @default(viewer)
+  invitedBy String?  @map("invited_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user      User     @relation("BrandMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  inviter   User?    @relation("BrandInvites", fields: [invitedBy], references: [id])
+
+  @@unique([brandId, userId])
+  @@index([userId])
+  @@map("brand_team_members")
+}
+
+model AdminTeamMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  role      TeamRole @default(viewer)
+  invitedBy String?  @map("invited_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user      User     @relation("AdminMembership", fields: [userId], references: [id], onDelete: Cascade)
+  inviter   User?    @relation("AdminInvites", fields: [invitedBy], references: [id])
+
+  @@map("admin_team_members")
 }

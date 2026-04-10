@@ -7,7 +7,8 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
-import { resolveVendorId } from '@/lib/resolveVendorId';
+import { resolveVendorContext } from '@/lib/resolveVendorId';
+import { requireVendorPerm } from '@/lib/teamPermissions';
 
 const addSchema = z.object({
   pincode: z.string().min(4).max(10),
@@ -25,11 +26,11 @@ const deleteSchema = z.object({
 // POST — add new service area pincode
 export const POST = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx, req);
+    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
+    requireVendorPerm(teamRole, 'settings:write');
     const body = await req.json();
     const { pincode } = addSchema.parse(body);
 
-    // Check for duplicate
     const existing = await prisma.serviceArea.findUnique({
       where: { vendorId_pincode: { vendorId, pincode } },
     });
@@ -49,14 +50,12 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
 // PATCH — toggle active/inactive
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx, req);
+    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
+    requireVendorPerm(teamRole, 'settings:write');
     const body = await req.json();
     const { id, isActive } = updateSchema.parse(body);
 
-    // Verify ownership
-    const area = await prisma.serviceArea.findFirst({
-      where: { id, vendorId },
-    });
+    const area = await prisma.serviceArea.findFirst({ where: { id, vendorId } });
     if (!area) throw Errors.notFound('Service area');
 
     const updated = await prisma.serviceArea.update({
@@ -74,14 +73,12 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
 // DELETE — remove service area
 export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx, req);
+    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
+    requireVendorPerm(teamRole, 'settings:write');
     const body = await req.json();
     const { id } = deleteSchema.parse(body);
 
-    // Verify ownership
-    const area = await prisma.serviceArea.findFirst({
-      where: { id, vendorId },
-    });
+    const area = await prisma.serviceArea.findFirst({ where: { id, vendorId } });
     if (!area) throw Errors.notFound('Service area');
 
     await prisma.serviceArea.delete({ where: { id } });

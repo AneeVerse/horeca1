@@ -10,7 +10,8 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { CatalogService } from '@/modules/catalog/catalog.service';
-import { resolveVendorId } from '@/lib/resolveVendorId';
+import { resolveVendorContext } from '@/lib/resolveVendorId';
+import { requireVendorPerm } from '@/lib/teamPermissions';
 
 // Validation schema for product updates (all fields optional)
 const updateProductSchema = z.object({
@@ -52,7 +53,8 @@ function extractId(req: NextRequest): string {
 // PATCH — update product fields
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx, req);
+    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
+    requireVendorPerm(teamRole, 'products:write');
 
     const productId = extractId(req);
     const body = await req.json();
@@ -90,7 +92,7 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
 // GET — fetch a single product with price slabs (for edit form)
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx, req);
+    const { vendorId } = await resolveVendorContext(ctx, req);
 
     const productId = extractId(req);
     const product = await prisma.product.findFirst({
@@ -112,7 +114,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 // DELETE — soft-delete by setting isActive = false
 export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx, req);
+    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
+    requireVendorPerm(teamRole, 'products:write');
 
     const productId = extractId(req);
 

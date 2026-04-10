@@ -10,7 +10,8 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { InventoryService } from '@/modules/inventory/inventory.service';
-import { resolveVendorId } from '@/lib/resolveVendorId';
+import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
+import { requireVendorPerm } from '@/lib/teamPermissions';
 
 // Validation schema for inventory updates
 const updateInventorySchema = z.object({
@@ -49,7 +50,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 // PATCH — update stock quantity or low-stock threshold for a product
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx, req);
+    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
+    requireVendorPerm(teamRole, 'inventory:write');
 
     const body = await req.json();
     const { productId, qtyAvailable, lowStockThreshold } = updateInventorySchema.parse(body);

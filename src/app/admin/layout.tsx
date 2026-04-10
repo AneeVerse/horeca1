@@ -40,6 +40,7 @@ const SIDEBAR_LINKS = [
     { name: 'Brands', icon: Sparkles, href: '/admin/brands' },
     { name: 'Finance', icon: Wallet, href: '/admin/finance' },
     { name: 'Reports', icon: BarChart3, href: '/admin/reports' },
+    { name: 'Team', icon: Users, href: '/admin/team' },
     { name: 'Settings', icon: Settings, href: '/admin/settings' },
 ];
 

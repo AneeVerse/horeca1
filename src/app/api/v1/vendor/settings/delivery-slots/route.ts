@@ -7,7 +7,8 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
-import { resolveVendorId } from '@/lib/resolveVendorId';
+import { resolveVendorContext } from '@/lib/resolveVendorId';
+import { requireVendorPerm } from '@/lib/teamPermissions';
 
 const timeRegex = /^\d{2}:\d{2}$/;
 
@@ -34,19 +35,13 @@ const deleteSchema = z.object({
 // POST — add new delivery slot
 export const POST = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx, req);
+    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
+    requireVendorPerm(teamRole, 'settings:write');
     const body = await req.json();
     const data = addSchema.parse(body);
 
-    // Check for duplicate (same vendor, day, start time)
     const existing = await prisma.deliverySlot.findUnique({
-      where: {
-        vendorId_dayOfWeek_slotStart: {
-          vendorId,
-          dayOfWeek: data.dayOfWeek,
-          slotStart: data.slotStart,
-        },
-      },
+      where: { vendorId_dayOfWeek_slotStart: { vendorId, dayOfWeek: data.dayOfWeek, slotStart: data.slotStart } },
     });
     if (existing) throw Errors.conflict('A slot for this day and start time already exists');
 
@@ -64,14 +59,12 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
 // PATCH — update delivery slot fields
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx, req);
+    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
+    requireVendorPerm(teamRole, 'settings:write');
     const body = await req.json();
     const { id, ...fields } = updateSchema.parse(body);
 
-    // Verify ownership
-    const slot = await prisma.deliverySlot.findFirst({
-      where: { id, vendorId },
-    });
+    const slot = await prisma.deliverySlot.findFirst({ where: { id, vendorId } });
     if (!slot) throw Errors.notFound('Delivery slot');
 
     const updated = await prisma.deliverySlot.update({
@@ -89,20 +82,15 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
 // DELETE — remove delivery slot
 export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const vendorId = await resolveVendorId(ctx, req);
+    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
+    requireVendorPerm(teamRole, 'settings:write');
     const body = await req.json();
     const { id } = deleteSchema.parse(body);
 
-    // Verify ownership
-    const slot = await prisma.deliverySlot.findFirst({
-      where: { id, vendorId },
-    });
+    const slot = await prisma.deliverySlot.findFirst({ where: { id, vendorId } });
     if (!slot) throw Errors.notFound('Delivery slot');
 
-    // Check if any orders reference this slot
-    const orderCount = await prisma.order.count({
-      where: { deliverySlotId: id },
-    });
+    const orderCount = await prisma.order.count({ where: { deliverySlotId: id } });
     if (orderCount > 0) {
       throw Errors.conflict('Cannot delete slot — it is referenced by existing orders. Deactivate it instead.');
     }
