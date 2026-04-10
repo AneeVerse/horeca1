@@ -245,7 +245,7 @@ export default function BrandSettingsPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1">Full Name</label>
-                                <input type="text" value={memberForm.fullName} onChange={e => setMemberForm(f => ({ ...f, fullName: e.target.value }))}
+                                <input type="text" name="fullName" autoComplete="off" value={memberForm.fullName} onChange={e => setMemberForm(f => ({ ...f, fullName: e.target.value }))}
                                     placeholder="e.g. Priya Sharma"
                                     className="w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] outline-none focus:border-[#53B175]/40 bg-white" />
                             </div>
@@ -257,7 +257,7 @@ export default function BrandSettingsPage() {
                             </div>
                             <div>
                                 <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1">Password</label>
-                                <input type="password" value={memberForm.password} onChange={e => setMemberForm(f => ({ ...f, password: e.target.value }))}
+                                <input type="password" name="newPassword" autoComplete="new-password" value={memberForm.password} onChange={e => setMemberForm(f => ({ ...f, password: e.target.value }))}
                                     placeholder="Min. 6 characters"
                                     className="w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] outline-none focus:border-[#53B175]/40 bg-white" />
                             </div>
