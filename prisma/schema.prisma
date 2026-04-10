@@ -90,6 +90,7 @@ model User {
   brandInvitesSent  BrandTeamMember[]  @relation("BrandInvites")
   adminMembership   AdminTeamMember?   @relation("AdminMembership")
   adminInvitesSent  AdminTeamMember[]  @relation("AdminInvites")
+  savedAddresses    SavedAddress[]
 
   @@index([email])
   @@index([phone])
@@ -819,4 +820,30 @@ model AdminTeamMember {
   inviter   User?    @relation("AdminInvites", fields: [invitedBy], references: [id])
 
   @@map("admin_team_members")
+}
+
+// ═══ SAVED ADDRESSES ══════════════════════════════════
+
+model SavedAddress {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  label        String   @default("Other") @db.VarChar(50)
+  businessName String?  @map("business_name") @db.VarChar(255)
+  fullAddress  String   @map("full_address") @db.Text
+  shortAddress String?  @map("short_address") @db.VarChar(255)
+  flatInfo     String?  @map("flat_info") @db.VarChar(255)
+  landmark     String?  @db.VarChar(255)
+  pincode      String?  @db.VarChar(10)
+  city         String?  @db.VarChar(100)
+  state        String?  @db.VarChar(100)
+  latitude     Float
+  longitude    Float
+  placeId      String?  @map("place_id") @db.VarChar(500)
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("saved_addresses")
 }

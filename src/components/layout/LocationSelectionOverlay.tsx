@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ArrowLeft, Search, MapPin, Home, Briefcase, Loader2, Navigation, X, Trash2 } from 'lucide-react';
+import {
+    ArrowLeft, Search, MapPin, Home, Briefcase, Loader2,
+    Navigation, X, Trash2, Store,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAddress, Address } from '@/context/AddressContext';
 import { useGooglePlacesAutocomplete, PlacePrediction } from '@/hooks/useGooglePlacesAutocomplete';
@@ -14,6 +17,7 @@ interface LocationSelectionOverlayProps {
 }
 
 const LABEL_ICONS: Record<string, React.FC<{ size?: number; className?: string }>> = {
+    Business: Store,
     Home: Home,
     Work: Briefcase,
     Other: MapPin,
@@ -24,6 +28,7 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
     const {
         selectedAddress,
         savedAddresses,
+        isLoadingAddresses,
         setSelectedAddress,
         addAddress,
         removeAddress,
@@ -34,9 +39,11 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
     const [searchQuery, setSearchQuery] = useState('');
     const [isAddNewOpen, setIsAddNewOpen] = useState(false);
     const [initialCoords, setInitialCoords] = useState<{ lat?: number; lng?: number }>({});
+    const [defaultMode, setDefaultMode] = useState<'business' | 'map'>('business');
 
-    // ─── Google Places autocomplete ──────────────────────────────────────
-    const { predictions, isSearching, getPlaceDetails, clearPredictions } = useGooglePlacesAutocomplete(searchQuery);
+    // ─── Google Places autocomplete (address search in main overlay) ─────
+    const { predictions, isSearching, getPlaceDetails, clearPredictions } =
+        useGooglePlacesAutocomplete(searchQuery);
 
     // ─── Select a saved address ──────────────────────────────────────────
     const handleSelectSaved = (addr: Address) => {
@@ -48,10 +55,10 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
     const handleSelectPrediction = async (pred: PlacePrediction) => {
         const details = await getPlaceDetails(pred.placeId);
         if (details) {
-            // Open add-new-address overlay with the selected location pre-filled
             setInitialCoords({ lat: details.latitude, lng: details.longitude });
             setSearchQuery('');
             clearPredictions();
+            setDefaultMode('map'); // address search → open in map mode with pin placed
             setIsAddNewOpen(true);
         }
     };
@@ -59,15 +66,15 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
     // ─── Use current location ────────────────────────────────────────────
     const handleUseCurrentLocation = async () => {
         const detected = await detectCurrentLocation();
-        if (detected) {
-            onClose();
-        }
+        if (detected) onClose();
     };
 
     // ─── Save from AddNewAddressOverlay ──────────────────────────────────
-    const handleSaveNewAddress = (address: Address) => {
-        addAddress(address);
-        setSelectedAddress(address);
+    const handleSaveNewAddress = async (address: Omit<Address, 'id'>) => {
+        const saved = await addAddress(address);
+        if (saved) {
+            setSelectedAddress(saved);
+        }
         setIsAddNewOpen(false);
         onClose();
     };
@@ -82,27 +89,29 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
                 onClick={onClose}
             />
 
-            {/* Panel: full-screen on mobile, centered modal on desktop */}
+            {/* Panel */}
             <div className="fixed inset-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-[11001] bg-white flex flex-col md:w-[480px] md:max-h-[80vh] md:rounded-2xl md:shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom md:slide-in-from-bottom-4 duration-300">
+
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b border-gray-100 shrink-0">
                     <button onClick={onClose} className="p-1 -ml-1 md:hidden">
                         <ArrowLeft size={24} className="text-gray-700" />
                     </button>
-                    <h2 className="text-xl font-bold text-gray-800">Select a location</h2>
+                    <h2 className="text-xl font-bold text-gray-800">Delivery Location</h2>
                     <button onClick={onClose} className="p-1 -mr-1 hover:bg-gray-100 rounded-full transition-colors">
                         <X size={22} className="text-gray-600" />
                     </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-4 pt-2 pb-24 md:pb-4">
+
                     {/* Search Bar */}
-                    <div className="mb-6 relative">
+                    <div className="mb-4 relative">
                         <div className="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-lg w-full shadow-sm focus-within:border-[#33a852]/50 transition-colors">
                             <Search size={20} className="text-gray-400 shrink-0" />
                             <input
                                 type="text"
-                                placeholder={isLoaded ? "Search for area, street name..." : "Loading maps..."}
+                                placeholder={isLoaded ? 'Search area or street name...' : 'Loading maps...'}
                                 className="flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -113,26 +122,22 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
                                     <X size={16} className="text-gray-400" />
                                 </button>
                             )}
-                            {isSearching && (
-                                <Loader2 size={16} className="animate-spin text-gray-400 shrink-0" />
-                            )}
+                            {isSearching && <Loader2 size={16} className="animate-spin text-gray-400 shrink-0" />}
                         </div>
 
-                        {/* API Error Notice */}
                         {loadError && (
                             <div className="mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
                                 <p className="text-xs text-amber-700">{loadError}</p>
                             </div>
                         )}
 
-                        {/* Autocomplete Results */}
                         {predictions.length > 0 && (
                             <div className="mt-2 bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden">
                                 {predictions.map((pred) => (
                                     <button
                                         key={pred.placeId}
                                         onClick={() => handleSelectPrediction(pred)}
-                                        className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left border-b border-gray-50 last:border-0"
+                                        className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left border-b border-gray-50 last:border-0"
                                     >
                                         <MapPin size={18} className="text-gray-400 mt-0.5 shrink-0" />
                                         <div className="flex-1 min-w-0">
@@ -149,14 +154,12 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
                     <button
                         onClick={handleUseCurrentLocation}
                         disabled={isDetectingLocation}
-                        className="w-full flex items-center gap-4 p-4 bg-[#e9f9e9] border border-[#d1f2d1] rounded-lg mb-8 group active:scale-[0.98] transition-transform text-left disabled:opacity-60"
+                        className="w-full flex items-center gap-4 p-4 bg-[#e9f9e9] border border-[#d1f2d1] rounded-lg mb-6 active:scale-[0.98] transition-transform text-left disabled:opacity-60"
                     >
                         <div className="w-10 h-10 shrink-0 bg-white rounded-full flex items-center justify-center shadow-sm">
-                            {isDetectingLocation ? (
-                                <Loader2 size={20} className="animate-spin text-[#33a852]" />
-                            ) : (
-                                <Navigation size={20} className="text-[#33a852]" />
-                            )}
+                            {isDetectingLocation
+                                ? <Loader2 size={20} className="animate-spin text-[#33a852]" />
+                                : <Navigation size={20} className="text-[#33a852]" />}
                         </div>
                         <div className="flex-1 min-w-0">
                             <h3 className="text-[15px] font-bold text-[#33a852]">
@@ -169,13 +172,19 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
                     </button>
 
                     {/* Saved Addresses */}
-                    {savedAddresses.length > 0 && (
-                        <>
-                            <div className="text-center mb-6">
-                                <h3 className="text-sm font-extrabold text-black uppercase tracking-wider">Saved Addresses</h3>
-                            </div>
+                    {isLoadingAddresses && (
+                        <div className="flex items-center justify-center py-6">
+                            <Loader2 size={20} className="animate-spin text-[#33a852]" />
+                            <span className="text-sm text-gray-400 ml-2">Loading saved addresses...</span>
+                        </div>
+                    )}
 
-                            <div className="space-y-4 mb-12">
+                    {!isLoadingAddresses && savedAddresses.length > 0 && (
+                        <>
+                            <h3 className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider mb-3">
+                                Saved Addresses
+                            </h3>
+                            <div className="space-y-3 mb-6">
                                 {savedAddresses.map((addr) => {
                                     const Icon = LABEL_ICONS[addr.label] || MapPin;
                                     const isSelected = selectedAddress?.id === addr.id;
@@ -185,34 +194,47 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
                                             key={addr.id}
                                             onClick={() => handleSelectSaved(addr)}
                                             className={cn(
-                                                "flex items-center gap-4 p-4 bg-white border rounded-lg shadow-sm cursor-pointer transition-all active:scale-[0.98]",
+                                                'flex items-center gap-3 p-4 bg-white border rounded-xl shadow-sm cursor-pointer transition-all active:scale-[0.98]',
                                                 isSelected
-                                                    ? "border-[#33a852] ring-1 ring-[#33a852]/20"
-                                                    : "border-gray-100 hover:border-gray-200"
+                                                    ? 'border-[#33a852] ring-1 ring-[#33a852]/20'
+                                                    : 'border-gray-100 hover:border-gray-200'
                                             )}
                                         >
                                             <div className={cn(
-                                                "w-10 h-10 shrink-0 rounded-lg flex items-center justify-center",
-                                                isSelected ? "bg-[#e9f9e9]" : "bg-gray-50"
+                                                'w-10 h-10 shrink-0 rounded-xl flex items-center justify-center',
+                                                isSelected ? 'bg-[#e9f9e9]' : 'bg-gray-50'
                                             )}>
-                                                <Icon size={24} className={isSelected ? "text-[#33a852]" : "text-gray-500"} />
+                                                <Icon size={20} className={isSelected ? 'text-[#33a852]' : 'text-gray-400'} />
                                             </div>
-                                            <div className="flex-1 min-w-0 border-l border-gray-100 pl-4">
-                                                <h4 className="text-[15px] font-bold text-gray-800">{addr.label}</h4>
-                                                <p className="text-[11px] text-gray-400 font-medium truncate mt-0.5">
-                                                    {addr.flatInfo ? `${addr.flatInfo}, ` : ''}{addr.shortAddress || addr.fullAddress}
+                                            <div className="flex-1 min-w-0">
+                                                {/* Business name shown prominently if present */}
+                                                {addr.businessName && (
+                                                    <p className="text-[14px] font-bold text-gray-800 truncate leading-tight">
+                                                        {addr.businessName}
+                                                    </p>
+                                                )}
+                                                <p className={cn(
+                                                    'font-semibold truncate',
+                                                    addr.businessName
+                                                        ? 'text-[11px] text-gray-400 mt-0.5'
+                                                        : 'text-[14px] text-gray-800'
+                                                )}>
+                                                    {addr.label}
+                                                    {addr.flatInfo ? ` · ${addr.flatInfo}` : ''}
+                                                </p>
+                                                <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                                                    {addr.shortAddress || addr.fullAddress}
+                                                    {addr.pincode ? ` — ${addr.pincode}` : ''}
                                                 </p>
                                             </div>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (confirm('Remove this address?')) {
-                                                        removeAddress(addr.id);
-                                                    }
+                                                    if (confirm('Remove this address?')) removeAddress(addr.id);
                                                 }}
                                                 className="p-2 hover:bg-red-50 rounded-full transition-colors shrink-0"
                                             >
-                                                <Trash2 size={16} className="text-gray-300 hover:text-red-400" />
+                                                <Trash2 size={15} className="text-gray-300 hover:text-red-400" />
                                             </button>
                                         </div>
                                     );
@@ -221,39 +243,41 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
                         </>
                     )}
 
-                    {/* Empty state when no saved addresses */}
-                    {savedAddresses.length === 0 && (
+                    {!isLoadingAddresses && savedAddresses.length === 0 && (
                         <div className="text-center py-8 mb-8">
-                            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <MapPin size={28} className="text-gray-300" />
+                            <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                <Store size={28} className="text-gray-300" />
                             </div>
-                            <h3 className="text-sm font-bold text-gray-500 mb-1">No saved addresses</h3>
-                            <p className="text-xs text-gray-400">Add an address to get started</p>
+                            <h3 className="text-sm font-bold text-gray-500 mb-1">No saved addresses yet</h3>
+                            <p className="text-xs text-gray-400">Search for your restaurant, hotel or cafe below</p>
                         </div>
                     )}
                 </div>
 
-                {/* Sticky Bottom Button */}
+                {/* Sticky Bottom Button — opens in Business Search mode by default */}
                 <div className="p-4 bg-white border-t border-gray-100 shrink-0">
                     <button
                         onClick={() => {
                             setInitialCoords({});
+                            setDefaultMode('business');
                             setIsAddNewOpen(true);
                         }}
-                        className="w-full bg-[#5cb85c] hover:bg-[#4cae4c] text-white font-bold py-4 rounded-lg shadow-lg active:scale-[0.98] transition-all text-lg"
+                        className="w-full bg-[#33a852] hover:bg-[#2d9548] text-white font-bold py-4 rounded-xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                     >
-                        Add new address
+                        <Store size={18} />
+                        Add Delivery Address
                     </button>
                 </div>
             </div>
 
-            {/* Add New Address Overlay (opens on top) */}
+            {/* Add New Address Overlay */}
             <AddNewAddressOverlay
                 isOpen={isAddNewOpen}
                 onClose={() => setIsAddNewOpen(false)}
                 onSave={handleSaveNewAddress}
                 initialLat={initialCoords.lat}
                 initialLng={initialCoords.lng}
+                defaultMode={defaultMode}
             />
         </>
     );

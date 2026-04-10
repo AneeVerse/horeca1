@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Search, MapPin, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Search, MapPin, Navigation, Loader2, Store, X, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAddress } from '@/context/AddressContext';
+import { useGooglePlacesAutocomplete } from '@/hooks/useGooglePlacesAutocomplete';
 
 interface InitialPincodeOverlayProps {
     onComplete: (pincode?: string) => void;
@@ -11,30 +13,131 @@ interface InitialPincodeOverlayProps {
 // Track if shown since last page reload
 let hasBeenShownInSession = false;
 
+type Tab = 'business' | 'pincode';
+
 export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps) {
     const [isVisible, setIsVisible] = useState(false);
-    const [pincode, setPincode] = useState('');
-    const [error, setError] = useState('');
-    const [checking, setChecking] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
+    const [tab, setTab] = useState<Tab>('business');
+
+    // ─── Business Search State ────────────────────────────────────────────
+    const [businessQuery, setBusinessQuery] = useState('');
+    const [showDropdown, setShowDropdown] = useState(false);
+    const [isFetchingPlace, setIsFetchingPlace] = useState(false);
+    const [selectedName, setSelectedName] = useState('');
+    const [selectedPincode, setSelectedPincode] = useState('');
+    const [isCheckingServiceability, setIsCheckingServiceability] = useState(false);
+    const [serviceabilityError, setServiceabilityError] = useState('');
+
+    const { addAddress, setSelectedAddress, detectCurrentLocation, isDetectingLocation } = useAddress();
+    const { predictions, isSearching, getPlaceDetails, clearPredictions } =
+        useGooglePlacesAutocomplete(businessQuery, { businessMode: true, countryCode: 'in' });
+
+    // ─── Pincode State ────────────────────────────────────────────────────
+    const [pincode, setPincode] = useState('');
+    const [pincodeError, setPincodeError] = useState('');
+    const [checkingPincode, setCheckingPincode] = useState(false);
 
     useEffect(() => {
         setIsMounted(true);
-        
-        // Only show if it hasn't been shown in this session (since last refresh)
         if (!hasBeenShownInSession) {
             setIsVisible(true);
             hasBeenShownInSession = true;
         }
-    }, [onComplete]);
+    }, []);
 
     if (!isMounted || !isVisible) return null;
 
-    const handleSubmit = async (e?: React.FormEvent) => {
+    const handleSkip = () => {
+        localStorage.setItem('pincode_interacted', 'true');
+        setIsVisible(false);
+        onComplete();
+    };
+
+    // ─── Business selection flow ──────────────────────────────────────────
+
+    const handleSelectBusiness = async (placeId: string, mainText: string) => {
+        setShowDropdown(false);
+        setBusinessQuery(mainText);
+        clearPredictions();
+        setIsFetchingPlace(true);
+        setServiceabilityError('');
+
+        const details = await getPlaceDetails(placeId);
+        if (!details) { setIsFetchingPlace(false); return; }
+
+        setSelectedName(details.businessName || mainText);
+        setSelectedPincode(details.pincode || '');
+        setIsFetchingPlace(false);
+
+        if (!details.pincode) {
+            setServiceabilityError('Could not detect pincode for this location. Please enter manually below.');
+            setTab('pincode');
+            return;
+        }
+
+        // Check serviceability
+        setIsCheckingServiceability(true);
+        try {
+            const res = await fetch(`/api/v1/vendors/serviceability?pincode=${details.pincode}`);
+            const data = await res.json();
+
+            localStorage.setItem('pincode_interacted', 'true');
+            localStorage.setItem('user_pincode', details.pincode);
+
+            // Save address to context (DB-backed if logged in)
+            const saved = await addAddress({
+                label: 'Business',
+                businessName: details.businessName || mainText,
+                fullAddress: details.fullAddress,
+                shortAddress: details.shortAddress,
+                latitude: details.latitude,
+                longitude: details.longitude,
+                pincode: details.pincode,
+                city: details.city,
+                state: details.state,
+                placeId: details.placeId,
+                isDefault: true,
+            });
+            if (saved) setSelectedAddress(saved);
+
+            if (!data.serviceable && !data.vendor_count) {
+                setServiceabilityError(`We're not in ${details.city || 'your area'} yet, but your address is saved for when we expand!`);
+            }
+
+            setIsVisible(false);
+            onComplete(details.pincode);
+        } catch {
+            localStorage.setItem('pincode_interacted', 'true');
+            if (details.pincode) localStorage.setItem('user_pincode', details.pincode);
+            setIsVisible(false);
+            onComplete(details.pincode);
+        } finally {
+            setIsCheckingServiceability(false);
+        }
+    };
+
+    // ─── GPS flow ─────────────────────────────────────────────────────────
+
+    const handleUseGPS = async () => {
+        const detected = await detectCurrentLocation();
+        if (detected) {
+            if (detected.pincode) {
+                localStorage.setItem('pincode_interacted', 'true');
+                localStorage.setItem('user_pincode', detected.pincode);
+            }
+            setIsVisible(false);
+            onComplete(detected.pincode);
+        }
+    };
+
+    // ─── Pincode flow ─────────────────────────────────────────────────────
+
+    const handlePincodeSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        if (pincode.length !== 6) { setError('Please enter a valid 6-digit pincode'); return; }
-        setChecking(true);
-        setError('');
+        if (pincode.length !== 6) { setPincodeError('Enter a valid 6-digit pincode'); return; }
+        setCheckingPincode(true);
+        setPincodeError('');
         try {
             const res = await fetch(`/api/v1/vendors/serviceability?pincode=${pincode}`);
             const data = await res.json();
@@ -44,121 +147,210 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
                 setIsVisible(false);
                 onComplete(pincode);
             } else {
-                setError('Sorry, we don\'t deliver to this pincode yet.');
+                setPincodeError("Sorry, we don't deliver to this pincode yet.");
             }
         } catch {
-            // Fallback: accept and continue if API unreachable
             localStorage.setItem('pincode_interacted', 'true');
             localStorage.setItem('user_pincode', pincode);
             setIsVisible(false);
             onComplete(pincode);
         } finally {
-            setChecking(false);
+            setCheckingPincode(false);
         }
     };
 
-    const handleSkip = () => {
-        localStorage.setItem('pincode_interacted', 'true');
-        setIsVisible(false);
-        onComplete();
-    };
+    const isBusy = isFetchingPlace || isCheckingServiceability || isDetectingLocation;
 
     return (
         <div className="fixed inset-0 z-[20000] flex items-center justify-center px-4">
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            
-            {/* Content Card */}
-            <div className="relative w-full max-w-[500px] min-w-[260px] bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+
+            {/* Card */}
+            <div className="relative w-full max-w-[460px] bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
                 <div className="p-6 md:p-8">
+
                     {/* Header */}
-                    <div className="text-center mb-8">
-                        <h2 className="text-xl md:text-2xl font-bold text-[#181725] mb-2">Choose delivery location</h2>
-                        <p className="text-sm text-gray-500">Enter your pincode to check serviceability</p>
+                    <div className="text-center mb-6">
+                        <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                            <MapPin size={24} className="text-[#33a852]" />
+                        </div>
+                        <h2 className="text-[20px] font-bold text-[#181725] mb-1">Choose Delivery Location</h2>
+                        <p className="text-[13px] text-gray-400">Find your restaurant, hotel or cafe</p>
                     </div>
 
-                    {/* Search/Input Section */}
-                    <form onSubmit={handleSubmit} className="mb-8 space-y-4">
-                        <div className={cn(
-                            "flex items-center gap-3 px-4 py-3 border-2 rounded-xl transition-all duration-300 shadow-sm",
-                            error ? "border-red-400 bg-red-50/30" : "border-[#53B175] bg-white"
-                        )}>
-                            <Search size={22} className={cn("shrink-0", error ? "text-red-400" : "text-[#53B175]")} />
-                            <input
-                                type="text"
-                                value={pincode}
-                                onChange={(e) => {
-                                    setPincode(e.target.value.replace(/\D/g, ''));
-                                    setError('');
-                                }}
-                                placeholder="Search for area, street name or pincode.."
-                                className="flex-1 bg-transparent text-[15px] font-medium outline-none placeholder:text-gray-400"
-                                maxLength={6}
-                                autoFocus
-                            />
-                        </div>
-                        
-                        {error && (
-                            <p className="text-sm font-semibold text-red-500 text-center animate-in fade-in slide-in-from-top-1">
-                                {error}
-                            </p>
-                        )}
-
+                    {/* Tabs */}
+                    <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-5">
                         <button
-                            type="submit"
-                            disabled={checking}
-                            className="w-full bg-[#53B175] hover:bg-[#48a068] disabled:opacity-70 text-white font-bold py-4 rounded-xl shadow-lg shadow-green-100 transition-all active:scale-[0.98]"
+                            onClick={() => setTab('business')}
+                            className={cn(
+                                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[13px] font-bold transition-all',
+                                tab === 'business'
+                                    ? 'bg-white text-[#33a852] shadow-sm'
+                                    : 'text-gray-400 hover:text-gray-600'
+                            )}
                         >
-                            {checking ? 'Checking...' : 'Confirm Pincode'}
+                            <Store size={14} />
+                            Search Business
                         </button>
-                    </form>
-
-                    {/* Map Icon Placeholder (matches screenshot) */}
-                    <div className="flex flex-col items-center justify-center py-6 border-y border-gray-50 mb-8">
-                        <div className="relative">
-                            <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center">
-                                <MapPin size={48} className="text-gray-200" />
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 border-4 border-white rounded-full" />
-                            </div>
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 mt-[-4px]">
-                                <MapPin size={32} className="text-[#FF4B4B] fill-[#FF4B4B]" />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Bottom Options */}
-                    <div className="space-y-4">
                         <button
-                            onClick={handleSkip}
-                            className="w-full text-sm font-bold text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-wider"
+                            onClick={() => setTab('pincode')}
+                            className={cn(
+                                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[13px] font-bold transition-all',
+                                tab === 'pincode'
+                                    ? 'bg-white text-[#33a852] shadow-sm'
+                                    : 'text-gray-400 hover:text-gray-600'
+                            )}
                         >
-                            Go without pincode
+                            <Search size={14} />
+                            Enter Pincode
                         </button>
-
-                        {/* Banner Placeholder (matches screenshot) */}
-                        <div className="bg-[#F2F3F2] rounded-xl p-3 flex items-center gap-3">
-                            <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center p-2 shadow-sm shrink-0">
-                                <img src="/images/mobile-nav/cart.svg" alt="App" className="w-full h-full object-contain" />
-                            </div>
-                            <div className="min-w-0">
-                                <h4 className="text-[12px] font-bold text-[#181725] leading-tight mb-0.5">Your Shopping & Savings' Partner</h4>
-                                <p className="text-[10px] text-gray-500 font-medium">One-stop shop for your family needs.</p>
-                            </div>
-                        </div>
                     </div>
+
+                    {/* ─── Business Search Tab ─────────────────────────────── */}
+                    {tab === 'business' && (
+                        <div>
+                            {/* Search input */}
+                            <div className="relative mb-3">
+                                <div className={cn(
+                                    'flex items-center gap-3 px-4 py-3 border-2 rounded-xl transition-all',
+                                    'border-gray-200 focus-within:border-[#33a852] bg-white'
+                                )}>
+                                    <Store size={18} className="text-[#33a852] shrink-0" />
+                                    <input
+                                        type="text"
+                                        value={businessQuery}
+                                        onChange={(e) => {
+                                            setBusinessQuery(e.target.value);
+                                            setShowDropdown(true);
+                                            setSelectedName('');
+                                            setSelectedPincode('');
+                                            setServiceabilityError('');
+                                        }}
+                                        placeholder="e.g. The Grand Hotel, Chai Point..."
+                                        className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400"
+                                        autoComplete="off"
+                                        autoFocus
+                                    />
+                                    {isBusy && <Loader2 size={16} className="animate-spin text-[#33a852] shrink-0" />}
+                                    {businessQuery && !isBusy && (
+                                        <button onClick={() => { setBusinessQuery(''); setSelectedName(''); clearPredictions(); }}>
+                                            <X size={16} className="text-gray-400" />
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Dropdown */}
+                                {showDropdown && businessQuery.length >= 2 && !selectedName && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-xl max-h-[200px] overflow-y-auto z-30">
+                                        {isSearching && (
+                                            <div className="flex items-center justify-center py-4">
+                                                <Loader2 size={16} className="animate-spin text-gray-400" />
+                                                <span className="text-xs text-gray-400 ml-2">Searching...</span>
+                                            </div>
+                                        )}
+                                        {!isSearching && predictions.length === 0 && (
+                                            <div className="py-4 text-center text-xs text-gray-400">
+                                                No results — try a different name
+                                            </div>
+                                        )}
+                                        {predictions.map((pred) => (
+                                            <button
+                                                key={pred.placeId}
+                                                onClick={() => handleSelectBusiness(pred.placeId, pred.mainText)}
+                                                className="w-full flex items-start gap-3 px-4 py-3 hover:bg-green-50 transition-colors text-left border-b border-gray-50 last:border-0"
+                                            >
+                                                <Store size={15} className="text-[#33a852] mt-0.5 shrink-0" />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-[13px] font-bold text-gray-800 truncate">{pred.mainText}</p>
+                                                    <p className="text-[11px] text-gray-400 truncate">{pred.secondaryText}</p>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Selected business confirmation */}
+                            {selectedName && (
+                                <div className="flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-100 rounded-xl mb-3">
+                                    <CheckCircle size={16} className="text-[#33a852] shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[13px] font-bold text-[#33a852] truncate">{selectedName}</p>
+                                        {selectedPincode && (
+                                            <p className="text-[11px] text-green-600">Pincode: {selectedPincode}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {serviceabilityError && (
+                                <p className="text-[12px] text-amber-600 font-medium text-center mb-3 px-2">
+                                    {serviceabilityError}
+                                </p>
+                            )}
+
+                            {/* GPS option */}
+                            <button
+                                onClick={handleUseGPS}
+                                disabled={isBusy}
+                                className="w-full flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-xl hover:border-[#33a852]/30 hover:bg-green-50/30 transition-all disabled:opacity-60 mb-4"
+                            >
+                                {isDetectingLocation
+                                    ? <Loader2 size={18} className="animate-spin text-[#33a852] shrink-0" />
+                                    : <Navigation size={18} className="text-[#33a852] shrink-0" />}
+                                <span className="text-[13px] font-semibold text-gray-700">
+                                    {isDetectingLocation ? 'Detecting location...' : 'Use my current location (GPS)'}
+                                </span>
+                            </button>
+                        </div>
+                    )}
+
+                    {/* ─── Pincode Tab ─────────────────────────────────────── */}
+                    {tab === 'pincode' && (
+                        <form onSubmit={handlePincodeSubmit} className="mb-4 space-y-3">
+                            <div className={cn(
+                                'flex items-center gap-3 px-4 py-3 border-2 rounded-xl transition-all',
+                                pincodeError ? 'border-red-400 bg-red-50/30' : 'border-gray-200 focus-within:border-[#33a852]'
+                            )}>
+                                <Search size={18} className={cn('shrink-0', pincodeError ? 'text-red-400' : 'text-[#33a852]')} />
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={pincode}
+                                    onChange={(e) => { setPincode(e.target.value.replace(/\D/g, '')); setPincodeError(''); }}
+                                    placeholder="Enter 6-digit pincode"
+                                    className="flex-1 bg-transparent text-[15px] font-medium outline-none placeholder:text-gray-400"
+                                    maxLength={6}
+                                    autoFocus
+                                />
+                            </div>
+
+                            {pincodeError && (
+                                <p className="text-[12px] font-semibold text-red-500 text-center animate-in fade-in">
+                                    {pincodeError}
+                                </p>
+                            )}
+
+                            <button
+                                type="submit"
+                                disabled={checkingPincode}
+                                className="w-full bg-[#33a852] hover:bg-[#2d9548] disabled:opacity-70 text-white font-bold py-4 rounded-xl shadow-lg transition-all active:scale-[0.98]"
+                            >
+                                {checkingPincode ? 'Checking...' : 'Confirm Pincode'}
+                            </button>
+                        </form>
+                    )}
+
+                    {/* Skip */}
+                    <button
+                        onClick={handleSkip}
+                        className="w-full text-[12px] font-bold text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-wider py-2"
+                    >
+                        Go Without Location
+                    </button>
                 </div>
             </div>
-
-            <style jsx global>{`
-                @media (max-width: 280px) {
-                    .max-w-\[500px\] {
-                        max-width: 260px !important;
-                    }
-                    h2 {
-                        font-size: 16px !important;
-                    }
-                }
-            `}</style>
         </div>
     );
 }
