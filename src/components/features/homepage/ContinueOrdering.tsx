@@ -570,11 +570,17 @@ export function ContinueOrdering() {
                                                 </div>
                                             ) : (
                                                 <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-transparent overflow-hidden shrink-0 border border-gray-50">
-                                                    <img
-                                                        src={card.vendorLogo || vendor?.logo || ''}
-                                                        alt={card.vendorName}
-                                                        className="w-full h-full object-cover"
-                                                    />
+                                                    {(card.vendorLogo || vendor?.logo) ? (
+                                                        <img
+                                                            src={card.vendorLogo || vendor?.logo}
+                                                            alt={card.vendorName}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs font-bold">
+                                                            {card.vendorName?.[0] || '?'}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>

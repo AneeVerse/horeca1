@@ -42,8 +42,13 @@ export function GoogleMapsProvider({ children }: { children: React.ReactNode }) 
             libraries: ['places', 'geocoding', 'marker'],
         });
 
-        // Import core library to trigger the actual loading
-        importLibrary('core')
+        // Import all required libraries before marking as loaded
+        Promise.all([
+            importLibrary('core'),
+            importLibrary('places'),
+            importLibrary('marker'),
+            importLibrary('geocoding'),
+        ])
             .then(() => {
                 setIsLoaded(true);
             })
