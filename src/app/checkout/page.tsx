@@ -9,6 +9,52 @@ import { useSession } from 'next-auth/react';
 import { AuthScreen } from '@/components/auth/AuthScreen';
 import { dal } from '@/lib/dal';
 
+declare global {
+    interface Window {
+        Razorpay: new (options: Record<string, unknown>) => { open(): void };
+    }
+}
+
+interface RazorpaySuccessPayload {
+    razorpay_payment_id: string;
+    razorpay_order_id: string;
+    razorpay_signature: string;
+}
+
+function loadRazorpayScript(): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (typeof window !== 'undefined' && typeof window.Razorpay !== 'undefined') { resolve(); return; }
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Razorpay checkout'));
+        document.body.appendChild(script);
+    });
+}
+
+function openRazorpayPopup(opts: {
+    key: string;
+    amount: number;
+    currency: string;
+    order_id: string;
+    description: string;
+}): Promise<RazorpaySuccessPayload> {
+    return new Promise((resolve, reject) => {
+        const rzp = new window.Razorpay({
+            key: opts.key,
+            amount: opts.amount,
+            currency: opts.currency,
+            order_id: opts.order_id,
+            name: 'HoReCa Hub',
+            description: opts.description,
+            theme: { color: '#299e60' },
+            handler: (response: RazorpaySuccessPayload) => resolve(response),
+            modal: { ondismiss: () => reject(new Error('Payment cancelled')) },
+        });
+        rzp.open();
+    });
+}
+
 type CheckoutStep = 'review' | 'payment' | 'confirmation';
 
 const PAYMENT_OPTIONS = [
@@ -49,7 +95,6 @@ export default function CheckoutPage() {
         setIsPlacingOrder(true);
         setOrderError(null);
         try {
-            // Build vendor order payloads from cart groups
             const vendorOrders = groups.map(group => ({
                 vendorId: group.vendorId,
                 items: group.items.map(item => ({
@@ -58,16 +103,57 @@ export default function CheckoutPage() {
                 })),
             }));
 
-            const result = await dal.orders.create(vendorOrders, selectedPayment) as { orders: Array<{ id: string; orderNumber: string }> };
-            setPlacedOrderIds((result.orders || []).map((o) => o.orderNumber || o.id));
+            // 1. Create orders in DB (same for all payment methods)
+            const result = await dal.orders.create(vendorOrders, selectedPayment) as {
+                orders: Array<{ id: string; orderNumber: string }>;
+            };
+            const createdOrders = result.orders || [];
 
-            // Capture snapshot for confirmation screen
-            setOrderSnapshot({
-                groups: [...groups],
-                total: totalAmount,
-                count: vendorCount,
-            });
+            // 2. For online payment: open Razorpay popup for each order
+            if (selectedPayment === 'online') {
+                await loadRazorpayScript();
 
+                for (let i = 0; i < createdOrders.length; i++) {
+                    const order = createdOrders[i];
+
+                    // Initiate — get razorpay_order_id from our backend
+                    const initiateRes = await fetch('/api/v1/payments/initiate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ orderId: order.id }),
+                    });
+                    const initiateData = await initiateRes.json();
+                    if (!initiateRes.ok) throw new Error(initiateData.error?.message || 'Payment initiation failed');
+
+                    const { razorpay_order_id, amount, currency, key_id } = initiateData.data;
+
+                    // Open popup — awaits user completing or dismissing payment
+                    const payment = await openRazorpayPopup({
+                        key: key_id,
+                        amount,
+                        currency,
+                        order_id: razorpay_order_id,
+                        description: `Order ${order.orderNumber}${createdOrders.length > 1 ? ` (${i + 1}/${createdOrders.length})` : ''}`,
+                    });
+
+                    // Verify HMAC signature on our backend
+                    const verifyRes = await fetch('/api/v1/payments/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            razorpay_order_id: payment.razorpay_order_id,
+                            razorpay_payment_id: payment.razorpay_payment_id,
+                            razorpay_signature: payment.razorpay_signature,
+                        }),
+                    });
+                    const verifyData = await verifyRes.json();
+                    if (!verifyRes.ok) throw new Error(verifyData.error?.message || 'Payment verification failed');
+                }
+            }
+
+            // 3. Show confirmation
+            setPlacedOrderIds(createdOrders.map(o => o.orderNumber || o.id));
+            setOrderSnapshot({ groups: [...groups], total: totalAmount, count: vendorCount });
             setStep('confirmation');
             clearCart();
         } catch (err: unknown) {
@@ -312,9 +398,9 @@ export default function CheckoutPage() {
                             {isPlacingOrder ? (
                                 <>
                                     <Loader2 size={16} className="animate-spin" />
-                                    Placing Order...
+                                    {selectedPayment === 'online' ? 'Opening Payment...' : 'Placing Order...'}
                                 </>
-                            ) : 'Place Order →'}
+                            ) : selectedPayment === 'online' ? 'Pay Online →' : 'Place Order →'}
                         </button>
                     </div>
                 )}

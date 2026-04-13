@@ -3,6 +3,52 @@
 import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+
+declare global {
+    interface Window {
+        Razorpay: new (options: Record<string, unknown>) => { open(): void };
+    }
+}
+
+interface RazorpaySuccessPayload {
+    razorpay_payment_id: string;
+    razorpay_order_id: string;
+    razorpay_signature: string;
+}
+
+function loadRazorpayScript(): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (typeof window !== 'undefined' && typeof window.Razorpay !== 'undefined') { resolve(); return; }
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Razorpay checkout'));
+        document.body.appendChild(script);
+    });
+}
+
+function openRazorpayPopup(opts: {
+    key: string;
+    amount: number;
+    currency: string;
+    order_id: string;
+    description: string;
+}): Promise<RazorpaySuccessPayload> {
+    return new Promise((resolve, reject) => {
+        const rzp = new window.Razorpay({
+            key: opts.key,
+            amount: opts.amount,
+            currency: opts.currency,
+            order_id: opts.order_id,
+            name: 'HoReCa Hub',
+            description: opts.description,
+            theme: { color: '#53B175' },
+            handler: (response: RazorpaySuccessPayload) => resolve(response),
+            modal: { ondismiss: () => reject(new Error('Payment cancelled')) },
+        });
+        rzp.open();
+    });
+}
 import { ArrowLeft, Search, ChevronRight, ChevronDown, ChevronUp, Plus, Minus, X, Percent, FileText, AlertTriangle, Check, Home, ShoppingCart, Truck, CreditCard, Trash2, Store, Zap, FileCheck, Banknote, BadgePercent, Wallet, Loader2 } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { dal } from '@/lib/dal';
@@ -145,7 +191,55 @@ export default function CartPage() {
                     quantity: item.quantity,
                 })),
             }));
-            await dal.orders.create(vendorOrders, paymentMethod);
+
+            // 1. Create orders in DB
+            const result = await dal.orders.create(vendorOrders, paymentMethod) as {
+                orders: Array<{ id: string; orderNumber: string }>;
+            };
+            const createdOrders = result.orders || [];
+
+            // 2. For Razorpay: open payment popup for each order
+            if (paymentMethod === 'razorpay') {
+                await loadRazorpayScript();
+
+                for (let i = 0; i < createdOrders.length; i++) {
+                    const order = createdOrders[i];
+
+                    // Get razorpay_order_id from backend
+                    const initiateRes = await fetch('/api/v1/payments/initiate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ orderId: order.id }),
+                    });
+                    const initiateData = await initiateRes.json();
+                    if (!initiateRes.ok) throw new Error(initiateData.error?.message || 'Payment initiation failed');
+
+                    const { razorpay_order_id, amount, currency, key_id } = initiateData.data;
+
+                    // Open Razorpay popup — waits for user to pay or cancel
+                    const payment = await openRazorpayPopup({
+                        key: key_id,
+                        amount,
+                        currency,
+                        order_id: razorpay_order_id,
+                        description: `Order ${order.orderNumber}${createdOrders.length > 1 ? ` (${i + 1}/${createdOrders.length})` : ''}`,
+                    });
+
+                    // Verify HMAC signature
+                    const verifyRes = await fetch('/api/v1/payments/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            razorpay_order_id: payment.razorpay_order_id,
+                            razorpay_payment_id: payment.razorpay_payment_id,
+                            razorpay_signature: payment.razorpay_signature,
+                        }),
+                    });
+                    const verifyData = await verifyRes.json();
+                    if (!verifyRes.ok) throw new Error(verifyData.error?.message || 'Payment verification failed');
+                }
+            }
+
             clearCart();
             setScreen('success');
         } catch (err: any) {
@@ -288,7 +382,10 @@ export default function CartPage() {
                                 disabled={isPlacingOrder}
                                 className="w-full bg-[#53B175] text-white py-5 rounded-2xl font-bold text-[18px] transition-all hover:bg-[#48a068] active:scale-[0.98] shadow-lg shadow-[#53B175]/20 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
-                                {isPlacingOrder ? <><Loader2 size={20} className="animate-spin" /> Placing Order...</> : 'Confirm Order'}
+                                {isPlacingOrder
+                                    ? <><Loader2 size={20} className="animate-spin" /> {paymentMethod === 'razorpay' ? 'Opening Payment...' : 'Placing Order...'}</>
+                                    : paymentMethod === 'razorpay' ? 'Pay with Razorpay' : 'Confirm Order'
+                                }
                             </button>
                         </div>
 
@@ -339,7 +436,10 @@ export default function CartPage() {
                         disabled={isPlacingOrder}
                         className="w-full bg-[#53B175] text-white py-[18px] rounded-[16px] font-bold text-[17px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20 hover:bg-[#48a068] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                        {isPlacingOrder ? <><Loader2 size={20} className="animate-spin" /> Placing Order...</> : `Confirm & Pay ₹${totalPay.toFixed(2)}`}
+                        {isPlacingOrder
+                            ? <><Loader2 size={20} className="animate-spin" /> {paymentMethod === 'razorpay' ? 'Opening Payment...' : 'Placing Order...'}</>
+                            : paymentMethod === 'razorpay' ? `Pay ₹${totalPay.toFixed(2)} with Razorpay` : `Confirm & Pay ₹${totalPay.toFixed(2)}`
+                        }
                     </button>
                 </div>
             </div>

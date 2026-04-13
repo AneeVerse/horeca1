@@ -138,7 +138,11 @@ export class OrderService {
       orderBy: { createdAt: 'desc' },
       include: {
         vendor: { select: { id: true, businessName: true, slug: true, logoUrl: true } },
-        items: true,
+        items: {
+          include: {
+            product: { select: { imageUrl: true, images: true } },
+          },
+        },
       },
     });
 
@@ -155,7 +159,11 @@ export class OrderService {
     const order = await prisma.order.findFirst({
       where: { id: orderId, userId },
       include: {
-        items: true,
+        items: {
+          include: {
+            product: { select: { imageUrl: true, images: true } },
+          },
+        },
         vendor: { select: { id: true, businessName: true, slug: true, logoUrl: true } },
         payments: true,
       },
