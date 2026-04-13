@@ -40,7 +40,7 @@ export class PaymentService {
     // Verify signature
     const body = `${razorpayOrderId}|${razorpayPaymentId}`;
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET!)
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
       .update(body)
       .digest('hex');
 
