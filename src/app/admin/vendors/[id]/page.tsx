@@ -39,7 +39,7 @@ interface ServiceArea {
 
 interface DeliverySlot {
     id: string;
-    dayOfWeek: string;
+    dayOfWeek: number | string;
     slotStart: string;
     slotEnd: string;
     cutoffTime: string;
@@ -102,9 +102,20 @@ function getInitials(name: string): string {
 }
 
 const DAY_ORDER = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+const DAY_MAP: Record<number, string> = {
+    1: 'MONDAY',
+    2: 'TUESDAY',
+    3: 'WEDNESDAY',
+    4: 'THURSDAY',
+    5: 'FRIDAY',
+    6: 'SATURDAY',
+    7: 'SUNDAY',
+};
 
-function formatDayOfWeek(day: string): string {
-    return day.charAt(0) + day.slice(1).toLowerCase();
+function formatDayOfWeek(day: string | number): string {
+    const dayStr = typeof day === 'number' ? DAY_MAP[day] || 'UNKNOWN' : day.toString();
+    if (!dayStr) return 'Unknown';
+    return dayStr.charAt(0).toUpperCase() + dayStr.slice(1).toLowerCase();
 }
 
 function formatTime(time: string): string {
@@ -208,9 +219,11 @@ export default function VendorDetailsPage() {
         .filter(Boolean)
         .join(', ');
 
-    const sortedSlots = [...vendor.deliverySlots].sort(
-        (a, b) => DAY_ORDER.indexOf(a.dayOfWeek) - DAY_ORDER.indexOf(b.dayOfWeek)
-    );
+    const sortedSlots = [...vendor.deliverySlots].sort((a, b) => {
+        const orderA = typeof a.dayOfWeek === 'number' ? a.dayOfWeek : DAY_ORDER.indexOf(a.dayOfWeek.toUpperCase()) + 1;
+        const orderB = typeof b.dayOfWeek === 'number' ? b.dayOfWeek : DAY_ORDER.indexOf(b.dayOfWeek.toUpperCase()) + 1;
+        return orderA - orderB;
+    });
 
     const stats = [
         { label: 'Products', value: vendor._count.products, icon: Package, color: '#299E60' },
