@@ -626,13 +626,13 @@ export default function CategoriesPage() {
     }
 
     return (
-        <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500 pb-6">
             {/* ============================================================= */}
             {/* Header */}
             {/* ============================================================= */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-[28px] font-[900] text-[#181725] tracking-tight">
+                    <h1 className="text-[22px] md:text-[28px] font-[900] text-[#181725] tracking-tight">
                         Category Management
                     </h1>
                     <p className="text-[#7C7C7C] font-medium mt-1">
@@ -689,7 +689,7 @@ export default function CategoriesPage() {
             {/* ============================================================= */}
             {/* Stats */}
             {/* ============================================================= */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
                 {[
                     {
                         label: 'Total Categories',
@@ -722,10 +722,10 @@ export default function CategoriesPage() {
                 ].map((stat, idx) => (
                     <div
                         key={idx}
-                        className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm flex items-center gap-5"
+                        className="bg-white p-4 md:p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm flex items-center gap-3 md:gap-5"
                     >
                         <div
-                            className="w-[56px] h-[56px] rounded-[14px] flex items-center justify-center shrink-0"
+                            className="w-[44px] h-[44px] md:w-[56px] md:h-[56px] rounded-[14px] flex items-center justify-center shrink-0"
                             style={{ backgroundColor: stat.bgColor, color: stat.color }}
                         >
                             <stat.icon size={26} strokeWidth={2.5} />
@@ -734,7 +734,7 @@ export default function CategoriesPage() {
                             <p className="text-[13px] font-bold text-[#AEAEAE] mb-1 uppercase tracking-wider">
                                 {stat.label}
                             </p>
-                            <h3 className="text-[28px] font-[900] text-[#181725] leading-none">
+                            <h3 className="text-[20px] md:text-[28px] font-[900] text-[#181725] leading-none">
                                 {stat.value}
                             </h3>
                         </div>
@@ -763,7 +763,7 @@ export default function CategoriesPage() {
             {/* ============================================================= */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
                 {/* Search bar inside card */}
-                <div className="p-6 border-b border-[#EEEEEE] flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="p-4 md:p-6 border-b border-[#EEEEEE] flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <h2 className="text-[20px] font-[900] text-[#181725]">All Categories</h2>
                     <div className="relative w-full md:w-[320px]">
                         <Search
@@ -782,7 +782,7 @@ export default function CategoriesPage() {
 
                 {/* Table */}
                 <div className="overflow-x-auto min-h-[300px]">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse min-w-[800px]">
                         <thead>
                             <tr className="bg-[#F8F9FB]">
                                 <th className="px-8 py-5 text-[13px] font-bold text-[#7C7C7C] uppercase tracking-wider">

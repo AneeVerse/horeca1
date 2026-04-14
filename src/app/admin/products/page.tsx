@@ -508,13 +508,13 @@ export default function ProductsPage() {
     // -----------------------------------------------------------------------
 
     return (
-        <div className="max-w-[1600px] mx-auto space-y-8 pb-10 animate-in fade-in duration-500">
+        <div className="space-y-6 md:space-y-8 pb-6 animate-in fade-in duration-500">
             {/* ============================================================= */}
             {/* Header Row                                                      */}
             {/* ============================================================= */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-[28px] font-[900] text-[#181725] tracking-tight leading-none mb-1">
+                    <h1 className="text-[22px] md:text-[28px] font-[900] text-[#181725] tracking-tight leading-none mb-1">
                         Product Management
                     </h1>
                     <p className="text-[#7C7C7C] font-medium text-[13px]">
@@ -576,23 +576,23 @@ export default function ProductsPage() {
             {/* ============================================================= */}
             {/* Stats Cards                                                     */}
             {/* ============================================================= */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
                 {statCards.map((card, idx) => (
                     <div
                         key={idx}
-                        className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm flex items-center gap-5"
+                        className="bg-white p-4 md:p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm flex items-center gap-3 md:gap-5"
                     >
                         <div
-                            className="w-[56px] h-[56px] rounded-[14px] flex items-center justify-center shrink-0"
+                            className="w-[44px] h-[44px] md:w-[56px] md:h-[56px] rounded-[14px] flex items-center justify-center shrink-0"
                             style={{ backgroundColor: card.bgColor, color: card.color }}
                         >
-                            <card.icon size={26} strokeWidth={2.5} />
+                            <card.icon size={22} strokeWidth={2.5} className="md:w-[26px] md:h-[26px]" />
                         </div>
                         <div>
                             <p className="text-[12px] font-bold text-[#AEAEAE] mb-1 uppercase tracking-wider">
                                 {card.label}
                             </p>
-                            <h3 className="text-[28px] font-[900] text-[#181725] leading-none">{card.value}</h3>
+                            <h3 className="text-[20px] md:text-[28px] font-[900] text-[#181725] leading-none">{card.value}</h3>
                         </div>
                     </div>
                 ))}
@@ -601,7 +601,7 @@ export default function ProductsPage() {
             {/* ============================================================= */}
             {/* Filters Row                                                     */}
             {/* ============================================================= */}
-            <div className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm">
+            <div className="bg-white p-4 md:p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm">
                 <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                     {/* Search */}
                     <div className="relative flex-1 min-w-[220px]">

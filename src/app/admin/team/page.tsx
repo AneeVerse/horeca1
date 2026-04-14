@@ -95,17 +95,17 @@ export default function AdminTeamPage() {
     };
 
     return (
-        <div className="space-y-6 pb-10 animate-in fade-in duration-300">
+        <div className="space-y-4 md:space-y-6 pb-6 animate-in fade-in duration-300">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-[28px] font-bold text-[#181725] leading-none mb-1">Admin Team</h1>
+                    <h1 className="text-[22px] md:text-[28px] font-bold text-[#181725] leading-none mb-1">Admin Team</h1>
                     <p className="text-[#7C7C7C] text-[14px] font-medium">Manage who has access to the admin dashboard</p>
                 </div>
                 {isOwner && (
                     <button onClick={() => { setShowAddMember(true); setMemberError(null); }}
-                        className="h-[44px] px-5 bg-[#E74C3C] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#c0392b] transition-colors flex items-center gap-2 shadow-sm">
-                        <Plus size={16} /> Add Admin
+                        className="h-[40px] md:h-[44px] px-4 md:px-5 bg-[#E74C3C] text-white rounded-[12px] text-[13px] md:text-[14px] font-bold hover:bg-[#c0392b] transition-colors flex items-center gap-2 shadow-sm">
+                        <Plus size={16} /> <span className="hidden sm:inline">Add Admin</span><span className="sm:hidden">Add</span>
                     </button>
                 )}
             </div>
@@ -127,7 +127,7 @@ export default function AdminTeamPage() {
 
             {/* Add Member Form */}
             {showAddMember && (
-                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-4 md:p-6">
                     <h3 className="text-[16px] font-bold text-[#181725] mb-4">Add Admin Team Member</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -179,7 +179,7 @@ export default function AdminTeamPage() {
 
             {/* Team Table */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                <div className="p-5 border-b border-[#EEEEEE] flex items-center gap-2">
+                <div className="p-4 md:p-5 border-b border-[#EEEEEE] flex items-center gap-2">
                     <Users size={18} className="text-[#E74C3C]" />
                     <h2 className="text-[16px] font-bold text-[#181725]">Team Members</h2>
                     <span className="text-[13px] text-[#AEAEAE]">({team.length})</span>
@@ -195,7 +195,7 @@ export default function AdminTeamPage() {
                 ) : (
                     <>
                         {/* Table header */}
-                        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 px-6 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE] text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">
+                        <div className="grid grid-cols-[1fr_auto_auto] md:grid-cols-[1fr_auto_auto_auto] gap-4 px-4 md:px-6 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE] text-[10px] md:text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">
                             <span>Member</span>
                             <span>Role</span>
                             <span className="hidden md:block">Joined</span>
@@ -206,7 +206,7 @@ export default function AdminTeamPage() {
                             {team.map(member => {
                                 const cfg = ROLE_CONFIG[member.role] ?? ROLE_CONFIG.viewer;
                                 return (
-                                    <div key={member.id} className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-6 py-4">
+                                    <div key={member.id} className="grid grid-cols-[1fr_auto_auto] md:grid-cols-[1fr_auto_auto_auto] gap-2 md:gap-4 items-center px-4 md:px-6 py-4">
                                         {/* Member info */}
                                         <div className="flex items-center gap-3 min-w-0">
                                             <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center text-[13px] font-[900] shrink-0"

@@ -238,9 +238,9 @@ export default function VendorDetailsPage() {
     ];
 
     return (
-        <div className="space-y-6 pb-10">
+        <div className="w-full space-y-6 pb-6">
             {/* Header / Breadcrumbs */}
-            <div className="flex items-center gap-2 text-[14px] text-[#4B4B4B]">
+            <div className="flex items-center gap-2 text-[13px] md:text-[14px] text-[#4B4B4B] flex-wrap">
                 <button
                     onClick={() => router.back()}
                     className="hover:text-[#299E60] flex items-center gap-1 transition-colors"
@@ -260,14 +260,14 @@ export default function VendorDetailsPage() {
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
                     {/* Left: Logo + Basic Info */}
-                    <div className="p-8 flex gap-6">
-                        <div className="shrink-0">
-                            <div className="w-[140px] h-[140px] rounded-[16px] bg-[#F1F4F9] flex items-center justify-center p-4">
+                    <div className="p-4 md:p-8 flex flex-col sm:flex-row gap-4 md:gap-6">
+                        <div className="shrink-0 flex flex-col items-center sm:items-start">
+                            <div className="w-[100px] h-[100px] md:w-[140px] md:h-[140px] rounded-[16px] bg-[#F1F4F9] flex items-center justify-center p-4">
                                 {vendor.logoUrl ? (
                                     <img
                                         src={vendor.logoUrl}
                                         alt={vendor.businessName}
-                                        className="w-[100px] h-[100px] object-contain"
+                                        className="w-[70px] h-[70px] md:w-[100px] md:h-[100px] object-contain"
                                     />
                                 ) : (
                                     <span className="text-[36px] font-[900] text-[#299E60]">
@@ -301,7 +301,7 @@ export default function VendorDetailsPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3">
-                                <h2 className="text-[22px] font-extrabold text-[#181725] leading-tight">
+                                <h2 className="text-[18px] md:text-[22px] font-extrabold text-[#181725] leading-tight">
                                     {vendor.businessName}
                                 </h2>
                                 {vendor.isVerified && (
@@ -377,7 +377,7 @@ export default function VendorDetailsPage() {
                     </div>
 
                     {/* Right: Delivery & Business Info */}
-                    <div className="p-8 border-l border-[#EEEEEE]">
+                    <div className="p-4 md:p-8 border-t lg:border-t-0 lg:border-l border-[#EEEEEE]">
                         <h3 className="text-[18px] font-extrabold text-[#181725] mb-6">
                             Business Details
                         </h3>
@@ -459,14 +459,14 @@ export default function VendorDetailsPage() {
             </div>
 
             {/* Stats Row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                 {stats.map((stat, idx) => (
                     <div
                         key={idx}
                         className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden hover:shadow-md transition-all group"
                     >
                         <div className="h-[3px] w-full" style={{ backgroundColor: stat.color }} />
-                        <div className="p-6 text-center">
+                        <div className="p-4 md:p-6 text-center">
                             <div
                                 className="w-[44px] h-[44px] rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform"
                                 style={{
@@ -476,7 +476,7 @@ export default function VendorDetailsPage() {
                             >
                                 <stat.icon size={20} />
                             </div>
-                            <h4 className="text-[20px] font-[900] text-[#181725] leading-none">
+                            <h4 className="text-[16px] md:text-[20px] font-[900] text-[#181725] leading-none">
                                 {stat.value}
                             </h4>
                             <p className="text-[12px] font-bold text-[#AEAEAE] mt-2 uppercase tracking-wider">
@@ -489,7 +489,7 @@ export default function VendorDetailsPage() {
 
             {/* Products Table */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                <div className="p-6 flex items-center justify-between border-b border-[#EEEEEE]">
+                <div className="p-4 md:p-6 flex items-center justify-between border-b border-[#EEEEEE]">
                     <h3 className="text-[18px] font-extrabold text-[#181725] flex items-center gap-2">
                         <Package size={20} className="text-[#299E60]" />
                         Products
@@ -508,25 +508,25 @@ export default function VendorDetailsPage() {
                     </div>
                 ) : (
                     <>
-                        {/* Table Header */}
-                        <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE] text-[12px] font-bold text-[#AEAEAE] uppercase">
+                        {/* Table Header - hidden on mobile */}
+                        <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE] text-[12px] font-bold text-[#AEAEAE] uppercase">
                             <div className="col-span-1">#</div>
                             <div className="col-span-5">Product Name</div>
                             <div className="col-span-3">Price</div>
                             <div className="col-span-3">Status</div>
                         </div>
 
-                        {/* Table Rows */}
+                        {/* Table Rows - card on mobile, table row on desktop */}
                         {vendor.products.map((product, i) => (
                             <div
                                 key={product.id}
-                                className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#F5F5F5] items-center hover:bg-[#FAFAFA] transition-colors"
+                                className="flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 px-4 md:px-6 py-4 border-b border-[#F5F5F5] md:items-center hover:bg-[#FAFAFA] transition-colors"
                             >
-                                <div className="col-span-1 text-[13px] font-bold text-[#AEAEAE]">
+                                <div className="hidden md:block col-span-1 text-[13px] font-bold text-[#AEAEAE]">
                                     {i + 1}
                                 </div>
-                                <div className="col-span-5 flex items-center gap-3">
-                                    <div className="w-[44px] h-[44px] rounded-[10px] bg-[#F1F4F9] overflow-hidden shrink-0">
+                                <div className="md:col-span-5 flex items-center gap-3">
+                                    <div className="w-[40px] h-[40px] md:w-[44px] md:h-[44px] rounded-[10px] bg-[#F1F4F9] overflow-hidden shrink-0">
                                         {product.imageUrl ? (
                                             <img
                                                 src={product.imageUrl}
@@ -546,10 +546,10 @@ export default function VendorDetailsPage() {
                                         {product.name}
                                     </p>
                                 </div>
-                                <div className="col-span-3 text-[14px] font-bold text-[#181725]">
+                                <div className="md:col-span-3 text-[14px] font-bold text-[#181725] pl-[52px] md:pl-0">
                                     {formatPrice(product.basePrice)}
                                 </div>
-                                <div className="col-span-3">
+                                <div className="md:col-span-3 pl-[52px] md:pl-0">
                                     {product.isActive ? (
                                         <span className="inline-flex items-center gap-1.5 bg-[#E6F9ED] text-[#299E60] text-[11px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase">
                                             <CheckCircle2 size={12} />
@@ -569,10 +569,10 @@ export default function VendorDetailsPage() {
             </div>
 
             {/* Delivery Slots + Service Areas */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                 {/* Delivery Slots */}
                 <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                    <div className="p-6 flex items-center gap-2 border-b border-[#EEEEEE]">
+                    <div className="p-4 md:p-6 flex items-center gap-2 border-b border-[#EEEEEE]">
                         <CalendarClock size={20} className="text-[#299E60]" />
                         <h3 className="text-[18px] font-extrabold text-[#181725]">
                             Delivery Slots
@@ -631,7 +631,7 @@ export default function VendorDetailsPage() {
 
                 {/* Service Areas */}
                 <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                    <div className="p-6 flex items-center gap-2 border-b border-[#EEEEEE]">
+                    <div className="p-4 md:p-6 flex items-center gap-2 border-b border-[#EEEEEE]">
                         <MapPinned size={20} className="text-[#3B82F6]" />
                         <h3 className="text-[18px] font-extrabold text-[#181725]">
                             Service Areas

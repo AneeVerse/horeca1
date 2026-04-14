@@ -94,8 +94,8 @@ export function AccountSwitcherDropdown({ allowAdd = false }: { allowAdd?: boole
             {switching ? <Loader2 size={16} className="animate-spin" /> : initials}
           </span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[15px] font-bold text-[#181725]">{currentName}</span>
+        <div className="hidden lg:flex items-center gap-1.5 min-w-0">
+          <span className="text-[15px] font-bold text-[#181725] truncate">{currentName}</span>
           <ChevronDown
             size={16}
             className={`text-[#AEAEAE] group-hover:text-[#181725] transition-all duration-200 ${isOpen ? 'rotate-180' : ''}`}

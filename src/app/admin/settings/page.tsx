@@ -44,16 +44,16 @@ export default function SettingsPage() {
     };
 
     return (
-        <div className="max-w-[960px] space-y-8 pb-12">
+        <div className="space-y-6 md:space-y-8 pb-6">
             {/* Page Header */}
             <div>
-                <h1 className="text-[26px] font-medium text-[#000000]">Settings</h1>
+                <h1 className="text-[22px] md:text-[26px] font-medium text-[#000000]">Settings</h1>
                 <p className="text-[#000000] text-[12px] font-light">Manage your platform configuration</p>
             </div>
 
             {/* General Settings */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm">
-                <div className="flex items-center gap-3 px-8 py-6 border-b border-[#EEEEEE]">
+                <div className="flex items-center gap-3 px-4 md:px-8 py-4 md:py-6 border-b border-[#EEEEEE]">
                     <div className="w-11 h-11 rounded-lg bg-green-50 text-[#299E60] flex items-center justify-center shrink-0">
                         <Settings size={22} />
                     </div>
@@ -63,7 +63,7 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                <div className="px-8 py-6 space-y-5">
+                <div className="px-4 md:px-8 py-4 md:py-6 space-y-5">
                     <div>
                         <label className="block text-[13px] font-bold text-[#4B4B4B] mb-1.5">Platform Name</label>
                         <input
@@ -93,7 +93,7 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                <div className="px-8 py-5 border-t border-[#EEEEEE] flex justify-end">
+                <div className="px-4 md:px-8 py-4 md:py-5 border-t border-[#EEEEEE] flex justify-end">
                     <button
                         onClick={handleSaveGeneral}
                         className="flex items-center gap-2 h-[42px] px-6 bg-[#299E60] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#238a54] transition-colors shadow-sm shadow-[#299E60]/20"
@@ -106,7 +106,7 @@ export default function SettingsPage() {
 
             {/* Business Settings */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm">
-                <div className="flex items-center gap-3 px-8 py-6 border-b border-[#EEEEEE]">
+                <div className="flex items-center gap-3 px-4 md:px-8 py-4 md:py-6 border-b border-[#EEEEEE]">
                     <div className="w-11 h-11 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                         <Building2 size={22} />
                     </div>
@@ -116,7 +116,7 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                <div className="px-8 py-6 space-y-5">
+                <div className="px-4 md:px-8 py-4 md:py-6 space-y-5">
                     <div>
                         <label className="block text-[13px] font-bold text-[#4B4B4B] mb-1.5">Default Commission Rate (%)</label>
                         <input
@@ -150,7 +150,7 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                <div className="px-8 py-5 border-t border-[#EEEEEE] flex justify-end">
+                <div className="px-4 md:px-8 py-4 md:py-5 border-t border-[#EEEEEE] flex justify-end">
                     <button
                         onClick={handleSaveBusiness}
                         className="flex items-center gap-2 h-[42px] px-6 bg-[#299E60] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#238a54] transition-colors shadow-sm shadow-[#299E60]/20"
@@ -163,7 +163,7 @@ export default function SettingsPage() {
 
             {/* Notification Preferences */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm">
-                <div className="flex items-center gap-3 px-8 py-6 border-b border-[#EEEEEE]">
+                <div className="flex items-center gap-3 px-4 md:px-8 py-4 md:py-6 border-b border-[#EEEEEE]">
                     <div className="w-11 h-11 rounded-lg bg-yellow-50 text-yellow-600 flex items-center justify-center shrink-0">
                         <Bell size={22} />
                     </div>
@@ -173,7 +173,7 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                <div className="px-8 py-6 space-y-4">
+                <div className="px-4 md:px-8 py-4 md:py-6 space-y-4">
                     {/* Email Notifications */}
                     <div className="flex items-center justify-between py-3 border-b border-[#F5F5F5] last:border-b-0">
                         <div>
@@ -235,7 +235,7 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                <div className="px-8 py-5 border-t border-[#EEEEEE] flex justify-end">
+                <div className="px-4 md:px-8 py-4 md:py-5 border-t border-[#EEEEEE] flex justify-end">
                     <button
                         onClick={handleSaveNotifications}
                         className="flex items-center gap-2 h-[42px] px-6 bg-[#299E60] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#238a54] transition-colors shadow-sm shadow-[#299E60]/20"
@@ -248,7 +248,7 @@ export default function SettingsPage() {
 
             {/* Account */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm">
-                <div className="flex items-center gap-3 px-8 py-6 border-b border-[#EEEEEE]">
+                <div className="flex items-center gap-3 px-4 md:px-8 py-4 md:py-6 border-b border-[#EEEEEE]">
                     <div className="w-11 h-11 rounded-lg bg-pink-50 text-pink-600 flex items-center justify-center shrink-0">
                         <User size={22} />
                     </div>
@@ -258,7 +258,7 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                <div className="px-8 py-6 space-y-5">
+                <div className="px-4 md:px-8 py-4 md:py-6 space-y-5">
                     <div>
                         <label className="block text-[13px] font-bold text-[#4B4B4B] mb-1.5">Name</label>
                         <div className="w-full bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] py-3 px-4 text-[14px] font-medium text-[#181725]">

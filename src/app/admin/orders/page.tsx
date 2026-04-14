@@ -47,16 +47,16 @@ export default function OrdersPage() {
     );
 
     return (
-        <div className="space-y-8 pb-10">
+        <div className="space-y-6 md:space-y-8 pb-6">
             {/* Page Header */}
             <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                 <div>
-                    <h1 className="text-[28px] font-bold text-[#000000] leading-none mb-1">Orders</h1>
+                    <h1 className="text-[22px] md:text-[28px] font-bold text-[#000000] leading-none mb-1">Orders</h1>
                     <p className="text-[#000000] text-[13px] font-medium opacity-70">Whole data about your Order by Customers</p>
                 </div>
 
                 {/* Search Bar */}
-                <div className="relative group w-full max-w-[210px]">
+                <div className="relative group w-full md:max-w-[210px]">
                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={16} />
                     <input
                         type="text"
@@ -69,16 +69,16 @@ export default function OrdersPage() {
             </div>
 
             {/* Orders Table Container */}
-            <div className="bg-white p-6 md:p-10 rounded-[12px] border border-[#DCDCDC] shadow-sm max-w-[1360px]">
-                <h3 className="text-[18px] font-bold text-[#000000] mb-8">All Orders</h3>
+            <div className="bg-white p-4 md:p-10 rounded-[12px] border border-[#DCDCDC] shadow-sm w-full">
+                <h3 className="text-[16px] md:text-[18px] font-bold text-[#000000] mb-4 md:mb-8">All Orders</h3>
 
                 {loading ? (
                     <div className="flex items-center justify-center py-20">
                         <Loader2 className="animate-spin text-[#299E60]" size={32} />
                     </div>
                 ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full border-separate border-spacing-0">
+                <div className="overflow-x-auto -mx-4 md:mx-0">
+                    <table className="w-full border-separate border-spacing-0 min-w-[700px]">
                         <thead>
                             <tr className="bg-[#EFEFEF] h-[52px]">
                                 <th className="px-6 text-center text-[14px] font-bold text-[#4B4B4B] first:rounded-l-[10px]">Order ID</th>

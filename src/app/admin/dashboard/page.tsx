@@ -114,10 +114,10 @@ export default function DashboardPage() {
     ] : [];
 
     return (
-        <div className="space-y-8 pb-10">
+        <div className="space-y-6 md:space-y-8 pb-6">
             {/* Page Header */}
             <div>
-                <h1 className="text-[26px] font-medium text-[#000000]">Dashboard</h1>
+                <h1 className="text-[22px] md:text-[26px] font-medium text-[#000000]">Dashboard</h1>
                 <p className="text-[#000000] text-[12px] font-light">Whole data about your business here</p>
             </div>
 
@@ -128,21 +128,21 @@ export default function DashboardPage() {
             ) : (
             <>
             {/* Stat Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
                 {statCards.map((stat, idx) => (
-                    <div key={idx} className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm hover:shadow-md transition-all h-[145px] flex flex-col justify-between cursor-default">
-                        <div className="flex items-center gap-3">
-                            <div className={cn("w-11 h-11 rounded-lg flex items-center justify-center shrink-0", stat.color)}>
-                                <stat.icon size={22} />
+                    <div key={idx} className="bg-white p-4 md:p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm hover:shadow-md transition-all min-h-[120px] md:h-[145px] flex flex-col justify-between cursor-default">
+                        <div className="flex items-center gap-2 md:gap-3">
+                            <div className={cn("w-9 h-9 md:w-11 md:h-11 rounded-lg flex items-center justify-center shrink-0", stat.color)}>
+                                <stat.icon size={18} className="md:w-[22px] md:h-[22px]" />
                             </div>
-                            <span className="text-[15px] font-bold text-[#4B4B4B]">{stat.label}</span>
+                            <span className="text-[12px] md:text-[15px] font-bold text-[#4B4B4B] leading-tight">{stat.label}</span>
                         </div>
 
-                        <div className="flex items-center justify-between">
-                            <h4 className="text-[28px] font-[800] text-[#181725] leading-none">{stat.value}</h4>
+                        <div className="flex items-center justify-between mt-2 md:mt-0">
+                            <h4 className="text-[20px] md:text-[28px] font-[800] text-[#181725] leading-none">{stat.value}</h4>
                             {stat.trend && (
                             <div className={cn(
-                                "flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-bold",
+                                "flex items-center gap-1 px-1.5 md:px-2.5 py-0.5 md:py-1 rounded-full text-[10px] md:text-[12px] font-bold",
                                 stat.trendType === 'up' ? "bg-[#EEF8F1] text-[#299E60]" : "bg-[#FFF0F0] text-[#E74C3C]"
                             )}>
                                 {stat.trend}
@@ -154,11 +154,11 @@ export default function DashboardPage() {
             </div>
 
             {/* Charts Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                 {/* Sales Overview - Area Chart */}
-                <div className="bg-white p-10 rounded-[14px] border border-[#EEEEEE] shadow-sm min-h-[411px]">
-                    <h3 className="text-[18px] font-bold text-[#181725] mb-6">Orders Overview</h3>
-                    <div className="h-[340px] w-full">
+                <div className="bg-white p-4 md:p-10 rounded-[14px] border border-[#EEEEEE] shadow-sm min-h-[300px] md:min-h-[411px]">
+                    <h3 className="text-[16px] md:text-[18px] font-bold text-[#181725] mb-4 md:mb-6">Orders Overview</h3>
+                    <div className="h-[240px] md:h-[340px] w-full">
                         {(!data?.monthlyData || data.monthlyData.length === 0) ? (
                             <div className="h-full flex flex-col items-center justify-center text-gray-400">
                                 <TrendingUp size={40} className="mb-3 opacity-30" />
@@ -207,9 +207,9 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Monthly Revenue - Bar Chart */}
-                <div className="bg-white p-10 rounded-[14px] border border-[#EEEEEE] shadow-sm min-h-[411px]">
-                    <h3 className="text-[18px] font-bold text-[#181725] mb-6">Monthly Revenue</h3>
-                    <div className="h-[340px] w-full">
+                <div className="bg-white p-4 md:p-10 rounded-[14px] border border-[#EEEEEE] shadow-sm min-h-[300px] md:min-h-[411px]">
+                    <h3 className="text-[16px] md:text-[18px] font-bold text-[#181725] mb-4 md:mb-6">Monthly Revenue</h3>
+                    <div className="h-[240px] md:h-[340px] w-full">
                         {(!data?.monthlyData || data.monthlyData.length === 0) ? (
                             <div className="h-full flex flex-col items-center justify-center text-gray-400">
                                 <Wallet size={40} className="mb-3 opacity-30" />
@@ -253,10 +253,10 @@ export default function DashboardPage() {
             </div>
 
             {/* Order Status Breakdown & Recent Vendors */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                 {/* Order Status Breakdown */}
-                <div className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm h-fit">
-                    <div className="flex items-center justify-between mb-8">
+                <div className="bg-white p-4 md:p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm h-fit">
+                    <div className="flex items-center justify-between mb-4 md:mb-8">
                         <h3 className="text-[18px] font-bold text-[#000000]">Orders by Status</h3>
                         <Link href="/admin/orders" className="text-[#299E60] text-[12px] font-bold hover:underline">See All</Link>
                     </div>
@@ -290,8 +290,8 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Active Vendors from recent orders */}
-                <div className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm h-fit">
-                    <div className="flex items-center justify-between mb-8">
+                <div className="bg-white p-4 md:p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm h-fit">
+                    <div className="flex items-center justify-between mb-4 md:mb-8">
                         <h3 className="text-[18px] font-bold text-[#000000]">Active Vendors</h3>
                         <Link href="/admin/vendors" className="text-[#299E60] text-[12px] font-bold hover:underline">See All</Link>
                     </div>
@@ -318,8 +318,8 @@ export default function DashboardPage() {
             </div>
 
             {/* Recent Activity Table */}
-            <div className="bg-white p-10 rounded-[10px] border border-[#DCDCDC] shadow-sm max-w-[1360px]">
-                <h3 className="text-[18px] font-bold text-[#000000] mb-8">Recent Activity</h3>
+            <div className="bg-white p-4 md:p-10 rounded-[10px] border border-[#DCDCDC] shadow-sm w-full">
+                <h3 className="text-[16px] md:text-[18px] font-bold text-[#000000] mb-4 md:mb-8">Recent Activity</h3>
                 <div className="overflow-x-auto">
                     <table className="w-full border-separate border-spacing-0">
                         <thead>

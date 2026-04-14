@@ -255,35 +255,35 @@ export default function ApprovalsPage() {
     }
 
     return (
-        <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500 pb-6">
             {/* Header */}
             <div>
-                <h1 className="text-[28px] font-[900] text-[#181725] tracking-tight">Approvals</h1>
+                <h1 className="text-[22px] md:text-[28px] font-[900] text-[#181725] tracking-tight">Approvals</h1>
                 <p className="text-[#7C7C7C] font-medium mt-1">Review and manage pending approvals</p>
             </div>
 
             {/* Stats Row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
                 {[
                     { label: 'Pending Vendors', value: summary.pendingVendors, icon: Store, color: '#F59E0B', bg: '#FFF7E6' },
                     { label: 'Pending Products', value: summary.pendingProducts, icon: Package, color: '#3B82F6', bg: '#EFF6FF' },
                     { label: 'Pending Categories', value: summary.pendingCategories, icon: Tag, color: '#8B5CF6', bg: '#F3F0FF' },
                     { label: 'Total Pending', value: totalPending, icon: Clock, color: '#E74C3C', bg: '#FEF2F2' },
                 ].map((stat, idx) => (
-                    <div key={idx} className="bg-white p-5 rounded-[16px] border border-[#EEEEEE] shadow-sm flex items-center gap-4">
-                        <div className="w-[52px] h-[52px] rounded-[14px] flex items-center justify-center shrink-0" style={{ backgroundColor: stat.bg, color: stat.color }}>
-                            <stat.icon size={26} strokeWidth={2.5} />
+                    <div key={idx} className="bg-white p-4 md:p-5 rounded-[16px] border border-[#EEEEEE] shadow-sm flex items-center gap-3 md:gap-4">
+                        <div className="w-[40px] h-[40px] md:w-[52px] md:h-[52px] rounded-[14px] flex items-center justify-center shrink-0" style={{ backgroundColor: stat.bg, color: stat.color }}>
+                            <stat.icon size={20} strokeWidth={2.5} className="md:w-[26px] md:h-[26px]" />
                         </div>
                         <div>
                             <p className="text-[12px] font-bold text-[#AEAEAE] uppercase tracking-wider">{stat.label}</p>
-                            <h3 className="text-[26px] font-[900] text-[#181725] leading-none mt-0.5">{stat.value}</h3>
+                            <h3 className="text-[20px] md:text-[26px] font-[900] text-[#181725] leading-none mt-0.5">{stat.value}</h3>
                         </div>
                     </div>
                 ))}
             </div>
 
             {/* Section Tabs */}
-            <div className="flex items-center gap-2 bg-[#F8F9FB] p-1.5 rounded-[16px] w-fit">
+            <div className="flex items-center gap-2 bg-[#F8F9FB] p-1.5 rounded-[16px] w-full md:w-fit overflow-x-auto">
                 {([
                     { key: 'Vendors' as SectionTab, icon: Store, count: summary.pendingVendors },
                     { key: 'Products' as SectionTab, icon: Package, count: summary.pendingProducts },
@@ -293,7 +293,7 @@ export default function ApprovalsPage() {
                         key={key}
                         onClick={() => { setSectionTab(key); setSearchQuery(''); }}
                         className={cn(
-                            'flex items-center gap-2 px-6 py-2.5 rounded-[12px] text-[14px] font-bold transition-all',
+                            'flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-[12px] text-[13px] md:text-[14px] font-bold transition-all whitespace-nowrap',
                             sectionTab === key ? 'bg-white text-[#181725] shadow-sm' : 'text-[#AEAEAE] hover:text-[#7C7C7C]'
                         )}
                     >
@@ -314,11 +314,11 @@ export default function ApprovalsPage() {
             {/* Main Content Card */}
             <div className="bg-white rounded-[24px] border border-[#EEEEEE] shadow-sm overflow-hidden">
                 {/* Search */}
-                <div className="p-6 border-b border-[#EEEEEE] flex items-center justify-between gap-4">
-                    <h2 className="text-[18px] font-[900] text-[#181725]">
+                <div className="p-4 md:p-6 border-b border-[#EEEEEE] flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <h2 className="text-[16px] md:text-[18px] font-[900] text-[#181725]">
                         {sectionTab === 'Vendors' ? `${vendorTab} Vendors` : `Pending ${sectionTab}`}
                     </h2>
-                    <div className="relative min-w-[280px]">
+                    <div className="relative w-full md:min-w-[280px] md:w-auto">
                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={16} />
                         <input
                             type="text"
@@ -351,7 +351,7 @@ export default function ApprovalsPage() {
                 {/* ── VENDORS TABLE ── */}
                 {sectionTab === 'Vendors' && (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                        <table className="w-full text-left min-w-[700px]">
                             <thead>
                                 <tr className="bg-[#F8F9FB]">
                                     <th className="px-6 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase">Vendor</th>
@@ -419,7 +419,7 @@ export default function ApprovalsPage() {
                 {/* ── PRODUCTS TABLE ── */}
                 {sectionTab === 'Products' && (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                        <table className="w-full text-left min-w-[700px]">
                             <thead>
                                 <tr className="bg-[#F8F9FB]">
                                     <th className="px-6 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase">Product</th>
@@ -477,7 +477,7 @@ export default function ApprovalsPage() {
                 {/* ── CATEGORIES TABLE ── */}
                 {sectionTab === 'Categories' && (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                        <table className="w-full text-left min-w-[600px]">
                             <thead>
                                 <tr className="bg-[#F8F9FB]">
                                     <th className="px-6 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase">Category</th>
@@ -536,8 +536,8 @@ export default function ApprovalsPage() {
 
             {/* ── Rejection Note Modal ── */}
             {rejectTarget && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setRejectTarget(null)}>
-                    <div className="bg-white rounded-[16px] w-full max-w-[440px] p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => setRejectTarget(null)}>
+                    <div className="bg-white rounded-[16px] w-full max-w-[440px] p-5 md:p-6 shadow-xl" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-2 mb-4">
                             <MessageSquare size={20} className="text-[#E74C3C]" />
                             <h3 className="text-[16px] font-bold text-[#181725]">Reject {rejectTarget.name}</h3>

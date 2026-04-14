@@ -180,36 +180,36 @@ export default function AdminBrandsPage() {
     }
 
     return (
-        <div className="max-w-[1600px] mx-auto space-y-7 animate-in fade-in duration-500">
+        <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500 pb-6">
             {/* Header */}
             <div>
-                <h1 className="text-[28px] font-[900] text-[#181725] tracking-tight">Brands</h1>
+                <h1 className="text-[22px] md:text-[28px] font-[900] text-[#181725] tracking-tight">Brands</h1>
                 <p className="text-[#7C7C7C] font-medium mt-1">Review brand applications and manage distributor mappings</p>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                 {[
                     { label: 'Total Brands', value: brands.length, icon: Store, color: '#3B82F6', bg: '#EFF6FF' },
                     { label: 'Pending Approval', value: pendingBrandsCount, icon: Clock, color: '#F59E0B', bg: '#FFF7E6' },
                     { label: 'Approved Brands', value: brands.filter(b => b.approvalStatus === 'approved').length, icon: CheckCircle, color: '#299E60', bg: '#EEF8F1' },
                     { label: 'Pending Mappings', value: pendingMappingsCount, icon: GitMerge, color: '#8B5CF6', bg: '#F3F0FF' },
                 ].map((stat, idx) => (
-                    <div key={idx} className="bg-white p-5 rounded-[16px] border border-[#EEEEEE] shadow-sm flex items-center gap-4">
-                        <div className="w-[50px] h-[50px] rounded-[14px] flex items-center justify-center shrink-0"
+                    <div key={idx} className="bg-white p-4 md:p-5 rounded-[16px] border border-[#EEEEEE] shadow-sm flex items-center gap-3 md:gap-4">
+                        <div className="w-[40px] h-[40px] md:w-[50px] md:h-[50px] rounded-[14px] flex items-center justify-center shrink-0"
                             style={{ backgroundColor: stat.bg, color: stat.color }}>
-                            <stat.icon size={24} strokeWidth={2.5} />
+                            <stat.icon size={20} strokeWidth={2.5} className="md:w-[24px] md:h-[24px]" />
                         </div>
                         <div>
                             <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">{stat.label}</p>
-                            <h3 className="text-[26px] font-[900] text-[#181725] leading-none mt-0.5">{stat.value}</h3>
+                            <h3 className="text-[20px] md:text-[26px] font-[900] text-[#181725] leading-none mt-0.5">{stat.value}</h3>
                         </div>
                     </div>
                 ))}
             </div>
 
             {/* Section Tabs */}
-            <div className="flex items-center gap-2 bg-[#F8F9FB] p-1.5 rounded-[16px] w-fit">
+            <div className="flex items-center gap-2 bg-[#F8F9FB] p-1.5 rounded-[16px] w-full md:w-fit overflow-x-auto">
                 {([
                     { key: 'Brands' as SectionTab, icon: Store, count: pendingBrandsCount },
                     { key: 'Mappings' as SectionTab, icon: GitMerge, count: pendingMappingsCount },
@@ -218,7 +218,7 @@ export default function AdminBrandsPage() {
                         key={key}
                         onClick={() => { setSectionTab(key); setSearchQuery(''); }}
                         className={cn(
-                            'flex items-center gap-2 px-6 py-2.5 rounded-[12px] text-[14px] font-bold transition-all',
+                            'flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-[12px] text-[13px] md:text-[14px] font-bold transition-all whitespace-nowrap',
                             sectionTab === key ? 'bg-white text-[#181725] shadow-sm' : 'text-[#AEAEAE] hover:text-[#7C7C7C]'
                         )}
                     >
@@ -237,13 +237,13 @@ export default function AdminBrandsPage() {
             {/* Main Card */}
             <div className="bg-white rounded-[24px] border border-[#EEEEEE] shadow-sm overflow-hidden">
                 {/* Toolbar */}
-                <div className="p-6 border-b border-[#EEEEEE] flex items-center justify-between gap-4 flex-wrap">
-                    <h2 className="text-[18px] font-[900] text-[#181725]">
+                <div className="p-4 md:p-6 border-b border-[#EEEEEE] flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <h2 className="text-[16px] md:text-[18px] font-[900] text-[#181725]">
                         {sectionTab === 'Brands' ? 'Brand Applications' : 'Pending Mappings Review'}
                     </h2>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
                         {sectionTab === 'Brands' && (
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 overflow-x-auto">
                                 {(['all', 'pending', 'approved', 'rejected'] as const).map(f => (
                                     <button key={f} onClick={() => setBrandFilter(f)}
                                         className={cn('px-3 py-1.5 rounded-[8px] text-[12px] font-bold transition-all capitalize',
@@ -260,7 +260,7 @@ export default function AdminBrandsPage() {
                                 placeholder={`Search ${sectionTab.toLowerCase()}...`}
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                className="w-[240px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] py-2.5 pl-10 pr-4 text-[13px] outline-none placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 focus:bg-white"
+                                className="w-full md:w-[240px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] py-2.5 pl-10 pr-4 text-[13px] outline-none placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 focus:bg-white"
                             />
                         </div>
                     </div>
@@ -269,7 +269,7 @@ export default function AdminBrandsPage() {
                 {/* ── BRANDS TABLE ── */}
                 {sectionTab === 'Brands' && (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                        <table className="w-full text-left min-w-[800px]">
                             <thead>
                                 <tr className="bg-[#F8F9FB]">
                                     {['Brand', 'Owner', 'Products', 'Mappings', 'Date', 'Status', 'Actions'].map(h => (
@@ -359,7 +359,7 @@ export default function AdminBrandsPage() {
                 {/* ── MAPPINGS TABLE ── */}
                 {sectionTab === 'Mappings' && (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                        <table className="w-full text-left min-w-[700px]">
                             <thead>
                                 <tr className="bg-[#F8F9FB]">
                                     {['Brand Product', 'Distributor Product', 'Vendor', 'Confidence', 'Date', 'Actions'].map(h => (
@@ -421,8 +421,8 @@ export default function AdminBrandsPage() {
 
             {/* Rejection Modal */}
             {rejectTarget && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setRejectTarget(null)}>
-                    <div className="bg-white rounded-[16px] w-full max-w-[440px] p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => setRejectTarget(null)}>
+                    <div className="bg-white rounded-[16px] w-full max-w-[440px] p-5 md:p-6 shadow-xl" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-2 mb-4">
                             <MessageSquare size={20} className="text-[#E74C3C]" />
                             <h3 className="text-[16px] font-bold text-[#181725]">Reject: {rejectTarget.name}</h3>

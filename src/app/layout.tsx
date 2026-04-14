@@ -63,7 +63,7 @@ export default function RootLayout({
                 <Toaster position="top-center" richColors />
               <Navbar />
               <VendorApplicationBanner />
-              <main className="w-full min-h-screen pb-20 md:pb-0">
+              <main className="w-full min-h-screen">
                 {children}
               </main>
               <Footer />

@@ -87,11 +87,11 @@ export default function VendorsPage() {
     };
 
     return (
-        <div className="space-y-8 pb-10">
+        <div className="space-y-6 md:space-y-8 pb-6">
             {/* Page Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-[28px] font-bold text-[#000000] leading-none mb-1">Vendors List</h1>
+                    <h1 className="text-[22px] md:text-[28px] font-bold text-[#000000] leading-none mb-1">Vendors List</h1>
                     <p className="text-[#000000] text-[13px] font-medium opacity-70">Whole data about your Vendors</p>
                 </div>
 
@@ -106,8 +106,8 @@ export default function VendorsPage() {
                             className="h-[44px] w-full bg-white border border-[#EEEEEE] rounded-[12px] pl-10 pr-4 text-[13px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 shadow-sm"
                         />
                     </div>
-                    {/* Grid / Table toggle */}
-                    <div className="flex items-center bg-white border border-[#EEEEEE] rounded-[10px] p-1 shadow-sm">
+                    {/* Grid / Table toggle — hidden on mobile (mobile always shows grid) */}
+                    <div className="hidden md:flex items-center bg-white border border-[#EEEEEE] rounded-[10px] p-1 shadow-sm">
                         <button
                             onClick={() => setViewMode('grid')}
                             className={cn(
@@ -139,13 +139,13 @@ export default function VendorsPage() {
                     {searchQuery ? `No vendors found matching "${searchQuery}"` : 'No vendors yet'}
                 </div>
             ) : (
-            /* Vendors — Grid or Table view */
-            viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-[24px]">
+            /* Vendors — always grid on mobile, respect viewMode on desktop */
+            (viewMode === 'grid' || typeof window !== 'undefined' && window.innerWidth < 768) ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 md:gap-[24px]">
                 {filteredVendors.map((vendor) => (
                     <div
                         key={vendor.id}
-                        className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden flex flex-col h-full hover:shadow-md transition-all max-w-[381px] w-full mx-auto"
+                        className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden flex flex-col h-full hover:shadow-md transition-all w-full"
                     >
                         {/* Top Logo Box */}
                         <div className="p-3">
@@ -258,8 +258,8 @@ export default function VendorsPage() {
                 ))}
             </div>
             ) : (
-            /* Table View */
-            <div className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+            /* Table View — only on md+ */
+            <div className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden hidden md:block">
                 {/* Table Header */}
                 <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-[#FAFAFA] border-b border-[#EEEEEE] text-[12px] font-bold text-[#AEAEAE] uppercase">
                     <div className="col-span-1">#</div>

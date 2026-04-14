@@ -86,10 +86,10 @@ export default function CustomersPage() {
     }, [activeMenu]);
 
     return (
-        <div className="space-y-8 pb-10">
+        <div className="space-y-6 md:space-y-8 pb-6 px-4 md:px-0">
             {/* Page Header */}
             <div>
-                <h1 className="text-[28px] font-bold text-[#000000] leading-none mb-1">Customers</h1>
+                <h1 className="text-[22px] md:text-[28px] font-bold text-[#000000] leading-none mb-1">Customers</h1>
                 <p className="text-[#000000] text-[13px] font-medium opacity-70">Whole data about your Customers</p>
             </div>
 
@@ -100,16 +100,16 @@ export default function CustomersPage() {
             ) : (
             <>
             {/* Stat Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
                 {stats.map((stat, idx) => (
-                    <div key={idx} className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm hover:shadow-md transition-all h-[130px] flex flex-col justify-between">
+                    <div key={idx} className="bg-white p-4 md:p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm hover:shadow-md transition-all min-h-[100px] md:h-[130px] flex flex-col justify-between">
                         <div className="flex items-center gap-3">
                             <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center shrink-0", stat.bgColor)}>
                                 <stat.icon size={20} className={stat.iconColor} />
                             </div>
                             <span className="text-[14px] font-bold text-[#4B4B4B]">{stat.label}</span>
                         </div>
-                        <h4 className="text-[22px] font-[800] text-[#181725] leading-none">{stat.value}</h4>
+                        <h4 className="text-[18px] md:text-[22px] font-[800] text-[#181725] leading-none">{stat.value}</h4>
                     </div>
                 ))}
             </div>
@@ -133,17 +133,17 @@ export default function CustomersPage() {
                 </div>
 
                 <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[320px] md:min-w-[800px]">
                         <thead>
                             <tr className="bg-white">
-                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B]">Name</th>
-                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B]">Email</th>
-                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B]">Phone</th>
-                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B]">Role</th>
-                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B]">Business</th>
-                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B]">Status</th>
-                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B]">Joined</th>
-                                <th className="p-4 text-center text-[14px] font-[800] text-[#4B4B4B]">Action</th>
+                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B] whitespace-nowrap">Name</th>
+                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B] whitespace-nowrap">Email</th>
+                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B] whitespace-nowrap">Phone</th>
+                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B] whitespace-nowrap">Role</th>
+                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B] whitespace-nowrap">Business</th>
+                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B] whitespace-nowrap">Status</th>
+                                <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B] whitespace-nowrap">Joined</th>
+                                <th className="p-4 text-center text-[14px] font-[800] text-[#4B4B4B] whitespace-nowrap">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#EEEEEE]">
@@ -157,16 +157,16 @@ export default function CustomersPage() {
                                                         {(user.fullName || 'U').charAt(0).toUpperCase()}
                                                     </span>
                                                 </div>
-                                                <span className="text-[14px] font-[800] text-[#181725] tracking-tight">
+                                                <span className="text-[14px] font-[800] text-[#181725] tracking-tight whitespace-nowrap">
                                                     {user.fullName}
                                                 </span>
                                             </Link>
                                         </td>
-                                        <td className="p-4 text-[13px] font-medium text-[#7C7C7C]">{user.email}</td>
-                                        <td className="p-4 text-[13px] font-medium text-[#7C7C7C]">{user.phone || '—'}</td>
+                                        <td className="p-4 text-[13px] font-medium text-[#7C7C7C] whitespace-nowrap">{user.email}</td>
+                                        <td className="p-4 text-[13px] font-medium text-[#7C7C7C] whitespace-nowrap">{user.phone || '—'}</td>
                                         <td className="p-4">
                                             <span className={cn(
-                                                "inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold capitalize",
+                                                "inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold capitalize whitespace-nowrap",
                                                 user.role === 'admin' ? "bg-purple-50 text-purple-600" :
                                                 user.role === 'vendor' ? "bg-blue-50 text-blue-600" :
                                                 "bg-[#EEF8F1] text-[#299E60]"
@@ -174,16 +174,16 @@ export default function CustomersPage() {
                                                 {user.role}
                                             </span>
                                         </td>
-                                        <td className="p-4 text-[13px] font-medium text-[#7C7C7C]">{user.businessName || '—'}</td>
+                                        <td className="p-4 text-[13px] font-medium text-[#7C7C7C] whitespace-nowrap">{user.businessName || '—'}</td>
                                         <td className="p-4">
                                             <span className={cn(
-                                                "inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold",
+                                                "inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold whitespace-nowrap",
                                                 user.isActive ? "bg-[#EEF8F1] text-[#299E60]" : "bg-[#FFF0F0] text-[#E74C3C]"
                                             )}>
                                                 {user.isActive ? 'Active' : 'Inactive'}
                                             </span>
                                         </td>
-                                        <td className="p-4 text-[13px] font-medium text-[#7C7C7C]">
+                                        <td className="p-4 text-[13px] font-medium text-[#7C7C7C] whitespace-nowrap">
                                             {new Date(user.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                                         </td>
                                         <td className="p-4">

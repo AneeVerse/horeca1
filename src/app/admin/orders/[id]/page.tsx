@@ -249,7 +249,7 @@ export default function OrderDetailsPage() {
             </div>
 
             {/* Main Content Card */}
-            <div className="bg-white p-10 md:p-14 rounded-[12px] border border-[#DCDCDC] shadow-sm max-w-[1100px]">
+            <div className="bg-white p-6 md:p-14 rounded-[12px] border border-[#DCDCDC] shadow-sm w-full">
                 {/* Order Top Header */}
                 <div className="mb-12 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>

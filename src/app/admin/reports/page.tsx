@@ -147,22 +147,22 @@ export default function ReportsPage() {
     ];
 
     return (
-        <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 pb-12 text-[#181725]">
+        <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500 pb-6 text-[#181725]">
             {/* Header Section */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-[28px] font-[900] tracking-tight">Business Intelligence</h1>
+                    <h1 className="text-[22px] md:text-[28px] font-[900] tracking-tight">Business Intelligence</h1>
                     <p className="text-[#7C7C7C] font-medium mt-1">Advanced analytics and performance reporting</p>
                 </div>
             </div>
 
             {/* Stats Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
                 {stats.map((stat, idx) => (
                     <Link
                         key={idx}
                         href={stat.href}
-                        className="bg-white p-6 rounded-[24px] border border-[#EEEEEE] shadow-sm hover:shadow-md transition-all group flex flex-col"
+                        className="bg-white p-4 md:p-6 rounded-[24px] border border-[#EEEEEE] shadow-sm hover:shadow-md transition-all group flex flex-col"
                     >
                         <div className="flex items-start justify-between mb-4">
                             <div
@@ -180,7 +180,7 @@ export default function ReportsPage() {
                             </div>
                         </div>
                         <p className="text-[13px] font-bold text-[#AEAEAE] mb-1 uppercase tracking-wider">{stat.label}</p>
-                        <h3 className="text-[28px] font-[900] text-[#181725] leading-none">{stat.value}</h3>
+                        <h3 className="text-[20px] md:text-[28px] font-[900] text-[#181725] leading-none">{stat.value}</h3>
                     </Link>
                 ))}
             </div>
@@ -197,14 +197,14 @@ export default function ReportsPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1 bg-white border border-[#EEEEEE] p-1.5 rounded-[12px] shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-1 bg-white border border-[#EEEEEE] p-1 rounded-[12px] shadow-sm overflow-x-auto w-full md:w-auto">
                         {['7d', '30d', '90d', 'All'].map((range) => (
                             <button
                                 key={range}
                                 onClick={() => setActiveRange(range)}
                                 className={cn(
-                                    "px-4 py-2 text-[13px] font-bold rounded-[10px] transition-all",
+                                    "flex-1 md:flex-none px-3 md:px-4 py-2 text-[12px] md:text-[13px] font-bold rounded-[10px] transition-all whitespace-nowrap",
                                     activeRange === range
                                         ? "bg-[#299E60] text-white shadow-sm shadow-[#299E60]/20"
                                         : "text-[#7C7C7C] hover:bg-gray-50"
@@ -217,7 +217,7 @@ export default function ReportsPage() {
 
                     <button
                         onClick={handleGeneratePDF}
-                        className="h-[48px] px-6 bg-[#299E60] text-white rounded-[14px] text-[14px] font-bold hover:bg-[#238a54] transition-all flex items-center gap-2 shadow-sm shadow-[#299E60]/20"
+                        className="h-[48px] px-6 bg-[#299E60] text-white rounded-[14px] text-[14px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-2 shadow-sm shadow-[#299E60]/20 w-full md:w-auto"
                     >
                         <Download size={18} />
                         Generate PDF
@@ -227,7 +227,7 @@ export default function ReportsPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Main Sales Chart */}
-                <div className="lg:col-span-2 bg-white p-8 rounded-[32px] border border-[#EEEEEE] shadow-sm">
+                <div className="lg:col-span-2 bg-white p-4 md:p-8 rounded-[32px] border border-[#EEEEEE] shadow-sm">
                     <div className="flex items-center justify-between mb-8">
                         <div>
                             <h2 className="text-[20px] font-[900]">Revenue Performance</h2>
@@ -245,7 +245,7 @@ export default function ReportsPage() {
                         </div>
                     </div>
 
-                    <div className="h-[380px] w-full mt-4">
+                    <div className="h-[280px] md:h-[380px] w-full mt-4">
                         {isMounted ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={getChartData()} margin={{ top: 20, right: 10, left: 0, bottom: 20 }}>
@@ -326,10 +326,10 @@ export default function ReportsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Top Vendors Table */}
                 <div className="bg-white rounded-[32px] border border-[#EEEEEE] shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-8 border-b border-[#EEEEEE] flex items-center justify-between">
+                    <div className="p-4 md:p-8 border-b border-[#EEEEEE] flex items-center justify-between">
                         <div>
-                            <h2 className="text-[20px] font-[900]">Market Leaders</h2>
-                            <p className="text-[14px] text-[#AEAEAE] font-medium">Top performing vendors by revenue</p>
+                            <h2 className="text-[18px] md:text-[20px] font-[900]">Market Leaders</h2>
+                            <p className="text-[12px] md:text-[14px] text-[#AEAEAE] font-medium">Top performing vendors by revenue</p>
                         </div>
                         <button className="text-[#299E60] font-bold text-[14px] flex items-center gap-1.5 hover:underline">
                             View All <ArrowRight size={16} />
@@ -341,7 +341,7 @@ export default function ReportsPage() {
                                 href={`/admin/vendors/${vendor.id}`}
                                 key={vendor.id}
                                 className={cn(
-                                    "flex items-center justify-between p-6 hover:bg-[#F8F9FB] transition-all group",
+                                    "flex items-center justify-between p-4 md:p-6 hover:bg-[#F8F9FB] transition-all group",
                                     idx !== TOP_VENDORS.length - 1 && "border-b border-[#F5F5F5]"
                                 )}
                             >
@@ -371,14 +371,14 @@ export default function ReportsPage() {
 
                 {/* Recent Reports Hub */}
                 <div className="bg-white rounded-[32px] border border-[#EEEEEE] shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-8 border-b border-[#EEEEEE]">
-                        <h2 className="text-[20px] font-[900]">Report Repository</h2>
-                        <p className="text-[14px] text-[#AEAEAE] font-medium">History of generated platform analytics</p>
+                    <div className="p-4 md:p-8 border-b border-[#EEEEEE]">
+                        <h2 className="text-[18px] md:text-[20px] font-[900]">Report Repository</h2>
+                        <p className="text-[12px] md:text-[14px] text-[#AEAEAE] font-medium">History of generated platform analytics</p>
                     </div>
-                    <div className="flex-1 p-8 space-y-6">
+                    <div className="flex-1 p-4 md:p-8 space-y-6">
                         {RECENT_REPORTS.map((report) => (
-                            <div key={report.id} className="flex items-center gap-5 group cursor-pointer" onClick={() => handleDownloadReport(report.name)}>
-                                <div className="w-[56px] h-[56px] rounded-[18px] bg-[#F8F9FB] flex items-center justify-center text-[#AEAEAE] group-hover:bg-[#299E60] group-hover:text-white transition-all">
+                            <div key={report.id} className="flex items-center gap-3 md:gap-5 group cursor-pointer" onClick={() => handleDownloadReport(report.name)}>
+                                <div className="w-[48px] h-[48px] md:w-[56px] md:h-[56px] rounded-[18px] bg-[#F8F9FB] flex items-center justify-center text-[#AEAEAE] group-hover:bg-[#299E60] group-hover:text-white transition-all">
                                     <FileText size={24} />
                                 </div>
                                 <div className="flex-1">

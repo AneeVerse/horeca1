@@ -163,9 +163,6 @@ export default function OrderHistoryPage() {
             setOrders(prev => prev.map(o =>
                 o.id === ratingModal.orderId ? { ...o, review: { rating: selectedStars } } : o
             ));
-            if (detailOrder?.id === ratingModal.orderId) {
-                setDetailOrder(prev => prev ? { ...prev, review: { rating: selectedStars } } : prev);
-            }
             toast.success('Review submitted!');
             setRatingModal(null);
         } catch (err: unknown) {

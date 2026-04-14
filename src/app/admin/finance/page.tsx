@@ -90,11 +90,11 @@ export default function FinancePage() {
     const trendPositive = parseFloat(data?.stats.monthTrend || '0') >= 0;
 
     return (
-        <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 pb-12 text-[#181725]">
+        <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500 pb-6 text-[#181725]">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-[28px] font-[900] tracking-tight">Finance Management</h1>
+                    <h1 className="text-[22px] md:text-[28px] font-[900] tracking-tight">Finance Management</h1>
                     <p className="text-[#7C7C7C] font-medium mt-1">Monitor revenue, platform earnings, and vendor payments</p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -116,7 +116,7 @@ export default function FinancePage() {
             ) : (
             <>
             {/* Stats Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
                 {[
                     {
                         label: 'Total Revenue',
@@ -148,18 +148,18 @@ export default function FinancePage() {
                 ].map((stat, idx) => (
                     <div
                         key={idx}
-                        className="bg-white p-6 rounded-[24px] border border-[#EEEEEE] shadow-sm flex items-center gap-6"
+                        className="bg-white p-4 md:p-6 rounded-[24px] border border-[#EEEEEE] shadow-sm flex items-center gap-4 md:gap-6"
                     >
                         <div
-                            className="w-[68px] h-[68px] rounded-[20px] flex items-center justify-center shrink-0"
+                            className="w-[52px] h-[52px] md:w-[68px] md:h-[68px] rounded-[20px] flex items-center justify-center shrink-0"
                             style={{ backgroundColor: stat.bgColor, color: stat.color }}
                         >
                             <stat.icon size={34} strokeWidth={2.5} />
                         </div>
                         <div className="flex-1">
                             <p className="text-[13px] font-bold text-[#AEAEAE] mb-1 uppercase tracking-wider">{stat.label}</p>
-                            <div className="flex items-end justify-between">
-                                <h3 className="text-[24px] font-[900] text-[#181725] leading-none">{stat.value}</h3>
+                            <div className="flex items-end justify-between flex-wrap gap-2">
+                                <h3 className="text-[18px] md:text-[24px] font-[900] text-[#181725] leading-none">{stat.value}</h3>
                                 <div className={cn(
                                     "flex items-center gap-0.5 text-[12px] font-extrabold px-2 py-1 rounded-full",
                                     stat.isPositive ? "bg-[#EEF8F1] text-[#299E60]" : "bg-[#FFF2F0] text-[#E74C3C]"
@@ -174,7 +174,7 @@ export default function FinancePage() {
             </div>
 
             {/* Revenue Chart */}
-            <div className="bg-white p-8 rounded-[32px] border border-[#EEEEEE] shadow-sm">
+            <div className="bg-white p-4 md:p-8 rounded-[32px] border border-[#EEEEEE] shadow-sm">
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h2 className="text-[20px] font-[900] text-[#181725]">Monthly Revenue</h2>
@@ -182,7 +182,7 @@ export default function FinancePage() {
                     </div>
                 </div>
 
-                <div className="h-[360px] w-full mt-4">
+                <div className="h-[260px] md:h-[360px] w-full mt-4">
                     {(!data?.monthlyData || data.monthlyData.length === 0) ? (
                         <div className="h-full flex flex-col items-center justify-center text-gray-400">
                             <TrendingUp size={40} className="mb-3 opacity-30" />
@@ -236,10 +236,10 @@ export default function FinancePage() {
 
             {/* Payment Records */}
             <div className="bg-white rounded-[28px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                <div className="p-8 border-b border-[#EEEEEE]">
-                    <div className="flex flex-col gap-8">
+                <div className="p-4 md:p-8 border-b border-[#EEEEEE]">
+                    <div className="flex flex-col gap-6 md:gap-8">
                         {/* Tab Switcher */}
-                        <div className="flex items-center gap-2 bg-[#F8F9FB] p-1.5 rounded-[16px] w-fit">
+                        <div className="flex items-center gap-2 bg-[#F8F9FB] p-1.5 rounded-[16px] w-full md:w-fit overflow-x-auto">
                             <button
                                 onClick={() => setActivePayoutTab('pending')}
                                 className={cn(
@@ -296,7 +296,7 @@ export default function FinancePage() {
                                     placeholder="Search vendor..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-[260px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[14px] py-2.5 pl-11 pr-4 text-[14px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 focus:bg-white"
+                                    className="w-full md:w-[260px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[14px] py-2.5 pl-11 pr-4 text-[14px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 focus:bg-white"
                                 />
                             </div>
                         </div>
@@ -304,7 +304,7 @@ export default function FinancePage() {
                 </div>
 
                 <div className="overflow-x-auto min-h-[300px]">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse min-w-[600px]">
                         <thead>
                             <tr className="bg-[#F8F9FB]">
                                 <th className="px-8 py-5 text-[13px] font-bold text-[#7C7C7C] uppercase tracking-wider">Vendor</th>
@@ -377,7 +377,7 @@ export default function FinancePage() {
 
             {/* Toast */}
             {toast && (
-                <div className="fixed bottom-10 right-10 z-[100] animate-in slide-in-from-bottom-5 duration-300">
+                <div className="fixed bottom-6 right-4 md:bottom-10 md:right-10 z-[100] animate-in slide-in-from-bottom-5 duration-300">
                     <div className="bg-[#181725] text-white px-6 py-4 rounded-[16px] shadow-2xl flex items-center gap-3 border border-white/10">
                         <div className="w-8 h-8 rounded-full bg-[#299E60] flex items-center justify-center">
                             <CheckCircle2 size={18} className="text-white" />
