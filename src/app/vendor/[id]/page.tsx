@@ -45,7 +45,7 @@ export default function VendorStorePage() {
         setLoading(true);
         Promise.all([
             dal.vendors.getById(vendorId),
-            dal.vendors.getProducts(vendorId),
+            dal.vendors.getProducts(vendorId, { limit: 200 }),
         ]).then(([v, p]) => {
             setVendor(v);
             setProducts(p.products);
