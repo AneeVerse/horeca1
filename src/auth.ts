@@ -94,6 +94,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.id = user.id;
         token.role = (user as { role?: string }).role || 'customer';
+        // For admin users, resolve team role at sign-in time (stored in JWT, no per-request DB query)
+        if (token.role === 'admin') {
+          const membership = await prisma.adminTeamMember.findUnique({
+            where: { userId: token.id as string },
+            select: { role: true },
+          });
+          token.adminTeamRole = membership?.role ?? 'owner';
+        }
       }
       // Re-fetch role from DB when session.update() is called (e.g. after vendor approval)
       if (trigger === 'update' && token.id) {
@@ -101,7 +109,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           where: { id: token.id as string },
           select: { role: true },
         });
-        if (freshUser) token.role = freshUser.role;
+        if (freshUser) {
+          token.role = freshUser.role;
+          if (freshUser.role === 'admin') {
+            const membership = await prisma.adminTeamMember.findUnique({
+              where: { userId: token.id as string },
+              select: { role: true },
+            });
+            token.adminTeamRole = membership?.role ?? 'owner';
+          } else {
+            token.adminTeamRole = undefined;
+          }
+        }
       }
       return token;
     },
@@ -109,6 +128,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (session.user) {
         session.user.id = token.id as string;
         (session.user as { role?: string }).role = token.role as string;
+        if (token.adminTeamRole) {
+          (session.user as { adminTeamRole?: string }).adminTeamRole = token.adminTeamRole as string;
+        }
       }
       return session;
     },

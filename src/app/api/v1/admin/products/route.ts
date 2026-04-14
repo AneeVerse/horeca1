@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse } from '@/middleware/errorHandler';
+import { requireAdminPerm } from '@/lib/teamPermissions';
 
 // Validation schema for admin product creation
 // vendorId is optional — admin can create catalog products without a vendor
@@ -190,6 +191,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 // If no vendorId, it's a catalog product that any vendor can adopt
 export const POST = adminOnly(async (req: NextRequest, ctx) => {
   try {
+    requireAdminPerm(ctx.adminTeamRole, 'products:write');
     const body = await req.json();
     const data = createProductSchema.parse(body);
 

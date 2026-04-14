@@ -17,15 +17,6 @@ const createMemberSchema = z.object({
   role: z.enum(['manager', 'editor', 'viewer']),
 });
 
-async function getAdminTeamRole(userId: string): Promise<'owner' | 'manager' | 'editor' | 'viewer'> {
-  const membership = await prisma.adminTeamMember.findUnique({
-    where: { userId },
-    select: { role: true },
-  });
-  // Not in the team table = original admin owner
-  return membership ? membership.role : 'owner';
-}
-
 export const GET = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
   // Find all admin users
   const admins = await prisma.user.findMany({
@@ -52,8 +43,7 @@ export const GET = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
 });
 
 export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
-  const callerRole = await getAdminTeamRole(ctx.userId);
-  requireAdminPerm(callerRole, 'team:manage');
+  requireAdminPerm(ctx.adminTeamRole, 'team:manage');
 
   const body = await req.json();
   const input = createMemberSchema.parse(body);

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
+import { requireAdminPerm } from '@/lib/teamPermissions';
 
 // Helper: extract the [id] segment from the URL
 function extractId(req: NextRequest): string {
@@ -69,8 +70,9 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 });
 
 // PATCH — update any product field
-export const PATCH = adminOnly(async (req: NextRequest, _ctx) => {
+export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
+    requireAdminPerm(ctx.adminTeamRole, 'products:write');
     const id = extractId(req);
     const body = await req.json();
     const data = updateProductSchema.parse(body);
@@ -121,8 +123,9 @@ export const PATCH = adminOnly(async (req: NextRequest, _ctx) => {
 });
 
 // DELETE — soft-delete (set isActive: false)
-export const DELETE = adminOnly(async (req: NextRequest, _ctx) => {
+export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
   try {
+    requireAdminPerm(ctx.adminTeamRole, 'products:write');
     const id = extractId(req);
 
     const existing = await prisma.product.findUnique({

@@ -27,8 +27,8 @@ const BRAND_PERMS: Record<TeamRole | 'owner', Permission[]> = {
 };
 
 const ADMIN_PERMS: Record<TeamRole | 'owner', Permission[]> = {
-  owner:   ['read', 'products:write', 'settings:write', 'team:manage'],
-  manager: ['read', 'products:write', 'settings:write'],
+  owner:   ['read', 'orders:write', 'products:write', 'inventory:write', 'settings:write', 'team:manage'],
+  manager: ['read', 'orders:write', 'products:write', 'inventory:write', 'settings:write'],
   editor:  ['read', 'products:write'],
   viewer:  ['read'],
 };

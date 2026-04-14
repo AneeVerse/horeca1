@@ -6,11 +6,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { BrandService } from '@/modules/brand/brand.service';
 import { reviewMappingSchema } from '@/modules/brand/brand.validator';
 import { adminOnly } from '@/middleware/rbac';
+import { requireAdminPerm } from '@/lib/teamPermissions';
 import type { AuthContext } from '@/middleware/auth';
 
 const brandService = new BrandService();
 
 export const PATCH = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
+  requireAdminPerm(ctx.adminTeamRole, 'settings:write');
   const id = req.nextUrl.pathname.split('/').at(-1)!;
   const body = await req.json();
   const { status, reviewNote } = reviewMappingSchema.parse(body);

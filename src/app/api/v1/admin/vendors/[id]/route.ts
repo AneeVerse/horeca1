@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
+import { requireAdminPerm } from '@/lib/teamPermissions';
 
 // Helper: extract the [id] segment from /api/v1/admin/vendors/{id}
 function extractId(req: NextRequest): string {
@@ -84,8 +85,9 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 });
 
 // PATCH — approve/reject vendor (update isVerified, isActive)
-export const PATCH = adminOnly(async (req: NextRequest, _ctx) => {
+export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
+    requireAdminPerm(ctx.adminTeamRole, 'settings:write');
     const id = extractId(req);
     const body = await req.json();
 

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Check, X, Search, Clock, CheckCircle, Loader2, ClipboardList, Store,
-    GitMerge, MessageSquare, Package, ExternalLink, LayoutDashboard,
+    GitMerge, MessageSquare, Package, ExternalLink, LayoutDashboard, Plus, Eye, EyeOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -51,6 +51,16 @@ function getInitials(name: string) {
     return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
+interface CreateBrandForm {
+    fullName: string;
+    email: string;
+    password: string;
+    name: string;
+    description: string;
+    website: string;
+    tagline: string;
+}
+
 export default function AdminBrandsPage() {
     const router = useRouter();
     const [sectionTab, setSectionTab] = useState<SectionTab>('Brands');
@@ -64,6 +74,45 @@ export default function AdminBrandsPage() {
     const [mappings, setMappings] = useState<PendingMapping[]>([]);
     const [rejectTarget, setRejectTarget] = useState<{ type: 'brand' | 'mapping'; id: string; name: string } | null>(null);
     const [rejectNote, setRejectNote] = useState('');
+
+    // Create brand modal
+    const [showCreate, setShowCreate] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [creating, setCreating] = useState(false);
+    const [createError, setCreateError] = useState('');
+    const [brandForm, setBrandForm] = useState<CreateBrandForm>({
+        fullName: '', email: '', password: '', name: '', description: '', website: '', tagline: '',
+    });
+
+    const handleCreateBrand = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setCreating(true);
+        setCreateError('');
+        try {
+            const res = await fetch('/api/v1/admin/brands', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fullName: brandForm.fullName,
+                    email: brandForm.email,
+                    password: brandForm.password,
+                    name: brandForm.name,
+                    description: brandForm.description || undefined,
+                    website: brandForm.website || undefined,
+                    tagline: brandForm.tagline || undefined,
+                }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Failed to create brand');
+            setBrands(prev => [{ ...json.data, _count: { masterProducts: 0, productMappings: 0 } }, ...prev]);
+            setShowCreate(false);
+            setBrandForm({ fullName: '', email: '', password: '', name: '', description: '', website: '', tagline: '' });
+        } catch (err) {
+            setCreateError(err instanceof Error ? err.message : 'Something went wrong');
+        } finally {
+            setCreating(false);
+        }
+    };
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -182,9 +231,18 @@ export default function AdminBrandsPage() {
     return (
         <div className="max-w-[1600px] mx-auto space-y-7 animate-in fade-in duration-500">
             {/* Header */}
-            <div>
-                <h1 className="text-[28px] font-[900] text-[#181725] tracking-tight">Brands</h1>
-                <p className="text-[#7C7C7C] font-medium mt-1">Review brand applications and manage distributor mappings</p>
+            <div className="flex items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-[28px] font-[900] text-[#181725] tracking-tight">Brands</h1>
+                    <p className="text-[#7C7C7C] font-medium mt-1">Review brand applications and manage distributor mappings</p>
+                </div>
+                <button
+                    onClick={() => setShowCreate(true)}
+                    className="h-[44px] px-5 bg-[#299E60] text-white rounded-[12px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 shrink-0"
+                >
+                    <Plus size={16} />
+                    Add Brand
+                </button>
             </div>
 
             {/* Stats */}
@@ -418,6 +476,95 @@ export default function AdminBrandsPage() {
                     </p>
                 </div>
             </div>
+
+            {/* Create Brand Modal */}
+            {showCreate && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowCreate(false)}>
+                    <div className="bg-white rounded-[20px] w-full max-w-[520px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-5 border-b border-[#EEEEEE]">
+                            <div>
+                                <h3 className="text-[18px] font-[900] text-[#181725]">Add Brand</h3>
+                                <p className="text-[12px] text-[#AEAEAE] font-medium mt-0.5">Create an approved brand account directly</p>
+                            </div>
+                            <button onClick={() => setShowCreate(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F5F5F5] text-[#AEAEAE]">
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleCreateBrand} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                            <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">Owner Account</p>
+                            <div>
+                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Full Name *</label>
+                                <input required value={brandForm.fullName} onChange={e => setBrandForm(f => ({ ...f, fullName: e.target.value }))}
+                                    placeholder="Jane Smith"
+                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
+                            </div>
+                            <div>
+                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Email *</label>
+                                <input required type="email" value={brandForm.email} onChange={e => setBrandForm(f => ({ ...f, email: e.target.value }))}
+                                    placeholder="brand@company.com"
+                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
+                            </div>
+                            <div>
+                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Password *</label>
+                                <div className="relative">
+                                    <input required type={showPassword ? 'text' : 'password'} minLength={6} value={brandForm.password} onChange={e => setBrandForm(f => ({ ...f, password: e.target.value }))}
+                                        placeholder="Min 6 characters"
+                                        className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 pr-10 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
+                                    <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#AEAEAE]">
+                                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="pt-2 border-t border-[#EEEEEE]">
+                                <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-4">Brand Profile</p>
+                            </div>
+                            <div>
+                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Brand Name *</label>
+                                <input required value={brandForm.name} onChange={e => setBrandForm(f => ({ ...f, name: e.target.value }))}
+                                    placeholder="Kissan, Everest, etc."
+                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
+                            </div>
+                            <div>
+                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Tagline</label>
+                                <input value={brandForm.tagline} onChange={e => setBrandForm(f => ({ ...f, tagline: e.target.value }))}
+                                    placeholder="Taste the difference"
+                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
+                            </div>
+                            <div>
+                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Website</label>
+                                <input type="url" value={brandForm.website} onChange={e => setBrandForm(f => ({ ...f, website: e.target.value }))}
+                                    placeholder="https://kissan.in"
+                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
+                            </div>
+                            <div>
+                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Description</label>
+                                <textarea value={brandForm.description} onChange={e => setBrandForm(f => ({ ...f, description: e.target.value }))}
+                                    placeholder="Brief description of the brand..."
+                                    rows={2}
+                                    className="w-full border border-[#EEEEEE] rounded-[10px] px-3 py-2.5 text-[13px] outline-none focus:border-[#299E60]/40 font-medium resize-none" />
+                            </div>
+
+                            {createError && (
+                                <p className="text-[13px] text-[#E74C3C] font-medium bg-[#FEF2F2] px-3 py-2 rounded-[8px]">{createError}</p>
+                            )}
+                        </form>
+
+                        <div className="px-6 py-4 border-t border-[#EEEEEE] flex items-center justify-end gap-3">
+                            <button type="button" onClick={() => setShowCreate(false)}
+                                className="h-[42px] px-5 bg-[#F5F5F5] text-[#7C7C7C] rounded-[10px] text-[13px] font-bold hover:bg-[#EEEEEE]">
+                                Cancel
+                            </button>
+                            <button onClick={handleCreateBrand} disabled={creating}
+                                className="h-[42px] px-6 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] disabled:opacity-60 flex items-center gap-2">
+                                {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                                Create Brand
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Rejection Modal */}
             {rejectTarget && (

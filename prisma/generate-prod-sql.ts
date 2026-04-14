@@ -72,9 +72,9 @@ async function main() {
     );
     lines.push(`  SELECT id INTO v_user_id FROM users WHERE email = ${esc(user.email)};`);
     lines.push(
-      `  INSERT INTO vendors (id, user_id, business_name, slug, description, logo_url, rating, min_order_value, is_active, created_at, updated_at)` +
-      ` VALUES (gen_random_uuid(), v_user_id, ${esc(v.businessName)}, ${esc(v.slug)}, ${esc(v.description)}, ${esc(v.logoUrl)}, ${decStr(v.rating)}, ${decStr(v.minOrderValue)}, ${v.isActive}, ${esc(v.createdAt)}, ${esc(v.updatedAt)})` +
-      ` ON CONFLICT (slug) DO UPDATE SET business_name=${esc(v.businessName)}, logo_url=${esc(v.logoUrl)}, description=${esc(v.description)};`
+      `  INSERT INTO vendors (id, user_id, business_name, slug, description, logo_url, rating, min_order_value, is_active, is_verified, created_at, updated_at)` +
+      ` VALUES (gen_random_uuid(), v_user_id, ${esc(v.businessName)}, ${esc(v.slug)}, ${esc(v.description)}, ${esc(v.logoUrl)}, ${decStr(v.rating)}, ${decStr(v.minOrderValue)}, ${v.isActive}, true, ${esc(v.createdAt)}, ${esc(v.updatedAt)})` +
+      ` ON CONFLICT (slug) DO UPDATE SET business_name=${esc(v.businessName)}, logo_url=${esc(v.logoUrl)}, description=${esc(v.description)}, is_verified=true;`
     );
     for (const sa of serviceAreas) {
       lines.push(

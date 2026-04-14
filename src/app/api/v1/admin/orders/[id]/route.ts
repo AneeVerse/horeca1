@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { ApiError, errorResponse, Errors } from '@/middleware/errorHandler';
 import type { OrderStatus } from '@prisma/client';
+import { requireAdminPerm } from '@/lib/teamPermissions';
 
 const VALID_STATUSES: OrderStatus[] = [
   'pending',
@@ -103,8 +104,9 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 });
 
 // PATCH — admin force-update order status
-export const PATCH = adminOnly(async (req: NextRequest, _ctx) => {
+export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
+    requireAdminPerm(ctx.adminTeamRole, 'orders:write');
     const id = extractId(req);
     const body = await req.json();
 

@@ -17,16 +17,10 @@ function extractId(req: NextRequest): string {
   return segments[segments.length - 1];
 }
 
-async function getAdminTeamRole(userId: string): Promise<'owner' | 'manager' | 'editor' | 'viewer'> {
-  const membership = await prisma.adminTeamMember.findUnique({ where: { userId }, select: { role: true } });
-  return membership ? membership.role : 'owner';
-}
-
 export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
+    requireAdminPerm(ctx.adminTeamRole, 'team:manage');
     const id = extractId(req);
-    const callerRole = await getAdminTeamRole(ctx.userId);
-    requireAdminPerm(callerRole, 'team:manage');
 
     const member = await prisma.adminTeamMember.findUnique({ where: { userId: id }, select: { userId: true } });
     if (!member) throw Errors.notFound('Team member not found');
@@ -44,9 +38,8 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
 
 export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
   try {
+    requireAdminPerm(ctx.adminTeamRole, 'team:manage');
     const id = extractId(req);
-    const callerRole = await getAdminTeamRole(ctx.userId);
-    requireAdminPerm(callerRole, 'team:manage');
 
     const member = await prisma.adminTeamMember.findUnique({ where: { userId: id }, select: { userId: true } });
     if (!member) throw Errors.notFound('Team member not found');

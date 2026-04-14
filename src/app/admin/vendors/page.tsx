@@ -10,12 +10,15 @@ import {
     Phone,
     Loader2,
     Package,
-    ShoppingBag,
     CheckCircle,
     XCircle,
     LayoutGrid,
     List,
     LayoutDashboard,
+    Plus,
+    X,
+    Eye,
+    EyeOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -40,12 +43,63 @@ interface AdminVendor {
     };
 }
 
+interface CreateVendorForm {
+    fullName: string;
+    email: string;
+    password: string;
+    phone: string;
+    businessName: string;
+    description: string;
+    minOrderValue: string;
+}
+
 export default function VendorsPage() {
     const router = useRouter();
     const [searchQuery, setSearchQuery] = useState('');
     const [vendors, setVendors] = useState<AdminVendor[]>([]);
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
+
+    // Create vendor modal
+    const [showCreate, setShowCreate] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [creating, setCreating] = useState(false);
+    const [createError, setCreateError] = useState('');
+    const [form, setForm] = useState<CreateVendorForm>({
+        fullName: '', email: '', password: '', phone: '',
+        businessName: '', description: '', minOrderValue: '',
+    });
+
+    const handleCreate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setCreating(true);
+        setCreateError('');
+        try {
+            const res = await fetch('/api/v1/admin/vendors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fullName: form.fullName,
+                    email: form.email,
+                    password: form.password,
+                    phone: form.phone || undefined,
+                    businessName: form.businessName,
+                    description: form.description || undefined,
+                    minOrderValue: form.minOrderValue ? Number(form.minOrderValue) : undefined,
+                }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Failed to create vendor');
+            // Add to list and close
+            setVendors(prev => [{ ...json.data, _count: { products: 0, orders: 0 } }, ...prev]);
+            setShowCreate(false);
+            setForm({ fullName: '', email: '', password: '', phone: '', businessName: '', description: '', minOrderValue: '' });
+        } catch (err) {
+            setCreateError(err instanceof Error ? err.message : 'Something went wrong');
+        } finally {
+            setCreating(false);
+        }
+    };
 
     const viewDashboard = async (vendorId: string) => {
         await fetch('/api/v1/admin/impersonate', {
@@ -96,6 +150,13 @@ export default function VendorsPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setShowCreate(true)}
+                        className="h-[44px] px-5 bg-[#299E60] text-white rounded-[12px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 shrink-0"
+                    >
+                        <Plus size={16} />
+                        Add Vendor
+                    </button>
                     <div className="relative group w-full md:w-[240px]">
                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={16} />
                         <input
@@ -341,6 +402,100 @@ export default function VendorsPage() {
                 ))}
             </div>
             )
+            )}
+
+            {/* Create Vendor Modal */}
+            {showCreate && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowCreate(false)}>
+                    <div className="bg-white rounded-[20px] w-full max-w-[520px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between px-6 py-5 border-b border-[#EEEEEE]">
+                            <div>
+                                <h3 className="text-[18px] font-[900] text-[#181725]">Add Vendor</h3>
+                                <p className="text-[12px] text-[#AEAEAE] font-medium mt-0.5">Create a verified vendor account directly</p>
+                            </div>
+                            <button onClick={() => setShowCreate(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F5F5F5] text-[#AEAEAE]">
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        {/* Form */}
+                        <form onSubmit={handleCreate} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                            <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">Owner Account</p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Full Name *</label>
+                                    <input required value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
+                                        placeholder="John Doe"
+                                        className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
+                                </div>
+                                <div>
+                                    <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Phone</label>
+                                    <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                                        placeholder="+91 98765 43210"
+                                        className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Email *</label>
+                                <input required type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                                    placeholder="vendor@example.com"
+                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
+                            </div>
+                            <div>
+                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Password *</label>
+                                <div className="relative">
+                                    <input required type={showPassword ? 'text' : 'password'} minLength={6} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                                        placeholder="Min 6 characters"
+                                        className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 pr-10 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
+                                    <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#AEAEAE]">
+                                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="pt-2 border-t border-[#EEEEEE]">
+                                <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-4">Vendor Profile</p>
+                            </div>
+                            <div>
+                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Business Name *</label>
+                                <input required value={form.businessName} onChange={e => setForm(f => ({ ...f, businessName: e.target.value }))}
+                                    placeholder="Fresh Farms Co."
+                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
+                            </div>
+                            <div>
+                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Description</label>
+                                <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                                    placeholder="Brief description of the vendor..."
+                                    rows={2}
+                                    className="w-full border border-[#EEEEEE] rounded-[10px] px-3 py-2.5 text-[13px] outline-none focus:border-[#299E60]/40 font-medium resize-none" />
+                            </div>
+                            <div>
+                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Min Order Value (₹)</label>
+                                <input type="number" min="0" value={form.minOrderValue} onChange={e => setForm(f => ({ ...f, minOrderValue: e.target.value }))}
+                                    placeholder="0"
+                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
+                            </div>
+
+                            {createError && (
+                                <p className="text-[13px] text-[#E74C3C] font-medium bg-[#FEF2F2] px-3 py-2 rounded-[8px]">{createError}</p>
+                            )}
+                        </form>
+
+                        {/* Footer */}
+                        <div className="px-6 py-4 border-t border-[#EEEEEE] flex items-center justify-end gap-3">
+                            <button type="button" onClick={() => setShowCreate(false)}
+                                className="h-[42px] px-5 bg-[#F5F5F5] text-[#7C7C7C] rounded-[10px] text-[13px] font-bold hover:bg-[#EEEEEE]">
+                                Cancel
+                            </button>
+                            <button onClick={handleCreate} disabled={creating}
+                                className="h-[42px] px-6 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] disabled:opacity-60 flex items-center gap-2">
+                                {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                                Create Vendor
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

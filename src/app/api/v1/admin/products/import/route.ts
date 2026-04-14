@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { parseProductImport, type ParsedProductRow } from '@/modules/import-export/excel.service';
+import { requireAdminPerm } from '@/lib/teamPermissions';
 
 // ── Preview mode: parse file, match SKUs, return diff without committing ──
 // ── Commit mode: actually create/update products with backup ──
@@ -50,6 +51,7 @@ interface CommitResponse {
 
 export const POST = adminOnly(async (req: NextRequest, ctx) => {
   try {
+    requireAdminPerm(ctx.adminTeamRole, 'products:write');
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     if (!file) throw Errors.notFound('File');
