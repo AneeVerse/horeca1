@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import { Users, Plus, Trash2, Loader2, Crown, Shield, Edit3, Eye, AlertCircle } from 'lucide-react';
+import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 
 interface AdminTeamMember {
     id: string;
@@ -23,6 +25,10 @@ const ROLE_CONFIG = {
 };
 
 export default function AdminTeamPage() {
+    const { data: session, update: updateSession } = useSession();
+    const currentUserId = (session?.user as { id?: string })?.id;
+    const perms = useAdminPermissions();
+    const canManage = perms.canManageTeam;
     const [team, setTeam] = useState<AdminTeamMember[]>([]);
     const [loading, setLoading] = useState(true);
     const [isOwner, setIsOwner] = useState(false);
@@ -38,7 +44,10 @@ export default function AdminTeamPage() {
             const json = await res.json();
             if (json.success) {
                 setTeam(json.data);
-                setIsOwner(json.data[0]?.isOwner ?? false);
+                // "isOwner" here is used only for UI — keep it in sync with the currently
+                // logged-in user's entry, not just the first row (order isn't stable).
+                const me = json.data.find((m: AdminTeamMember) => m.user.id === currentUserId);
+                setIsOwner(me?.isOwner ?? false);
             }
         } catch { /* silent */ }
         finally { setLoading(false); }
@@ -89,6 +98,12 @@ export default function AdminTeamPage() {
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Failed');
             setTeam(prev => prev.map(m => m.id === member.id ? { ...m, role: newRole } : m));
+            // If the changed member is the logged-in user, refresh the JWT so the
+            // new adminTeamRole flows into session/ctx immediately (otherwise the
+            // user keeps their cached role until next sign-in and RBAC is stale).
+            if (member.user.id === currentUserId) {
+                await updateSession();
+            }
         } catch (err: unknown) {
             alert(err instanceof Error ? err.message : 'Failed to update role');
         }

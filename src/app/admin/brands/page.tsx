@@ -8,6 +8,7 @@ import {
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 
 interface Brand {
     id: string;
@@ -63,6 +64,7 @@ interface CreateBrandForm {
 
 export default function AdminBrandsPage() {
     const router = useRouter();
+    const perms = useAdminPermissions();
     const [sectionTab, setSectionTab] = useState<SectionTab>('Brands');
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
@@ -236,13 +238,15 @@ export default function AdminBrandsPage() {
                     <h1 className="text-[28px] font-[900] text-[#181725] tracking-tight">Brands</h1>
                     <p className="text-[#7C7C7C] font-medium mt-1">Review brand applications and manage distributor mappings</p>
                 </div>
-                <button
-                    onClick={() => setShowCreate(true)}
-                    className="h-[44px] px-5 bg-[#299E60] text-white rounded-[12px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 shrink-0"
-                >
-                    <Plus size={16} />
-                    Add Brand
-                </button>
+                {perms.canWriteSettings && (
+                    <button
+                        onClick={() => setShowCreate(true)}
+                        className="h-[44px] px-5 bg-[#299E60] text-white rounded-[12px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 shrink-0"
+                    >
+                        <Plus size={16} />
+                        Add Brand
+                    </button>
+                )}
             </div>
 
             {/* Stats */}

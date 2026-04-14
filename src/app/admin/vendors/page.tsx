@@ -21,6 +21,7 @@ import {
     EyeOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 
 interface AdminVendor {
     id: string;
@@ -55,6 +56,7 @@ interface CreateVendorForm {
 
 export default function VendorsPage() {
     const router = useRouter();
+    const perms = useAdminPermissions();
     const [searchQuery, setSearchQuery] = useState('');
     const [vendors, setVendors] = useState<AdminVendor[]>([]);
     const [loading, setLoading] = useState(true);
@@ -150,13 +152,15 @@ export default function VendorsPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => setShowCreate(true)}
-                        className="h-[44px] px-5 bg-[#299E60] text-white rounded-[12px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 shrink-0"
-                    >
-                        <Plus size={16} />
-                        Add Vendor
-                    </button>
+                    {perms.canWriteSettings && (
+                        <button
+                            onClick={() => setShowCreate(true)}
+                            className="h-[44px] px-5 bg-[#299E60] text-white rounded-[12px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 shrink-0"
+                        >
+                            <Plus size={16} />
+                            Add Vendor
+                        </button>
+                    )}
                     <div className="relative group w-full md:w-[240px]">
                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={16} />
                         <input

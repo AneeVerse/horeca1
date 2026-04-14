@@ -23,6 +23,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import ProductImportModal from '@/components/features/admin/ProductImportModal';
+import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -110,6 +111,7 @@ const PAGE_LIMIT = 20;
 // ---------------------------------------------------------------------------
 
 export default function ProductsPage() {
+    const perms = useAdminPermissions();
     // Data state
     const [products, setProducts] = useState<Product[]>([]);
     const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -554,22 +556,26 @@ export default function ProductsPage() {
                     </div>
 
                     {/* Import Button */}
-                    <button
-                        onClick={openImport}
-                        className="h-[44px] px-5 bg-white border border-[#EEEEEE] rounded-[12px] text-[13px] font-bold text-[#181725] hover:bg-[#F8F9FB] transition-all flex items-center gap-2 shadow-sm"
-                    >
-                        <Upload size={16} />
-                        Import
-                    </button>
+                    {perms.canWriteProducts && (
+                        <button
+                            onClick={openImport}
+                            className="h-[44px] px-5 bg-white border border-[#EEEEEE] rounded-[12px] text-[13px] font-bold text-[#181725] hover:bg-[#F8F9FB] transition-all flex items-center gap-2 shadow-sm"
+                        >
+                            <Upload size={16} />
+                            Import
+                        </button>
+                    )}
 
                     {/* Add Product Button */}
-                    <button
-                        onClick={openCreate}
-                        className="h-[44px] px-6 bg-[#299E60] text-white rounded-[12px] text-[13px] font-bold hover:bg-[#238a54] transition-all flex items-center gap-2 shadow-sm shadow-[#299E60]/20"
-                    >
-                        <Plus size={16} strokeWidth={3} />
-                        Add Product
-                    </button>
+                    {perms.canWriteProducts && (
+                        <button
+                            onClick={openCreate}
+                            className="h-[44px] px-6 bg-[#299E60] text-white rounded-[12px] text-[13px] font-bold hover:bg-[#238a54] transition-all flex items-center gap-2 shadow-sm shadow-[#299E60]/20"
+                        >
+                            <Plus size={16} strokeWidth={3} />
+                            Add Product
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -786,15 +792,18 @@ export default function ProductsPage() {
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center justify-end gap-2">
                                                         {/* Edit */}
-                                                        <button
-                                                            onClick={() => openEdit(product)}
-                                                            title="Edit product"
-                                                            className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center text-[#7C7C7C] hover:bg-[#EEF8F1] hover:text-[#299E60] transition-all"
-                                                        >
-                                                            <Pencil size={16} />
-                                                        </button>
+                                                        {perms.canWriteProducts && (
+                                                            <button
+                                                                onClick={() => openEdit(product)}
+                                                                title="Edit product"
+                                                                className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center text-[#7C7C7C] hover:bg-[#EEF8F1] hover:text-[#299E60] transition-all"
+                                                            >
+                                                                <Pencil size={16} />
+                                                            </button>
+                                                        )}
 
                                                         {/* Toggle Active */}
+                                                        {perms.canWriteProducts && (
                                                         <button
                                                             onClick={() => toggleActive(product)}
                                                             disabled={actionLoading === product.id}
@@ -817,15 +826,18 @@ export default function ProductsPage() {
                                                                 </div>
                                                             )}
                                                         </button>
+                                                        )}
 
                                                         {/* Delete */}
-                                                        <button
-                                                            onClick={() => setDeleteTarget(product)}
-                                                            title="Delete product"
-                                                            className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center text-[#7C7C7C] hover:bg-[#FFF0F0] hover:text-[#E74C3C] transition-all"
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
+                                                        {perms.canWriteProducts && (
+                                                            <button
+                                                                onClick={() => setDeleteTarget(product)}
+                                                                title="Delete product"
+                                                                className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center text-[#7C7C7C] hover:bg-[#FFF0F0] hover:text-[#E74C3C] transition-all"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>

@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImageUpload } from '@/components/ui/ImageUpload';
+import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,6 +89,7 @@ const INITIAL_FORM: CategoryFormData = {
 // ---------------------------------------------------------------------------
 
 export default function CategoriesPage() {
+    const perms = useAdminPermissions();
     // Data state
     const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
@@ -594,20 +596,24 @@ export default function CategoriesPage() {
             {/* Actions */}
             <td className="px-8 py-4">
                 <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => openEditModal(cat)}
-                        className="w-[36px] h-[36px] flex items-center justify-center rounded-[10px] bg-[#F1F4F9] text-[#7C7C7C] hover:bg-[#299E60] hover:text-white transition-all"
-                        title="Edit category"
-                    >
-                        <Edit2 size={15} />
-                    </button>
-                    <button
-                        onClick={() => openDeleteModal(cat)}
-                        className="w-[36px] h-[36px] flex items-center justify-center rounded-[10px] bg-[#F1F4F9] text-[#7C7C7C] hover:bg-[#E74C3C] hover:text-white transition-all"
-                        title="Delete category"
-                    >
-                        <Trash2 size={15} />
-                    </button>
+                    {perms.canWriteProducts && (
+                        <button
+                            onClick={() => openEditModal(cat)}
+                            className="w-[36px] h-[36px] flex items-center justify-center rounded-[10px] bg-[#F1F4F9] text-[#7C7C7C] hover:bg-[#299E60] hover:text-white transition-all"
+                            title="Edit category"
+                        >
+                            <Edit2 size={15} />
+                        </button>
+                    )}
+                    {perms.canWriteProducts && (
+                        <button
+                            onClick={() => openDeleteModal(cat)}
+                            className="w-[36px] h-[36px] flex items-center justify-center rounded-[10px] bg-[#F1F4F9] text-[#7C7C7C] hover:bg-[#E74C3C] hover:text-white transition-all"
+                            title="Delete category"
+                        >
+                            <Trash2 size={15} />
+                        </button>
+                    )}
                 </div>
             </td>
         </tr>
@@ -676,13 +682,15 @@ export default function CategoriesPage() {
                     </div>
 
                     {/* Add Category */}
-                    <button
-                        onClick={openCreateModal}
-                        className="h-[44px] px-6 flex items-center gap-2 bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] shadow-sm shadow-[#299E60]/20 transition-all active:scale-[0.98]"
-                    >
-                        <Plus size={18} strokeWidth={2.5} />
-                        Add Category
-                    </button>
+                    {perms.canWriteProducts && (
+                        <button
+                            onClick={openCreateModal}
+                            className="h-[44px] px-6 flex items-center gap-2 bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] shadow-sm shadow-[#299E60]/20 transition-all active:scale-[0.98]"
+                        >
+                            <Plus size={18} strokeWidth={2.5} />
+                            Add Category
+                        </button>
+                    )}
                 </div>
             </div>
 
