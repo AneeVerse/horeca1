@@ -74,9 +74,7 @@ export default function ShipmentDetailPage() {
     };
 
     const itemTotal = shipment.items.reduce((sum, item) => sum + item.price * item.pcs, 0);
-    const deliveryFee = 15;
-    const handlingFee = 4;
-    const totalPay = itemTotal + deliveryFee + handlingFee;
+    const totalPay = itemTotal;
     const minOrder = 600;
     const shortfall = minOrder - itemTotal;
     const isDemo = id !== 'cart-shipment';
@@ -324,14 +322,6 @@ export default function ShipmentDetailPage() {
                                     <span className="text-[15px] text-[#4C4F4D] font-medium">Item Total</span>
                                     <span className="text-[15px] font-bold text-[#181725]">₹ {itemTotal}</span>
                                 </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-[15px] text-[#4C4F4D] font-medium">Delivery Fee</span>
-                                    <span className="text-[15px] font-bold text-[#181725]">₹ {deliveryFee}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-[15px] text-[#4C4F4D] font-medium">Handling Fee</span>
-                                    <span className="text-[15px] font-bold text-[#181725]">₹ {handlingFee}</span>
-                                </div>
                             </div>
                             <div className="px-7 pb-6">
                                 <div className="border-t border-dashed border-[#D0D0D0] pt-5">
@@ -374,14 +364,6 @@ export default function ShipmentDetailPage() {
                         <div className="flex justify-between items-center text-[14px] font-medium text-[#7C7C7C]">
                             <span>Item Total</span>
                             <span className="text-[#181725] font-bold">₹ {itemTotal}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-[14px] font-medium text-[#7C7C7C]">
-                            <span>Delivery Fee</span>
-                            <span className="text-[#181725] font-bold">₹ {deliveryFee}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-[14px] font-medium text-[#7C7C7C]">
-                            <span>Handling Fee</span>
-                            <span className="text-[#181725] font-bold">₹ {handlingFee}</span>
                         </div>
                         <div className="pt-2">
                             <div className="border-t border-dashed border-[#CFCECE] w-full" />

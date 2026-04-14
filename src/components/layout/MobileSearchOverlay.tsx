@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, Search, X, Star, Heart, ShoppingCart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { dal } from '@/lib/dal';
-import type { Vendor, VendorProduct } from '@/types';
+import type { Vendor, VendorProduct, VendorSummary } from '@/types';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
 
@@ -24,6 +24,8 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
     const { totalItems } = useCart();
 
     const [vendors, setVendors] = useState<Vendor[]>([]);
+    // Vendors returned by the search API — these are vendors that actually carry the searched product
+    const [searchResultVendors, setSearchResultVendors] = useState<VendorSummary[]>([]);
 
     useEffect(() => {
         dal.vendors.list().then((res) => setVendors(res.vendors)).catch(console.error);
@@ -44,12 +46,15 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
     useEffect(() => {
         if (!searchQuery.trim()) {
             setFilteredItems([]);
+            setSearchResultVendors([]);
             return;
         }
         const timeout = setTimeout(() => {
             dal.search.query(searchQuery).then((res) => {
                 setFilteredItems(res.products);
-            }).catch(() => setFilteredItems([]));
+                // Use API-returned vendors (vendors that carry the searched product)
+                setSearchResultVendors(res.vendors);
+            }).catch(() => { setFilteredItems([]); setSearchResultVendors([]); });
         }, 300); // debounce 300ms
         return () => clearTimeout(timeout);
     }, [searchQuery]);
@@ -88,6 +93,10 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
             return false;
         });
     }, [searchQuery, vendors]);
+
+    // When user has typed a query, prefer vendors from the search API (they actually carry
+    // the product). Fall back to client-side name/tag filtering for browse-without-query.
+    const displayVendors = searchQuery.trim() ? searchResultVendors : filteredVendors;
 
     if (!isOpen) return null;
 
@@ -181,7 +190,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                             "text-[11px] px-2 py-0.5 rounded-full font-bold",
                             activeTab === 'vendors' ? "bg-[#53B175] text-white" : "bg-[#E5E7EB] text-[#181725]"
                         )}>
-                            {filteredVendors.length}
+                            {displayVendors.length}
                         </span>
                         {activeTab === 'vendors' && (
                             <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#53B175] rounded-t-full" />
@@ -257,19 +266,28 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
 
                 {activeTab === 'vendors' && (
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6 w-full">
-                        {filteredVendors.length > 0 ? (
-                            filteredVendors.map((vendor) => {
+                        {displayVendors.length > 0 ? (
+                            displayVendors.map((vendor) => {
                                 const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
                                 const q = searchQuery.toLowerCase().trim();
-                                
-                                // 1. Check for exact category match
-                                let catMatch = vendor.categories.find(c => slugify(c) === slugify(q));
-                                
-                                // 2. Fallback: no catalog on DAL vendors, skip product-level matching
 
-                                const vendorTarget = catMatch 
-                                    ? `/category/${vendor.slug}/${slugify(catMatch)}`
-                                    : `/vendor/${vendor.id}`; 
+                                // 1. Check for exact category match (works when vendor has categories loaded)
+                                const catMatch = vendor.categories.find(c => slugify(c) === slugify(q));
+
+                                // 2. For product searches: find the category of the first matching product for
+                                //    this vendor so we can open the left-sidebar category page pre-selected
+                                const vendorProducts = q ? filteredItems.filter(p => p.vendorId === vendor.id) : [];
+                                const productCategory = vendorProducts[0]?.category;
+                                const productCategorySlug = productCategory ? slugify(productCategory) : 'all';
+
+                                // 3. Target URL:
+                                //    - Category name match  → category page with that category selected (left sidebar layout)
+                                //    - Product search hit   → category page with product's category pre-selected
+                                //    - Browse with no query → vendor storefront (full header + tabs)
+                                const vendorTarget = catMatch
+                                    ? `/category/${vendor.id}/${slugify(catMatch)}`
+                                    : q ? `/category/${vendor.id}/${productCategorySlug}`
+                                    : `/vendor/${vendor.id}`;
 
                                 return (
                                     <Link

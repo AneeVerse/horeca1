@@ -25,7 +25,7 @@ export class CatalogService {
       include: {
         priceSlabs: { orderBy: { sortOrder: 'asc' } },
         inventory: { select: { qtyAvailable: true, qtyReserved: true } },
-        category: { select: { name: true, slug: true } },
+        category: { select: { id: true, name: true, slug: true } },
         vendor: { select: { id: true, businessName: true, logoUrl: true } },
       },
     });

@@ -10,7 +10,8 @@ export class CartService {
           include: {
             product: {
               select: {
-                id: true, name: true, imageUrl: true, basePrice: true, packSize: true,
+                id: true, name: true, imageUrl: true, basePrice: true, originalPrice: true,
+                taxPercent: true, minOrderQty: true, packSize: true,
                 unit: true, creditEligible: true,
                 priceSlabs: { orderBy: { minQty: 'asc' as const }, select: { minQty: true, maxQty: true, price: true } },
                 inventory: { select: { qtyAvailable: true } },
@@ -65,6 +66,7 @@ export class CartService {
     });
     if (!product) throw Errors.notFound('Product');
     if (product.approvalStatus !== 'approved') throw Errors.forbidden('This product is not available for purchase');
+    if (quantity < product.minOrderQty) throw Errors.badRequest(`Minimum order quantity for this product is ${product.minOrderQty}`);
 
     let unitPrice = Number(product.basePrice);
     for (const slab of product.priceSlabs) {
@@ -92,6 +94,8 @@ export class CartService {
       where: { id: item.productId },
       include: { priceSlabs: { orderBy: { minQty: 'asc' } } },
     });
+
+    if (quantity < product!.minOrderQty) throw Errors.badRequest(`Minimum order quantity for this product is ${product!.minOrderQty}`);
 
     let unitPrice = Number(product!.basePrice);
     for (const slab of product!.priceSlabs) {

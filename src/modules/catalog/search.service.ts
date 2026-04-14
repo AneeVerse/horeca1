@@ -26,7 +26,7 @@ export class SearchService {
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       include: {
         vendor: {
-          select: { id: true, businessName: true, slug: true, rating: true, minOrderValue: true },
+          select: { id: true, businessName: true, slug: true, logoUrl: true, rating: true, minOrderValue: true },
         },
         priceSlabs: { orderBy: { sortOrder: 'asc' } },
         inventory: { select: { qtyAvailable: true } },

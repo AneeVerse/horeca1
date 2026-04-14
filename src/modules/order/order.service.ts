@@ -40,7 +40,7 @@ export class OrderService {
         const vendor = await tx.vendor.findUnique({ where: { id: vo.vendorId } });
         if (!vendor) throw Errors.notFound('Vendor');
 
-        // 3. Calculate subtotal
+        // 3. Calculate subtotal (GST-inclusive gross prices — DB prices are ex-GST taxable rates)
         let subtotal = 0;
         const itemDetails = [];
 
@@ -51,22 +51,25 @@ export class OrderService {
           });
           if (!product) throw Errors.notFound('Product');
 
-          // Find applicable price slab
-          let unitPrice = Number(product.basePrice);
+          // Find applicable price slab (ex-GST taxable rate)
+          let taxableUnitPrice = Number(product.basePrice);
           for (const slab of product.priceSlabs) {
             if (item.quantity >= slab.minQty && (slab.maxQty === null || item.quantity <= slab.maxQty)) {
-              unitPrice = Number(slab.price);
+              taxableUnitPrice = Number(slab.price);
             }
           }
 
-          const totalPrice = unitPrice * item.quantity;
+          // Apply GST to get gross (customer-facing) price
+          const taxPercent = Number(product.taxPercent) || 0;
+          const grossUnitPrice = Math.round(taxableUnitPrice * (1 + taxPercent / 100) * 100) / 100;
+          const totalPrice = Math.round(grossUnitPrice * item.quantity * 100) / 100;
           subtotal += totalPrice;
 
           itemDetails.push({
             productId: item.productId,
             productName: product.name,
             quantity: item.quantity,
-            unitPrice,
+            unitPrice: grossUnitPrice,
             totalPrice,
           });
         }

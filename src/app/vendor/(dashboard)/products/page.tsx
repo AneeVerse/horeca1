@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Search, Plus, Loader2, Package, Pencil, X,
-    ChevronRight, Info, ImageIcon, Settings, DollarSign, Trash2,
+    ChevronRight, ChevronLeft, Info, ImageIcon, Settings, DollarSign, Trash2,
     BarChart3, BoxIcon, Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -83,6 +83,7 @@ interface ProductForm {
 /* ------------------------------------------------------------------ */
 
 const UNIT_OPTIONS = ['kg', 'g', 'ml', 'L', 'piece', 'pack', 'box', 'dozen', 'case', 'bag', 'bottle', 'can', 'carton', 'tray'];
+const PAGE_SIZE = 20;
 
 const EMPTY_FORM: ProductForm = {
     name: '',
@@ -145,6 +146,22 @@ function calcSavingsPercent(base: string, original: string): number | null {
     const o = parseFloat(original);
     if (isNaN(b) || isNaN(o) || o <= b) return null;
     return Math.round(((o - b) / o) * 100);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Pagination helper                                                  */
+/* ------------------------------------------------------------------ */
+
+function getPageRange(current: number, total: number): (number | 'gap')[] {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    const pages: (number | 'gap')[] = [1];
+    if (current > 3) pages.push('gap');
+    const lo = Math.max(2, current - 1);
+    const hi = Math.min(total - 1, current + 1);
+    for (let i = lo; i <= hi; i++) pages.push(i);
+    if (current < total - 2) pages.push('gap');
+    pages.push(total);
+    return pages;
 }
 
 /* ------------------------------------------------------------------ */
@@ -253,6 +270,7 @@ export default function VendorProductsPage() {
     const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<VendorProduct | null>(null);
     const [form, setForm] = useState<ProductForm>(EMPTY_FORM);
@@ -276,16 +294,16 @@ export default function VendorProductsPage() {
 
     /* ---- Data fetching ---- */
 
-    const fetchProducts = useCallback(async () => {
+    const fetchProducts = useCallback(async (showSpinner = true) => {
         try {
-            setLoading(true);
-            const res = await fetch('/api/v1/vendor/products?limit=100');
+            if (showSpinner) setLoading(true);
+            const res = await fetch('/api/v1/vendor/products?limit=200');
             const json = await res.json();
             if (json.success) setProducts(json.data.products);
         } catch (err) {
             console.error('Failed to load products:', err);
         } finally {
-            setLoading(false);
+            if (showSpinner) setLoading(false);
         }
     }, []);
 
@@ -297,9 +315,16 @@ export default function VendorProductsPage() {
             .catch(console.error);
     }, [fetchProducts]);
 
+    // Reset to page 1 when search changes
+    useEffect(() => { setCurrentPage(1); }, [searchQuery]);
+
     const filteredProducts = products.filter(p =>
         p.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
+    const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+    const safeCurrentPage = Math.min(currentPage, totalPages);
+    const paginatedProducts = filteredProducts.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
+    const pageRange = getPageRange(safeCurrentPage, totalPages);
 
     /* ---- Product suggestions (autocomplete) ---- */
 
@@ -610,7 +635,69 @@ export default function VendorProductsPage() {
             if (!json.success) throw new Error(json.error?.message || 'Failed to save product');
 
             closePanel();
-            fetchProducts();
+
+            // Optimistically update local state immediately so the product
+            // is visible right away (before the background refetch completes).
+            const p = json.data;
+            const cat = categories.find(c => c.id === p.categoryId);
+            if (editingProduct) {
+                // Merge updated fields into the existing entry
+                setProducts(prev => prev.map(existing => existing.id === p.id ? {
+                    ...existing,
+                    basePrice: Number(p.basePrice),
+                    originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
+                    packSize: p.packSize ?? null,
+                    unit: p.unit ?? null,
+                    imageUrl: p.imageUrl ?? null,
+                    isActive: p.isActive ?? existing.isActive,
+                    description: p.description ?? null,
+                    creditEligible: p.creditEligible ?? existing.creditEligible,
+                    categoryName: cat?.name ?? existing.categoryName,
+                    categorySlug: cat?.slug ?? existing.categorySlug,
+                    sku: p.sku ?? null,
+                    hsn: p.hsn ?? null,
+                    brand: p.brand ?? null,
+                    barcode: p.barcode ?? null,
+                    taxPercent: p.taxPercent != null ? Number(p.taxPercent) : null,
+                    minOrderQty: p.minOrderQty ?? existing.minOrderQty,
+                    tags: p.tags ?? null,
+                    approvalStatus: p.approvalStatus ?? existing.approvalStatus,
+                    approvalNote: p.approvalNote ?? null,
+                } : existing));
+            } else {
+                // Prepend new product so it appears at the top immediately
+                const optimistic: VendorProduct = {
+                    id: p.id,
+                    name: p.name,
+                    slug: p.slug,
+                    basePrice: Number(p.basePrice),
+                    originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
+                    packSize: p.packSize ?? null,
+                    unit: p.unit ?? null,
+                    imageUrl: p.imageUrl ?? null,
+                    isActive: p.isActive ?? true,
+                    description: p.description ?? null,
+                    creditEligible: p.creditEligible ?? false,
+                    categoryName: cat?.name ?? '',
+                    categorySlug: cat?.slug ?? '',
+                    in_stock: false,
+                    qty_available: 0,
+                    sku: p.sku ?? null,
+                    hsn: p.hsn ?? null,
+                    brand: p.brand ?? null,
+                    barcode: p.barcode ?? null,
+                    taxPercent: p.taxPercent != null ? Number(p.taxPercent) : null,
+                    minOrderQty: p.minOrderQty ?? 1,
+                    tags: p.tags ?? null,
+                    images: p.images ?? null,
+                    approvalStatus: p.approvalStatus ?? 'pending',
+                    approvalNote: p.approvalNote ?? null,
+                };
+                setProducts(prev => [optimistic, ...prev]);
+            }
+
+            // Background refetch to sync with server (no loading spinner)
+            fetchProducts(false);
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Save failed';
             setFormError(msg);
@@ -724,7 +811,7 @@ export default function VendorProductsPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[#F5F5F5]">
-                                {filteredProducts.map((product) => (
+                                {paginatedProducts.map((product) => (
                                     <tr key={product.id} className="hover:bg-[#FAFAFA] transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
@@ -807,6 +894,64 @@ export default function VendorProductsPage() {
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+                )}
+
+                {/* Pagination bar — only when there are results */}
+                {!loading && filteredProducts.length > 0 && (
+                    <div className="flex items-center justify-between px-6 py-4 border-t border-[#F5F5F5]">
+                        {/* Count */}
+                        <p className="text-[13px] text-[#7C7C7C] font-medium">
+                            Showing{' '}
+                            <span className="text-[#181725] font-bold">
+                                {(safeCurrentPage - 1) * PAGE_SIZE + 1}–{Math.min(safeCurrentPage * PAGE_SIZE, filteredProducts.length)}
+                            </span>
+                            {' '}of{' '}
+                            <span className="text-[#181725] font-bold">{filteredProducts.length}</span>
+                            {' '}products
+                        </p>
+
+                        {/* Page numbers */}
+                        {totalPages > 1 && (
+                            <div className="flex items-center gap-1">
+                                {/* Prev */}
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={safeCurrentPage === 1}
+                                    className="w-[34px] h-[34px] flex items-center justify-center rounded-[8px] border border-[#EEEEEE] text-[#7C7C7C] hover:bg-[#F5F5F5] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <ChevronLeft size={16} />
+                                </button>
+
+                                {pageRange.map((item, idx) =>
+                                    item === 'gap' ? (
+                                        <span key={`gap-${idx}`} className="w-[34px] h-[34px] flex items-center justify-center text-[#AEAEAE] text-[13px]">…</span>
+                                    ) : (
+                                        <button
+                                            key={item}
+                                            onClick={() => setCurrentPage(item)}
+                                            className={cn(
+                                                'w-[34px] h-[34px] flex items-center justify-center rounded-[8px] text-[13px] font-bold transition-colors',
+                                                item === safeCurrentPage
+                                                    ? 'bg-[#299E60] text-white'
+                                                    : 'border border-[#EEEEEE] text-[#7C7C7C] hover:bg-[#F5F5F5]'
+                                            )}
+                                        >
+                                            {item}
+                                        </button>
+                                    )
+                                )}
+
+                                {/* Next */}
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={safeCurrentPage === totalPages}
+                                    className="w-[34px] h-[34px] flex items-center justify-center rounded-[8px] border border-[#EEEEEE] text-[#7C7C7C] hover:bg-[#F5F5F5] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <ChevronRight size={16} />
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

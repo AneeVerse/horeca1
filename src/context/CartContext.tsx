@@ -2,12 +2,14 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
-import type { VendorProduct, CartItem, VendorCartGroup } from '@/types';
+import type { VendorProduct, CartItem, VendorCartGroup, BulkPriceTier } from '@/types';
 import { dal } from '@/lib/dal';
 
 // CartItem extended with API item ID (needed for PATCH/DELETE on server cart)
 interface CartItemWithId extends CartItem {
-    cartItemId?: string; // DB id from server cart
+    cartItemId?: string;   // DB id from server cart (for PATCH/DELETE)
+    basePriceGross: number; // gross price at qty < first bulk tier (never mutated after first add)
+                            // used to recalculate tier price live when qty changes in cart
 }
 
 interface CartContextType {
@@ -18,7 +20,9 @@ interface CartContextType {
     updateQuantity: (productId: string, quantity: number) => void;
     clearCart: () => void;
     totalItems: number;
-    subtotal: number;
+    subtotal: number;       // gross total (GST-inclusive)
+    totalTaxable: number;   // taxable value (ex-GST)
+    totalGST: number;       // GST portion = subtotal - totalTaxable
     totalAmount: number;
     vendorCount: number;
 }
@@ -26,6 +30,25 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 // ---- HELPERS ----
+
+/**
+ * Given a base gross price and sorted bulk tier array, find the correct gross
+ * unit price for `qty`. Tiers must be gross prices (already × (1 + tax%)).
+ *
+ * Logic: the highest tier whose minQty ≤ qty wins.
+ *   qty=9  → no tier matches → basePrice
+ *   qty=10 → tier1 (minQty:10) matches → tier1.price
+ *   qty=50 → tier2 (minQty:50) also matches → tier2.price wins (highest match)
+ */
+function getEffectiveGrossPrice(basePriceGross: number, bulkPrices: BulkPriceTier[], qty: number): number {
+    let price = basePriceGross;
+    // Iterate ascending — last match wins (highest qualifying tier)
+    const sorted = [...(bulkPrices || [])].sort((a, b) => a.minQty - b.minQty);
+    for (const tier of sorted) {
+        if (qty >= tier.minQty) price = tier.price;
+    }
+    return price;
+}
 
 function buildGroups(cart: CartItemWithId[]): VendorCartGroup[] {
     const grouped: Record<string, VendorCartGroup> = {};
@@ -39,12 +62,23 @@ function buildGroups(cart: CartItemWithId[]): VendorCartGroup[] {
                 vendorLogo: item.product.vendorLogo,
                 items: [],
                 subtotal: 0,
-                minOrderValue: item.product.minOrderQuantity || 0,
+                subtotalTaxable: 0,
+                totalGST: 0,
+                minOrderValue: item.product.vendorMinOrderValue || 0,
                 meetsMinOrder: false
             };
         }
         grouped[vId].items.push(item);
-        grouped[vId].subtotal += (item.product.price || 0) * item.quantity;
+
+        // Gross price (what customer sees) × qty
+        const gross = (item.product.price || 0) * item.quantity;
+        // Back-calculate taxable from gross: taxable = gross / (1 + gst%)
+        const tax = item.product.taxPercent || 0;
+        const taxable = tax > 0 ? gross / (1 + tax / 100) : gross;
+
+        grouped[vId].subtotal += gross;
+        grouped[vId].subtotalTaxable += taxable;
+        grouped[vId].totalGST += gross - taxable;
         grouped[vId].meetsMinOrder = grouped[vId].subtotal >= grouped[vId].minOrderValue;
     });
     return Object.values(grouped);
@@ -67,17 +101,28 @@ function fromApiCart(apiData: { vendorGroups: unknown[]; total: number }): CartI
             const priceSlabs = (product.priceSlabs as Array<Record<string, unknown>>) || [];
             const inventory = product.inventory as Record<string, unknown> | null;
 
+            // unitPrice from DB is the taxable rate (ex-GST) — matches the active slab
             const unitPrice = Number(raw.unitPrice) || 0;
-            const price = unitPrice > 0 ? unitPrice
+            const taxableRate = unitPrice > 0 ? unitPrice
                 : priceSlabs.length > 0 ? Number(priceSlabs[0].price)
                 : Number(product.basePrice) || 0;
+
+            // Compute gross (GST-inclusive) price from taxable rate
+            const taxPercent = Number(product.taxPercent) || 0;
+            const grossPrice = Math.round(taxableRate * (1 + taxPercent / 100) * 100) / 100;
+
+            // MRP: originalPrice from DB is also a taxable rate — compute gross MRP
+            const originalTaxableRate = Number(product.originalPrice) || 0;
+            const grossMRP = originalTaxableRate > 0
+                ? Math.round(originalTaxableRate * (1 + taxPercent / 100) * 100) / 100
+                : 0;
 
             const vp: VendorProduct = {
                 id: product.id as string,
                 name: (product.name as string) || '',
                 description: '',
-                price,
-                originalPrice: Number(product.basePrice) || 0,
+                price: grossPrice,                 // gross price shown to customer
+                originalPrice: grossMRP || grossPrice,
                 images: product.imageUrl ? [product.imageUrl as string] : [],
                 category: '',
                 packSize: (product.packSize as string) || '1 unit',
@@ -89,17 +134,29 @@ function fromApiCart(apiData: { vendorGroups: unknown[]; total: number }): CartI
                 vendorId: (raw.vendorId as string) || (itemVendor.id as string) || '',
                 vendorName: (itemVendor.businessName as string) || '',
                 vendorLogo: (itemVendor.logoUrl as string) || '',
-                bulkPrices: priceSlabs.map(s => ({ minQty: Number(s.minQty), price: Number(s.price) })),
+                // Bulk price slabs: store gross prices for display
+                bulkPrices: priceSlabs.map(s => ({
+                    minQty: Number(s.minQty),
+                    price: Math.round(Number(s.price) * (1 + taxPercent / 100) * 100) / 100,
+                })),
                 creditBadge: (product.creditEligible as boolean) || false,
-                minOrderQuantity: priceSlabs.length > 0 ? Number(priceSlabs[0].minQty) : 1,
+                minOrderQuantity: Number(product.minOrderQty) || 1,
+                taxPercent,
+                taxableRate,
+                vendorMinOrderValue: Number((itemVendor.minOrderValue as number) || 0),
                 frequentlyOrdered: false,
                 isDeal: false,
             };
+            // basePriceGross = gross price at qty < first tier (single unit base price)
+            // DB basePrice is taxable rate → compute gross
+            const basePriceGross = Math.round(Number(product.basePrice) * (1 + taxPercent / 100) * 100) / 100 || grossPrice;
+
             items.push({
                 productId: vp.id,
                 product: vp,
                 quantity: Number(raw.quantity) || 1,
                 cartItemId: raw.id as string, // cart item DB id for PATCH/DELETE
+                basePriceGross,
             });
         }
     }
@@ -153,27 +210,49 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }, [cart, isInitialized, isLoggedIn]);
 
     const addToCart = useCallback((product: VendorProduct, quantity: number = 1) => {
+        // product.price = base gross price (below any bulk tier)
+        // Compute the correct tier price for the quantity being added
+        const basePriceGross = product.price;
+        const effectiveGross = getEffectiveGrossPrice(basePriceGross, product.bulkPrices || [], quantity);
+        const tax = product.taxPercent || 0;
+        const effectiveTaxableRate = tax > 0 ? effectiveGross / (1 + tax / 100) : effectiveGross;
+        const productWithEffectivePrice: VendorProduct = { ...product, price: effectiveGross, taxableRate: effectiveTaxableRate };
+
         if (isLoggedIn) {
             dal.cart.addItem(product.id, product.vendorId, quantity)
                 .then(async () => {
-                    // Refresh cart from API to get the cartItemId
+                    // Refresh cart from API to get cartItemId and server-computed prices
                     const apiData = await dal.cart.get();
                     const items = fromApiCart(apiData as { vendorGroups: unknown[]; total: number });
                     setCart(items);
                 })
                 .catch(() => {
-                    // Optimistic update on API failure
+                    // Optimistic update on API failure — use locally-computed effective price
                     setCart(prev => {
                         const existing = prev.find(i => i.productId === product.id);
-                        if (existing) return prev.map(i => i.productId === product.id ? { ...i, quantity: i.quantity + quantity } : i);
-                        return [...prev, { productId: product.id, product, quantity }];
+                        if (existing) {
+                            const newQty = existing.quantity + quantity;
+                            const newGross = getEffectiveGrossPrice(existing.basePriceGross, existing.product.bulkPrices || [], newQty);
+                            const newTaxable = tax > 0 ? newGross / (1 + tax / 100) : newGross;
+                            return prev.map(i => i.productId === product.id
+                                ? { ...i, quantity: newQty, product: { ...i.product, price: newGross, taxableRate: newTaxable } }
+                                : i);
+                        }
+                        return [...prev, { productId: product.id, product: productWithEffectivePrice, quantity, basePriceGross }];
                     });
                 });
         } else {
             setCart(prev => {
                 const existing = prev.find(i => i.productId === product.id);
-                if (existing) return prev.map(i => i.productId === product.id ? { ...i, quantity: i.quantity + quantity } : i);
-                return [...prev, { productId: product.id, product, quantity }];
+                if (existing) {
+                    const newQty = existing.quantity + quantity;
+                    const newGross = getEffectiveGrossPrice(existing.basePriceGross, existing.product.bulkPrices || [], newQty);
+                    const newTaxable = tax > 0 ? newGross / (1 + tax / 100) : newGross;
+                    return prev.map(i => i.productId === product.id
+                        ? { ...i, quantity: newQty, product: { ...i.product, price: newGross, taxableRate: newTaxable } }
+                        : i);
+                }
+                return [...prev, { productId: product.id, product: productWithEffectivePrice, quantity, basePriceGross }];
             });
         }
     }, [isLoggedIn]);
@@ -195,10 +274,34 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
         setCart(prev => {
             const item = prev.find(i => i.productId === productId);
-            if (isLoggedIn && item?.cartItemId) {
+            if (!item) return prev;
+
+            // Enforce minOrderQuantity — silently block; UI must show the toast
+            const minQty = item.product?.minOrderQuantity || 1;
+            if (quantity < minQty) return prev;
+
+            // ── LIVE TIER PRICE RECALCULATION ──────────────────────────────
+            // Use the immutable basePriceGross (set at first add) to find the
+            // correct tier price for the new quantity.
+            //
+            //   qty=9  → below tier1 (minQty:10) → basePriceGross (₹100)
+            //   qty=10 → tier1 matches            → tier1.price    (₹90)
+            //   qty=50 → tier2 also matches        → tier2.price    (₹80)
+            const basePriceGross = item.basePriceGross || item.product?.price || 0;
+            const newGrossPrice = getEffectiveGrossPrice(basePriceGross, item.product?.bulkPrices || [], quantity);
+            const tax = item.product?.taxPercent || 0;
+            const newTaxableRate = tax > 0 ? newGrossPrice / (1 + tax / 100) : newGrossPrice;
+
+            // Sync with server cart (server also recalculates slab price)
+            if (isLoggedIn && item.cartItemId) {
                 dal.cart.updateItem(item.cartItemId, quantity).catch(() => {});
             }
-            return prev.map(i => i.productId === productId ? { ...i, quantity } : i);
+
+            return prev.map(i => i.productId === productId ? {
+                ...i,
+                quantity,
+                product: { ...i.product, price: newGrossPrice, taxableRate: newTaxableRate },
+            } : i);
         });
     }, [isLoggedIn, removeFromCart]);
 
@@ -211,7 +314,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
     const groups = useMemo(() => buildGroups(cart), [cart]);
     const totalItems = useMemo(() => cart.reduce((sum, i) => sum + (i.quantity || 0), 0), [cart]);
+
+    // subtotal = gross total (GST-inclusive) — what customer pays before delivery
     const subtotal = useMemo(() => cart.reduce((sum, i) => sum + ((i.product?.price || 0) * i.quantity), 0), [cart]);
+
+    // totalTaxable = taxable value (ex-GST): gross / (1 + gst%)
+    const totalTaxable = useMemo(() => cart.reduce((sum, i) => {
+        const tax = i.product?.taxPercent || 0;
+        const gross = (i.product?.price || 0) * i.quantity;
+        return sum + (tax > 0 ? gross / (1 + tax / 100) : gross);
+    }, 0), [cart]);
+
+    // totalGST = GST portion extracted from inclusive gross price
+    const totalGST = useMemo(() => subtotal - totalTaxable, [subtotal, totalTaxable]);
+
     const totalAmount = subtotal;
     const vendorCount = groups.length;
 
@@ -224,9 +340,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         clearCart,
         totalItems,
         subtotal,
+        totalTaxable,
+        totalGST,
         totalAmount,
         vendorCount,
-    }), [cart, groups, addToCart, removeFromCart, updateQuantity, clearCart, totalItems, subtotal, totalAmount, vendorCount]);
+    }), [cart, groups, addToCart, removeFromCart, updateQuantity, clearCart, totalItems, subtotal, totalTaxable, totalGST, totalAmount, vendorCount]);
 
     return (
         <CartContext.Provider value={value}>

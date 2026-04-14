@@ -57,7 +57,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     const categoryId = params.get('categoryId') || undefined;
     const search = params.get('search') || undefined;
     const cursor = params.get('cursor') || undefined;
-    const limit = Math.min(Number(params.get('limit')) || 20, 50);
+    const limit = Math.min(Number(params.get('limit')) || 20, 200);
 
     const catalogService = new CatalogService();
     const result = await catalogService.getVendorProducts(vendorId, {

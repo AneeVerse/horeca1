@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { VendorStoreHeader } from '@/components/features/vendor/VendorStoreHeader';
 import { VendorCatalogNav } from '@/components/features/vendor/VendorCatalogNav';
@@ -16,6 +16,7 @@ import { Package, Star, CheckCircle, Clock } from 'lucide-react';
 
 export default function VendorStorePage() {
     const params = useParams();
+    const searchParams = useSearchParams();
     const vendorId = params.id as string;
     const { status: sessionStatus } = useSession();
     const { addToCart } = useCart();
@@ -23,7 +24,8 @@ export default function VendorStorePage() {
     const [products, setProducts] = useState<VendorProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('all');
-    const [searchQuery, setSearchQuery] = useState('');
+    // Pre-fill search from ?q= param (e.g. navigating from search overlay with a specific product)
+    const [searchQuery, setSearchQuery] = useState(() => searchParams?.get('q') || '');
     const [prevOrders, setPrevOrders] = useState<any[]>([]);
     const [reviewsData, setReviewsData] = useState<{
         reviews: Array<{ id: string; rating: number; comment?: string; createdAt: string; reviewerName: string }>;

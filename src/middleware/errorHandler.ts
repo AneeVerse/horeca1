@@ -102,4 +102,7 @@ export const Errors = {
 
   conflict: (message: string) =>
     new ApiError('CONFLICT', message, 409),
+
+  badRequest: (message: string) =>
+    new ApiError('BAD_REQUEST', message, 400),
 };

@@ -47,7 +47,7 @@ function VendorCategoryPageContent() {
             .then(async ([v, cats]) => {
                 setVendor(v);
                 setCategories(cats);
-                const res = await dal.vendors.getProducts(v.id);
+                const res = await dal.vendors.getProducts(v.id, { limit: 200 });
                 setProducts(res.products);
             })
             .catch(() => {
@@ -71,8 +71,8 @@ function VendorCategoryPageContent() {
     const filteredProducts = useMemo(() => {
         if (!activeCategory) return products;
         return products.filter(p =>
-            (p as unknown as { categoryId?: string }).categoryId === activeCategory.id ||
-            p.category === activeCategory.name
+            p.categoryId === activeCategory.id ||
+            p.category.toLowerCase() === activeCategory.name.toLowerCase()
         );
     }, [products, activeCategory]);
 

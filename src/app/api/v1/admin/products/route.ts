@@ -68,7 +68,6 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
       ];
     }
 
-    // Fetch all matching products, then deduplicate by name (catalog view)
     const allProducts = await prisma.product.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -79,7 +78,46 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
       },
     });
 
-    // Deduplicate: group by lowercase name, keep first entry, count vendors, aggregate stock
+    // ── APPROVAL QUEUE: no deduplication ────────────────────────────────────
+    // When filtering by approvalStatus (e.g. "pending"), admin needs to see
+    // every vendor's individual submission. Deduplication by name would hide
+    // a vendor's pending "Basmati Rice" if another vendor already has one.
+    if (approvalStatus) {
+      let startIdx = 0;
+      if (cursor) startIdx = allProducts.findIndex(p => p.id === cursor) + 1;
+
+      const page = allProducts.slice(startIdx, startIdx + limit + 1);
+      const hasMore = page.length > limit;
+      if (hasMore) page.pop();
+
+      const products = page.map(p => ({
+        ...p,
+        vendorCount: 1,
+        vendors: p.vendor ? [p.vendor.businessName] : [],
+        vendorStock: [{ vendor: p.vendor?.businessName ?? '', qty: p.inventory?.qtyAvailable ?? 0 }],
+        totalStock: p.inventory?.qtyAvailable ?? 0,
+      }));
+
+      const nextCursor = hasMore ? products[products.length - 1].id : null;
+      const totalCount = allProducts.length;
+      const pendingCount = allProducts.filter(p => p.approvalStatus === 'pending').length;
+      const approvedCount = allProducts.filter(p => p.approvalStatus === 'approved').length;
+      const rejectedCount = allProducts.filter(p => p.approvalStatus === 'rejected').length;
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          products,
+          nextCursor,
+          hasMore,
+          stats: { total: totalCount, approved: approvedCount, pending: pendingCount, rejected: rejectedCount },
+        },
+      });
+    }
+
+    // ── CATALOG VIEW: deduplicate by name ───────────────────────────────────
+    // No approvalStatus filter → admin is browsing the full catalog.
+    // Group products with the same name, count how many vendors carry them.
     const catalogMap = new Map<string, {
       product: (typeof allProducts)[0];
       vendorCount: number;
@@ -112,11 +150,8 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 
     const catalogEntries = Array.from(catalogMap.values());
 
-    // Apply cursor-based pagination on the deduplicated list
     let startIdx = 0;
-    if (cursor) {
-      startIdx = catalogEntries.findIndex(e => e.product.id === cursor) + 1;
-    }
+    if (cursor) startIdx = catalogEntries.findIndex(e => e.product.id === cursor) + 1;
 
     const page = catalogEntries.slice(startIdx, startIdx + limit + 1);
     const hasMore = page.length > limit;
@@ -131,8 +166,6 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
     }));
 
     const nextCursor = hasMore ? products[products.length - 1].id : null;
-
-    // Compute stats from ALL deduplicated products (not just current page)
     const totalCount = catalogEntries.length;
     const approvedCount = catalogEntries.filter(e => e.product.approvalStatus === 'approved').length;
     const pendingCount = catalogEntries.filter(e => e.product.approvalStatus === 'pending').length;

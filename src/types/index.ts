@@ -59,9 +59,13 @@ export interface VendorProduct extends Product {
     vendorId: string;
     vendorName: string;
     vendorLogo?: string;
+    categoryId?: string;         // DB category UUID — used for reliable category-page filtering
     bulkPrices: BulkPriceTier[];
     creditBadge: boolean;
-    minOrderQuantity: number;
+    minOrderQuantity: number;    // min qty the customer must add (from DB minOrderQty)
+    taxPercent?: number;         // GST rate e.g. 18; 0 = no GST
+    taxableRate?: number;        // price ex-GST — for accurate cart math (price / (1 + tax%))
+    vendorMinOrderValue?: number; // vendor's min ₹ order value for this vendor group
     frequentlyOrdered?: boolean;
     isDeal?: boolean;
 }
@@ -96,7 +100,9 @@ export interface VendorCartGroup {
     vendorName: string;
     vendorLogo?: string;
     items: CartItem[];
-    subtotal: number;
+    subtotal: number;        // gross subtotal (GST-inclusive)
+    subtotalTaxable: number; // taxable value (ex-GST) — for GST breakdown display
+    totalGST: number;        // GST portion = subtotal - subtotalTaxable
     minOrderValue: number;
     meetsMinOrder: boolean;
 }

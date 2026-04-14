@@ -117,6 +117,7 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
     vendorId: (p.vendorId as string) || (vendor.id as string) || '',
     vendorName: (vendor.businessName as string) || '',
     vendorLogo: (vendor.logoUrl as string) || '',
+    categoryId: (p.categoryId as string) || ((p.category as Record<string, unknown>)?.id as string) || undefined,
     bulkPrices: priceSlabs.map((s): BulkPriceTier => ({
       minQty: Number(s.minQty),
       price: Number(s.price),
@@ -165,11 +166,12 @@ export const dal = {
     },
 
     /** Get vendor products with price slabs + inventory */
-    async getProducts(vendorId: string, options?: { categoryId?: string; search?: string; cursor?: string }) {
+    async getProducts(vendorId: string, options?: { categoryId?: string; search?: string; cursor?: string; limit?: number }) {
       const params = new URLSearchParams();
       if (options?.categoryId) params.set('categoryId', options.categoryId);
       if (options?.search) params.set('search', options.search);
       if (options?.cursor) params.set('cursor', options.cursor);
+      if (options?.limit) params.set('limit', String(options.limit));
       const qs = params.toString() ? `?${params}` : '';
 
       const data = await apiFetch<{ products: Record<string, unknown>[]; pagination: unknown }>(`/api/v1/vendors/${vendorId}/products${qs}`);

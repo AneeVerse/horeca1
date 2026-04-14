@@ -89,10 +89,15 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
         e.preventDefault();
         e.stopPropagation();
 
+        const minQty = product.minOrderQuantity || 1;
+
         if (currentQty > 0) {
             updateQuantity(product.id, currentQty + qty);
         } else {
-            addToCart(product, qty);
+            // First add: respect minimum order quantity
+            const firstAddQty = Math.max(qty, minQty);
+            addToCart(product, firstAddQty);
+            qty = firstAddQty;
         }
 
         toast.success(`${product.name} added to cart!`, {
@@ -247,9 +252,16 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                 )}>
                     {product.name}
                 </h3>
-                <p className="text-[11px] md:text-[13px] text-gray-400 font-extrabold uppercase tracking-widest truncate">
-                    {product.packSize}
-                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-[11px] md:text-[13px] text-gray-400 font-extrabold uppercase tracking-widest truncate">
+                        {product.packSize}
+                    </p>
+                    {(product.minOrderQuantity || 1) > 1 && (
+                        <span className="text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-md shrink-0">
+                            Min {product.minOrderQuantity}
+                        </span>
+                    )}
+                </div>
             </div>
 
             {/* ── BULK TIERS ── */}

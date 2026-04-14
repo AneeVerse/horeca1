@@ -49,14 +49,15 @@ function openRazorpayPopup(opts: {
         rzp.open();
     });
 }
-import { ArrowLeft, Search, ChevronRight, ChevronDown, ChevronUp, Plus, Minus, X, Percent, FileText, AlertTriangle, Check, Home, ShoppingCart, Truck, CreditCard, Trash2, Store, Zap, FileCheck, Banknote, BadgePercent, Wallet, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, ChevronRight, ChevronDown, ChevronUp, Plus, Minus, X, Percent, FileText, AlertTriangle, Check, Home, ShoppingCart, CreditCard, Trash2, Store, Zap, FileCheck, Banknote, BadgePercent, Wallet, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useCart } from '@/context/CartContext';
 import { dal } from '@/lib/dal';
 import { cn } from '@/lib/utils';
 
 export default function CartPage() {
     const [screen, setScreen] = useState<'cart' | 'payment' | 'success'>('cart');
-    const { cart, groups, removeFromCart, updateQuantity, totalItems, subtotal, clearCart } = useCart();
+    const { cart, groups, removeFromCart, updateQuantity, totalItems, subtotal, totalGST, totalTaxable, clearCart } = useCart();
     const router = useRouter();
     const [expandedVendors, setExpandedVendors] = useState<Record<string, boolean>>({});
     const [paymentMethod, setPaymentMethod] = useState('razorpay');
@@ -78,6 +79,12 @@ export default function CartPage() {
             if (!grouped[vId]) {
                 grouped[vId] = { vendor: vName, vendorId: vId, items: [] };
             }
+            // Find the active bulk tier for the current quantity (for the badge)
+            const bulkPrices = item.product.bulkPrices || [];
+            const activeTier = [...bulkPrices]
+                .sort((a, b) => b.minQty - a.minQty)
+                .find(t => item.quantity >= t.minQty);
+
             grouped[vId].items.push({
                 id: String(item.productId),
                 name: item.product.name,
@@ -85,6 +92,8 @@ export default function CartPage() {
                 pcs: item.quantity,
                 price: item.product.price,
                 image: item.product.images[0] || '/images/recom-product/product-img10.png',
+                minQty: item.product.minOrderQuantity || 1,
+                tierLabel: activeTier ? `Bulk ${activeTier.minQty}+ @ ₹${activeTier.price}/pc` : null,
             });
         });
         return Object.values(grouped).map(group => ({
@@ -97,10 +106,10 @@ export default function CartPage() {
     const getShipmentTotal = (items: any[]) => items.reduce((sum, item) => sum + item.price * item.pcs, 0);
     const getShipmentItemCount = (items: any[]) => items.reduce((sum, item) => sum + item.pcs, 0);
 
-    const itemTotal = subtotal;
-    const deliveryFee = 35;
-    const handlingFee = 5;
-    const totalPay = itemTotal + deliveryFee + handlingFee;
+    const itemTaxable = totalTaxable;  // taxable value (ex-GST)
+    const itemGST = totalGST;          // GST portion extracted from gross
+    const itemTotal = subtotal;        // gross total (GST-inclusive) = itemTaxable + itemGST
+    const totalPay = itemTotal;
 
     // --- SUCCESS SCREEN ---
     if (screen === 'success') {
@@ -349,16 +358,12 @@ export default function CartPage() {
                                 </div>
                                 <div className="px-7 py-6 space-y-4">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-[15px] text-[#4C4F4D] font-medium">Subtotal</span>
-                                        <span className="text-[15px] font-bold text-[#181725]">₹{itemTotal.toFixed(0)}</span>
+                                        <span className="text-[15px] text-[#4C4F4D] font-medium">Taxable</span>
+                                        <span className="text-[15px] font-bold text-[#181725]">₹{itemTaxable.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-[15px] text-[#4C4F4D] font-medium">Delivery</span>
-                                        <span className="text-[15px] font-bold text-[#181725]">₹{deliveryFee}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-[15px] text-[#4C4F4D] font-medium">Handling Fee</span>
-                                        <span className="text-[15px] font-bold text-[#181725]">₹{handlingFee}</span>
+                                        <span className="text-[15px] text-[#4C4F4D] font-medium">GST (incl.)</span>
+                                        <span className="text-[15px] font-bold text-[#181725]">₹{itemGST.toFixed(2)}</span>
                                     </div>
                                 </div>
                                 <div className="px-7 pb-6">
@@ -404,16 +409,12 @@ export default function CartPage() {
                             {/* Amounts */}
                             <div className="px-5 py-4 space-y-3">
                                 <div className="flex justify-between">
-                                    <span className="text-[14px] text-gray-500 font-medium">Subtotal</span>
-                                    <span className="text-[14px] font-bold text-[#181725]">₹{itemTotal.toFixed(0)}</span>
+                                    <span className="text-[14px] text-gray-500 font-medium">Taxable</span>
+                                    <span className="text-[14px] font-bold text-[#181725]">₹{itemTaxable.toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-[14px] text-gray-500 font-medium">Delivery Fee</span>
-                                    <span className="text-[14px] font-bold text-[#181725]">₹{deliveryFee}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-[14px] text-gray-500 font-medium">Handling Fee</span>
-                                    <span className="text-[14px] font-bold text-[#181725]">₹{handlingFee}</span>
+                                    <span className="text-[14px] text-gray-500 font-medium">GST (incl.)</span>
+                                    <span className="text-[14px] font-bold text-[#181725]">₹{itemGST.toFixed(2)}</span>
                                 </div>
                                 <div className="border-t border-dashed border-gray-200 pt-3 flex justify-between items-baseline">
                                     <span className="text-[16px] font-bold text-[#181725]">Total</span>
@@ -634,9 +635,16 @@ export default function CartPage() {
                                                     <div className="flex-1 min-w-0">
                                                         <h4 className="text-[15px] font-bold text-[#181725] leading-snug line-clamp-1">{item.name}</h4>
                                                         <p className="text-[13px] text-gray-400 font-medium mt-0.5">{item.size}</p>
-                                                        <div className="flex items-center gap-1.5 mt-1">
-                                                            <div className="w-[6px] h-[6px] rounded-full bg-primary" />
-                                                            <span className="text-[12px] text-gray-400 font-medium">₹{item.price}/pc</span>
+                                                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <div className="w-[6px] h-[6px] rounded-full bg-primary" />
+                                                                <span className="text-[12px] text-gray-400 font-medium">₹{item.price}/pc</span>
+                                                            </div>
+                                                            {item.tierLabel && (
+                                                                <span className="text-[10px] font-black uppercase tracking-wide bg-green-50 text-green-700 border border-green-200 px-1.5 py-0.5 rounded-md">
+                                                                    {item.tierLabel}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
 
@@ -644,6 +652,11 @@ export default function CartPage() {
                                                     <div className="flex items-center gap-0 border border-gray-200 rounded-xl overflow-hidden shrink-0">
                                                         <button
                                                             onClick={() => {
+                                                                const minQty = item.minQty || 1;
+                                                                if (item.pcs <= minQty) {
+                                                                    toast.error(`Minimum order is ${minQty} unit${minQty > 1 ? 's' : ''}`, { duration: 2000 });
+                                                                    return;
+                                                                }
                                                                 if (item.pcs <= 1) removeFromCart(item.id);
                                                                 else updateQuantity(item.id, item.pcs - 1);
                                                             }}
@@ -697,23 +710,12 @@ export default function CartPage() {
                             {/* Line Items */}
                             <div className="px-7 py-6 space-y-4">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-[15px] text-[#4C4F4D] font-medium">Item Total</span>
-                                    <span className="text-[15px] font-bold text-[#181725]">₹{itemTotal.toFixed(0)}</span>
+                                    <span className="text-[15px] text-[#4C4F4D] font-medium">Taxable</span>
+                                    <span className="text-[15px] font-bold text-[#181725]">₹{itemTaxable.toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between items-center">
-                                    <span className="text-[15px] text-[#4C4F4D] font-medium">GST + Cess</span>
-                                    <span className="text-[15px] font-bold text-[#181725]">₹0</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[15px] text-[#4C4F4D] font-medium">Delivery charge</span>
-                                        <Truck size={14} className="text-primary" />
-                                    </div>
-                                    <span className="text-[15px] font-bold text-[#181725]">₹{deliveryFee}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-[15px] text-[#4C4F4D] font-medium">Handling Fee</span>
-                                    <span className="text-[15px] font-bold text-[#181725]">₹{handlingFee}</span>
+                                    <span className="text-[15px] text-[#4C4F4D] font-medium">GST (incl.)</span>
+                                    <span className="text-[15px] font-bold text-[#181725]">₹{itemGST.toFixed(2)}</span>
                                 </div>
                             </div>
 
@@ -757,16 +759,12 @@ export default function CartPage() {
                     </div>
                     <div className="px-5 pt-5 pb-2 space-y-4">
                         <div className="flex justify-between items-center">
-                            <span className="text-[14px] text-[#4C4F4D] font-medium">Item Total</span>
-                            <span className="text-[14px] font-bold text-[#181725]">₹ {itemTotal.toFixed(0)}</span>
+                            <span className="text-[14px] text-[#4C4F4D] font-medium">Taxable</span>
+                            <span className="text-[14px] font-bold text-[#181725]">₹ {itemTaxable.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                            <span className="text-[14px] text-[#4C4F4D] font-medium">Delivery Fee</span>
-                            <span className="text-[14px] font-bold text-[#181725]">₹ {deliveryFee}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-[14px] text-[#4C4F4D] font-medium">Handling Fee</span>
-                            <span className="text-[14px] font-bold text-[#181725]">₹ {handlingFee}</span>
+                            <span className="text-[14px] text-[#4C4F4D] font-medium">GST (incl.)</span>
+                            <span className="text-[14px] font-bold text-[#181725]">₹ {itemGST.toFixed(2)}</span>
                         </div>
                     </div>
                     <div className="px-5 pb-5 pt-2">

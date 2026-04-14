@@ -4,14 +4,14 @@ export const vendorProductsSchema = z.object({
   categoryId: z.string().uuid().optional(),
   search: z.string().optional(),
   cursor: z.string().uuid().optional(),
-  limit: z.coerce.number().int().min(1).max(50).default(20),
+  limit: z.coerce.number().int().min(1).max(200).default(20),
 });
 
 export const searchProductsSchema = z.object({
   q: z.string().min(1, 'Search query required'),
   pincode: z.string().regex(/^\d{6}$/).optional(),
   cursor: z.string().uuid().optional(),
-  limit: z.coerce.number().int().min(1).max(50).default(20),
+  limit: z.coerce.number().int().min(1).max(200).default(20),
 });
 
 export const createProductSchema = z.object({
