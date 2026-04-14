@@ -40,6 +40,9 @@
     "**/*.mts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "prisma/seed.ts",
+    "prisma/generate-prod-sql.ts",
+    "prisma/export-local-to-prod.ts"
   ]
 }

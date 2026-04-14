@@ -33,7 +33,7 @@ async function main() {
     await prod.category.upsert({
       where: { id: cat.id },
       update: {
-        name: cat.name, slug: cat.slug, description: cat.description,
+        name: cat.name, slug: cat.slug,
         imageUrl: cat.imageUrl, isActive: cat.isActive, sortOrder: cat.sortOrder,
         parentId: cat.parentId,
       },
