@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 interface VendorProfile {
     id: string;
@@ -128,7 +129,7 @@ export default function CustomerDetailsPage() {
                 throw new Error(json.message || 'Failed to update user');
             }
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Failed to update user status');
+            toast.error(err instanceof Error ? err.message : 'Failed to update user status');
         } finally {
             setToggling(false);
         }

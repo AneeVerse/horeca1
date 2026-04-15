@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { Users, Plus, Trash2, Loader2, Crown, Shield, Edit3, Eye, AlertCircle } from 'lucide-react';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { toast } from 'sonner';
 
 interface AdminTeamMember {
     id: string;
@@ -29,6 +31,7 @@ export default function AdminTeamPage() {
     const currentUserId = (session?.user as { id?: string })?.id;
     const perms = useAdminPermissions();
     const canManage = perms.canManageTeam;
+    const confirm = useConfirm();
     const [team, setTeam] = useState<AdminTeamMember[]>([]);
     const [loading, setLoading] = useState(true);
     const [isOwner, setIsOwner] = useState(false);
@@ -77,14 +80,21 @@ export default function AdminTeamPage() {
     };
 
     const handleRemoveMember = async (member: AdminTeamMember) => {
-        if (!confirm(`Remove ${member.user.fullName} from the admin team? They will lose admin access.`)) return;
+        const ok = await confirm({
+            title: 'Remove team member?',
+            message: `${member.user.fullName} will lose admin access. They can be re-added later.`,
+            confirmText: 'Remove',
+            tone: 'danger',
+        });
+        if (!ok) return;
         try {
             const res = await fetch(`/api/v1/admin/team/${member.user.id}`, { method: 'DELETE' });
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Failed');
             setTeam(prev => prev.filter(m => m.id !== member.id));
+            toast.success(`${member.user.fullName} removed from team`);
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to remove');
+            toast.error(err instanceof Error ? err.message : 'Failed to remove');
         }
     };
 
@@ -105,7 +115,7 @@ export default function AdminTeamPage() {
                 await updateSession();
             }
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to update role');
+            toast.error(err instanceof Error ? err.message : 'Failed to update role');
         }
     };
 

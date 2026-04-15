@@ -11,6 +11,7 @@ import { AddressProvider } from "@/context/AddressContext";
 import { WishlistProvider } from "@/context/WishlistContext";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { Toaster } from 'sonner';
+import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 import { VendorApplicationBanner } from '@/components/features/homepage/VendorApplicationBanner';
 
 const quicksand = Quicksand({
@@ -60,14 +61,16 @@ export default function RootLayout({
           <AddressProvider>
             <WishlistProvider>
               <CartProvider>
-                <Toaster position="top-center" richColors />
-              <Navbar />
-              <VendorApplicationBanner />
-              <main className="w-full min-h-screen pb-20 md:pb-0">
-                {children}
-              </main>
-              <Footer />
-            </CartProvider>
+                <ConfirmProvider>
+                  <Toaster position="top-center" richColors />
+                  <Navbar />
+                  <VendorApplicationBanner />
+                  <main className="w-full min-h-screen pb-20 md:pb-0">
+                    {children}
+                  </main>
+                  <Footer />
+                </ConfirmProvider>
+              </CartProvider>
           </WishlistProvider>
         </AddressProvider>
         </GoogleMapsProvider>

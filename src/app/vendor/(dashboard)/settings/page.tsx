@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil, Users, Crown, Shield, Eye, Edit3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImageUpload } from '@/components/ui/ImageUpload';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { toast } from 'sonner';
 
 interface ServiceArea {
     id: string;
@@ -63,6 +65,7 @@ const ROLE_CONFIG = {
 };
 
 export default function VendorSettingsPage() {
+    const confirm = useConfirm();
     const [settings, setSettings] = useState<VendorSettings | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -165,7 +168,7 @@ export default function VendorSettingsPage() {
             setSaved(true);
             setTimeout(() => setSaved(false), 3000);
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Save failed');
+            toast.error(err instanceof Error ? err.message : 'Save failed');
         } finally {
             setSaving(false);
         }
@@ -186,7 +189,7 @@ export default function VendorSettingsPage() {
             setSettings(prev => prev ? { ...prev, serviceAreas: [...prev.serviceAreas, json.data] } : prev);
             setNewPincode('');
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to add service area');
+            toast.error(err instanceof Error ? err.message : 'Failed to add service area');
         } finally {
             setAddingArea(false);
         }
@@ -206,12 +209,18 @@ export default function VendorSettingsPage() {
                 serviceAreas: prev.serviceAreas.map(a => a.id === area.id ? json.data : a),
             } : prev);
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to update');
+            toast.error(err instanceof Error ? err.message : 'Failed to update');
         }
     };
 
     const handleDeleteArea = async (area: ServiceArea) => {
-        if (!confirm(`Remove service area ${area.pincode}?`)) return;
+        const ok = await confirm({
+            title: 'Remove service area?',
+            message: `Customers in pincode ${area.pincode} will no longer be able to order from you.`,
+            confirmText: 'Remove',
+            tone: 'danger',
+        });
+        if (!ok) return;
         try {
             const res = await fetch('/api/v1/vendor/settings/service-areas', {
                 method: 'DELETE',
@@ -225,7 +234,7 @@ export default function VendorSettingsPage() {
                 serviceAreas: prev.serviceAreas.filter(a => a.id !== area.id),
             } : prev);
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to delete');
+            toast.error(err instanceof Error ? err.message : 'Failed to delete');
         }
     };
 
@@ -251,7 +260,7 @@ export default function VendorSettingsPage() {
     };
 
     const handleSaveSlot = async () => {
-        if (!slotStart || !slotEnd || !slotCutoff) { alert('Please fill all time fields'); return; }
+        if (!slotStart || !slotEnd || !slotCutoff) { toast.error('Please fill all time fields'); return; }
         try {
             setSavingSlot(true);
             if (editingSlotId) {
@@ -275,7 +284,7 @@ export default function VendorSettingsPage() {
             }
             resetSlotForm();
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to save slot');
+            toast.error(err instanceof Error ? err.message : 'Failed to save slot');
         } finally {
             setSavingSlot(false);
         }
@@ -292,12 +301,18 @@ export default function VendorSettingsPage() {
             if (!json.success) throw new Error(json.error?.message || 'Failed to update');
             setSettings(prev => prev ? { ...prev, deliverySlots: prev.deliverySlots.map(s => s.id === slot.id ? json.data : s) } : prev);
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to update');
+            toast.error(err instanceof Error ? err.message : 'Failed to update');
         }
     };
 
     const handleDeleteSlot = async (slot: DeliverySlot) => {
-        if (!confirm(`Delete ${DAY_NAMES[slot.dayOfWeek]} ${formatTime(slot.slotStart)} - ${formatTime(slot.slotEnd)} slot?`)) return;
+        const ok = await confirm({
+            title: 'Delete delivery slot?',
+            message: `${DAY_NAMES[slot.dayOfWeek]} ${formatTime(slot.slotStart)} – ${formatTime(slot.slotEnd)} will be removed. If it's linked to existing orders, try deactivating instead.`,
+            confirmText: 'Delete',
+            tone: 'danger',
+        });
+        if (!ok) return;
         try {
             const res = await fetch('/api/v1/vendor/settings/delivery-slots', {
                 method: 'DELETE',
@@ -308,7 +323,7 @@ export default function VendorSettingsPage() {
             if (!json.success) throw new Error(json.error?.message || 'Failed to delete');
             setSettings(prev => prev ? { ...prev, deliverySlots: prev.deliverySlots.filter(s => s.id !== slot.id) } : prev);
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to delete. It may be linked to existing orders — try deactivating instead.');
+            toast.error(err instanceof Error ? err.message : 'Failed to delete. It may be linked to existing orders — try deactivating instead.');
         }
     };
 
@@ -338,14 +353,21 @@ export default function VendorSettingsPage() {
     };
 
     const handleRemoveMember = async (member: TeamMember) => {
-        if (!confirm(`Remove ${member.user.fullName} from your team? They will lose access to this portal.`)) return;
+        const ok = await confirm({
+            title: 'Remove team member?',
+            message: `${member.user.fullName} will lose access to this portal. They can be re-added later.`,
+            confirmText: 'Remove',
+            tone: 'danger',
+        });
+        if (!ok) return;
         try {
             const res = await fetch(`/api/v1/vendor/team/${member.id}`, { method: 'DELETE' });
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Failed to remove');
             setTeam(prev => prev.filter(m => m.id !== member.id));
+            toast.success(`${member.user.fullName} removed from team`);
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to remove member');
+            toast.error(err instanceof Error ? err.message : 'Failed to remove member');
         }
     };
 
@@ -360,7 +382,7 @@ export default function VendorSettingsPage() {
             if (!json.success) throw new Error(json.error?.message || 'Failed to update role');
             setTeam(prev => prev.map(m => m.id === member.id ? { ...m, role: newRole } : m));
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to update role');
+            toast.error(err instanceof Error ? err.message : 'Failed to update role');
         }
     };
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ChevronLeft, User, Package, MapPin, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface OrderVendor {
     id: string;
@@ -194,7 +195,7 @@ export default function OrderDetailsPage() {
 
             setOrder((prev) => (prev ? { ...prev, status: selectedStatus } : prev));
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Failed to update status');
+            toast.error(err instanceof Error ? err.message : 'Failed to update status');
             setSelectedStatus(order.status);
         } finally {
             setUpdatingStatus(false);

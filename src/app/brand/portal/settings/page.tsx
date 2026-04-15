@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Check, Save, Users, Plus, Trash2, Crown, Shield, Edit3, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { toast } from 'sonner';
 
 interface BrandProfile {
     id: string;
@@ -36,6 +38,7 @@ const ROLE_CONFIG = {
 };
 
 export default function BrandSettingsPage() {
+    const confirm = useConfirm();
     const [profile, setProfile] = useState<BrandProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -131,14 +134,21 @@ export default function BrandSettingsPage() {
     };
 
     const handleRemoveMember = async (member: TeamMember) => {
-        if (!confirm(`Remove ${member.user.fullName} from your team?`)) return;
+        const ok = await confirm({
+            title: 'Remove team member?',
+            message: `${member.user.fullName} will lose access to this portal. They can be re-added later.`,
+            confirmText: 'Remove',
+            tone: 'danger',
+        });
+        if (!ok) return;
         try {
             const res = await fetch(`/api/v1/brand/team/${member.id}`, { method: 'DELETE' });
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Failed');
             setTeam(prev => prev.filter(m => m.id !== member.id));
+            toast.success(`${member.user.fullName} removed from team`);
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to remove');
+            toast.error(err instanceof Error ? err.message : 'Failed to remove');
         }
     };
 
@@ -153,7 +163,7 @@ export default function BrandSettingsPage() {
             if (!json.success) throw new Error(json.error?.message || 'Failed');
             setTeam(prev => prev.map(m => m.id === member.id ? { ...m, role: newRole } : m));
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to update role');
+            toast.error(err instanceof Error ? err.message : 'Failed to update role');
         }
     };
 

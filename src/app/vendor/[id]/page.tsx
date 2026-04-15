@@ -130,7 +130,13 @@ export default function VendorStorePage() {
             );
         }
 
-        return result;
+        // Surface in-stock items first so buyers never hit a wall of sold-out cards.
+        // Stable sort preserves the server's original ordering within each bucket.
+        return [...result].sort((a, b) => {
+            const aOut = (a.stock ?? 0) <= 0 ? 1 : 0;
+            const bOut = (b.stock ?? 0) <= 0 ? 1 : 0;
+            return aOut - bOut;
+        });
     }, [products, activeTab, searchQuery]);
 
     if (loading) {

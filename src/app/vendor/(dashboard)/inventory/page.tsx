@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Package, AlertTriangle, Search, X, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface InventoryItem {
     id: string;
@@ -83,7 +84,7 @@ export default function VendorInventoryPage() {
                 }));
                 cancelEdit();
             } else {
-                alert(json.error?.message || 'Update failed');
+                toast.error(json.error?.message || 'Update failed');
             }
         } catch (err) {
             console.error('Save failed:', err);

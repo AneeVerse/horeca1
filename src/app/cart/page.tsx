@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 declare global {
     interface Window {
@@ -59,6 +60,16 @@ export default function CartPage() {
     const [screen, setScreen] = useState<'cart' | 'payment' | 'success'>('cart');
     const { cart, groups, removeFromCart, updateQuantity, totalItems, subtotal, totalGST, totalTaxable, clearCart } = useCart();
     const router = useRouter();
+    const confirm = useConfirm();
+    const handleClearCart = async () => {
+        const ok = await confirm({
+            title: 'Clear cart?',
+            message: 'This will remove all items from your cart. You can add them back later.',
+            confirmText: 'Clear Cart',
+            tone: 'danger',
+        });
+        if (ok) clearCart();
+    };
     const [expandedVendors, setExpandedVendors] = useState<Record<string, boolean>>({});
     const [paymentMethod, setPaymentMethod] = useState('razorpay');
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
@@ -473,11 +484,7 @@ export default function CartPage() {
                 <div className="flex items-center gap-1">
                     {cart.length > 0 && (
                         <button
-                            onClick={() => {
-                                if (window.confirm('Are you sure you want to clear your cart?')) {
-                                    clearCart();
-                                }
-                            }}
+                            onClick={handleClearCart}
                             className="text-[12px] font-bold text-red-500 px-2 py-1 hover:bg-red-50 rounded-lg transition-colors"
                         >
                             Clear
@@ -503,11 +510,7 @@ export default function CartPage() {
                         </h1>
                         {cart.length > 0 && (
                             <button
-                                onClick={() => {
-                                    if (window.confirm('Are you sure you want to clear your cart?')) {
-                                        clearCart();
-                                    }
-                                }}
+                                onClick={handleClearCart}
                                 className="flex items-center gap-2 text-[14px] font-bold text-red-500 px-4 py-2 hover:bg-red-50 rounded-xl transition-colors border border-red-100"
                             >
                                 <Trash2 size={16} />

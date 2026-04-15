@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ChevronLeft, User, Package, MapPin, Loader2, AlertCircle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface OrderUser {
     id: string;
@@ -121,7 +122,7 @@ export default function VendorOrderDetailPage() {
             if (!json.success) throw new Error(json.error?.message || 'Failed to update');
             setOrder((prev) => prev ? { ...prev, status: newStatus } : prev);
         } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Update failed');
+            toast.error(err instanceof Error ? err.message : 'Update failed');
         } finally {
             setUpdating(false);
         }

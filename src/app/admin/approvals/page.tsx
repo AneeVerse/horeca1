@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { toast } from 'sonner';
 
 // ── Interfaces ──
 
@@ -556,7 +557,7 @@ export default function ApprovalsPage() {
                             </button>
                             <button
                                 onClick={() => {
-                                    if (!rejectNote.trim()) return alert('Please provide a reason');
+                                    if (!rejectNote.trim()) { toast.error('Please provide a reason'); return; }
                                     if (rejectTarget.type === 'product') handleRejectProduct(rejectTarget.id, rejectNote);
                                     else handleRejectCategory(rejectTarget.id, rejectNote);
                                 }}

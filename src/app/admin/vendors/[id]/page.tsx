@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 interface VendorProduct {
     id: string;
@@ -183,7 +184,7 @@ export default function VendorDetailsPage() {
                 await fetchVendor();
             }
         } catch (err: any) {
-            alert(err.message || 'Failed to toggle verification');
+            toast.error(err.message || 'Failed to toggle verification');
         } finally {
             setTogglingVerification(false);
         }

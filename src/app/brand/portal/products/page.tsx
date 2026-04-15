@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Package, Plus, Pencil, Trash2, Loader2, X, Check, GitMerge } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface MasterProduct {
     id: string;
@@ -30,6 +31,7 @@ interface ProductFormData {
 const EMPTY_FORM: ProductFormData = { name: '', packSize: '', unit: '', category: '', imageUrl: '', sku: '', description: '' };
 
 export default function BrandProductsPage() {
+    const confirm = useConfirm();
     const [products, setProducts] = useState<MasterProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -82,7 +84,13 @@ export default function BrandProductsPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Delete this product? This cannot be undone.')) return;
+        const ok = await confirm({
+            title: 'Delete product?',
+            message: 'This will permanently remove the product. This action cannot be undone.',
+            confirmText: 'Delete',
+            tone: 'danger',
+        });
+        if (!ok) return;
         setActionLoading(id);
         try {
             await fetch(`/api/v1/brand/products/${id}`, { method: 'DELETE' });

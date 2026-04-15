@@ -10,6 +10,7 @@ import { useAddress, Address } from '@/context/AddressContext';
 import { useGooglePlacesAutocomplete, PlacePrediction } from '@/hooks/useGooglePlacesAutocomplete';
 import { useGoogleMaps } from '@/components/providers/GoogleMapsProvider';
 import { AddNewAddressOverlay } from './AddNewAddressOverlay';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface LocationSelectionOverlayProps {
     isOpen: boolean;
@@ -25,6 +26,7 @@ const LABEL_ICONS: Record<string, React.FC<{ size?: number; className?: string }
 
 export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionOverlayProps) {
     const { isLoaded, loadError } = useGoogleMaps();
+    const confirm = useConfirm();
     const {
         selectedAddress,
         savedAddresses,
@@ -228,9 +230,15 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
                                                 </p>
                                             </div>
                                             <button
-                                                onClick={(e) => {
+                                                onClick={async (e) => {
                                                     e.stopPropagation();
-                                                    if (confirm('Remove this address?')) removeAddress(addr.id);
+                                                    const ok = await confirm({
+                                                        title: 'Remove address?',
+                                                        message: `This will permanently remove "${addr.label || addr.shortAddress}" from your saved addresses.`,
+                                                        confirmText: 'Remove',
+                                                        tone: 'danger',
+                                                    });
+                                                    if (ok) removeAddress(addr.id);
                                                 }}
                                                 className="p-2 hover:bg-red-50 rounded-full transition-colors shrink-0"
                                             >
