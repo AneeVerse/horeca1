@@ -64,6 +64,7 @@ model User {
   businessName  String?   @map("business_name") @db.VarChar(255)
   gstNumber     String?   @map("gst_number") @db.VarChar(20)
   isActive      Boolean   @default(true) @map("is_active")
+  profileCompletedAt DateTime? @map("profile_completed_at") @db.Timestamptz
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 

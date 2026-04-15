@@ -9,12 +9,16 @@ import { ContinueOrdering } from "@/components/features/homepage/ContinueOrderin
 import { NearbyVendors } from "@/components/features/homepage/NearbyVendors";
 import { Collections } from "@/components/features/homepage/Collections";
 import { NewsletterBanner } from "@/components/features/NewsletterBanner";
+import { CompleteProfileBanner } from "@/components/features/homepage/CompleteProfileBanner";
 
 export default function Home() {
   return (
     <div className="flex flex-col w-full">
       {/* Hero / Banner */}
       <Hero />
+
+      {/* Profile completeness nudge — only shows for signed-in users whose profile is incomplete */}
+      <CompleteProfileBanner />
 
       {/* Quick Actions: Reorder, Quick Order, My Vendors */}
       <QuickActions />
