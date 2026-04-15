@@ -27,6 +27,7 @@ import { useWishlist } from '@/context/WishlistContext';
 import { toast } from 'sonner';
 import { dal } from '@/lib/dal';
 import type { Vendor as DalVendor, VendorProduct } from '@/types';
+import AlternateVendorsStrip from '@/components/features/product/AlternateVendorsStrip';
 
 // --- API Product Type ---
 interface ApiProduct {
@@ -294,6 +295,11 @@ export default function ProductDetailPage() {
                     </div>
                 </main>
 
+                {/* OOS alternates strip — only when current vendor has 0 stock */}
+                {stockQty === 0 && (
+                    <AlternateVendorsStrip productId={apiProduct.id} />
+                )}
+
                 {/* Mobile Product details Section */}
                 <div className="mt-4 mx-4 bg-white rounded-[18px] p-5 shadow-sm border border-gray-50">
                     <h2 className="text-[18px] font-extrabold text-[#181725] mb-3">Product details</h2>
@@ -413,6 +419,13 @@ export default function ProductDetailPage() {
                             </div>
                         </div>
                     </div>
+
+                    {/* OOS alternates strip — only when current vendor has 0 stock */}
+                    {stockQty === 0 && (
+                        <div className="mt-16">
+                            <AlternateVendorsStrip productId={apiProduct.id} />
+                        </div>
+                    )}
 
                     {/* Information Sections (Desktop/Tab Specific) */}
                     <div className="mt-32 grid grid-cols-12 gap-16 lg:gap-24">

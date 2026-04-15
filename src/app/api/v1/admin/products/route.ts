@@ -20,6 +20,8 @@ const createProductSchema = z.object({
   slug: z.string().optional(),
   basePrice: z.number().positive(),
   categoryId: z.string().uuid().optional(),
+  categoryIds: z.array(z.string().uuid()).optional(),
+  primaryCategoryId: z.string().uuid().optional(),
   originalPrice: z.number().positive().optional(),
   packSize: z.string().optional(),
   unit: z.string().optional(),
@@ -76,6 +78,9 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
         vendor: { select: { id: true, businessName: true } },
         category: { select: { id: true, name: true } },
         inventory: { select: { qtyAvailable: true } },
+        categoryLinks: {
+          include: { category: { select: { id: true, name: true } } },
+        },
       },
     });
 
@@ -195,7 +200,14 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
     const body = await req.json();
     const data = createProductSchema.parse(body);
 
-    const { priceSlabs, vendorId, slug: providedSlug, ...productData } = data;
+    const {
+      priceSlabs,
+      vendorId,
+      slug: providedSlug,
+      categoryIds,
+      primaryCategoryId,
+      ...productData
+    } = data;
 
     // Auto-generate slug from name if not provided
     const slug = providedSlug || productData.name
@@ -203,6 +215,15 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
       + '-' + Date.now().toString(36);
+
+    // Resolve multi-category inputs. The denormalized Product.categoryId
+    // always mirrors the primary category so existing indexed filters still work.
+    const multiIds = categoryIds && categoryIds.length > 0 ? Array.from(new Set(categoryIds)) : [];
+    const primaryId = primaryCategoryId
+      ?? productData.categoryId
+      ?? multiIds[0];
+    if (multiIds.length > 0 && primaryId && !multiIds.includes(primaryId)) multiIds.push(primaryId);
+    if (primaryId) productData.categoryId = primaryId;
 
     // Build unchecked create data (raw IDs — vendorId is optional after migration)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -215,33 +236,48 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
     };
     if (vendorId) createData.vendorId = vendorId;
 
-    const product = await prisma.product.create({ data: createData });
+    const product = await prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({ data: createData });
 
-    // Only create price slabs and inventory if vendor is assigned
-    if (vendorId) {
-      if (priceSlabs && priceSlabs.length > 0) {
-        await prisma.priceSlab.createMany({
-          data: priceSlabs.map((slab, idx) => ({
-            productId: product.id,
-            vendorId,
-            minQty: slab.minQty,
-            maxQty: slab.maxQty ?? null,
-            price: slab.price,
-            promoPrice: slab.promoPrice ?? null,
-            sortOrder: idx,
+      const joinIds = multiIds.length > 0 ? multiIds : (primaryId ? [primaryId] : []);
+      if (joinIds.length > 0) {
+        await tx.productCategory.createMany({
+          data: joinIds.map(cid => ({
+            productId: created.id,
+            categoryId: cid,
+            isPrimary: cid === primaryId,
           })),
+          skipDuplicates: true,
         });
       }
 
-      await prisma.inventory.create({
-        data: {
-          productId: product.id,
-          vendorId,
-          qtyAvailable: 0,
-          lowStockThreshold: 10,
-        },
-      });
-    }
+      if (vendorId) {
+        if (priceSlabs && priceSlabs.length > 0) {
+          await tx.priceSlab.createMany({
+            data: priceSlabs.map((slab, idx) => ({
+              productId: created.id,
+              vendorId,
+              minQty: slab.minQty,
+              maxQty: slab.maxQty ?? null,
+              price: slab.price,
+              promoPrice: slab.promoPrice ?? null,
+              sortOrder: idx,
+            })),
+          });
+        }
+
+        await tx.inventory.create({
+          data: {
+            productId: created.id,
+            vendorId,
+            qtyAvailable: 0,
+            lowStockThreshold: 10,
+          },
+        });
+      }
+
+      return created;
+    });
 
     return NextResponse.json({ success: true, data: product }, { status: 201 });
   } catch (error) {

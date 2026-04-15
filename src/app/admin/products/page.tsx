@@ -50,6 +50,7 @@ interface Product {
     createdAt: string;
     vendor: { id: string; businessName: string } | null;
     category: { id: string; name: string } | null;
+    categoryLinks?: { categoryId: string; isPrimary: boolean; category: { id: string; name: string } }[];
     inventory: { qtyAvailable: number } | null;
     vendorCount?: number;
     vendors?: string[];
@@ -73,6 +74,7 @@ interface ProductFormData {
     hsn: string;
     brand: string;
     categoryId: string;
+    additionalCategoryIds: string[];
     description: string;
     basePrice: string;
     originalPrice: string;
@@ -89,6 +91,7 @@ const EMPTY_FORM: ProductFormData = {
     hsn: '',
     brand: '',
     categoryId: '',
+    additionalCategoryIds: [],
     description: '',
     basePrice: '',
     originalPrice: '',
@@ -360,12 +363,17 @@ export default function ProductsPage() {
 
     const openEdit = (product: Product) => {
         setEditingProduct(product);
+        const primaryId = product.category?.id ?? '';
+        const additionalIds = (product.categoryLinks ?? [])
+            .filter(l => l.categoryId !== primaryId)
+            .map(l => l.categoryId);
         setFormData({
             name: product.name,
             sku: product.sku ?? '',
             hsn: product.hsn ?? '',
             brand: product.brand ?? '',
-            categoryId: product.category?.id ?? '',
+            categoryId: primaryId,
+            additionalCategoryIds: additionalIds,
             description: product.description ?? '',
             basePrice: String(product.basePrice),
             originalPrice: product.originalPrice != null ? String(product.originalPrice) : '',
@@ -416,7 +424,12 @@ export default function ProductsPage() {
             if (formData.sku.trim()) payload.sku = formData.sku.trim();
             if (formData.hsn.trim()) payload.hsn = formData.hsn.trim();
             if (formData.brand.trim()) payload.brand = formData.brand.trim();
-            if (formData.categoryId) payload.categoryId = formData.categoryId;
+            if (formData.categoryId) {
+                payload.categoryId = formData.categoryId;
+                const joinIds = Array.from(new Set([formData.categoryId, ...formData.additionalCategoryIds]));
+                payload.categoryIds = joinIds;
+                payload.primaryCategoryId = formData.categoryId;
+            }
             if (formData.description.trim()) payload.description = formData.description.trim();
             if (formData.originalPrice && Number(formData.originalPrice) > 0) {
                 payload.originalPrice = Number(formData.originalPrice);
@@ -995,11 +1008,18 @@ export default function ProductsPage() {
                                 </div>
                                 <div>
                                     <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                        Category
+                                        Primary Category
                                     </label>
                                     <select
                                         value={formData.categoryId}
-                                        onChange={e => updateField('categoryId', e.target.value)}
+                                        onChange={e => {
+                                            const newPrimary = e.target.value;
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                categoryId: newPrimary,
+                                                additionalCategoryIds: prev.additionalCategoryIds.filter(id => id !== newPrimary),
+                                            }));
+                                        }}
                                         className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white cursor-pointer"
                                     >
                                         <option value="">Select category</option>
@@ -1009,6 +1029,40 @@ export default function ProductsPage() {
                                     </select>
                                 </div>
                             </div>
+
+                            {/* Additional Categories (multi-select) */}
+                            {formData.categoryId && categories.length > 1 && (
+                                <div>
+                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
+                                        Additional Categories
+                                    </label>
+                                    <div className="flex flex-wrap gap-2 bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] p-3">
+                                        {categories.filter(c => c.id !== formData.categoryId).map(c => {
+                                            const selected = formData.additionalCategoryIds.includes(c.id);
+                                            return (
+                                                <button
+                                                    key={c.id}
+                                                    type="button"
+                                                    onClick={() => setFormData(prev => ({
+                                                        ...prev,
+                                                        additionalCategoryIds: selected
+                                                            ? prev.additionalCategoryIds.filter(id => id !== c.id)
+                                                            : [...prev.additionalCategoryIds, c.id],
+                                                    }))}
+                                                    className={cn(
+                                                        'px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-all',
+                                                        selected
+                                                            ? 'bg-[#299E60] text-white border-[#299E60]'
+                                                            : 'bg-white text-[#7C7C7C] border-[#EEEEEE] hover:border-[#299E60]/40',
+                                                    )}
+                                                >
+                                                    {c.name}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Description */}
                             <div>

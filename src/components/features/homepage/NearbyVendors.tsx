@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Star, MapPin, Bookmark, ChevronLeft, ChevronRight } from 'lucide-react';
 import { dal } from '@/lib/dal';
+import { useAddress } from '@/context/AddressContext';
 import type { Vendor } from '@/types';
 
 // Cover images for vendor cards (cycling through available images)
@@ -87,10 +88,36 @@ export function NearbyVendors() {
     const [canScrollLeft, setCanScrollLeft] = useState(false);
     const [canScrollRight, setCanScrollRight] = useState(true);
     const [vendors, setVendors] = useState<Vendor[]>([]);
+    const [servicingIds, setServicingIds] = useState<Set<string> | null>(null);
+    const { selectedAddress } = useAddress();
+    const pincode = selectedAddress?.pincode;
 
     useEffect(() => {
         dal.vendors.list().then((res) => setVendors(res.vendors)).catch(console.error);
     }, []);
+
+    // Pincode serviceability gate — fetch vendor ids that service the user's pincode.
+    // If pincode is unknown, render the full list (no gate).
+    useEffect(() => {
+        if (!pincode || !/^\d{6}$/.test(pincode)) {
+            setServicingIds(null);
+            return;
+        }
+        let cancelled = false;
+        dal.vendors
+            .checkServiceability(pincode)
+            .then((res) => {
+                if (cancelled) return;
+                setServicingIds(new Set(res.vendorIds ?? []));
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setServicingIds(null); // fall back to unfiltered on error
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [pincode]);
 
     const checkScroll = () => {
         if (scrollRef.current) {
@@ -110,7 +137,8 @@ export function NearbyVendors() {
         }
     };
 
-    const displayVendors = vendors.slice(0, 10);
+    const filteredVendors = servicingIds ? vendors.filter((v) => servicingIds.has(v.id)) : vendors;
+    const displayVendors = filteredVendors.slice(0, 10);
 
     return (
         <section id="vendors" className="w-full py-6 bg-white overflow-hidden">

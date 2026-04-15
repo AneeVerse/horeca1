@@ -244,6 +244,7 @@ model Category {
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children Category[] @relation("CategoryTree")
   products Product[]
+  productLinks ProductCategory[]
   brandMasterProducts BrandMasterProduct[]
 
   @@index([parentId])
@@ -286,6 +287,7 @@ model Product {
 
   vendor              Vendor?              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   category            Category?            @relation(fields: [categoryId], references: [id])
+  categoryLinks       ProductCategory[]
   priceSlabs          PriceSlab[]
   inventory           Inventory?
   cartItems           CartItem[]
@@ -301,6 +303,25 @@ model Product {
   @@index([approvalStatus])
   @@index([sku])
   @@map("products")
+}
+
+// Join table enabling a product to belong to multiple categories
+// (one of them marked isPrimary). Product.categoryId is kept as the
+// denormalized primary FK for fast filtering; it mirrors the row where
+// isPrimary = true.
+model ProductCategory {
+  productId  String   @map("product_id") @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+  @@index([categoryId])
+  @@index([productId, isPrimary])
+  @@map("product_categories")
 }
 
 model PriceSlab {

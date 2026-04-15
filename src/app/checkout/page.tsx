@@ -8,6 +8,7 @@ import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { useSession } from 'next-auth/react';
 import { AuthScreen } from '@/components/auth/AuthScreen';
 import { dal } from '@/lib/dal';
+import { DeliverySlotPicker } from '@/components/features/checkout/DeliverySlotPicker';
 
 declare global {
     interface Window {
@@ -77,9 +78,10 @@ export default function CheckoutPage() {
     const [orderError, setOrderError] = useState<string | null>(null);
     const [placedOrderIds, setPlacedOrderIds] = useState<string[]>([]);
     const [excludedVendorIds, setExcludedVendorIds] = useState<Set<string>>(new Set());
+    const [slotByVendor, setSlotByVendor] = useState<Record<string, string | null>>({});
 
     const selectedGroups = useMemo(
-        () => groups.filter(g => !excludedVendorIds.has(g.vendorId)),
+        () => groups.filter(g => !excludedVendorIds.has(g.vendorId) && g.meetsMinOrder),
         [groups, excludedVendorIds]
     );
     const selectedTotal = useMemo(
@@ -129,6 +131,7 @@ export default function CheckoutPage() {
                     productId: item.productId,
                     quantity: item.quantity,
                 })),
+                ...(slotByVendor[group.vendorId] ? { deliverySlotId: slotByVendor[group.vendorId] as string } : {}),
             }));
 
             // 1. Create orders in DB (same for all payment methods)
@@ -296,12 +299,14 @@ export default function CheckoutPage() {
                         </div>
 
                         {groups.map((group) => {
-                            const isSelected = !excludedVendorIds.has(group.vendorId);
+                            const belowMov = !group.meetsMinOrder;
+                            const isSelected = !excludedVendorIds.has(group.vendorId) && !belowMov;
+                            const movGap = Math.max(0, (group.minOrderValue || 0) - group.subtotal);
                             return (
                             <div
                                 key={group.vendorId}
                                 className={`bg-white rounded-2xl border overflow-hidden transition-all ${
-                                    isSelected ? 'border-gray-100' : 'border-gray-100 opacity-55'
+                                    isSelected ? 'border-gray-100' : 'border-gray-100 opacity-80'
                                 }`}
                             >
                                 {/* Vendor Header */}
@@ -309,10 +314,13 @@ export default function CheckoutPage() {
                                     {groups.length > 1 && (
                                         <button
                                             type="button"
-                                            onClick={() => toggleVendor(group.vendorId)}
+                                            onClick={() => !belowMov && toggleVendor(group.vendorId)}
+                                            disabled={belowMov}
                                             aria-label={isSelected ? `Deselect ${group.vendorName}` : `Select ${group.vendorName}`}
                                             className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${
-                                                isSelected ? 'bg-[#299e60] border-[#299e60]' : 'bg-white border-gray-300'
+                                                belowMov
+                                                    ? 'bg-gray-100 border-gray-200 cursor-not-allowed'
+                                                    : isSelected ? 'bg-[#299e60] border-[#299e60]' : 'bg-white border-gray-300'
                                             }`}
                                         >
                                             {isSelected && <Check size={13} className="text-white" strokeWidth={4} />}
@@ -327,11 +335,21 @@ export default function CheckoutPage() {
                                         <p className="text-[13px] font-bold text-[#181725]">{group.vendorName}</p>
                                         <p className="text-[10px] text-gray-400 font-medium flex items-center gap-1">
                                             <Clock size={10} />
-                                            Delivery: Tomorrow morning
+                                            Min order ₹{(group.minOrderValue || 0).toLocaleString('en-IN')}
                                         </p>
                                     </div>
                                     <span className="text-[14px] font-bold text-[#181725]">₹{group.subtotal.toLocaleString('en-IN')}</span>
                                 </div>
+
+                                {/* MOV banner */}
+                                {belowMov && (
+                                    <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 text-[12px] font-semibold text-red-700 flex items-center justify-between gap-3">
+                                        <span>Add ₹{movGap.toLocaleString('en-IN')} more to meet minimum order</span>
+                                        <Link href={`/vendor/${group.vendorId}`} className="shrink-0 text-[11px] underline font-bold">
+                                            Shop more
+                                        </Link>
+                                    </div>
+                                )}
 
                                 {/* Items */}
                                 {group.items.map((item) => (
@@ -346,6 +364,17 @@ export default function CheckoutPage() {
                                         <span className="text-[12px] font-bold text-[#181725]">₹{(item.product.price * item.quantity).toLocaleString('en-IN')}</span>
                                     </div>
                                 ))}
+
+                                {/* Delivery slot picker */}
+                                {isSelected && (
+                                    <div className="px-4 py-3 bg-gray-50/50 border-t border-gray-100">
+                                        <DeliverySlotPicker
+                                            vendorId={group.vendorId}
+                                            selectedSlotId={slotByVendor[group.vendorId] ?? null}
+                                            onChange={(slotId) => setSlotByVendor(prev => ({ ...prev, [group.vendorId]: slotId }))}
+                                        />
+                                    </div>
+                                )}
                             </div>
                             );
                         })}

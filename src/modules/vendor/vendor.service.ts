@@ -147,10 +147,13 @@ export class VendorService {
   }
 
   async checkServiceability(pincode: string) {
-    const count = await prisma.serviceArea.count({
+    const areas = await prisma.serviceArea.findMany({
       where: { pincode, isActive: true },
+      select: { vendorId: true },
     });
 
-    return { serviceable: count > 0, vendor_count: count };
+    const vendorIds = Array.from(new Set(areas.map((a) => a.vendorId)));
+
+    return { serviceable: vendorIds.length > 0, vendor_count: vendorIds.length, vendorIds };
   }
 }

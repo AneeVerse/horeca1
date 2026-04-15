@@ -181,9 +181,9 @@ export const dal = {
       };
     },
 
-    /** Check if a pincode is serviceable */
+    /** Check if a pincode is serviceable. Returns serviceability flag, vendor count, and the list of vendorIds that service the pincode. */
     async checkServiceability(pincode: string) {
-      return apiFetch<{ serviceable: boolean; vendor_count: number }>(`/api/v1/vendors/serviceability?pincode=${pincode}`);
+      return apiFetch<{ serviceable: boolean; vendor_count: number; vendorIds: string[] }>(`/api/v1/vendors/serviceability?pincode=${pincode}`);
     },
   },
 

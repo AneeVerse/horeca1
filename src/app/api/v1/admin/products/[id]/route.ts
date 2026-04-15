@@ -23,6 +23,8 @@ const updateProductSchema = z.object({
   name: z.string().min(1).optional(),
   slug: z.string().min(1).optional(),
   categoryId: z.string().uuid().optional(),
+  categoryIds: z.array(z.string().uuid()).optional(),
+  primaryCategoryId: z.string().uuid().optional(),
   basePrice: z.number().positive().optional(),
   originalPrice: z.number().positive().optional(),
   packSize: z.string().optional(),
@@ -58,6 +60,9 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
         category: true,
         priceSlabs: { orderBy: { sortOrder: 'asc' } },
         inventory: true,
+        categoryLinks: {
+          include: { category: { select: { id: true, name: true, slug: true } } },
+        },
       },
     });
 
@@ -84,37 +89,63 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     });
     if (!existing) throw Errors.notFound('Product');
 
-    const { priceSlabs, ...productData } = data;
+    const { priceSlabs, categoryIds, primaryCategoryId, ...productData } = data;
 
-    // Update product fields
-    const product = await prisma.product.update({
-      where: { id },
-      data: productData,
-      include: {
-        vendor: { select: { id: true, businessName: true } },
-        category: { select: { id: true, name: true } },
-        inventory: { select: { qtyAvailable: true } },
-        priceSlabs: { orderBy: { sortOrder: 'asc' } },
-      },
-    });
+    // Resolve multi-category inputs when caller supplies them. Denormalized
+    // Product.categoryId always mirrors the primary so indexed filtering keeps working.
+    const categoriesChanged = categoryIds !== undefined || primaryCategoryId !== undefined;
+    const multiIds = categoryIds && categoryIds.length > 0 ? Array.from(new Set(categoryIds)) : [];
+    const primaryId = primaryCategoryId
+      ?? productData.categoryId
+      ?? multiIds[0];
+    if (multiIds.length > 0 && primaryId && !multiIds.includes(primaryId)) multiIds.push(primaryId);
+    if (categoriesChanged && primaryId) productData.categoryId = primaryId;
 
-    // If priceSlabs provided, delete existing and recreate (only if product has a vendor)
-    if (priceSlabs && existing.vendorId) {
-      await prisma.priceSlab.deleteMany({ where: { productId: id } });
+    const product = await prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({
+        where: { id },
+        data: productData,
+        include: {
+          vendor: { select: { id: true, businessName: true } },
+          category: { select: { id: true, name: true } },
+          inventory: { select: { qtyAvailable: true } },
+          priceSlabs: { orderBy: { sortOrder: 'asc' } },
+        },
+      });
 
-      if (priceSlabs.length > 0) {
-        await prisma.priceSlab.createMany({
-          data: priceSlabs.map((slab, idx) => ({
-            productId: id,
-            vendorId: existing.vendorId!,
-            minQty: slab.minQty,
-            maxQty: slab.maxQty ?? null,
-            price: slab.price,
-            sortOrder: idx,
-          })),
-        });
+      if (categoriesChanged) {
+        await tx.productCategory.deleteMany({ where: { productId: id } });
+        const joinIds = multiIds.length > 0 ? multiIds : (primaryId ? [primaryId] : []);
+        if (joinIds.length > 0) {
+          await tx.productCategory.createMany({
+            data: joinIds.map(cid => ({
+              productId: id,
+              categoryId: cid,
+              isPrimary: cid === primaryId,
+            })),
+            skipDuplicates: true,
+          });
+        }
       }
-    }
+
+      if (priceSlabs && existing.vendorId) {
+        await tx.priceSlab.deleteMany({ where: { productId: id } });
+        if (priceSlabs.length > 0) {
+          await tx.priceSlab.createMany({
+            data: priceSlabs.map((slab, idx) => ({
+              productId: id,
+              vendorId: existing.vendorId!,
+              minQty: slab.minQty,
+              maxQty: slab.maxQty ?? null,
+              price: slab.price,
+              sortOrder: idx,
+            })),
+          });
+        }
+      }
+
+      return updated;
+    });
 
     return NextResponse.json({ success: true, data: product });
   } catch (error) {
