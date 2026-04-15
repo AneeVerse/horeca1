@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Star, MapPin, Phone, Heart, Share2, ChevronLeft, Image as ImageIcon, Navigation } from 'lucide-react';
+import { Star, MapPin, Phone, Heart, Share2, ChevronLeft, Image as ImageIcon, Navigation, ClipboardList } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { toast } from 'sonner';
@@ -97,6 +98,13 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                     <button onClick={handleShare} className="shrink-0 p-3 bg-gray-50 border border-gray-100 rounded-2xl text-gray-800">
                         <Share2 size={18} className="text-[#53B175]" strokeWidth={3} />
                     </button>
+                    <Link
+                        href={`/order-lists?vendorId=${vendor.id}`}
+                        className="shrink-0 bg-gray-50 border border-gray-100 px-4 py-2 rounded-2xl flex items-center justify-center gap-2 text-[13px] font-black text-gray-800"
+                    >
+                        <ClipboardList size={16} className="text-[#53B175]" strokeWidth={3} />
+                        My Lists
+                    </Link>
                 </div>
 
                 {/* Mobile Tabs */}
@@ -226,6 +234,13 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                             <Share2 size={15} strokeWidth={2.5} />
                             Share
                         </button>
+                        <Link
+                            href={`/order-lists?vendorId=${vendor.id}`}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gray-50 border border-gray-100 text-[13px] font-black text-gray-700 hover:bg-[#53B175]/5 hover:border-[#53B175]/40 hover:text-[#53B175] transition-all duration-200"
+                        >
+                            <ClipboardList size={15} strokeWidth={2.5} />
+                            My Lists
+                        </Link>
                     </div>
                 </div>
 

@@ -14,6 +14,7 @@ import {
     Package,
     Tag,
     MessageSquare,
+    Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -392,17 +393,23 @@ export default function ApprovalsPage() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            {vendor.isVerified ? (
-                                                <button onClick={() => handleRevokeVendor(vendor)} disabled={actionLoading === vendor.id}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
-                                                    {actionLoading === vendor.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />} Revoke
-                                                </button>
-                                            ) : (
-                                                <button onClick={() => handleApproveVendor(vendor)} disabled={actionLoading === vendor.id}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
-                                                    {actionLoading === vendor.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve
-                                                </button>
-                                            )}
+                                            <div className="flex items-center gap-2">
+                                                {vendor.isVerified ? (
+                                                    <button onClick={() => handleRevokeVendor(vendor)} disabled={actionLoading === vendor.id}
+                                                        className="flex items-center gap-1 h-[34px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
+                                                        {actionLoading === vendor.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />} Revoke
+                                                    </button>
+                                                ) : (
+                                                    <button onClick={() => handleApproveVendor(vendor)} disabled={actionLoading === vendor.id}
+                                                        className="flex items-center gap-1 h-[34px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
+                                                        {actionLoading === vendor.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve
+                                                    </button>
+                                                )}
+                                                <Link href={`/admin/vendors/${vendor.id}`}
+                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[8px] text-[12px] font-bold hover:bg-[#EEF8F1] hover:border-[#299E60]/40 hover:text-[#299E60] transition-colors">
+                                                    <Pencil size={13} /> Edit
+                                                </Link>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -460,6 +467,10 @@ export default function ApprovalsPage() {
                                                     className="flex items-center gap-1 h-[34px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold">
                                                     <X size={14} /> Reject
                                                 </button>
+                                                <Link href={`/admin/products?editId=${product.id}`}
+                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[8px] text-[12px] font-bold hover:bg-[#EEF8F1] hover:border-[#299E60]/40 hover:text-[#299E60] transition-colors">
+                                                    <Pencil size={13} /> Edit
+                                                </Link>
                                             </div>
                                         </td>
                                     </tr>
@@ -510,6 +521,10 @@ export default function ApprovalsPage() {
                                                     className="flex items-center gap-1 h-[34px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold">
                                                     <X size={14} /> Reject
                                                 </button>
+                                                <Link href={`/admin/categories?editId=${cat.id}`}
+                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[8px] text-[12px] font-bold hover:bg-[#EEF8F1] hover:border-[#299E60]/40 hover:text-[#299E60] transition-colors">
+                                                    <Pencil size={13} /> Edit
+                                                </Link>
                                             </div>
                                         </td>
                                     </tr>

@@ -106,8 +106,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
         });
     };
 
-    const bulk1 = product.bulkPrices?.[0] ?? null;
-    const bulk2 = product.bulkPrices?.[1] ?? null;
+    const bulkTiers = (product.bulkPrices ?? []).slice(0, 3);
 
     const isOutOfStock = product.stock === 0 || product.isActive === false;
     
@@ -265,9 +264,9 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
             </div>
 
             {/* ── BULK TIERS ── */}
-            {(bulk1 || bulk2) && (
+            {bulkTiers.length > 0 && (
                 <div className="flex flex-col gap-1.5 mt-1">
-                    {[bulk1, bulk2].map((tier, i) => tier && (
+                    {bulkTiers.map((tier, i) => (
                         <div key={i} className={cn(
                             "rounded-xl border px-3 py-1.5 flex items-center justify-between gap-2 transition-colors",
                             isOutOfStock ? "bg-gray-50 border-gray-100" : "bg-[#F7FBF8] border-[#EAF5ED] hover:border-[#53B175]/30"

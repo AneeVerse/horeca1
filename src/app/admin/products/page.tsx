@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
     Search,
     Loader2,
@@ -112,6 +113,9 @@ const PAGE_LIMIT = 20;
 
 export default function ProductsPage() {
     const perms = useAdminPermissions();
+    const searchParams = useSearchParams();
+    const editIdParam = searchParams.get('editId');
+    const autoOpenedRef = useRef(false);
     // Data state
     const [products, setProducts] = useState<Product[]>([]);
     const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -343,6 +347,16 @@ export default function ProductsPage() {
         setFormErrors({});
         setPanelOpen(true);
     };
+
+    // Auto-open edit panel when ?editId=… is in the URL (e.g. from Approvals page)
+    useEffect(() => {
+        if (!editIdParam || autoOpenedRef.current || loading) return;
+        const target = products.find(p => p.id === editIdParam);
+        if (target) {
+            autoOpenedRef.current = true;
+            openEdit(target);
+        }
+    }, [editIdParam, loading, products]);
 
     const openEdit = (product: Product) => {
         setEditingProduct(product);

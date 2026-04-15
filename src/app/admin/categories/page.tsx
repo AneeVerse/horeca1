@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
     Plus,
     Search,
@@ -90,6 +91,9 @@ const INITIAL_FORM: CategoryFormData = {
 
 export default function CategoriesPage() {
     const perms = useAdminPermissions();
+    const searchParams = useSearchParams();
+    const editIdParam = searchParams.get('editId');
+    const autoOpenedRef = useRef(false);
     // Data state
     const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
@@ -229,6 +233,16 @@ export default function CategoriesPage() {
         setFormError(null);
         setShowFormModal(true);
     };
+
+    // Auto-open edit modal when ?editId=… is in URL (e.g. from Approvals page)
+    useEffect(() => {
+        if (!editIdParam || autoOpenedRef.current || loading) return;
+        const target = categories.find(c => c.id === editIdParam);
+        if (target) {
+            autoOpenedRef.current = true;
+            openEditModal(target);
+        }
+    }, [editIdParam, loading, categories]);
 
     const openEditModal = (cat: Category) => {
         setEditingCategory(cat);

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, CreditCard, Smartphone, Building2, FileText, Clock, CheckCircle2, Shield, User, Loader2 } from 'lucide-react';
+import { ChevronLeft, CreditCard, Smartphone, Building2, FileText, Clock, CheckCircle2, Shield, User, Loader2, Check } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { useSession } from 'next-auth/react';
@@ -65,7 +65,7 @@ const PAYMENT_OPTIONS = [
 ];
 
 export default function CheckoutPage() {
-    const { groups, totalAmount, totalItems, vendorCount, clearCart } = useCart();
+    const { groups, clearCart, removeFromCart } = useCart();
     const { status: sessionStatus } = useSession();
     const [step, setStep] = useState<CheckoutStep>('review');
     const [selectedPayment, setSelectedPayment] = useState('');
@@ -76,6 +76,30 @@ export default function CheckoutPage() {
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
     const [orderError, setOrderError] = useState<string | null>(null);
     const [placedOrderIds, setPlacedOrderIds] = useState<string[]>([]);
+    const [excludedVendorIds, setExcludedVendorIds] = useState<Set<string>>(new Set());
+
+    const selectedGroups = useMemo(
+        () => groups.filter(g => !excludedVendorIds.has(g.vendorId)),
+        [groups, excludedVendorIds]
+    );
+    const selectedTotal = useMemo(
+        () => selectedGroups.reduce((sum, g) => sum + g.subtotal, 0),
+        [selectedGroups]
+    );
+    const selectedItemCount = useMemo(
+        () => selectedGroups.reduce((sum, g) => sum + g.items.reduce((a, i) => a + i.quantity, 0), 0),
+        [selectedGroups]
+    );
+    const selectedVendorCount = selectedGroups.length;
+
+    const toggleVendor = (vendorId: string) => {
+        setExcludedVendorIds(prev => {
+            const next = new Set(prev);
+            if (next.has(vendorId)) next.delete(vendorId);
+            else next.add(vendorId);
+            return next;
+        });
+    };
 
     // Load real credit info when payment step is reached
     React.useEffect(() => {
@@ -92,10 +116,14 @@ export default function CheckoutPage() {
     }, [step, sessionStatus]);
 
     const handlePlaceOrder = async () => {
+        if (selectedGroups.length === 0) {
+            setOrderError('Select at least one vendor PO to place.');
+            return;
+        }
         setIsPlacingOrder(true);
         setOrderError(null);
         try {
-            const vendorOrders = groups.map(group => ({
+            const vendorOrders = selectedGroups.map(group => ({
                 vendorId: group.vendorId,
                 items: group.items.map(item => ({
                     productId: item.productId,
@@ -153,9 +181,16 @@ export default function CheckoutPage() {
 
             // 3. Show confirmation
             setPlacedOrderIds(createdOrders.map(o => o.orderNumber || o.id));
-            setOrderSnapshot({ groups: [...groups], total: totalAmount, count: vendorCount });
+            setOrderSnapshot({ groups: [...selectedGroups], total: selectedTotal, count: selectedVendorCount });
             setStep('confirmation');
-            clearCart();
+
+            // Remove only the placed vendor groups from cart; leave unselected ones intact.
+            const placedAllGroups = selectedGroups.length === groups.length;
+            if (placedAllGroups) {
+                clearCart();
+            } else {
+                selectedGroups.forEach(g => g.items.forEach(i => removeFromCart(i.productId)));
+            }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Failed to place order. Please try again.';
             setOrderError(msg);
@@ -249,14 +284,40 @@ export default function CheckoutPage() {
                 {/* === STEP 1: REVIEW === */}
                 {step === 'review' && (
                     <div className="space-y-4">
-                        <h2 className="text-[15px] font-bold text-[#181725]">
-                            Purchase Order{vendorCount > 1 ? 's' : ''} — {vendorCount} vendor{vendorCount > 1 ? 's' : ''}
-                        </h2>
+                        <div className="flex items-end justify-between gap-3 flex-wrap">
+                            <h2 className="text-[15px] font-bold text-[#181725]">
+                                Purchase Order{groups.length > 1 ? 's' : ''} — {groups.length} vendor{groups.length > 1 ? 's' : ''}
+                            </h2>
+                            {groups.length > 1 && (
+                                <p className="text-[11px] font-medium text-gray-500">
+                                    Uncheck any vendor to place their PO later
+                                </p>
+                            )}
+                        </div>
 
-                        {groups.map((group) => (
-                            <div key={group.vendorId} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                        {groups.map((group) => {
+                            const isSelected = !excludedVendorIds.has(group.vendorId);
+                            return (
+                            <div
+                                key={group.vendorId}
+                                className={`bg-white rounded-2xl border overflow-hidden transition-all ${
+                                    isSelected ? 'border-gray-100' : 'border-gray-100 opacity-55'
+                                }`}
+                            >
                                 {/* Vendor Header */}
                                 <div className="flex items-center gap-3 px-4 py-3 bg-gray-50/80 border-b border-gray-100">
+                                    {groups.length > 1 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleVendor(group.vendorId)}
+                                            aria-label={isSelected ? `Deselect ${group.vendorName}` : `Select ${group.vendorName}`}
+                                            className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${
+                                                isSelected ? 'bg-[#299e60] border-[#299e60]' : 'bg-white border-gray-300'
+                                            }`}
+                                        >
+                                            {isSelected && <Check size={13} className="text-white" strokeWidth={4} />}
+                                        </button>
+                                    )}
                                     {group.vendorLogo && (
                                         <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center p-1 border border-gray-100">
                                             <img src={group.vendorLogo} alt={group.vendorName} className="w-full h-full object-contain" />
@@ -286,20 +347,26 @@ export default function CheckoutPage() {
                                     </div>
                                 ))}
                             </div>
-                        ))}
+                            );
+                        })}
 
                         {/* Total */}
                         <div className="bg-white rounded-2xl border border-gray-100 p-4">
                             <div className="flex items-center justify-between">
                                 <span className="text-[14px] font-bold text-[#181725]">Total Payable</span>
-                                <span className="text-[18px] font-bold text-[#299e60]">₹{totalAmount.toLocaleString('en-IN')}</span>
+                                <span className="text-[18px] font-bold text-[#299e60]">₹{selectedTotal.toLocaleString('en-IN')}</span>
                             </div>
-                            <p className="text-[11px] text-gray-400 mt-1">{totalItems} items from {vendorCount} vendor{vendorCount > 1 ? 's' : ''}</p>
+                            <p className="text-[11px] text-gray-400 mt-1">{selectedItemCount} items from {selectedVendorCount} vendor{selectedVendorCount !== 1 ? 's' : ''}</p>
                         </div>
 
                         <button
                             onClick={() => setStep('payment')}
-                            className="w-full py-3.5 bg-[#299e60] text-white text-[14px] font-bold rounded-xl shadow-lg shadow-green-200/50 hover:bg-[#22844f] active:scale-[0.99] transition-all"
+                            disabled={selectedVendorCount === 0}
+                            className={`w-full py-3.5 text-[14px] font-bold rounded-xl shadow-lg transition-all ${
+                                selectedVendorCount === 0
+                                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
+                                    : 'bg-[#299e60] text-white shadow-green-200/50 hover:bg-[#22844f] active:scale-[0.99]'
+                            }`}
                         >
                             Continue to Payment →
                         </button>
@@ -361,7 +428,7 @@ export default function CheckoutPage() {
                                     </div>
                                     <div className="flex justify-between text-[12px]">
                                         <span className="text-purple-600">This order</span>
-                                        <span className="font-bold text-purple-800">₹{totalAmount.toLocaleString('en-IN')}</span>
+                                        <span className="font-bold text-purple-800">₹{selectedTotal.toLocaleString('en-IN')}</span>
                                     </div>
                                     <div className="flex justify-between text-[12px]">
                                         <span className="text-purple-600">Next due date</span>
@@ -377,7 +444,7 @@ export default function CheckoutPage() {
                         <div className="bg-white rounded-2xl border border-gray-100 p-4">
                             <div className="flex items-center justify-between">
                                 <span className="text-[14px] font-bold text-[#181725]">Total Payable</span>
-                                <span className="text-[18px] font-bold text-[#299e60]">₹{totalAmount.toLocaleString('en-IN')}</span>
+                                <span className="text-[18px] font-bold text-[#299e60]">₹{selectedTotal.toLocaleString('en-IN')}</span>
                             </div>
                         </div>
 

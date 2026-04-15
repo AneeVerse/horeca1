@@ -2,8 +2,8 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Plus, Clock, ChevronRight, ClipboardList, ChevronLeft, Trash2, Edit2, Heart, ShoppingCart, Home, Building2, AlertCircle } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Plus, Clock, ChevronRight, ClipboardList, ChevronLeft, Trash2, Edit2, Heart, ShoppingCart, Home, Building2, AlertCircle, X as XIcon } from 'lucide-react';
 import { dal } from '@/lib/dal';
 import type { Vendor, VendorProduct, OrderList } from '@/types';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
@@ -15,6 +15,8 @@ import { CreateListOverlay } from '@/components/features/order-lists/CreateListO
 
 export default function OrderListsPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const vendorFilterId = searchParams.get('vendorId');
     const { data: session } = useSession();
     const { totalItems, addToCart } = useCart();
     const { wishlist } = useWishlist();
@@ -173,6 +175,20 @@ export default function OrderListsPage() {
         setIsCreateOverlayOpen(true);
     };
 
+    // Filter by vendor when ?vendorId=... is in URL (e.g. vendor store shortcut)
+    const displayedLists = React.useMemo(() => {
+        if (!vendorFilterId) return allLists;
+        return allLists.filter(list =>
+            list.vendorId === vendorFilterId ||
+            list.items.some(i => (i.product?.vendorId || list.vendorId) === vendorFilterId)
+        );
+    }, [allLists, vendorFilterId]);
+
+    const filteredVendorName = React.useMemo(() => {
+        if (!vendorFilterId) return null;
+        return vendorsList.find(v => v.id === vendorFilterId)?.name ?? null;
+    }, [vendorFilterId, vendorsList]);
+
     return (
         <div className="min-h-screen bg-gray-50/50 pb-24">
             {/* Desktop Header */}
@@ -245,9 +261,25 @@ export default function OrderListsPage() {
 
             {/* Lists */}
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-4">
-                {allLists.length > 0 ? (
+                {vendorFilterId && (
+                    <div className="mb-3 flex items-center justify-between gap-3 bg-[#EEF8F1] border border-[#299e60]/20 rounded-xl px-4 py-2.5">
+                        <p className="text-[13px] font-bold text-[#1B5E20] truncate">
+                            Showing lists for {filteredVendorName ?? 'this vendor'}
+                            <span className="text-[11px] font-semibold text-[#299e60] ml-2">
+                                ({displayedLists.length} of {allLists.length})
+                            </span>
+                        </p>
+                        <Link
+                            href="/order-lists"
+                            className="flex items-center gap-1 shrink-0 text-[12px] font-bold text-[#299e60] hover:text-[#1B5E20] transition-colors"
+                        >
+                            <XIcon size={14} /> Clear
+                        </Link>
+                    </div>
+                )}
+                {displayedLists.length > 0 ? (
                     <div className="space-y-3">
-                        {allLists.map((list) => (
+                        {displayedLists.map((list) => (
                                 <Link
                                     key={list.id}
                                     href={`/order-lists/${list.id}`}
