@@ -21,15 +21,42 @@ export function registerEventListeners(): void {
 
   eventBus.on('OrderCreated', async (payload) => {
     try {
-      await notifications.send({
-        userId: payload.vendorId,
-        type: 'order',
-        channel: 'in_app',
-        title: 'New Order Received',
-        body: `Order #${payload.orderNumber} has been placed (₹${payload.totalAmount.toLocaleString('en-IN')}).`,
-        referenceId: payload.orderId,
-        referenceType: 'order',
+      // Vendor's owning user gets the in-app + email alert
+      const vendor = await prisma.vendor.findUnique({
+        where: { id: payload.vendorId },
+        select: { userId: true },
       });
+      const vendorUserId = vendor?.userId ?? payload.vendorId;
+
+      await Promise.all([
+        notifications.send({
+          userId: vendorUserId,
+          type: 'order',
+          channel: 'in_app',
+          title: 'New Order Received',
+          body: `Order #${payload.orderNumber} has been placed (₹${payload.totalAmount.toLocaleString('en-IN')}).`,
+          referenceId: payload.orderId,
+          referenceType: 'order',
+        }),
+        notifications.send({
+          userId: vendorUserId,
+          type: 'order',
+          channel: 'email',
+          title: `New order ${payload.orderNumber}`,
+          body: `A new order worth ₹${payload.totalAmount.toLocaleString('en-IN')} has been placed. Log into HoReCa Hub to confirm and fulfill it.`,
+          referenceId: payload.orderId,
+          referenceType: 'order',
+        }),
+        notifications.send({
+          userId: payload.userId,
+          type: 'order',
+          channel: 'email',
+          title: `Order ${payload.orderNumber} placed`,
+          body: `Thank you for your order. Total: ₹${payload.totalAmount.toLocaleString('en-IN')}. We'll notify you once the vendor confirms.`,
+          referenceId: payload.orderId,
+          referenceType: 'order',
+        }),
+      ]);
     } catch (error) {
       console.error('[Events] OrderCreated listener failed:', error);
     }
@@ -37,15 +64,26 @@ export function registerEventListeners(): void {
 
   eventBus.on('OrderConfirmed', async (payload) => {
     try {
-      await notifications.send({
-        userId: payload.userId,
-        type: 'order',
-        channel: 'in_app',
-        title: 'Order Confirmed',
-        body: `Your order ${payload.orderId} has been confirmed by the vendor.`,
-        referenceId: payload.orderId,
-        referenceType: 'order',
-      });
+      await Promise.all([
+        notifications.send({
+          userId: payload.userId,
+          type: 'order',
+          channel: 'in_app',
+          title: 'Order Confirmed',
+          body: `Your order ${payload.orderId} has been confirmed by the vendor.`,
+          referenceId: payload.orderId,
+          referenceType: 'order',
+        }),
+        notifications.send({
+          userId: payload.userId,
+          type: 'order',
+          channel: 'email',
+          title: 'Order confirmed',
+          body: `Your order ${payload.orderId} has been confirmed. You'll receive another update once it's out for delivery.`,
+          referenceId: payload.orderId,
+          referenceType: 'order',
+        }),
+      ]);
     } catch (error) {
       console.error('[Events] OrderConfirmed listener failed:', error);
     }
