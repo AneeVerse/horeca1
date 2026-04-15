@@ -394,75 +394,123 @@ export function BrandStore({ brandId }: BrandStoreProps) {
         <div className="min-h-screen bg-gray-50/50 pb-24">
 
             {/* ══════════════════════════════════════════
-                MOBILE HEADER
+                MOBILE HEADER — compact light-green hero
+                (matches homepage mobile hero style)
             ══════════════════════════════════════════ */}
-            <div className="block md:hidden">
-                {/* Hero image — no gradient, white card slides up */}
-                <div className="relative w-full h-[260px]">
-                    <img
-                        src={brand.bannerImage}
-                        alt={brand.name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.background = '#e5e5e5'; }}
-                    />
+            <div className="block md:hidden px-4 pt-4">
+                <div
+                    className="relative w-full rounded-[20px] overflow-hidden"
+                    style={{ backgroundColor: '#eff9f0' }}
+                >
                     <button
                         onClick={() => router.back()}
-                        className="absolute top-4 left-4 p-2.5 bg-black/50 backdrop-blur-md rounded-full text-white"
+                        className="absolute top-3 left-3 z-20 p-2 bg-white/80 backdrop-blur-md rounded-full shadow-sm"
+                        aria-label="Back"
                     >
-                        <ChevronLeft size={22} strokeWidth={3} />
+                        <ChevronLeft size={18} strokeWidth={3} className="text-[#181725]" />
                     </button>
+                    <div className="flex items-center px-5 py-6 pt-10">
+                        <div className="flex-1 pr-2 min-w-0">
+                            <span className="inline-block bg-[#53B175] text-white px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide mb-2">
+                                Brand Store
+                            </span>
+                            <h1 className="text-[20px] font-[900] text-[#0f172a] leading-[1.15] mb-1 line-clamp-2">
+                                {brand.name}
+                            </h1>
+                            <p className="text-[11px] text-gray-500 font-bold leading-[1.4] line-clamp-2 mb-2">
+                                {brand.tagline}
+                            </p>
+                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-wide">
+                                {brand.products.length} products · {brand.vendors.length} distributors
+                            </p>
+                        </div>
+                        <div className="flex-shrink-0 w-[38%] max-w-[120px]">
+                            <div className="w-full aspect-square rounded-[14px] overflow-hidden bg-white border border-white/60 shadow-sm">
+                                <img
+                                    src={brand.bannerImage}
+                                    alt={brand.name}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.background = '#f5f5f5'; }}
+                                />
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                {/* White card curves up over the image */}
-                <div className="relative mt-[-40px] bg-white rounded-t-[36px] px-6 pt-6 pb-0 shadow-[0_-16px_40px_rgba(0,0,0,0.10)]">
-                    <span className="inline-block bg-[#53B175] text-white px-2.5 py-0.5 rounded-lg text-[11px] font-black uppercase tracking-wide mb-2">
-                        Brand Store
-                    </span>
-                    <h1 className="text-[26px] font-[1000] text-[#181725] leading-tight tracking-tight">
-                        {brand.name}
-                    </h1>
-                    <p className="text-gray-400 text-[13px] font-bold mt-1 mb-4">{brand.tagline}</p>
+                {/* Tabs below hero */}
+                <div className="mt-4 px-1">
                     <TabBar activeTab={activeTab} brand={brand} onTabChange={handleTabChange} />
                 </div>
             </div>
 
             {/* ══════════════════════════════════════════
-                DESKTOP HEADER
+                DESKTOP HEADER — compact green-gradient hero
+                (matches homepage hero style)
             ══════════════════════════════════════════ */}
             <div className="hidden md:block bg-white pb-0">
                 <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] pt-6">
-                    {/* Hero image */}
-                    <div className="relative w-full h-[400px] lg:h-[460px] rounded-[32px] overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.14)]">
-                        <img
-                            src={brand.bannerImage}
-                            alt={brand.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.background = '#e5e5e5'; }}
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                    <div className="relative w-full h-[180px] lg:h-[220px] rounded-[32px] md:rounded-[40px] overflow-hidden bg-gradient-to-r from-[#22844f] via-[#299e60] to-[#22c55e] flex items-center px-6 md:px-10 lg:px-20 shadow-lg">
+                        {/* Decorative circles (same as homepage hero) */}
+                        <div className="absolute left-0 top-0 w-full h-full opacity-10 pointer-events-none">
+                            <svg width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="10%" cy="50%" r="150" stroke="white" strokeWidth="2" />
+                                <circle cx="90%" cy="20%" r="80" stroke="white" strokeWidth="2" />
+                            </svg>
+                        </div>
+
+                        {/* Back button */}
                         <button
                             onClick={() => router.back()}
-                            className="absolute top-5 left-5 p-2.5 bg-black/50 backdrop-blur-md rounded-full text-white hover:bg-black/70 transition"
+                            className="absolute top-4 left-4 p-2 bg-white/20 backdrop-blur-md rounded-full text-white z-20 hover:bg-white/30 transition"
+                            aria-label="Back"
                         >
-                            <ChevronLeft size={22} strokeWidth={3} />
+                            <ChevronLeft size={20} strokeWidth={3} />
                         </button>
-                        <div className="absolute bottom-0 left-0 right-0 px-8 pb-8 pt-16">
-                            <div className="flex items-center gap-2 mb-3">
-                                <span className="bg-[#53B175] text-white px-3 py-1 rounded-xl text-[12px] font-black uppercase tracking-wide">
+
+                        {/* Content */}
+                        <div className="flex items-center w-full relative z-10">
+                            {/* Brand image thumbnail */}
+                            <div className="flex-shrink-0 mr-4 md:mr-8 lg:mr-12">
+                                <div className="w-[110px] h-[110px] md:w-[140px] md:h-[140px] lg:w-[170px] lg:h-[170px] rounded-[20px] md:rounded-[24px] bg-white/10 border-2 border-white/30 overflow-hidden shadow-2xl">
+                                    <img
+                                        src={brand.bannerImage}
+                                        alt={brand.name}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.background = 'rgba(255,255,255,0.15)'; }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Title + tagline + counts */}
+                            <div className="flex-grow flex flex-col items-start justify-center text-white min-w-0">
+                                <span className="bg-white/20 backdrop-blur-sm border border-white/30 text-white text-[10px] md:text-[11px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-2">
                                     Brand Store
                                 </span>
-                                <span className="text-white/60 text-[13px] font-bold">
+                                <h1 className="text-[1.6rem] md:text-[2rem] lg:text-[2.8rem] font-[900] leading-[1.05] tracking-tight drop-shadow-md line-clamp-1">
+                                    {brand.name}
+                                </h1>
+                                <p className="text-[0.8rem] md:text-[0.95rem] lg:text-[1.05rem] font-medium opacity-90 max-w-[500px] mt-1 line-clamp-1">
+                                    {brand.tagline}
+                                </p>
+                                <p className="text-[0.7rem] md:text-[0.78rem] font-bold opacity-80 mt-1.5 uppercase tracking-wider">
                                     {brand.products.length} products · {brand.vendors.length} distributors
-                                </span>
+                                </p>
                             </div>
-                            <h1 className="text-[48px] lg:text-[56px] font-[1000] text-white tracking-tighter leading-[0.95] mb-2 drop-shadow-lg">
-                                {brand.name}
-                            </h1>
-                            <p className="text-white/75 text-[15px] font-bold">{brand.tagline}</p>
+
+                            {/* CTA button */}
+                            <div className="flex-shrink-0 ml-4 hidden lg:block">
+                                <button
+                                    onClick={() => handleTabChange('items')}
+                                    className="bg-[#181725] text-white px-7 py-3 rounded-2xl flex items-center gap-2 text-[1rem] font-bold hover:scale-105 transition-all shadow-xl whitespace-nowrap"
+                                >
+                                    Explore Items
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Tabs below image */}
+                    {/* Tabs below hero */}
                     <div className="mt-6">
                         <TabBar activeTab={activeTab} brand={brand} onTabChange={handleTabChange} />
                     </div>
