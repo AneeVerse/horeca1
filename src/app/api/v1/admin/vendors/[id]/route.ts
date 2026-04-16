@@ -10,6 +10,7 @@ import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
 import { requireAdminPerm } from '@/lib/teamPermissions';
+import { logAction } from '@/lib/auditLog';
 
 // Helper: extract the [id] segment from /api/v1/admin/vendors/{id}
 function extractId(req: NextRequest): string {
@@ -154,6 +155,14 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
         businessName: existing.businessName,
       });
     }
+
+    await logAction(ctx, req, {
+      action: allowedFields.isVerified === true ? 'vendor.approve' : 'vendor.update',
+      entity: 'Vendor',
+      entityId: id,
+      before: { isVerified: existing.isVerified },
+      after: allowedFields,
+    });
 
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {

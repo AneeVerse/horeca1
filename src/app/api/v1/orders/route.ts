@@ -39,7 +39,7 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
     // Rate limit: 10 orders per user per minute (prevents checkout spam)
-    const { allowed } = checkRateLimit(`order:${ctx.userId}`, 10, 60000);
+    const { allowed } = await checkRateLimit(`order:${ctx.userId}`, 10, 60000);
     if (!allowed) {
       return NextResponse.json(
         { success: false, error: { code: 'RATE_LIMITED', message: 'Too many order attempts. Please wait.' } },

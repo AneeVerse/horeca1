@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   try {
     // Rate limit: 5 signup attempts per IP per minute
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
-    const { allowed } = checkRateLimit(`signup:${ip}`, 5, 60000);
+    const { allowed } = await checkRateLimit(`signup:${ip}`, 5, 60000);
     if (!allowed) {
       return NextResponse.json(
         { success: false, error: { code: 'RATE_LIMITED', message: 'Too many signup attempts. Try again later.' } },

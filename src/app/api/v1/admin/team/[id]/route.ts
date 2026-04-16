@@ -7,6 +7,7 @@ import { adminOnly } from '@/middleware/rbac';
 import { requireAdminPerm } from '@/lib/teamPermissions';
 import { prisma } from '@/lib/prisma';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
+import { logAction } from '@/lib/auditLog';
 
 const updateSchema = z.object({
   role: z.enum(['manager', 'editor', 'viewer']),
@@ -22,13 +23,21 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     requireAdminPerm(ctx.adminTeamRole, 'team:manage');
     const id = extractId(req);
 
-    const member = await prisma.adminTeamMember.findUnique({ where: { userId: id }, select: { userId: true } });
+    const member = await prisma.adminTeamMember.findUnique({ where: { userId: id }, select: { userId: true, role: true } });
     if (!member) throw Errors.notFound('Team member not found');
 
     const body = await req.json();
     const input = updateSchema.parse(body);
 
     await prisma.adminTeamMember.update({ where: { userId: id }, data: { role: input.role } });
+
+    await logAction(ctx, req, {
+      action: 'admin_team.role_change',
+      entity: 'AdminTeamMember',
+      entityId: id,
+      before: { role: member.role },
+      after: { role: input.role },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -41,10 +50,17 @@ export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
     requireAdminPerm(ctx.adminTeamRole, 'team:manage');
     const id = extractId(req);
 
-    const member = await prisma.adminTeamMember.findUnique({ where: { userId: id }, select: { userId: true } });
+    const member = await prisma.adminTeamMember.findUnique({ where: { userId: id }, select: { userId: true, role: true } });
     if (!member) throw Errors.notFound('Team member not found');
 
     await prisma.adminTeamMember.delete({ where: { userId: id } });
+
+    await logAction(ctx, req, {
+      action: 'admin_team.remove',
+      entity: 'AdminTeamMember',
+      entityId: id,
+      before: { role: member.role },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

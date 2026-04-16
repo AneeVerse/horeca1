@@ -21,7 +21,7 @@ const paymentService = new PaymentService();
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
     // Rate limit: 10 payment initiations per user per minute
-    const { allowed } = checkRateLimit(`payment:${ctx.userId}`, 10, 60000);
+    const { allowed } = await checkRateLimit(`payment:${ctx.userId}`, 10, 60000);
     if (!allowed) {
       return NextResponse.json(
         { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests. Please wait.' } },

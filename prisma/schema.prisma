@@ -869,3 +869,26 @@ model SavedAddress {
   @@index([userId])
   @@map("saved_addresses")
 }
+
+// AuditLog — append-only log of admin / privileged mutations.
+// WHY: Compliance + forensics. When an approval, price edit, or RBAC change
+// happens, we need to know who did it, when, and what changed. No FKs so a
+// deleted actor/entity doesn't void the record.
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorId   String?  @map("actor_id") @db.Uuid
+  actorRole String?  @map("actor_role") @db.VarChar(50)
+  action    String   @db.VarChar(100)
+  entity    String   @db.VarChar(100)
+  entityId  String?  @map("entity_id") @db.VarChar(255)
+  before    Json?
+  after     Json?
+  metadata  Json?
+  ip        String?  @db.VarChar(64)
+  at        DateTime @default(now()) @db.Timestamptz
+
+  @@index([actorId, at])
+  @@index([entity, entityId])
+  @@index([at])
+  @@map("audit_logs")
+}

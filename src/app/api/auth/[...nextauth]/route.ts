@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 function withRateLimit(handler: (req: NextRequest) => Promise<Response>) {
   return async (req: NextRequest) => {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
-    const { allowed } = checkRateLimit(`auth:${ip}`, 30, 60000); // 30 per minute (Auth.js uses multiple requests per login flow)
+    const { allowed } = await checkRateLimit(`auth:${ip}`, 30, 60000); // 30 per minute (Auth.js uses multiple requests per login flow)
     if (!allowed) {
       return NextResponse.json(
         { error: 'Too many requests. Try again later.' },
