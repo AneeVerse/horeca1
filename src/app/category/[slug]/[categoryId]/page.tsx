@@ -23,6 +23,8 @@ function VendorCategoryPageContent() {
     const [products, setProducts] = useState<VendorProduct[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
+    const [dealsOnly, setDealsOnly] = useState(false);
+    const [sortBy, setSortBy] = useState<'default' | 'price_asc' | 'price_desc' | 'discount'>('default');
 
     // Fetch vendor + products + categories in one chain — loading stays true until ALL data is ready
     useEffect(() => {
@@ -69,12 +71,31 @@ function VendorCategoryPageContent() {
 
     // Filter products by category ID (exact match) with name as fallback
     const filteredProducts = useMemo(() => {
-        if (!activeCategory) return products;
-        return products.filter(p =>
-            p.categoryId === activeCategory.id ||
-            p.category.toLowerCase() === activeCategory.name.toLowerCase()
-        );
-    }, [products, activeCategory]);
+        let list = !activeCategory
+            ? products
+            : products.filter(p =>
+                p.categoryId === activeCategory.id ||
+                p.category.toLowerCase() === activeCategory.name.toLowerCase()
+            );
+
+        if (dealsOnly) {
+            list = list.filter(p => p.isDeal || (p.originalPrice && p.originalPrice > p.price));
+        }
+
+        if (sortBy === 'price_asc') {
+            list = [...list].sort((a, b) => a.price - b.price);
+        } else if (sortBy === 'price_desc') {
+            list = [...list].sort((a, b) => b.price - a.price);
+        } else if (sortBy === 'discount') {
+            const discountPct = (p: VendorProduct) =>
+                p.originalPrice && p.originalPrice > p.price
+                    ? (p.originalPrice - p.price) / p.originalPrice
+                    : 0;
+            list = [...list].sort((a, b) => discountPct(b) - discountPct(a));
+        }
+
+        return list;
+    }, [products, activeCategory, dealsOnly, sortBy]);
 
     if (loading) {
         return (
@@ -168,20 +189,30 @@ function VendorCategoryPageContent() {
                     {/* Right Content Area */}
                     <div className="flex-1 flex flex-col overflow-hidden bg-white">
                         <div className="flex overflow-x-auto px-4 md:px-8 py-3 md:py-4 gap-2 md:gap-3 no-scrollbar border-b border-[#F2F3F2]">
-                            {[
-                                { label: 'Above 4.0+', icon: <Star size={14} className="fill-[#FFB800] text-[#FFB800] mr-1" /> },
-                                { label: 'Brand', hasArrow: true },
-                                { label: 'Type', hasArrow: true },
-                            ].map((chip, idx) => (
-                                <button
-                                    key={idx}
-                                    className="flex items-center px-4 md:px-6 py-2 md:py-3 rounded-[12px] md:rounded-xl border border-[#E2E2E2] bg-white text-[13px] md:text-[14px] font-extrabold text-[#181725] whitespace-nowrap transition-all active:scale-95"
-                                >
-                                    {chip.icon}
-                                    {chip.label}
-                                    {chip.hasArrow && <ChevronDown size={14} className="ml-1" strokeWidth={3} />}
-                                </button>
-                            ))}
+                            <button
+                                type="button"
+                                onClick={() => setDealsOnly(v => !v)}
+                                className={cn(
+                                    'flex items-center px-4 md:px-6 py-2 md:py-3 rounded-[12px] md:rounded-xl border text-[13px] md:text-[14px] font-extrabold whitespace-nowrap transition-all active:scale-95',
+                                    dealsOnly
+                                        ? 'bg-[#53B175] border-[#53B175] text-white'
+                                        : 'bg-white border-[#E2E2E2] text-[#181725]',
+                                )}
+                            >
+                                <Star size={14} className={cn('mr-1', dealsOnly ? 'fill-white text-white' : 'fill-[#FFB800] text-[#FFB800]')} />
+                                Deals Only
+                            </button>
+
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                                className="flex items-center px-4 md:px-6 py-2 md:py-3 rounded-[12px] md:rounded-xl border border-[#E2E2E2] bg-white text-[13px] md:text-[14px] font-extrabold text-[#181725] whitespace-nowrap transition-all focus:outline-none focus:border-[#53B175]"
+                            >
+                                <option value="default">Sort: Default</option>
+                                <option value="price_asc">Price: Low → High</option>
+                                <option value="price_desc">Price: High → Low</option>
+                                <option value="discount">Biggest Discount</option>
+                            </select>
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-4 md:p-8 no-scrollbar">
@@ -289,21 +320,42 @@ function VendorCategoryPageContent() {
                                 </h3>
 
                                 <div className="flex items-center gap-2">
-                                    {[
-                                        { label: 'Rating 4.0+', active: true },
-                                        { label: 'Price: Low to High' },
-                                        { label: 'Best Offers' },
-                                    ].map((f, i) => (
-                                        <button
-                                            key={i}
-                                            className={cn(
-                                                "px-4 py-2 rounded-xl border text-[13px] font-bold transition-all",
-                                                f.active ? "bg-[#53B175] border-[#53B175] text-white" : "bg-white border-gray-200 text-gray-600 hover:border-[#53B175] hover:text-[#53B175]"
-                                            )}
-                                        >
-                                            {f.label}
-                                        </button>
-                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => setDealsOnly(v => !v)}
+                                        className={cn(
+                                            "px-4 py-2 rounded-xl border text-[13px] font-bold transition-all",
+                                            dealsOnly
+                                                ? "bg-[#53B175] border-[#53B175] text-white"
+                                                : "bg-white border-gray-200 text-gray-600 hover:border-[#53B175] hover:text-[#53B175]",
+                                        )}
+                                    >
+                                        Deals Only
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSortBy(s => s === 'price_asc' ? 'default' : 'price_asc')}
+                                        className={cn(
+                                            "px-4 py-2 rounded-xl border text-[13px] font-bold transition-all",
+                                            sortBy === 'price_asc'
+                                                ? "bg-[#53B175] border-[#53B175] text-white"
+                                                : "bg-white border-gray-200 text-gray-600 hover:border-[#53B175] hover:text-[#53B175]",
+                                        )}
+                                    >
+                                        Price: Low to High
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSortBy(s => s === 'discount' ? 'default' : 'discount')}
+                                        className={cn(
+                                            "px-4 py-2 rounded-xl border text-[13px] font-bold transition-all",
+                                            sortBy === 'discount'
+                                                ? "bg-[#53B175] border-[#53B175] text-white"
+                                                : "bg-white border-gray-200 text-gray-600 hover:border-[#53B175] hover:text-[#53B175]",
+                                        )}
+                                    >
+                                        Best Offers
+                                    </button>
                                 </div>
                             </div>
 

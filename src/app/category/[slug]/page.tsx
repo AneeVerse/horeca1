@@ -1,16 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, Search, Star, MapPin, Clock, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, Search, Star, Clock, ShoppingBag } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { dal } from '@/lib/dal';
 import type { Category } from '@/types';
-import { VENDOR_COVERS, VENDOR_LOCATIONS, VENDOR_OFFERS } from '@/components/features/homepage/VendorCardShared';
+import { VENDOR_COVERS } from '@/components/features/homepage/VendorCardShared';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
+import { useAddress } from '@/context/AddressContext';
 
 interface VendorSummary {
     id: string;
@@ -33,6 +34,11 @@ function CategoryVendorsContent() {
     const [vendors, setVendors] = useState<VendorSummary[]>([]);
     const [topProducts, setTopProducts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [sortBy, setSortBy] = useState<'relevance' | 'rating' | 'mov_low' | 'mov_high'>('relevance');
+    const [servicingIds, setServicingIds] = useState<Set<string> | null>(null);
+
+    const { selectedAddress } = useAddress();
+    const pincode = selectedAddress?.pincode;
 
     useEffect(() => {
         if (!slug) return;
@@ -59,6 +65,32 @@ function CategoryVendorsContent() {
             .catch(() => { setCategory(null); setVendors([]); setTopProducts([]); })
             .finally(() => setLoading(false));
     }, [slug]);
+
+    // Pincode serviceability gate — only show vendors that deliver to the user's pincode.
+    useEffect(() => {
+        if (!pincode || !/^\d{6}$/.test(pincode)) {
+            setServicingIds(null);
+            return;
+        }
+        let cancelled = false;
+        dal.vendors
+            .checkServiceability(pincode)
+            .then((res) => {
+                if (cancelled) return;
+                setServicingIds(new Set(res.vendorIds ?? []));
+            })
+            .catch(() => { if (!cancelled) setServicingIds(null); });
+        return () => { cancelled = true; };
+    }, [pincode]);
+
+    const displayVendors = useMemo(() => {
+        const gated = servicingIds ? vendors.filter(v => servicingIds.has(v.id)) : vendors;
+        const sorted = [...gated];
+        if (sortBy === 'rating') sorted.sort((a, b) => b.rating - a.rating);
+        else if (sortBy === 'mov_low') sorted.sort((a, b) => a.minOrderValue - b.minOrderValue);
+        else if (sortBy === 'mov_high') sorted.sort((a, b) => b.minOrderValue - a.minOrderValue);
+        return sorted;
+    }, [vendors, servicingIds, sortBy]);
 
     const displayName = category?.name || slug.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
 
@@ -148,29 +180,65 @@ function CategoryVendorsContent() {
                     </div>
                 )}
 
+                {/* ── SORT BAR ── */}
+                {vendors.length > 0 && (
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                        <p className="text-[12px] md:text-[13px] text-gray-500 font-semibold">
+                            {displayVendors.length} of {vendors.length} vendor{vendors.length !== 1 ? 's' : ''}
+                            {servicingIds ? ' serviceable in your pincode' : ''}
+                        </p>
+                        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                            {[
+                                { key: 'relevance', label: 'Relevance' },
+                                { key: 'rating', label: 'Top Rated' },
+                                { key: 'mov_low', label: 'MOV: Low → High' },
+                                { key: 'mov_high', label: 'MOV: High → Low' },
+                            ].map((opt) => (
+                                <button
+                                    key={opt.key}
+                                    type="button"
+                                    onClick={() => setSortBy(opt.key as typeof sortBy)}
+                                    className={cn(
+                                        'shrink-0 px-3 py-1.5 rounded-full border text-[12px] font-bold transition-all',
+                                        sortBy === opt.key
+                                            ? 'bg-[#53B175] border-[#53B175] text-white'
+                                            : 'bg-white border-gray-200 text-gray-600 hover:border-[#53B175]/40 hover:text-[#53B175]',
+                                    )}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* ── VENDOR LIST ── */}
-                {vendors.length === 0 ? (
+                {displayVendors.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-32 text-center">
                         <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                             <ShoppingBag size={32} className="text-gray-300" />
                         </div>
-                        <h3 className="text-[18px] font-black text-[#181725] mb-1">No vendors yet</h3>
-                        <p className="text-gray-400 text-[14px]">No vendors carry {displayName} products right now.</p>
+                        <h3 className="text-[18px] font-black text-[#181725] mb-1">
+                            {vendors.length > 0 && servicingIds ? `No vendors deliver to ${pincode}` : 'No vendors yet'}
+                        </h3>
+                        <p className="text-gray-400 text-[14px]">
+                            {vendors.length > 0 && servicingIds
+                                ? `None of the ${vendors.length} vendor${vendors.length !== 1 ? 's' : ''} carrying ${displayName} currently deliver to your pincode.`
+                                : `No vendors carry ${displayName} products right now.`}
+                        </p>
                         <Link href="/vendors" className="mt-4 text-[#53B175] font-bold text-[14px]">Browse all vendors</Link>
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4 pb-6">
-                        {vendors.map((vendor, index) => {
+                        {displayVendors.map((vendor, index) => {
                             const cover = VENDOR_COVERS[index % VENDOR_COVERS.length];
-                            const location = VENDOR_LOCATIONS[index % VENDOR_LOCATIONS.length];
-                            const offer = VENDOR_OFFERS[index % VENDOR_OFFERS.length];
+                            const addressLine = null; // real address not available on VendorSummary
                             return (
                                 <Link
                                     key={vendor.id}
                                     href={`/category/${vendor.slug}/${slug}`}
                                     className="bg-white rounded-[16px] border border-gray-100 overflow-hidden shadow-sm hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300 group"
                                 >
-                                    {/* Cover Image */}
                                     <div className="relative w-full h-[110px] md:h-[130px] overflow-hidden">
                                         <Image
                                             src={cover}
@@ -178,15 +246,8 @@ function CategoryVendorsContent() {
                                             fill
                                             className="object-cover group-hover:scale-105 transition-transform duration-700"
                                         />
-                                        <div className="absolute bottom-1.5 left-1.5">
-                                            <span className="inline-flex items-center gap-1 bg-[#1C8C44]/90 backdrop-blur-sm text-white text-[9px] font-bold px-2 py-0.5 rounded-md">
-                                                <span className="w-1 h-1 bg-[#4ADE80] rounded-full" />
-                                                {offer}
-                                            </span>
-                                        </div>
                                     </div>
 
-                                    {/* Info */}
                                     <div className="p-2.5 md:p-3">
                                         <div className="flex items-start justify-between gap-1 mb-1">
                                             <h3 className="text-[13px] font-extrabold text-[#181725] leading-tight group-hover:text-[#53B175] transition-colors line-clamp-1">
@@ -199,16 +260,11 @@ function CategoryVendorsContent() {
 
                                         <div className="flex items-center gap-2 text-[10px] text-gray-400 font-bold border-t border-gray-50 pt-2 mt-2">
                                             <div className="flex items-center gap-0.5">
-                                                <MapPin size={10} className="text-[#53B175]" />
-                                                {location.distance}
-                                            </div>
-                                            <span className="text-gray-200">•</span>
-                                            <div className="flex items-center gap-0.5">
                                                 <Clock size={10} className="text-[#53B175]" />
                                                 {vendor.deliveryTime}
                                             </div>
                                             <div className="ml-auto text-[#181725] font-black text-[10px]">
-                                                ₹{vendor.minOrderValue}+
+                                                MOV ₹{vendor.minOrderValue}
                                             </div>
                                         </div>
                                     </div>

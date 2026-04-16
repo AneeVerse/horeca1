@@ -10,6 +10,7 @@ import { NearbyVendors } from "@/components/features/homepage/NearbyVendors";
 import { Collections } from "@/components/features/homepage/Collections";
 import { NewsletterBanner } from "@/components/features/NewsletterBanner";
 import { CompleteProfileBanner } from "@/components/features/homepage/CompleteProfileBanner";
+import { FeaturedDeals } from "@/components/features/homepage/FeaturedDeals";
 
 export default function Home() {
   return (
@@ -28,6 +29,9 @@ export default function Home() {
 
       {/* Vendors Near You (Now Shop By Vendor) */}
       <NearbyVendors />
+
+      {/* Featured Deals: products with a real promo or MRP markdown */}
+      <FeaturedDeals />
 
       {/* Shop By Store Promo (Design 1 - green promo banner with vendor logos) */}
 

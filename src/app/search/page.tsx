@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Search, ArrowLeft, Star, Clock, CreditCard, Package, ChevronRight } from 'lucide-react';
@@ -8,12 +8,36 @@ import { dal } from '@/lib/dal';
 import type { VendorProduct, VendorSummary, Category } from '@/types';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
+import { useAddress } from '@/context/AddressContext';
+import { cn } from '@/lib/utils';
 
 function SearchPageContent() {
     const searchParams = useSearchParams();
     const initialQuery = searchParams.get('q') || '';
     const [query, setQuery] = useState(initialQuery);
     const [results, setResults] = useState<{ products: VendorProduct[]; vendors: VendorSummary[]; categories: Category[] }>({ products: [], vendors: [], categories: [] });
+    const [tab, setTab] = useState<'all' | 'vendors' | 'products'>('all');
+    const [sort, setSort] = useState<'relevance' | 'price_asc' | 'price_desc'>('relevance');
+    const [servicingIds, setServicingIds] = useState<Set<string> | null>(null);
+
+    const { selectedAddress } = useAddress();
+    const pincode = selectedAddress?.pincode;
+
+    useEffect(() => {
+        if (!pincode || !/^\d{6}$/.test(pincode)) {
+            setServicingIds(null);
+            return;
+        }
+        let cancelled = false;
+        dal.vendors
+            .checkServiceability(pincode)
+            .then((res) => {
+                if (cancelled) return;
+                setServicingIds(new Set(res.vendorIds ?? []));
+            })
+            .catch(() => { if (!cancelled) setServicingIds(null); });
+        return () => { cancelled = true; };
+    }, [pincode]);
 
     useEffect(() => {
         if (!query.trim()) {
@@ -40,7 +64,21 @@ function SearchPageContent() {
         return () => { cancelled = true; };
     }, [query]);
 
-    const hasResults = results.products.length > 0 || results.vendors.length > 0 || results.categories.length > 0;
+    const displayVendors = useMemo(
+        () => (servicingIds ? results.vendors.filter(v => servicingIds.has(v.id)) : results.vendors),
+        [results.vendors, servicingIds],
+    );
+
+    const displayProducts = useMemo(() => {
+        let list = servicingIds ? results.products.filter(p => servicingIds.has(p.vendorId)) : results.products;
+        if (sort === 'price_asc') list = [...list].sort((a, b) => a.price - b.price);
+        else if (sort === 'price_desc') list = [...list].sort((a, b) => b.price - a.price);
+        return list;
+    }, [results.products, servicingIds, sort]);
+
+    const hasResults = displayProducts.length > 0 || displayVendors.length > 0 || results.categories.length > 0;
+    const showVendors = tab === 'all' || tab === 'vendors';
+    const showProducts = tab === 'all' || tab === 'products';
 
     return (
         <div className="min-h-screen bg-gray-50/50 pb-24">
@@ -66,6 +104,43 @@ function SearchPageContent() {
                 </div>
             </div>
 
+            {query.trim() && hasResults && (
+                <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] pt-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                        {([
+                            { key: 'all', label: `All (${displayVendors.length + displayProducts.length + results.categories.length})` },
+                            { key: 'vendors', label: `Vendors (${displayVendors.length})` },
+                            { key: 'products', label: `Products (${displayProducts.length})` },
+                        ] as const).map(opt => (
+                            <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => setTab(opt.key)}
+                                className={cn(
+                                    'shrink-0 px-3 py-1.5 rounded-full border text-[12px] font-bold transition-all',
+                                    tab === opt.key
+                                        ? 'bg-[#53B175] border-[#53B175] text-white'
+                                        : 'bg-white border-gray-200 text-gray-600 hover:border-[#53B175]/40 hover:text-[#53B175]',
+                                )}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
+                    {showProducts && (
+                        <select
+                            value={sort}
+                            onChange={(e) => setSort(e.target.value as typeof sort)}
+                            className="shrink-0 px-3 py-1.5 rounded-full border border-gray-200 bg-white text-[12px] font-bold text-gray-700 focus:outline-none focus:border-[#53B175]"
+                        >
+                            <option value="relevance">Relevance</option>
+                            <option value="price_asc">Price: Low → High</option>
+                            <option value="price_desc">Price: High → Low</option>
+                        </select>
+                    )}
+                </div>
+            )}
+
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-4">
                 {!query.trim() ? (
                     <div className="text-center py-16">
@@ -81,12 +156,17 @@ function SearchPageContent() {
                     </div>
                 ) : (
                     <div className="space-y-8">
+                        {servicingIds && pincode && (
+                            <p className="text-[12px] text-gray-500 font-semibold">
+                                Filtered to vendors delivering to pincode {pincode}
+                            </p>
+                        )}
                         {/* == VENDORS BLOCK (Primary Path — shown first per V2.2) == */}
-                        {results.vendors.length > 0 && (
+                        {showVendors && displayVendors.length > 0 && (
                             <section>
                                 <h2 className="text-[15px] font-bold text-[#181725] mb-3">Vendors</h2>
                                 <div className="space-y-3">
-                                    {results.vendors.map((vendor) => {
+                                    {displayVendors.map((vendor) => {
                                         const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
                                         const categoryMatch = vendor.categories.find(c => slugify(c) === slugify(query));
                                         const vendorPath = categoryMatch 
@@ -137,14 +217,14 @@ function SearchPageContent() {
                         )}
 
                         {/* == PRODUCTS BLOCK (Quick Access — secondary per V2.2) == */}
-                        {results.products.length > 0 && (
+                        {showProducts && displayProducts.length > 0 && (
                             <section>
                                 <div className="flex items-center justify-between mb-4">
                                     <h2 className="text-[18px] font-bold text-[#181725]">Quick Access Products</h2>
                                     <span className="text-[13px] font-semibold text-gray-400">From vendors above</span>
                                 </div>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                                    {results.products.slice(0, 6).map((product) => (
+                                    {(tab === 'products' ? displayProducts : displayProducts.slice(0, 6)).map((product) => (
                                         <VendorProductCard key={product.id} product={product} />
                                     ))}
                                 </div>
@@ -152,7 +232,7 @@ function SearchPageContent() {
                         )}
 
                         {/* == CATEGORIES BLOCK == */}
-                        {results.categories.length > 0 && (
+                        {tab === 'all' && results.categories.length > 0 && (
                             <section>
                                 <h2 className="text-[15px] font-bold text-[#181725] mb-3">Categories</h2>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

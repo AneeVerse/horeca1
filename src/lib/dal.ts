@@ -100,12 +100,23 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
   const inventory = p.inventory as Record<string, unknown> | null;
   const vendor = (p.vendor as Record<string, unknown>) || vendorInfo || {};
 
+  const basePrice = Number(p.basePrice) || 0;
+  const promoPrice = p.promoPrice != null ? Number(p.promoPrice) : null;
+  const mrp = p.originalPrice != null ? Number(p.originalPrice) : null;
+  const effectivePrice = priceSlabs.length > 0
+    ? Number(priceSlabs[0].price)
+    : (promoPrice != null && promoPrice < basePrice ? promoPrice : basePrice);
+  // Strike-through shows the higher reference price (MRP wins if present, else base when promo is active).
+  const strikePrice = mrp && mrp > effectivePrice
+    ? mrp
+    : (promoPrice != null && promoPrice < basePrice ? basePrice : undefined);
+
   return {
     id: p.id as string,
     name: (p.name as string) || '',
     description: (p.description as string) || '',
-    price: priceSlabs.length > 0 ? Number(priceSlabs[0].price) : Number(p.basePrice) || 0,
-    originalPrice: Number(p.basePrice) || 0,
+    price: effectivePrice,
+    originalPrice: strikePrice,
     images: p.imageUrl ? [p.imageUrl as string] : [],
     category: (p.categoryName as string) || (p.category as Record<string, unknown>)?.name as string || '',
     packSize: (p.packSize as string) || '1 unit',
@@ -125,7 +136,7 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
     creditBadge: (p.creditEligible as boolean) || false,
     minOrderQuantity: priceSlabs.length > 0 ? Number(priceSlabs[0].minQty) : 1,
     frequentlyOrdered: false,
-    isDeal: false,
+    isDeal: strikePrice !== undefined && strikePrice > effectivePrice,
   };
 }
 
@@ -229,6 +240,20 @@ export const dal = {
     /** List all collections */
     async list() {
       return apiFetch<Array<{ id: string; name: string; slug: string; description: string; products: Record<string, unknown>[] }>>('/api/v1/collections');
+    },
+  },
+
+  products: {
+    /** Featured deals — products with a real discount (promo < base, or base < MRP). */
+    async deals(options?: { pincode?: string; limit?: number }) {
+      const params = new URLSearchParams();
+      if (options?.pincode) params.set('pincode', options.pincode);
+      if (options?.limit) params.set('limit', String(options.limit));
+      const qs = params.toString() ? `?${params}` : '';
+      const data = await apiFetch<{ products: Record<string, unknown>[] }>(`/api/v1/products/deals${qs}`);
+      return {
+        products: data.products.map((p) => toVendorProduct(p)),
+      };
     },
   },
 
