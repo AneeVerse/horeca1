@@ -176,7 +176,7 @@ export class BrandService {
         description: mp.description,
         image: mp.imageUrl,
         packSize: mp.packSize,
-        category: mp.categoryRel?.name ?? (mp as any).category ?? 'General',
+        category: mp.categoryRel?.name ?? (mp as Record<string, unknown>).category as string | undefined ?? 'General',
         distributors,
       };
     });

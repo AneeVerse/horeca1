@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ShoppingCart, Star, Store, ArrowRight, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
+import type { VendorProduct } from '@/types';
 
 interface Product {
     id: number;
@@ -74,9 +75,9 @@ export function DailyBestSells() {
     const { addToCart } = useCart();
     const [addedId, setAddedId] = React.useState<number | null>(null);
 
-    const handleAddToCart = (e: React.MouseEvent, product: any) => {
+    const handleAddToCart = (e: React.MouseEvent, product: Product) => {
         e.preventDefault();
-        addToCart(product);
+        addToCart(product as unknown as VendorProduct);
         setAddedId(product.id);
         setTimeout(() => setAddedId(null), 2000);
     };

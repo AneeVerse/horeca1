@@ -7,7 +7,7 @@ import { ArrowLeft, Search, Star, Clock, ShoppingBag } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { dal } from '@/lib/dal';
-import type { Category } from '@/types';
+import type { Category, VendorProduct } from '@/types';
 import { VENDOR_COVERS } from '@/components/features/homepage/VendorCardShared';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
@@ -32,7 +32,7 @@ function CategoryVendorsContent() {
     const [category, setCategory] = useState<Category | null>(null);
     const [allCategories, setAllCategories] = useState<Category[]>([]);
     const [vendors, setVendors] = useState<VendorSummary[]>([]);
-    const [topProducts, setTopProducts] = useState<any[]>([]);
+    const [topProducts, setTopProducts] = useState<VendorProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const [sortBy, setSortBy] = useState<'relevance' | 'rating' | 'mov_low' | 'mov_high'>('relevance');
     const [servicingIds, setServicingIds] = useState<Set<string> | null>(null);
@@ -42,12 +42,13 @@ function CategoryVendorsContent() {
 
     useEffect(() => {
         if (!slug) return;
-        setLoading(true);
 
-        Promise.all([
-            dal.categories.list(),
-            dal.search.query(slug.replace(/-/g, ' '), {}),
-        ])
+        Promise.resolve()
+            .then(() => setLoading(true))
+            .then(() => Promise.all([
+                dal.categories.list(),
+                dal.search.query(slug.replace(/-/g, ' '), {}),
+            ]))
             .then(async ([cats, searchRes]) => {
                 setAllCategories(cats);
                 setTopProducts(searchRes.products.slice(0, 6));
@@ -69,7 +70,7 @@ function CategoryVendorsContent() {
     // Pincode serviceability gate — only show vendors that deliver to the user's pincode.
     useEffect(() => {
         if (!pincode || !/^\d{6}$/.test(pincode)) {
-            setServicingIds(null);
+            Promise.resolve().then(() => setServicingIds(null));
             return;
         }
         let cancelled = false;

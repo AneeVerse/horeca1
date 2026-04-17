@@ -25,7 +25,7 @@ function SearchPageContent() {
 
     useEffect(() => {
         if (!pincode || !/^\d{6}$/.test(pincode)) {
-            setServicingIds(null);
+            Promise.resolve().then(() => setServicingIds(null));
             return;
         }
         let cancelled = false;
@@ -41,7 +41,7 @@ function SearchPageContent() {
 
     useEffect(() => {
         if (!query.trim()) {
-            setResults({ products: [], vendors: [], categories: [] });
+            Promise.resolve().then(() => setResults({ products: [], vendors: [], categories: [] }));
             return;
         }
 

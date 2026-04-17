@@ -12,7 +12,7 @@ export function QuickActions() {
     const [isMounted, setIsMounted] = useState(false);
 
     useEffect(() => {
-        setIsMounted(true);
+        queueMicrotask(() => setIsMounted(true));
     }, []);
 
     const actions = [

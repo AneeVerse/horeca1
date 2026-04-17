@@ -45,8 +45,10 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
 
     useEffect(() => {
         if (!searchQuery.trim()) {
-            setFilteredItems([]);
-            setSearchResultVendors([]);
+            queueMicrotask(() => {
+                setFilteredItems([]);
+                setSearchResultVendors([]);
+            });
             return;
         }
         const timeout = setTimeout(() => {
@@ -258,7 +260,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                                     <Search size={32} className="text-gray-400" />
                                 </div>
                                 <p className="text-[#181725] font-bold text-lg">No items found</p>
-                                <p className="text-gray-400 text-sm mt-1">Try searching for something else like "Banana" or "Ketchup"</p>
+                                <p className="text-gray-400 text-sm mt-1">Try searching for something else like &quot;Banana&quot; or &quot;Ketchup&quot;</p>
                             </div>
                         )}
                     </>
@@ -328,7 +330,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                                 <div className="bg-gray-100 p-6 rounded-3xl mb-4">
                                     <Search size={40} className="text-gray-400" />
                                 </div>
-                                <p className="text-[#181725] font-bold text-xl">No vendors matching "{searchQuery}"</p>
+                                <p className="text-[#181725] font-bold text-xl">No vendors matching &quot;{searchQuery}&quot;</p>
                                 <p className="text-gray-400 text-[15px] mt-2">Try searching for a different category or store name</p>
                             </div>
                         )}

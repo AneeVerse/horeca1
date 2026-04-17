@@ -7,7 +7,7 @@ import { adminOnly } from '@/middleware/rbac';
 import { requireAdminPerm } from '@/lib/teamPermissions';
 import { prisma } from '@/lib/prisma';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
-import { logAction } from '@/lib/auditLog';
+import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
 
 const updateSchema = z.object({
   role: z.enum(['manager', 'editor', 'viewer']),
@@ -31,8 +31,8 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
 
     await prisma.adminTeamMember.update({ where: { userId: id }, data: { role: input.role } });
 
-    await logAction(ctx, req, {
-      action: 'admin_team.role_change',
+    logAction(ctx, req, {
+      action: AUDIT_ACTIONS.adminTeamRoleChange,
       entity: 'AdminTeamMember',
       entityId: id,
       before: { role: member.role },
@@ -55,8 +55,8 @@ export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
 
     await prisma.adminTeamMember.delete({ where: { userId: id } });
 
-    await logAction(ctx, req, {
-      action: 'admin_team.remove',
+    logAction(ctx, req, {
+      action: AUDIT_ACTIONS.adminTeamRemove,
       entity: 'AdminTeamMember',
       entityId: id,
       before: { role: member.role },

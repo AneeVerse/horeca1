@@ -68,11 +68,14 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
     // Update userData when session loads
     useEffect(() => {
         if (session?.user) {
-            setUserData(prev => ({
-                ...prev,
-                fullName: session.user?.name || 'Guest User',
-                email: session.user?.email || '',
-            }));
+            const newFullName = session.user?.name || 'Guest User';
+            const newEmail = session.user?.email || '';
+            queueMicrotask(() =>
+                setUserData(prev => {
+                    if (prev.fullName === newFullName && prev.email === newEmail) return prev;
+                    return { ...prev, fullName: newFullName, email: newEmail };
+                })
+            );
         }
     }, [session]);
 

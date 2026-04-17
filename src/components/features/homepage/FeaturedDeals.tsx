@@ -17,7 +17,7 @@ export function FeaturedDeals() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    queueMicrotask(() => setLoading(true));
     const validPincode = pincode && /^\d{6}$/.test(pincode) ? pincode : undefined;
     dal.products
       .deals({ pincode: validPincode, limit: 12 })

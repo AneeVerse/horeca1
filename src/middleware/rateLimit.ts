@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { redis } from '@/lib/redis';
+import { getClientIp } from '@/lib/utils';
 
 interface RateLimitConfig {
   maxRequests: number;
@@ -14,8 +15,7 @@ export async function rateLimit(
 ): Promise<{ allowed: boolean; remaining: number; resetMs: number }> {
   const { maxRequests, windowMs, keyPrefix = 'rl' } = config;
 
-  // Key based on IP or user ID
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+  const ip = getClientIp(req);
   const key = `${keyPrefix}:${ip}`;
   const now = Date.now();
   const windowStart = now - windowMs;

@@ -74,3 +74,8 @@ export function truncateText(text: string, maxLength: number): string {
  */
 export const isClient = typeof window !== 'undefined';
 export const isServer = typeof window === 'undefined';
+
+/** Extract the real client IP from a Next.js request, handling proxies. */
+export function getClientIp(req: { headers: { get(name: string): string | null } }): string {
+    return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+}

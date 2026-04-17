@@ -107,7 +107,10 @@ export default function OrderDetailPage() {
         if (sessionStatus !== 'authenticated') return;
         setLoading(true);
         dal.orders.getById(orderId)
-            .then((result: any) => setOrder(result.data ?? result))
+            .then((result: unknown) => {
+                const r = result as { data?: ApiOrder } & ApiOrder;
+                setOrder(r.data ?? r);
+            })
             .catch(() => { toast.error('Order not found'); router.push('/orders'); })
             .finally(() => setLoading(false));
     }, [orderId, sessionStatus]);
@@ -115,8 +118,8 @@ export default function OrderDetailPage() {
     React.useEffect(() => {
         if (sessionStatus !== 'authenticated') return;
         dal.vendors.list()
-            .then(r => Promise.all(r.vendors.map((v: any) =>
-                dal.vendors.getProducts(v.id).then((r2: any) => r2.products).catch(() => [] as VendorProduct[])
+            .then(r => Promise.all(r.vendors.map((v: { id: string }) =>
+                dal.vendors.getProducts(v.id).then((r2: { products: VendorProduct[] }) => r2.products).catch(() => [] as VendorProduct[])
             )))
             .then((arrays: VendorProduct[][]) => setAllProducts(arrays.flat()))
             .catch(() => {});

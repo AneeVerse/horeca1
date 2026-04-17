@@ -18,7 +18,7 @@ export interface Vendor {
     creditEnabled: boolean;
     creditAmount?: number;
     categories: string[];     // categories this vendor sells
-    catalog?: any[];          // Full category & product structure
+    catalog?: Record<string, unknown>[];          // Full category & product structure
     address?: Address;
     isActive: boolean;
     description?: string;

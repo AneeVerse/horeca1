@@ -48,7 +48,7 @@ export default function AlternateVendorsStrip({ productId }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    queueMicrotask(() => setLoading(true));
     fetch(`/api/v1/products/${productId}/alternates`)
       .then(r => r.json() as Promise<ApiResponse>)
       .then(json => {

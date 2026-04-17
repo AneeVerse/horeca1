@@ -10,7 +10,7 @@ import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
 import { requireAdminPerm } from '@/lib/teamPermissions';
-import { logAction } from '@/lib/auditLog';
+import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
 
 // Helper: extract the [id] segment from /api/v1/admin/vendors/{id}
 function extractId(req: NextRequest): string {
@@ -156,8 +156,8 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       });
     }
 
-    await logAction(ctx, req, {
-      action: allowedFields.isVerified === true ? 'vendor.approve' : 'vendor.update',
+    logAction(ctx, req, {
+      action: allowedFields.isVerified === true ? AUDIT_ACTIONS.vendorApprove : AUDIT_ACTIONS.vendorUpdate,
       entity: 'Vendor',
       entityId: id,
       before: { isVerified: existing.isVerified },

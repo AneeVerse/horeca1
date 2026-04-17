@@ -308,7 +308,7 @@ export function BrandStore({ brandId }: BrandStoreProps) {
     // Try real API; fall back to mock data silently
     useEffect(() => {
         if (BRAND_DATA[brandId]) return; // mock data covers this brand
-        setLoading(true);
+        queueMicrotask(() => setLoading(true));
         fetch(`/api/v1/brands/${brandId}`)
             .then(r => r.json())
             .then(json => {
@@ -320,13 +320,13 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                         name: d.name,
                         bannerImage: d.banner ?? '',
                         tagline: d.tagline ?? '',
-                        products: d.products.map((p: any) => ({
+                        products: d.products.map((p: { id: string; name: string; image?: string; category: string }) => ({
                             id: p.id,
                             name: p.name,
                             image: p.image ?? '',
                             category: p.category,
                         })),
-                        vendors: d.vendors.map((v: any) => ({
+                        vendors: d.vendors.map((v: { id: string; name: string; logo?: string; pincodes?: string[]; productIds: string[]; prices: Record<string, string> }) => ({
                             id: v.id,
                             name: v.name,
                             logo: v.logo ?? '',
@@ -340,6 +340,16 @@ export function BrandStore({ brandId }: BrandStoreProps) {
             .catch(() => {/* stay null, show not-found */})
             .finally(() => setLoading(false));
     }, [brandId]);
+
+    // Must be before early returns (hook rules)
+    const filteredProducts = useMemo(() => {
+        if (!brand) return [];
+        if (!searchQuery.trim()) return brand.products;
+        const q = searchQuery.toLowerCase();
+        return brand.products.filter(
+            (p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
+        );
+    }, [brand, searchQuery]);
 
     if (loading) {
         return (
@@ -378,14 +388,6 @@ export function BrandStore({ brandId }: BrandStoreProps) {
     const vendorsForProduct = selectedProduct
         ? brand.vendors.filter((v) => v.productIds.includes(selectedProduct.id))
         : brand.vendors;
-
-    const filteredProducts = useMemo(() => {
-        if (!searchQuery.trim()) return brand.products;
-        const q = searchQuery.toLowerCase();
-        return brand.products.filter(
-            (p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
-        );
-    }, [brand.products, searchQuery]);
 
     const fallbackSvg = (size: number) =>
         `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}"%3E%3Crect fill="%23f5f5f5" width="${size}" height="${size}"/%3E%3C/svg%3E`;

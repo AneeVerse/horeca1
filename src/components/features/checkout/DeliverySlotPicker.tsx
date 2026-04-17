@@ -31,7 +31,7 @@ export function DeliverySlotPicker({ vendorId, selectedSlotId, onChange }: Deliv
 
     useEffect(() => {
         let cancelled = false;
-        setLoading(true);
+        queueMicrotask(() => setLoading(true));
         fetch(`/api/v1/vendors/${vendorId}/delivery-slots?days=3`)
             .then(r => r.json())
             .then(json => {

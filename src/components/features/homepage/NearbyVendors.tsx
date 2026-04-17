@@ -100,7 +100,7 @@ export function NearbyVendors() {
     // If pincode is unknown, render the full list (no gate).
     useEffect(() => {
         if (!pincode || !/^\d{6}$/.test(pincode)) {
-            setServicingIds(null);
+            queueMicrotask(() => setServicingIds(null));
             return;
         }
         let cancelled = false;

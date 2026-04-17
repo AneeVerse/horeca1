@@ -92,7 +92,7 @@ export default function VendorDashboardPage() {
     };
 
     useEffect(() => {
-        fetchDashboard();
+        Promise.resolve().then(() => fetchDashboard());
     }, []);
 
     const statCards = data ? [

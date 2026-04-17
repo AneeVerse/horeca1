@@ -5,8 +5,19 @@ import Link from 'next/link';
 import { ChevronRight, Plus, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
+import type { VendorProduct } from '@/types';
 
-const FLASH_SALE_PRODUCTS = [
+interface FlashSaleProduct {
+    id: number;
+    name: string;
+    weight: string;
+    price: number;
+    originalPrice: number;
+    discount: number;
+    image: string;
+}
+
+const FLASH_SALE_PRODUCTS: FlashSaleProduct[] = [
     {
         id: 1,
         name: 'Chicken breast frozen',
@@ -67,10 +78,10 @@ export function FlashSaleBanner() {
     const { addToCart } = useCart();
     const [addedId, setAddedId] = React.useState<number | null>(null);
 
-    const handleAddToCart = (e: React.MouseEvent, product: any) => {
+    const handleAddToCart = (e: React.MouseEvent, product: FlashSaleProduct) => {
         e.preventDefault();
         e.stopPropagation();
-        addToCart(product);
+        addToCart(product as unknown as VendorProduct);
         setAddedId(product.id);
         setTimeout(() => setAddedId(null), 2000);
     };

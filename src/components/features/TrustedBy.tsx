@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect } from 'react';
 
 export function TrustedBy() {
     // Each logo gets a tailored container (w × h) so they all look
@@ -21,23 +21,22 @@ export function TrustedBy() {
     const firstSetRef = useRef<HTMLDivElement>(null);
     const offsetRef = useRef(0);
     const rafRef = useRef<number>(0);
-    const speed = 0.3;
-
-    const animate = useCallback(() => {
-        if (!scrollRef.current || !firstSetRef.current) return;
-        const firstSetWidth = firstSetRef.current.offsetWidth;
-        offsetRef.current -= speed;
-        if (Math.abs(offsetRef.current) >= firstSetWidth) {
-            offsetRef.current += firstSetWidth;
-        }
-        scrollRef.current.style.transform = `translateX(${offsetRef.current}px)`;
-        rafRef.current = requestAnimationFrame(animate);
-    }, []);
 
     useEffect(() => {
+        const speed = 0.3;
+        const animate = () => {
+            if (!scrollRef.current || !firstSetRef.current) return;
+            const firstSetWidth = firstSetRef.current.offsetWidth;
+            offsetRef.current -= speed;
+            if (Math.abs(offsetRef.current) >= firstSetWidth) {
+                offsetRef.current += firstSetWidth;
+            }
+            scrollRef.current.style.transform = `translateX(${offsetRef.current}px)`;
+            rafRef.current = requestAnimationFrame(animate);
+        };
         rafRef.current = requestAnimationFrame(animate);
         return () => cancelAnimationFrame(rafRef.current);
-    }, [animate]);
+    }, []);
 
     const LogoItem = ({ logo }: { logo: typeof logos[0] }) => (
         <div className={`flex-shrink-0 ${logo.cls} flex items-center justify-center mx-3 md:mx-5`}>

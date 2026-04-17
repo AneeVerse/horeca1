@@ -11,14 +11,14 @@ import { SearchService } from '@/modules/catalog/search.service';
 import { searchProductsSchema } from '@/modules/catalog/catalog.validator';
 import { errorResponse } from '@/middleware/errorHandler';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { getClientIp } from '@/lib/utils';
 
 const searchService = new SearchService();
 
 export async function GET(req: NextRequest) {
   try {
     // Rate limit: 30 searches per IP per minute
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
-    const { allowed } = await checkRateLimit(`search:${ip}`, 30, 60000);
+    const { allowed } = await checkRateLimit(`search:${getClientIp(req)}`, 30, 60000);
     if (!allowed) {
       return NextResponse.json(
         { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests. Try again later.' } },

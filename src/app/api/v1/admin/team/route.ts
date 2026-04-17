@@ -9,7 +9,7 @@ import { requireAdminPerm } from '@/lib/teamPermissions';
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
 import type { AuthContext } from '@/middleware/auth';
-import { logAction } from '@/lib/auditLog';
+import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
 
 const createMemberSchema = z.object({
   fullName: z.string().min(2).max(100),
@@ -74,8 +74,8 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
     return { member, user };
   });
 
-  await logAction(ctx, req, {
-    action: 'admin_team.invite',
+  logAction(ctx, req, {
+    action: AUDIT_ACTIONS.adminTeamInvite,
     entity: 'AdminTeamMember',
     entityId: result.user.id,
     after: { email: result.user.email, role: result.member.role },

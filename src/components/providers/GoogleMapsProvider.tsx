@@ -28,7 +28,7 @@ export function GoogleMapsProvider({ children }: { children: React.ReactNode }) 
         const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
         if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
-            setLoadError('Google Maps API key not configured. Add it to .env.local');
+            queueMicrotask(() => setLoadError('Google Maps API key not configured. Add it to .env.local'));
             return;
         }
 

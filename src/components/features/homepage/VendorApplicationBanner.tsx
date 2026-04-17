@@ -37,9 +37,9 @@ export function VendorApplicationBanner() {
     if (appStatus.status === 'pending') {
       // Reset approved-seen flag when back to pending (revoked then re-approved case)
       localStorage.removeItem('vendor_approved_seen');
-      if (sessionStorage.getItem('vendor_banner_pending_dismissed')) setDismissed(true);
+      if (sessionStorage.getItem('vendor_banner_pending_dismissed')) queueMicrotask(() => setDismissed(true));
     } else if (appStatus.status === 'approved') {
-      if (localStorage.getItem('vendor_approved_seen')) setDismissed(true);
+      if (localStorage.getItem('vendor_approved_seen')) queueMicrotask(() => setDismissed(true));
     }
   }, [appStatus]);
 
@@ -54,7 +54,7 @@ export function VendorApplicationBanner() {
   useEffect(() => {
     if (appStatus?.status === 'approved' && pathname?.startsWith('/vendor/dashboard')) {
       localStorage.setItem('vendor_approved_seen', '1');
-      setDismissed(true);
+      queueMicrotask(() => setDismissed(true));
     }
   }, [pathname, appStatus]);
 

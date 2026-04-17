@@ -62,18 +62,20 @@ export function useGooglePlacesAutocomplete(
     // Debounced search
     useEffect(() => {
         if (!isLoaded || !google || !serviceRef.current) {
-            setPredictions([]);
+            queueMicrotask(() => setPredictions([]));
             return;
         }
 
         if (!query || query.trim().length < 2) {
-            setPredictions([]);
-            setIsSearching(false);
+            queueMicrotask(() => {
+                setPredictions([]);
+                setIsSearching(false);
+            });
             return;
         }
 
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-        setIsSearching(true);
+        queueMicrotask(() => setIsSearching(true));
 
         debounceTimerRef.current = setTimeout(async () => {
             try {

@@ -10,7 +10,7 @@ import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
 import { requireAdminPerm } from '@/lib/teamPermissions';
-import { logAction } from '@/lib/auditLog';
+import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
 
 // Helper: extract the [id] segment from /api/v1/admin/products/{id}/approval
 function extractId(req: NextRequest): string {
@@ -59,8 +59,8 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
         });
       }
 
-      await logAction(ctx, req, {
-        action: 'product.approve',
+      logAction(ctx, req, {
+        action: AUDIT_ACTIONS.productApprove,
         entity: 'Product',
         entityId: id,
         after: { approvalStatus: 'approved', note: note ?? null },
@@ -91,8 +91,8 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       });
     }
 
-    await logAction(ctx, req, {
-      action: 'product.reject',
+    logAction(ctx, req, {
+      action: AUDIT_ACTIONS.productReject,
       entity: 'Product',
       entityId: id,
       after: { approvalStatus: 'rejected', note: note ?? null },

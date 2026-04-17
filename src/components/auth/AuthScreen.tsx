@@ -367,8 +367,9 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
                                 <input
                                     type="tel"
                                     value={phoneNumber}
-                                    onChange={(e) => { setPhoneNumber(e.target.value); if (errors.phone) setErrors(prev => ({ ...prev, phone: '' })); }}
+                                    onChange={(e) => { setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10)); if (errors.phone) setErrors(prev => ({ ...prev, phone: '' })); }}
                                     placeholder="10 digit mobile number"
+                                    inputMode="numeric"
                                     maxLength={10}
                                     className={cn("w-full px-4 py-2.5 md:py-2 bg-white border rounded-lg text-[14px] outline-none transition-colors", errors.phone ? "border-red-500" : "border-gray-200 focus:border-[#53B175]")}
                                 />

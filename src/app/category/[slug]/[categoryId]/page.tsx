@@ -29,7 +29,6 @@ function VendorCategoryPageContent() {
     // Fetch vendor + products + categories in one chain — loading stays true until ALL data is ready
     useEffect(() => {
         if (!slug) return;
-        setLoading(true);
 
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
 
@@ -45,7 +44,9 @@ function VendorCategoryPageContent() {
                 return found;
             });
 
-        Promise.all([findVendor, dal.categories.list()])
+        Promise.resolve()
+            .then(() => setLoading(true))
+            .then(() => Promise.all([findVendor, dal.categories.list()]))
             .then(async ([v, cats]) => {
                 setVendor(v);
                 setCategories(cats);

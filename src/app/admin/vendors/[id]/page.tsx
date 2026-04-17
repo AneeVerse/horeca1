@@ -151,8 +151,8 @@ export default function VendorDetailsPage() {
                 throw new Error(json.message || 'Failed to fetch vendor');
             }
             setVendor(json.data);
-        } catch (err: any) {
-            setError(err.message || 'Something went wrong');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Something went wrong');
         } finally {
             setLoading(false);
         }
@@ -183,8 +183,8 @@ export default function VendorDetailsPage() {
                 // Refetch to get the latest state
                 await fetchVendor();
             }
-        } catch (err: any) {
-            toast.error(err.message || 'Failed to toggle verification');
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Failed to toggle verification');
         } finally {
             setTogglingVerification(false);
         }

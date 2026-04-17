@@ -134,7 +134,8 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
     // ── PREVIEW MODE ──
     if (mode === 'preview') {
       const items: PreviewItem[] = [];
-      let creates = 0, updates = 0, skips = 0;
+      let creates = 0, updates = 0;
+      const skips = 0;
 
       rows.forEach((r, idx) => {
         const rowNum = idx + 2;

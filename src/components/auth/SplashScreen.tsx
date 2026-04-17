@@ -12,7 +12,7 @@ export function SplashScreen() {
         const hasShownSplash = sessionStorage.getItem('hasShownSplash');
 
         if (!hasShownSplash) {
-            setIsVisible(true);
+            queueMicrotask(() => setIsVisible(true));
 
             // Start fade out after 2 seconds
             const timer = setTimeout(() => {
