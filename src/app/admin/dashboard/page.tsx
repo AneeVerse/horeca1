@@ -61,7 +61,7 @@ const formatYAxis = (value: number) => {
 };
 
 /* Custom rounded bar shape with gradient fill */
-const RoundedBar = (props: any) => {
+const RoundedBar = (props: Record<string, number>) => {
     const { x, y, width, height } = props;
     const radius = 5;
     if (height <= 0) return null;
@@ -82,7 +82,7 @@ const RoundedBar = (props: any) => {
 };
 
 /* Custom tooltip */
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
     if (active && payload && payload.length) {
         return (
             <div className="bg-white border border-[#EEEEEE] rounded-xl shadow-lg px-4 py-3">
@@ -190,7 +190,7 @@ export default function DashboardPage() {
                                     tick={{ fontSize: 11, fill: '#7C7C7C', fontWeight: 500 }}
                                     width={40}
                                 />
-                                <Tooltip formatter={(val: any) => [val, 'Orders']} />
+                                <Tooltip formatter={(val) => [val, 'Orders']} />
                                 <Area
                                     type="monotone"
                                     dataKey="value"

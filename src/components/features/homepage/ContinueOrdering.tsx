@@ -207,7 +207,7 @@ export function ContinueOrdering() {
     const [isMounted, setIsMounted] = useState(false);
     const [cards, setCards] = useState<ContinueCard[]>([]);
     const [vendors, setVendors] = useState<Vendor[]>([]);
-    const [orderLists, setOrderLists] = useState<any[]>([]);
+    const [orderLists, setOrderLists] = useState<Record<string, unknown>[]>([]);
     const { groups: cartGroups, totalItems: cartTotalItems } = useCart();
     const pathname = usePathname(); // Re-runs buildCards on every route change
 
@@ -235,7 +235,7 @@ export function ContinueOrdering() {
     };
 
     useEffect(() => {
-        setIsMounted(true);
+        Promise.resolve().then(() => setIsMounted(true));
     }, []);
 
     // Fetch vendors and order lists from the DAL
@@ -247,7 +247,7 @@ export function ContinueOrdering() {
             .catch(() => setVendors([]));
 
         dal.lists.getAll()
-            .then((res) => setOrderLists(res as any[]))
+            .then((res) => setOrderLists(res as Record<string, unknown>[]))
             .catch(() => setOrderLists([]));
     }, [isMounted, isLoggedIn]);
 
@@ -299,17 +299,17 @@ export function ContinueOrdering() {
             try {
                 const savedOrders = localStorage.getItem('horeca_orders');
                 if (savedOrders) {
-                    const orders = JSON.parse(savedOrders);
+                    type ParsedOrder = { id: string; vendorId: string; vendorName?: string; vendorLogo?: string; createdAt: string };
+                    const orders: ParsedOrder[] = JSON.parse(savedOrders);
                     // Sort by createdAt desc
                     orders
-                        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                        .forEach((order: any) => {
+                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                        .forEach((order) => {
                             const vendorId = order.vendorId;
                             if (!vendorId || seenVendors.has(vendorId)) return;
                             seenVendors.add(vendorId);
 
                             const vendor = vendors.find(v => v.id === vendorId);
-                            const orderDate = new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
                             allCards.push({
                                 id: `order-${order.id}`,
@@ -333,12 +333,12 @@ export function ContinueOrdering() {
             try {
                 // Merge DAL-fetched lists with any saved in localStorage
                 const savedLists = localStorage.getItem('horeca_order_lists_all');
-                let mergedLists: any[] = [...orderLists];
+                const mergedLists: Record<string, unknown>[] = [...orderLists];
 
                 if (savedLists) {
-                    const parsed = JSON.parse(savedLists);
-                    parsed.forEach((localList: any) => {
-                        if (!mergedLists.find((l: any) => l.id === localList.id)) {
+                    const parsed: Record<string, unknown>[] = JSON.parse(savedLists);
+                    parsed.forEach((localList) => {
+                        if (!mergedLists.find((l) => l.id === localList.id)) {
                             mergedLists.push(localList);
                         }
                     });
@@ -348,10 +348,11 @@ export function ContinueOrdering() {
                     localStorage.setItem('horeca_order_lists_all', JSON.stringify(mergedLists));
                 }
 
-                mergedLists
-                    .filter((list: any) => !!list.lastUsed)
-                    .sort((a: any, b: any) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime())
-                    .forEach((list: any) => {
+                type ParsedList = { id: string; lastUsed?: string; vendorId?: string; vendorName?: string; vendorLogo?: string; name?: string; items: Array<{ product?: { vendorId?: string } }> };
+                (mergedLists as ParsedList[])
+                    .filter((list) => !!list.lastUsed)
+                    .sort((a, b) => new Date(b.lastUsed!).getTime() - new Date(a.lastUsed!).getTime())
+                    .forEach((list) => {
                         const vendorId = list.vendorId;
                         if (!vendorId || seenVendors.has(vendorId)) return;
                         seenVendors.add(vendorId);
@@ -361,7 +362,7 @@ export function ContinueOrdering() {
                         // Check if list has products from multiple vendors
                         const listVendorIds = new Set<string>();
                         if (list.items) {
-                            list.items.forEach((item: any) => {
+                            list.items.forEach((item) => {
                                 const vid = item.product?.vendorId || list.vendorId || vendorId;
                                 if (vid) listVendorIds.add(vid);
                             });
@@ -385,11 +386,11 @@ export function ContinueOrdering() {
                             vendorLogo: list.vendorLogo || vendor?.logo || '',
                             vendorLogos: logos.length > 1 ? logos : undefined,
                             subtitle: `${list.name} • ${list.items.length} items`,
-                            subtitle2: `Used ${getRelativeTime(new Date(list.lastUsed).getTime())}`,
+                            subtitle2: `Used ${getRelativeTime(new Date(list.lastUsed!).getTime())}`,
                             subtitleIcon: 'list',
                             href: `/order-lists/${list.id}`,
                             priority: 3,
-                            timestamp: new Date(list.lastUsed).getTime(),
+                            timestamp: new Date(list.lastUsed!).getTime(),
                         });
                     });
             } catch (e) {
@@ -402,8 +403,9 @@ export function ContinueOrdering() {
             try {
                 const savedViewed = localStorage.getItem('horeca_recently_viewed');
                 if (savedViewed) {
-                    const viewedEntries = JSON.parse(savedViewed);
-                    viewedEntries.forEach((entry: any) => {
+                    type ViewedEntry = { vendorId?: string; vendorName?: string; vendorLogo?: string; viewedAt?: number; viewedProducts?: Array<{ name: string }> };
+                    const viewedEntries: ViewedEntry[] = JSON.parse(savedViewed);
+                    viewedEntries.forEach((entry) => {
                         const vendorId = entry.vendorId;
                         if (!vendorId) return;
 
@@ -430,8 +432,8 @@ export function ContinueOrdering() {
                                 existing.href = products.length > 0 
                                     ? `/recently-viewed/${entry.vendorId}` 
                                     : `/vendor/${entry.vendorId}`;
-                                if (entry.viewedAt > existing.timestamp) {
-                                    existing.timestamp = entry.viewedAt;
+                                if ((entry.viewedAt ?? 0) > existing.timestamp) {
+                                    existing.timestamp = entry.viewedAt ?? 0;
                                 }
                             }
                         } else {

@@ -43,8 +43,8 @@ export default function OrderListDetailPage() {
         const saved = localStorage.getItem('horeca_order_lists_all');
         if (saved) {
             try {
-                const parsed = JSON.parse(saved);
-                found = parsed.find((l: any) => l.id === listId);
+                const parsed: OrderList[] = JSON.parse(saved);
+                found = parsed.find((l) => l.id === listId) ?? null;
             } catch (e) {
                 console.error('Failed to parse lists', e);
             }
@@ -53,10 +53,11 @@ export default function OrderListDetailPage() {
         // 2. Check DAL - FALLBACK
         if (!found) {
             dal.lists.getById(listId)
-                .then((list: any) => {
-                    if (list) {
-                        setOrderList(list);
-                        setQuantities(Object.fromEntries((list.items || []).map((item: any) => [item.productId, 0])));
+                .then((list) => {
+                    const typedList = list as OrderList | null;
+                    if (typedList) {
+                        setOrderList(typedList);
+                        setQuantities(Object.fromEntries((typedList.items || []).map((item) => [item.productId, 0])));
                     }
                     setIsLoading(false);
                 })
@@ -131,8 +132,8 @@ export default function OrderListDetailPage() {
             const saved = localStorage.getItem('horeca_order_lists_all');
             if (saved) {
                 try {
-                    const parsed = JSON.parse(saved);
-                    const updated = parsed.map((l: any) => 
+                    const parsed: OrderList[] = JSON.parse(saved);
+                    const updated = parsed.map((l) =>
                         l.id === orderList.id ? { ...l, lastUsed: new Date() } : l
                     );
                     localStorage.setItem('horeca_order_lists_all', JSON.stringify(updated));

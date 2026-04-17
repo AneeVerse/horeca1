@@ -82,6 +82,7 @@ export default function ShipmentDetailPage() {
     const handleProceedToPay = () => {
         // Create order for only this vendor's items
         const newOrder = {
+            // eslint-disable-next-line react-hooks/purity
             id: `ORD-${Date.now()}-${shipment.vendorId}`,
             status: 'Order Placed',
             date: `Placed at ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
@@ -152,7 +153,7 @@ export default function ShipmentDetailPage() {
                 <div className="w-full h-[12px] bg-[#53B175] fixed top-0" />
                 <img src="/images/empty-cart.png" alt="Empty Cart" className="w-[180px] mb-8 opacity-20" />
                 <h2 className="text-[20px] font-bold text-[#181725] mb-2">No items in this shipment</h2>
-                <p className="text-[#7C7C7C] text-center mb-8">This vendor's shipment is empty. Start adding some products!</p>
+                <p className="text-[#7C7C7C] text-center mb-8">This vendor&apos;s shipment is empty. Start adding some products!</p>
                 <button onClick={() => router.push('/')} className="bg-[#53B175] text-white px-12 py-4 rounded-xl font-bold hover:bg-[#48a068] transition-colors">
                     Start Shopping
                 </button>

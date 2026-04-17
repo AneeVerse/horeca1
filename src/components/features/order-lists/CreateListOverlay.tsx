@@ -52,9 +52,9 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
     useEffect(() => {
         if (isOpen) {
             if (initialData) {
-                setListName(initialData.name);
+                Promise.resolve().then(() => setListName(initialData.name));
                 const qtys = Object.fromEntries(initialData.items.map(i => [i.productId, i.defaultQty]));
-                setSelectedItems(qtys);
+                Promise.resolve().then(() => setSelectedItems(qtys));
                 // Build vendor map from existing items (VendorProduct has vendorId)
                 const vmap: Record<string, string> = {};
                 initialData.items.forEach(item => {
@@ -62,21 +62,25 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                         vmap[item.productId] = item.product.vendorId;
                     }
                 });
-                setItemVendorMap(vmap);
+                Promise.resolve().then(() => setItemVendorMap(vmap));
                 // Start on first vendor from items
                 const firstVendorId = initialData.items[0]?.product?.vendorId;
                 const firstVendor = firstVendorId ? dalVendors.find(v => v.id === firstVendorId) : null;
-                setActiveVendor(firstVendor || dalVendors[0] || null);
-                setStep('items');
+                Promise.resolve().then(() => setActiveVendor(firstVendor || dalVendors[0] || null));
+                Promise.resolve().then(() => setStep('items'));
             } else {
-                setStep('name');
-                setListName('');
-                setActiveVendor(dalVendors[0] || null);
-                setSelectedItems({});
-                setItemVendorMap({});
+                Promise.resolve().then(() => {
+                    setStep('name');
+                    setListName('');
+                    setActiveVendor(dalVendors[0] || null);
+                    setSelectedItems({});
+                    setItemVendorMap({});
+                });
             }
-            setSearchQuery('');
-            setShowVendorPicker(false);
+            Promise.resolve().then(() => {
+                setSearchQuery('');
+                setShowVendorPicker(false);
+            });
         }
     }, [isOpen, initialData, dalVendors]);
 
@@ -195,7 +199,7 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                     {step === 'name' && (
                         <div className="space-y-4">
                             <p className="text-[14px] text-gray-500 font-medium leading-relaxed">
-                                Give your order list a name like "Weekly Dairy" or "Monthly Staples" to find it easily later.
+                                Give your order list a name like &quot;Weekly Dairy&quot; or &quot;Monthly Staples&quot; to find it easily later.
                             </p>
                             <div className="space-y-2">
                                 <label className="text-[12px] font-bold text-gray-400 uppercase tracking-wider ml-1">List Name</label>

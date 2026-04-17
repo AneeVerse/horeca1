@@ -23,7 +23,7 @@ export default function UnderConstructionPage() {
                         Under Construction
                     </h1>
                     <p className="text-[14px] md:text-[16px] text-gray-500 font-medium mb-10 leading-relaxed max-w-[400px] mx-auto">
-                        We're currently working hard to bring you something amazing. This page will be live very soon!
+                        We&apos;re currently working hard to bring you something amazing. This page will be live very soon!
                     </p>
 
                     {/* Action Buttons */}

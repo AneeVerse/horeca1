@@ -56,13 +56,13 @@ export default function OrderListsPage() {
         const savedAll = localStorage.getItem('horeca_order_lists_all');
         if (savedAll) {
             try {
-                const parsed = JSON.parse(savedAll);
-                setAllLists(parsed.map((l: any) => ({
+                const parsed: Array<Record<string, unknown>> = JSON.parse(savedAll);
+                setAllLists(parsed.map((l) => ({
                     ...l,
-                    createdAt: new Date(l.createdAt),
-                    updatedAt: new Date(l.updatedAt),
-                    lastUsed: l.lastUsed ? new Date(l.lastUsed) : undefined
-                })));
+                    createdAt: new Date(l.createdAt as string),
+                    updatedAt: new Date(l.updatedAt as string),
+                    lastUsed: l.lastUsed ? new Date(l.lastUsed as string) : undefined
+                } as OrderList)));
                 return;
             } catch (e) {
                 console.error('Failed to parse all lists', e);
@@ -72,12 +72,12 @@ export default function OrderListsPage() {
         // Fetch from DAL if no localStorage data
         dal.lists.getAll()
             .then(lists => {
-                const parsed = (lists as any[]).map((l: any) => ({
+                const parsed = (lists as Array<Record<string, unknown>>).map((l) => ({
                     ...l,
-                    createdAt: new Date(l.createdAt),
-                    updatedAt: new Date(l.updatedAt),
-                    lastUsed: l.lastUsed ? new Date(l.lastUsed) : undefined
-                }));
+                    createdAt: new Date(l.createdAt as string),
+                    updatedAt: new Date(l.updatedAt as string),
+                    lastUsed: l.lastUsed ? new Date(l.lastUsed as string) : undefined
+                } as OrderList));
                 setAllLists(parsed);
                 localStorage.setItem('horeca_order_lists_all', JSON.stringify(parsed));
             })
@@ -440,7 +440,7 @@ export default function OrderListsPage() {
                             </div>
                             <h3 className="text-[20px] font-black text-[#181725] mb-2">Delete this list?</h3>
                             <p className="text-[14px] text-gray-400 font-medium leading-relaxed">
-                                Are you sure you want to delete <span className="text-[#181725] font-bold">"{allLists.find(l => l.id === listToDelete)?.name}"</span>? 
+                                Are you sure you want to delete <span className="text-[#181725] font-bold">&quot;{allLists.find(l => l.id === listToDelete)?.name}&quot;</span>?
                                 This action cannot be undone.
                             </p>
                         </div>

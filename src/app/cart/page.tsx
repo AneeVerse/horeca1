@@ -81,9 +81,11 @@ export default function CartPage() {
     };
     const isVendorExpanded = (vendorId: string) => expandedVendors[vendorId] !== false;
 
+    type ShipmentItem = { id: string; name: string; size: string; pcs: number; price: number; image: string; minQty: number; tierLabel: string | null };
+
     const shipments = useMemo(() => {
         if (cart.length === 0) return [];
-        const grouped: Record<string, { vendor: string, vendorId: string, items: any[] }> = {};
+        const grouped: Record<string, { vendor: string, vendorId: string, items: ShipmentItem[] }> = {};
         cart.forEach(item => {
             const vId = item.product.vendorId || 'general';
             const vName = item.product.vendorName || 'General Store';
@@ -114,8 +116,8 @@ export default function CartPage() {
         }));
     }, [cart]);
 
-    const getShipmentTotal = (items: any[]) => items.reduce((sum, item) => sum + item.price * item.pcs, 0);
-    const getShipmentItemCount = (items: any[]) => items.reduce((sum, item) => sum + item.pcs, 0);
+    const getShipmentTotal = (items: {price: number; pcs: number}[]) => items.reduce((sum, item) => sum + item.price * item.pcs, 0);
+    const getShipmentItemCount = (items: {pcs: number}[]) => items.reduce((sum, item) => sum + item.pcs, 0);
 
     const itemTaxable = totalTaxable;  // taxable value (ex-GST)
     const itemGST = totalGST;          // GST portion extracted from gross
@@ -262,8 +264,8 @@ export default function CartPage() {
 
             clearCart();
             setScreen('success');
-        } catch (err: any) {
-            setOrderError(err?.message || 'Order failed. Please try again.');
+        } catch (err: unknown) {
+            setOrderError(err instanceof Error ? err.message : 'Order failed. Please try again.');
         } finally {
             setIsPlacingOrder(false);
         }
@@ -305,7 +307,7 @@ export default function CartPage() {
                         <div className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
                             <div className="px-5 md:px-7 py-5 border-b border-[#F0F0F0] bg-[#FAFAFA]">
                                 <h3 className="text-[17px] md:text-[19px] font-bold text-[#181725]">Select Payment Method</h3>
-                                <p className="text-[13px] text-gray-400 font-medium mt-0.5">Choose how you'd like to pay</p>
+                                <p className="text-[13px] text-gray-400 font-medium mt-0.5">Choose how you&apos;d like to pay</p>
                             </div>
                             <div className="divide-y divide-[#F5F5F5]">
                                 {PAYMENT_METHODS.map((method) => {
@@ -539,7 +541,7 @@ export default function CartPage() {
                                     <div className="w-full p-4 flex items-center gap-3 active:bg-gray-50/50 transition-colors">
                                         <div className="w-[7px] h-[7px] rounded-full bg-[#53B175] shrink-0" />
                                         <div className="flex items-center -space-x-6 mr-auto pl-2">
-                                            {shipment.items.slice(0, 3).map((item: any, idx: number) => (
+                                            {shipment.items.slice(0, 3).map((item, idx) => (
                                                 <div
                                                     key={idx}
                                                     className="w-[52px] h-[52px] rounded-full bg-white flex items-center justify-center shrink-0 border border-gray-100 shadow-sm"
@@ -627,7 +629,7 @@ export default function CartPage() {
                                     {/* Items List - Collapsible */}
                                     {isVendorExpanded(shipment.id) && (
                                         <div className="divide-y divide-[#F5F5F5] border-t border-[#F0F0F0]">
-                                            {shipment.items.map((item: any) => (
+                                            {shipment.items.map((item) => (
                                                 <div key={item.id} className="px-7 py-5 flex items-center gap-5 hover:bg-gray-50/40 transition-colors group">
                                                     {/* Product Image */}
                                                     <div className="w-[72px] h-[72px] rounded-2xl bg-[#F7F8F7] flex items-center justify-center shrink-0 border border-gray-100 p-2 group-hover:border-primary/10 transition-colors">

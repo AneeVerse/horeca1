@@ -14,6 +14,17 @@ import { useCart } from '@/context/CartContext';
 import type { Vendor, VendorProduct } from '@/types';
 import { Package, Star, CheckCircle, Clock } from 'lucide-react';
 
+interface VendorOrder {
+    id?: string;
+    vendorId?: string;
+    vendor?: { id: string };
+    createdAt?: string;
+    date?: string;
+    totalAmount?: number;
+    price?: number;
+    items?: Array<{ name?: string; productName?: string; productId?: string; product?: { id: string }; quantity?: number }>;
+}
+
 export default function VendorStorePage() {
     const params = useParams();
     const searchParams = useSearchParams();
@@ -26,7 +37,7 @@ export default function VendorStorePage() {
     const [activeTab, setActiveTab] = useState('all');
     // Pre-fill search from ?q= param (e.g. navigating from search overlay with a specific product)
     const [searchQuery, setSearchQuery] = useState(() => searchParams?.get('q') || '');
-    const [prevOrders, setPrevOrders] = useState<any[]>([]);
+    const [prevOrders, setPrevOrders] = useState<VendorOrder[]>([]);
     const [reviewsData, setReviewsData] = useState<{
         reviews: Array<{ id: string; rating: number; comment?: string; createdAt: string; reviewerName: string }>;
         distribution: Record<string, number>;
@@ -42,7 +53,7 @@ export default function VendorStorePage() {
     // Fetch vendor + products from real API
     useEffect(() => {
         if (!vendorId) return;
-        setLoading(true);
+        Promise.resolve().then(() => setLoading(true));
         Promise.all([
             dal.vendors.getById(vendorId),
             dal.vendors.getProducts(vendorId, { limit: 200 }),
@@ -58,14 +69,14 @@ export default function VendorStorePage() {
         try {
             const KEY = 'horeca_recently_viewed';
             const saved = localStorage.getItem(KEY);
-            let entries: any[] = [];
+            let entries: Array<{ vendorId: string; vendorName: string; vendorLogo: string; viewedProducts: unknown[]; viewedAt: number }> = [];
             if (saved) entries = JSON.parse(saved);
 
-            const existing = entries.find((e: any) => e.vendorId === vendor.id);
+            const existing = entries.find((e) => e.vendorId === vendor.id);
             const existingProducts = existing?.viewedProducts || [];
             const mergedProducts = existingProducts;
 
-            entries = entries.filter((e: any) => e.vendorId !== vendor.id);
+            entries = entries.filter((e) => e.vendorId !== vendor.id);
             entries.unshift({
                 vendorId: vendor.id,
                 vendorName: vendor.name,
@@ -86,7 +97,7 @@ export default function VendorStorePage() {
         try {
             const res = await fetch('/api/v1/orders');
             const json = await res.json();
-            const vendorOrders = (json.data || json.orders || []).filter((o: any) =>
+            const vendorOrders = (json.data || json.orders || []).filter((o: VendorOrder) =>
                 o.vendorId === vendorId || o.vendor?.id === vendorId
             );
             setPrevOrders(vendorOrders);
@@ -94,13 +105,13 @@ export default function VendorStorePage() {
     }, [vendorId, sessionStatus]);
 
     useEffect(() => {
-        if (activeTab === 'orders') loadPrevOrders();
+        if (activeTab === 'orders') Promise.resolve().then(() => loadPrevOrders());
     }, [activeTab, loadPrevOrders]);
 
     // Load reviews when ratings tab is activated
     useEffect(() => {
         if (activeTab !== 'ratings' || !vendorId || reviewsData) return;
-        setReviewsLoading(true);
+        Promise.resolve().then(() => setReviewsLoading(true));
         dal.reviews.getVendorReviews(vendorId)
             .then(data => setReviewsData(data))
             .catch(() => setReviewsData({ reviews: [], distribution: {}, totalCount: 0 }))
@@ -200,7 +211,7 @@ export default function VendorStorePage() {
                         ) : prevOrders.length === 0 ? (
                             <div className="text-center py-16 text-gray-400 font-bold">No previous orders from this vendor yet.</div>
                         ) : (
-                            prevOrders.map((order: any) => (
+                            prevOrders.map((order) => (
                                 <div key={order.id} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
                                     <div className="flex items-center justify-between mb-3">
                                         <div>
@@ -210,13 +221,13 @@ export default function VendorStorePage() {
                                         <span className="text-[13px] font-black text-[#53B175]">₹{order.totalAmount || order.price}</span>
                                     </div>
                                     <div className="flex flex-wrap gap-1.5 mb-3">
-                                        {(order.items || []).slice(0, 4).map((item: any, i: number) => (
+                                        {(order.items || []).slice(0, 4).map((item, i: number) => (
                                             <span key={i} className="text-[11px] font-bold text-gray-500 bg-gray-50 px-2 py-1 rounded-lg">{item.name || item.productName}</span>
                                         ))}
                                     </div>
                                     <button
                                         onClick={() => {
-                                            (order.items || []).forEach((item: any) => {
+                                            (order.items || []).forEach((item) => {
                                                 const productId = item.productId || item.product?.id;
                                                 if (!productId) return;
                                                 const found = products.find(p => p.id === productId);

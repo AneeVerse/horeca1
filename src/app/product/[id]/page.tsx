@@ -130,22 +130,24 @@ export default function ProductDetailPage() {
             const vName = apiProduct.vendor?.businessName || vendorName;
             const vLogo = matched?.logo || apiProduct.vendor?.logoUrl || '';
 
+            type ViewedProduct = { id: string; name: string; image: string; price: number; unit: string };
+            type ViewedEntry = { vendorId: string; vendorName: string; vendorLogo: string; viewedProducts: ViewedProduct[]; viewedAt: number };
             const KEY = 'horeca_recently_viewed';
             const saved = localStorage.getItem(KEY);
-            let entries: any[] = [];
+            let entries: ViewedEntry[] = [];
             if (saved) entries = JSON.parse(saved);
 
-            const existing = entries.find((e: any) => e.vendorId === vId);
-            const existingProducts = existing?.viewedProducts || [];
-            const currentProduct = { id: apiProduct.id, name: productName, image: productImage, price: productPrice, unit: productUnit };
+            const existing = entries.find((e) => e.vendorId === vId);
+            const existingProducts: ViewedProduct[] = existing?.viewedProducts || [];
+            const currentProduct: ViewedProduct = { id: apiProduct.id, name: productName, image: productImage, price: productPrice, unit: productUnit };
 
             const seenIds = new Set<string>();
-            const mergedProducts: any[] = [];
-            [currentProduct, ...existingProducts].forEach((p: any) => {
+            const mergedProducts: ViewedProduct[] = [];
+            [currentProduct, ...existingProducts].forEach((p) => {
                 if (!seenIds.has(p.id)) { seenIds.add(p.id); mergedProducts.push(p); }
             });
 
-            entries = entries.filter((e: any) => e.vendorId !== vId);
+            entries = entries.filter((e) => e.vendorId !== vId);
             entries.unshift({ vendorId: vId, vendorName: vName, vendorLogo: vLogo, viewedProducts: mergedProducts.slice(0, 20), viewedAt: Date.now() });
             if (entries.length > 20) entries = entries.slice(0, 20);
             localStorage.setItem(KEY, JSON.stringify(entries));
@@ -170,7 +172,7 @@ export default function ProductDetailPage() {
         });
     };
 
-    const similarItemsList: any[] = []; // Similar items loaded from API in a future iteration
+    const similarItemsList: { id: string; originalId?: string; name: string; image: string; vendorCount?: number }[] = []; // Similar items loaded from API in a future iteration
 
     const handleShare = async () => {
         const shareData = {
@@ -310,7 +312,7 @@ export default function ProductDetailPage() {
                 <div className="mt-6 px-4">
                     <h2 className="text-[18px] font-bold text-[#181725] mb-4">Similar items</h2>
                     <div className="flex gap-3 overflow-x-auto pb-6 no-scrollbar -mx-4 px-4 snap-x">
-                        {similarItemsList.map((item: any) => (
+                        {similarItemsList.map((item) => (
                             <Link key={item.id} href={`/product/${item.originalId || item.id}`} className="min-w-[150px] bg-white border border-gray-100 rounded-[18px] p-3 flex flex-col snap-start shadow-sm">
                                 <div className="w-full aspect-[4/3] flex items-center justify-center mb-3">
                                     <img src={item.image} alt={item.name} className="max-w-[80%] max-h-full object-contain" />
@@ -504,7 +506,7 @@ export default function ProductDetailPage() {
                         </div>
 
                         <div className="grid grid-cols-4 gap-10">
-                            {similarItemsList.map((item: any) => (
+                            {similarItemsList.map((item) => (
                                 <Link key={item.id} href={`/product/${item.originalId || item.id}`} className="bg-white border border-gray-100 rounded-[48px] p-7 flex flex-col hover:shadow-[0_30px_70px_-15px_rgba(0,0,0,0.1)] hover:-translate-y-3 transition-all group relative overflow-hidden">
                                     <div className="w-full aspect-square flex items-center justify-center mb-8 bg-[#F8F9FB]/50 rounded-[38px] overflow-hidden group-hover:bg-[#F1FBF4]/50 transition-colors duration-500">
                                         <img src={item.image} alt={item.name} className="max-w-[75%] max-h-[75%] object-contain group-hover:scale-110 transition-transform duration-700" />

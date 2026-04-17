@@ -40,13 +40,13 @@ export default function RecentlyViewedPage() {
             const saved = localStorage.getItem('horeca_recently_viewed');
             if (saved) {
                 const entries = JSON.parse(saved);
-                const entry = entries.find((e: any) => e.vendorId === vendorId);
+                const entry = entries.find((e: { vendorId: string; vendorName?: string; vendorLogo?: string; viewedProducts?: ViewedProduct[] }) => e.vendorId === vendorId);
                 if (entry) {
                     setVendorName(entry.vendorName || 'Vendor');
                     setVendorLogo(entry.vendorLogo || '');
                     const viewedProducts = entry.viewedProducts || [];
                     setProducts(viewedProducts);
-                    setQuantities(Object.fromEntries(viewedProducts.map((p: any) => [p.id, 1])));
+                    setQuantities(Object.fromEntries(viewedProducts.map((p: ViewedProduct) => [p.id, 1])));
                 }
             }
         } catch (e) {

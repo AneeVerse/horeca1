@@ -63,7 +63,7 @@ export default function FinancePage() {
     const [toast, setToast] = useState<string | null>(null);
 
     useEffect(() => {
-        setIsMounted(true);
+        Promise.resolve().then(() => setIsMounted(true));
         fetch('/api/v1/admin/finance')
             .then(res => res.json())
             .then(json => { if (json.success) setData(json.data); })
@@ -212,7 +212,7 @@ export default function FinancePage() {
                                     tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
                                 />
                                 <Tooltip
-                                    formatter={(val: any) => [formatINR(Number(val)), 'Revenue']}
+                                    formatter={(val) => [formatINR(Number(val)), 'Revenue']}
                                     contentStyle={{
                                         borderRadius: '16px',
                                         border: 'none',

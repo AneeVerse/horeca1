@@ -9,6 +9,7 @@ import { useSession } from 'next-auth/react';
 import { AuthScreen } from '@/components/auth/AuthScreen';
 import { dal } from '@/lib/dal';
 import { DeliverySlotPicker } from '@/components/features/checkout/DeliverySlotPicker';
+import type { VendorCartGroup } from '@/types';
 
 declare global {
     interface Window {
@@ -70,7 +71,7 @@ export default function CheckoutPage() {
     const { status: sessionStatus } = useSession();
     const [step, setStep] = useState<CheckoutStep>('review');
     const [selectedPayment, setSelectedPayment] = useState('');
-    const [orderSnapshot, setOrderSnapshot] = useState<{ groups: any[], total: number, count: number } | null>(null);
+    const [orderSnapshot, setOrderSnapshot] = useState<{ groups: VendorCartGroup[], total: number, count: number } | null>(null);
     const [showAuthScreen, setShowAuthScreen] = useState(false);
     const [availableCredit, setAvailableCredit] = useState<number | null>(null);
     const [creditDueDate, setCreditDueDate] = useState<string | null>(null);

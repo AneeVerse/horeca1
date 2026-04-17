@@ -48,7 +48,7 @@ export default function ContinueOrderingPage() {
     };
 
     useEffect(() => {
-        setIsMounted(true);
+        Promise.resolve().then(() => setIsMounted(true));
         dal.vendors.list()
             .then(result => setVendorsList(result.vendors))
             .catch(() => setVendorsList([]));
@@ -84,13 +84,12 @@ export default function ContinueOrderingPage() {
             try {
                 const savedOrders = localStorage.getItem('horeca_orders');
                 if (savedOrders) {
-                    const orders = JSON.parse(savedOrders);
-                    orders.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                        .forEach((order: any) => {
+                    const orders: Array<{id: string; vendorId: string; vendorName?: string; vendorLogo?: string; createdAt: string}> = JSON.parse(savedOrders);
+                    orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                        .forEach((order) => {
                             if (!order.vendorId || seenVendors.has(order.vendorId)) return;
                             seenVendors.add(order.vendorId);
                             const vendor = vendorsList.find(v => v.id === order.vendorId);
-                            const orderDate = new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
                             allCards.push({
                                 id: `order-${order.id}`,
                                 vendorId: order.vendorId,
@@ -110,17 +109,18 @@ export default function ContinueOrderingPage() {
             // SOURCE 3: Order Lists
             try {
                 const savedLists = localStorage.getItem('horeca_order_lists_all') || '[]';
-                let orderLists = JSON.parse(savedLists);
-                orderLists.filter((list: any) => !!list.lastUsed)
-                    .sort((a: any, b: any) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime())
-                    .forEach((list: any) => {
+                type ParsedList = { id: string; vendorId?: string; vendorName?: string; vendorLogo?: string; name?: string; lastUsed?: string; items: Array<{ product?: { vendorId?: string } }> };
+                const orderLists: ParsedList[] = JSON.parse(savedLists);
+                orderLists.filter((list) => !!list.lastUsed)
+                    .sort((a, b) => new Date(b.lastUsed!).getTime() - new Date(a.lastUsed!).getTime())
+                    .forEach((list) => {
                         if (!list.vendorId || seenVendors.has(list.vendorId)) return;
                         seenVendors.add(list.vendorId);
 
                         const vendor = vendorsList.find(v => v.id === list.vendorId);
                         const listVendorIds = new Set<string>();
                         if (list.items) {
-                            list.items.forEach((item: any) => {
+                            list.items.forEach((item) => {
                                 const vid = item.product?.vendorId || list.vendorId;
                                 if (vid) listVendorIds.add(vid);
                             });
@@ -142,11 +142,11 @@ export default function ContinueOrderingPage() {
                             vendorLogo: list.vendorLogo || vendor?.logo || '',
                             vendorLogos: logos.length > 1 ? logos : undefined,
                             subtitle: `${list.name} • ${list.items.length} items`,
-                            subtitle2: `Used ${getRelativeTime(new Date(list.lastUsed).getTime())}`,
+                            subtitle2: `Used ${getRelativeTime(new Date(list.lastUsed!).getTime())}`,
                             subtitleIcon: 'list',
                             href: `/order-lists/${list.id}`,
                             priority: 3,
-                            timestamp: new Date(list.lastUsed).getTime(),
+                            timestamp: new Date(list.lastUsed!).getTime(),
                         });
                     });
             } catch (e) {}
@@ -155,8 +155,9 @@ export default function ContinueOrderingPage() {
             try {
                 const savedViewed = localStorage.getItem('horeca_recently_viewed');
                 if (savedViewed) {
-                    const viewedEntries = JSON.parse(savedViewed);
-                    viewedEntries.forEach((entry: any) => {
+                    type ViewedEntry = { vendorId?: string; vendorName?: string; vendorLogo?: string; viewedAt?: number; viewedProducts?: Array<{ name: string }> };
+                    const viewedEntries: ViewedEntry[] = JSON.parse(savedViewed);
+                    viewedEntries.forEach((entry) => {
                         if (!entry.vendorId) return;
                         const products = entry.viewedProducts || [];
                         let productLabel = 'Recently Viewed';
@@ -176,7 +177,7 @@ export default function ContinueOrderingPage() {
                                 existing.href = products.length > 0 
                                     ? `/recently-viewed/${entry.vendorId}` 
                                     : `/vendor/${entry.vendorId}`;
-                                if (entry.viewedAt > existing.timestamp) existing.timestamp = entry.viewedAt;
+                                if ((entry.viewedAt ?? 0) > existing.timestamp) existing.timestamp = entry.viewedAt ?? 0;
                             }
                         } else {
                             seenVendors.add(entry.vendorId);

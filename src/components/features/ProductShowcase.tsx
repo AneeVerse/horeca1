@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Star, Plus, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
+import type { VendorProduct } from '@/types';
 
 // --- Types ---
 interface Product {
@@ -75,10 +76,10 @@ function ProductColumn({ title, products, globalIndex }: {
     const { addToCart } = useCart();
     const [addedId, setAddedId] = useState<number | null>(null);
 
-    const handleAddToCart = (e: React.MouseEvent, product: any) => {
+    const handleAddToCart = (e: React.MouseEvent, product: Product) => {
         e.preventDefault();
         e.stopPropagation();
-        addToCart(product);
+        addToCart(product as unknown as VendorProduct);
         setAddedId(product.id);
         setTimeout(() => setAddedId(null), 2000);
     };

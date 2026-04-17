@@ -6,6 +6,7 @@ import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import type { VendorProduct } from '@/types';
 
 interface WishlistOverlayProps {
     isOpen: boolean;
@@ -19,7 +20,7 @@ export function WishlistOverlay({ isOpen, onClose }: WishlistOverlayProps) {
 
     if (!isOpen) return null;
 
-    const handleAddToCart = (product: any) => {
+    const handleAddToCart = (product: VendorProduct) => {
         addToCart(product, 1);
     };
 

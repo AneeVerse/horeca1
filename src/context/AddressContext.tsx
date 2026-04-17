@@ -64,21 +64,21 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
             const res = await fetch('/api/v1/addresses');
             if (!res.ok) return [];
             const json = await res.json();
-            return (json.data || []).map((a: any): Address => ({
-                id: a.id,
-                label: a.label,
-                businessName: a.businessName ?? undefined,
-                fullAddress: a.fullAddress,
-                shortAddress: a.shortAddress ?? undefined,
-                latitude: a.latitude,
-                longitude: a.longitude,
-                flatInfo: a.flatInfo ?? undefined,
-                landmark: a.landmark ?? undefined,
-                pincode: a.pincode ?? undefined,
-                city: a.city ?? undefined,
-                state: a.state ?? undefined,
-                placeId: a.placeId ?? undefined,
-                isDefault: a.isDefault,
+            return (json.data || []).map((a: Record<string, unknown>): Address => ({
+                id: a.id as string,
+                label: a.label as string,
+                businessName: a.businessName as string | undefined,
+                fullAddress: a.fullAddress as string,
+                shortAddress: (a.shortAddress ?? '') as string,
+                latitude: a.latitude as number,
+                longitude: a.longitude as number,
+                flatInfo: a.flatInfo as string | undefined,
+                landmark: a.landmark as string | undefined,
+                pincode: a.pincode as string | undefined,
+                city: a.city as string | undefined,
+                state: a.state as string | undefined,
+                placeId: a.placeId as string | undefined,
+                isDefault: a.isDefault as boolean,
             }));
         } catch {
             return [];
@@ -91,12 +91,12 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
         // Always load selected address from localStorage (quick, no network)
         try {
             const savedSelected = localStorage.getItem(STORAGE_KEYS.SELECTED);
-            if (savedSelected) setSelectedAddressState(JSON.parse(savedSelected));
+            if (savedSelected) Promise.resolve().then(() => setSelectedAddressState(JSON.parse(savedSelected)));
         } catch { /* ignore */ }
 
         if (status === 'authenticated') {
             // Load saved addresses from DB
-            setIsLoadingAddresses(true);
+            Promise.resolve().then(() => setIsLoadingAddresses(true));
             fetchAddressesFromDB().then((addresses) => {
                 setSavedAddresses(addresses);
                 setIsLoadingAddresses(false);
@@ -116,7 +116,7 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
             // Fallback: load from localStorage
             try {
                 const savedList = localStorage.getItem(STORAGE_KEYS.SAVED);
-                if (savedList) setSavedAddresses(JSON.parse(savedList));
+                if (savedList) Promise.resolve().then(() => setSavedAddresses(JSON.parse(savedList)));
             } catch { /* ignore */ }
         }
     }, [status, fetchAddressesFromDB]);
@@ -342,13 +342,14 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
 
             setIsDetectingLocation(false);
             return null;
-        } catch (error: any) {
+        } catch (error: unknown) {
             setIsDetectingLocation(false);
-            if (error.code === 1) {
+            const geoError = error as { code?: number };
+            if (geoError.code === 1) {
                 toast.error('Location access denied. Enable location permissions in your browser settings.');
-            } else if (error.code === 2) {
+            } else if (geoError.code === 2) {
                 toast.error('Unable to determine your location. Please try again.');
-            } else if (error.code === 3) {
+            } else if (geoError.code === 3) {
                 toast.error('Location request timed out. Please try again.');
             }
             return null;
