@@ -244,7 +244,7 @@ export default function VendorStorePage() {
                     </div>
                 ) : activeTab === 'all' || activeTab === 'deals' || activeTab === 'frequent' || activeTab.startsWith('cat:') ? (
                     filteredProducts.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 md:gap-8">
+                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
                             {filteredProducts.map((product) => (
                                 <VendorProductCard key={product.id} product={product} />
                             ))}

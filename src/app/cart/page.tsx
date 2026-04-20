@@ -50,7 +50,7 @@ function openRazorpayPopup(opts: {
         rzp.open();
     });
 }
-import { ArrowLeft, Search, ChevronRight, ChevronDown, ChevronUp, Plus, Minus, X, Percent, FileText, AlertTriangle, Check, Home, ShoppingCart, CreditCard, Trash2, Store, Zap, FileCheck, Banknote, BadgePercent, Wallet, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, ChevronRight, ChevronDown, ChevronUp, Plus, Minus, X, Percent, FileText, AlertTriangle, Check, Home, ShoppingCart, CreditCard, Trash2, Store, Zap, FileCheck, Banknote, BadgePercent, Wallet, Loader2, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCart } from '@/context/CartContext';
 import { dal } from '@/lib/dal';
@@ -529,6 +529,23 @@ export default function CartPage() {
 
                     {/* ===== LEFT COLUMN ===== */}
                     <div className="space-y-3 md:space-y-6">
+
+                        {/* Multi-vendor awareness banner */}
+                        {shipments.length > 1 && (
+                            <div className="bg-gradient-to-r from-[#53B175]/5 to-[#53B175]/10 border border-[#53B175]/25 rounded-[16px] md:rounded-2xl px-4 py-3 md:px-5 md:py-4 flex items-start gap-3">
+                                <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-white border border-[#53B175]/20 flex items-center justify-center shrink-0 shadow-sm">
+                                    <Info size={18} className="text-[#53B175]" strokeWidth={2.5} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-[13px] md:text-[14px] font-black text-[#181725] leading-snug">
+                                        {shipments.length} vendors · Pay separately or together
+                                    </p>
+                                    <p className="text-[12px] md:text-[13px] text-[#4C4F4D] font-medium mt-0.5 leading-snug">
+                                        Each vendor&apos;s items become a separate order. Pick which ones to pay for at checkout — skip the rest for later.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* === MOBILE + TABLET: Shipment Cards === */}
                         <div className="lg:hidden space-y-3">

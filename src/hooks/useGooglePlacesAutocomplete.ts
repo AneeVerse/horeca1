@@ -113,6 +113,9 @@ export function useGooglePlacesAutocomplete(
                             }))
                         );
                     } else {
+                        if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+                            console.warn('[Places Autocomplete] status:', status, 'query:', query);
+                        }
                         setPredictions([]);
                     }
                     setIsSearching(false);

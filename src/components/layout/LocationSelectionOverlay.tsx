@@ -3,13 +3,14 @@
 import React, { useState } from 'react';
 import {
     ArrowLeft, Search, MapPin, Home, Briefcase, Loader2,
-    Navigation, X, Trash2, Store,
+    Navigation, X, Trash2, Store, Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAddress, Address } from '@/context/AddressContext';
 import { useGooglePlacesAutocomplete, PlacePrediction } from '@/hooks/useGooglePlacesAutocomplete';
 import { useGoogleMaps } from '@/components/providers/GoogleMapsProvider';
 import { AddNewAddressOverlay } from './AddNewAddressOverlay';
+import { EditAddressOverlay } from './EditAddressOverlay';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface LocationSelectionOverlayProps {
@@ -42,6 +43,7 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
     const [isAddNewOpen, setIsAddNewOpen] = useState(false);
     const [initialCoords, setInitialCoords] = useState<{ lat?: number; lng?: number }>({});
     const [defaultMode, setDefaultMode] = useState<'business' | 'map'>('business');
+    const [editingAddress, setEditingAddress] = useState<Address | null>(null);
 
     // ─── Google Places autocomplete (address search in main overlay) ─────
     const { predictions, isSearching, getPlaceDetails, clearPredictions } =
@@ -229,21 +231,34 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
                                                     {addr.pincode ? ` — ${addr.pincode}` : ''}
                                                 </p>
                                             </div>
-                                            <button
-                                                onClick={async (e) => {
-                                                    e.stopPropagation();
-                                                    const ok = await confirm({
-                                                        title: 'Remove address?',
-                                                        message: `This will permanently remove "${addr.label || addr.shortAddress}" from your saved addresses.`,
-                                                        confirmText: 'Remove',
-                                                        tone: 'danger',
-                                                    });
-                                                    if (ok) removeAddress(addr.id);
-                                                }}
-                                                className="p-2 hover:bg-red-50 rounded-full transition-colors shrink-0"
-                                            >
-                                                <Trash2 size={15} className="text-gray-300 hover:text-red-400" />
-                                            </button>
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setEditingAddress(addr);
+                                                    }}
+                                                    className="p-2 hover:bg-green-50 rounded-full transition-colors"
+                                                    aria-label="Edit address"
+                                                >
+                                                    <Pencil size={14} className="text-gray-300 hover:text-[#33a852]" />
+                                                </button>
+                                                <button
+                                                    onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        const ok = await confirm({
+                                                            title: 'Remove address?',
+                                                            message: `This will permanently remove "${addr.label || addr.shortAddress}" from your saved addresses.`,
+                                                            confirmText: 'Remove',
+                                                            tone: 'danger',
+                                                        });
+                                                        if (ok) removeAddress(addr.id);
+                                                    }}
+                                                    className="p-2 hover:bg-red-50 rounded-full transition-colors"
+                                                    aria-label="Remove address"
+                                                >
+                                                    <Trash2 size={15} className="text-gray-300 hover:text-red-400" />
+                                                </button>
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -286,6 +301,12 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
                 initialLat={initialCoords.lat}
                 initialLng={initialCoords.lng}
                 defaultMode={defaultMode}
+            />
+
+            {/* Edit Address Overlay */}
+            <EditAddressOverlay
+                address={editingAddress}
+                onClose={() => setEditingAddress(null)}
             />
         </>
     );

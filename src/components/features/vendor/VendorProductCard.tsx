@@ -142,7 +142,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
         <Link
             href={isOutOfStock ? '#' : `/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`}
             className={cn(
-                "bg-white rounded-[24px] md:rounded-[32px] border border-gray-200 overflow-hidden transition-all duration-700 group p-4 min-[340px]:p-5 relative flex flex-col gap-3 h-full",
+                "bg-white rounded-[24px] md:rounded-[20px] border border-gray-200 overflow-hidden transition-all duration-700 group p-4 min-[340px]:p-5 md:p-3.5 relative flex flex-col gap-3 md:gap-2 h-full",
                 isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_20px_50px_rgba(0,0,0,0.06)] hover:-translate-y-2 hover:border-[#53B175]/20"
             )}
             onClick={(e) => {
@@ -246,13 +246,13 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
             {/* ── CONTENT SECTION ── */}
             <div className="flex flex-col gap-1.5">
                 <h3 className={cn(
-                    "text-[14px] md:text-[17px] font-[900] leading-[1.3] line-clamp-2 h-[2.6em]",
+                    "text-[14px] md:text-[14px] font-[900] leading-[1.3] line-clamp-2 h-[2.6em]",
                     isOutOfStock ? "text-gray-400" : "text-[#181725]"
                 )}>
                     {product.name}
                 </h3>
                 <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-[11px] md:text-[13px] text-gray-400 font-extrabold uppercase tracking-widest truncate">
+                    <p className="text-[11px] md:text-[11px] text-gray-400 font-extrabold uppercase tracking-widest truncate">
                         {product.packSize}
                     </p>
                     {(product.minOrderQuantity || 1) > 1 && (
@@ -291,29 +291,29 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
             )}
 
             {/* ── FOOTER: PRICE + CTA ── */}
-            <div className="mt-auto pt-4 flex flex-col gap-4">
+            <div className="mt-auto pt-4 md:pt-3 flex flex-col gap-4 md:gap-2.5">
                 <div className="flex items-baseline gap-1.5">
                     <span className={cn(
-                        "text-[18px] md:text-[26px] font-[1000] tracking-tighter leading-none",
+                        "text-[18px] md:text-[20px] font-[1000] tracking-tighter leading-none",
                         isOutOfStock ? "text-gray-300" : "text-[#181725]"
                     )}>
                         ₹ {product.price}
                     </span>
-                    <span className="text-[11px] md:text-[14px] font-black text-gray-400 uppercase">/ unit</span>
+                    <span className="text-[11px] md:text-[12px] font-black text-gray-400 uppercase">/ unit</span>
                 </div>
 
                 <button
                     disabled={isOutOfStock}
                     onClick={(e) => handleAdd(e, 1)}
                     className={cn(
-                        "w-full py-4 rounded-2xl font-black text-[13px] md:text-[15px] flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-95 border uppercase tracking-[0.05em]",
-                        isOutOfStock 
-                            ? "bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed" 
+                        "w-full py-4 md:py-3 rounded-2xl font-black text-[13px] md:text-[13px] flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-95 border uppercase tracking-[0.05em]",
+                        isOutOfStock
+                            ? "bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed"
                             : "bg-[#53B175] text-white border-[#53B175] shadow-[0_8px_25px_rgba(83,177,117,0.2)] hover:bg-[#489d67] hover:shadow-[0_12px_30px_rgba(83,177,117,0.3)]"
                     )}
                 >
                     {isOutOfStock ? 'Sold Out' : 'Quick Add'}
-                    {!isOutOfStock && <ShoppingCart size={16} strokeWidth={3} className="shrink-0" />}
+                    {!isOutOfStock && <ShoppingCart size={15} strokeWidth={3} className="shrink-0" />}
                 </button>
             </div>
         </Link>

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, Search, Star, Clock, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, Search, Star, Clock, ShoppingBag, ChevronDown } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { dal } from '@/lib/dal';
@@ -143,10 +143,57 @@ function CategoryVendorsContent() {
                 </div>
             </div>
 
-            <div className="max-w-[var(--container-max)] mx-auto px-4 md:px-[var(--container-padding)]">
+            <div className="max-w-[var(--container-max)] mx-auto px-4 md:px-[var(--container-padding)] md:flex md:gap-8 md:items-start md:pt-6">
 
-                {/* ── CATEGORY TABS (horizontal scroll) ── */}
-                <div className="flex gap-2 overflow-x-auto no-scrollbar py-4">
+                {/* ── CATEGORY SIDEBAR (desktop) ── */}
+                <aside className="hidden md:block w-[280px] shrink-0 sticky top-24">
+                    <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm overflow-hidden max-h-[calc(100vh-120px)] overflow-y-auto">
+                        <div className="space-y-1">
+                            {allCategories.map((cat) => {
+                                const isActive = cat.slug === slug;
+                                return (
+                                    <Link
+                                        key={cat.id}
+                                        href={`/category/${cat.slug}`}
+                                        className={cn(
+                                            'flex items-center justify-between w-full p-3 rounded-xl transition-all group',
+                                            isActive ? 'bg-[#53B175]/10' : 'hover:bg-gray-50'
+                                        )}
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className={cn(
+                                                'w-8 h-8 rounded-lg flex items-center justify-center border transition-all shrink-0',
+                                                isActive
+                                                    ? 'bg-white border-[#53B175]/20 shadow-sm'
+                                                    : 'bg-gray-50 border-transparent group-hover:bg-white group-hover:border-gray-100'
+                                            )}>
+                                                {cat.image && (
+                                                    <Image src={cat.image} alt={cat.name} width={24} height={24} className="w-6 h-6 object-contain" />
+                                                )}
+                                            </div>
+                                            <span className={cn(
+                                                'text-[14px] font-bold transition-colors truncate',
+                                                isActive ? 'text-[#53B175]' : 'text-[#181725]'
+                                            )}>
+                                                {cat.name}
+                                            </span>
+                                        </div>
+                                        <ChevronDown size={16} className={cn(
+                                            'text-gray-300 transition-all shrink-0',
+                                            isActive ? 'text-[#53B175] rotate-[-90deg]' : 'group-hover:text-gray-400'
+                                        )} />
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </aside>
+
+                {/* ── MAIN CONTENT ── */}
+                <div className="flex-1 min-w-0">
+
+                {/* ── CATEGORY TABS (mobile horizontal scroll) ── */}
+                <div className="md:hidden flex gap-2 overflow-x-auto no-scrollbar py-4">
                     {allCategories.map((cat) => (
                         <Link
                             key={cat.id}
@@ -274,6 +321,7 @@ function CategoryVendorsContent() {
                         })}
                     </div>
                 )}
+                </div>
             </div>
 
             <StickyCartBar />

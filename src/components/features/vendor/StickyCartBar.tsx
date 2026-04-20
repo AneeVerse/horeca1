@@ -1,41 +1,72 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, X, ChevronUp } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
 
 export function StickyCartBar() {
     const { totalItems, totalAmount, vendorCount } = useCart();
+    const [hidden, setHidden] = useState(false);
 
     if (totalItems === 0) return null;
 
+    if (hidden) {
+        return (
+            <button
+                type="button"
+                onClick={() => setHidden(false)}
+                aria-label="Show cart bar"
+                className="fixed z-50 bottom-4 right-4 w-12 h-12 rounded-full bg-[#299e60] text-white shadow-2xl shadow-green-900/30 flex items-center justify-center hover:bg-[#238a54] transition-colors"
+            >
+                <ShoppingCart size={18} />
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-white text-[#299e60] text-[10px] font-black rounded-full flex items-center justify-center border-2 border-[#299e60]">
+                    {totalItems}
+                </span>
+            </button>
+        );
+    }
+
     return (
         <div className="fixed bottom-0 left-0 right-0 z-50 md:bottom-4 md:left-auto md:right-4 md:max-w-[420px]">
-            <div className="bg-[#299e60] md:rounded-2xl shadow-2xl shadow-green-900/30">
+            <div className="relative bg-[#299e60] md:rounded-2xl shadow-2xl shadow-green-900/30">
+                <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setHidden(true); }}
+                    aria-label="Hide cart bar"
+                    className={cn(
+                        'absolute top-1/2 -translate-y-1/2 right-2 w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-colors z-10',
+                        'md:-top-2 md:right-2 md:translate-y-0 md:w-6 md:h-6 md:bg-white md:text-[#299e60] md:shadow-md md:hover:bg-gray-50'
+                    )}
+                >
+                    <X size={14} strokeWidth={3} />
+                </button>
+
                 <Link
                     href="/cart"
-                    className="flex items-center justify-between px-5 py-3.5 md:py-3"
+                    className="flex items-center gap-3 pl-4 pr-12 py-3 md:py-3.5"
                 >
-                    <div className="flex items-center gap-3">
-                        <div className="relative">
-                            <ShoppingCart size={20} className="text-white" />
-                            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-white text-[#299e60] text-[9px] font-black rounded-full flex items-center justify-center">
-                                {totalItems}
-                            </span>
-                        </div>
-                        <div>
-                            <p className="text-white text-[13px] font-bold">
-                                {totalItems} item{totalItems > 1 ? 's' : ''} {vendorCount > 1 ? `• ${vendorCount} vendors` : ''}
-                            </p>
-                            <p className="text-green-100 text-[11px] font-medium">
-                                ₹{totalAmount.toLocaleString('en-IN')}
-                            </p>
-                        </div>
+                    <div className="relative shrink-0">
+                        <ShoppingCart size={20} className="text-white" strokeWidth={2.5} />
+                        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-white text-[#299e60] text-[10px] font-black rounded-full flex items-center justify-center">
+                            {totalItems}
+                        </span>
                     </div>
-                    <div className="bg-white text-[#299e60] px-4 py-2 rounded-xl text-[12px] font-bold shadow-md hover:shadow-lg transition-shadow">
-                        VIEW CART →
+
+                    <div className="flex-1 min-w-0 leading-tight">
+                        <p className="text-white text-[13px] font-bold truncate">
+                            {totalItems} item{totalItems > 1 ? 's' : ''}
+                            {vendorCount > 1 ? ` · ${vendorCount} vendors` : ''}
+                        </p>
+                        <p className="text-green-100 text-[11px] font-semibold">
+                            ₹{totalAmount.toLocaleString('en-IN')}
+                        </p>
                     </div>
+
+                    <span className="bg-white text-[#299e60] px-3.5 py-1.5 rounded-lg text-[11px] font-black tracking-wider shadow-md hover:shadow-lg transition-shadow shrink-0 flex items-center gap-1">
+                        VIEW <ChevronUp size={12} strokeWidth={3} className="rotate-90" />
+                    </span>
                 </Link>
             </div>
         </div>
