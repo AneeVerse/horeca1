@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Home, Package, Store, Clock, CheckCircle2, XCircle, Truck, CreditCard, Star, Loader2, X, ShoppingCart } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home, Package, Store, Clock, CheckCircle2, XCircle, Truck, CreditCard, Star, Loader2, X, ShoppingCart, FileDown } from 'lucide-react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useCart } from '@/context/CartContext';
@@ -102,6 +102,12 @@ export default function OrderDetailPage() {
     const [ratingComment, setRatingComment] = React.useState('');
     const [isSubmittingRating, setIsSubmittingRating] = React.useState(false);
 
+    // Return request state
+    const [showReturnForm, setShowReturnForm] = React.useState(false);
+    const [returnReason, setReturnReason] = React.useState('');
+    const [isSubmittingReturn, setIsSubmittingReturn] = React.useState(false);
+    const [returnRequest, setReturnRequest] = React.useState<{ status: string } | null>(null);
+
     React.useEffect(() => {
         if (sessionStatus === 'unauthenticated') { router.push('/'); return; }
         if (sessionStatus !== 'authenticated') return;
@@ -137,6 +143,35 @@ export default function OrderDetailPage() {
             router.push('/cart');
         } else {
             toast.error('Products not found in current catalog');
+        }
+    };
+
+    React.useEffect(() => {
+        if (!order || order.status !== 'delivered') return;
+        fetch(`/api/v1/orders/${orderId}/return`)
+            .then(r => r.json())
+            .then(json => { if (json.success && json.data) setReturnRequest(json.data); })
+            .catch(() => {});
+    }, [order, orderId]);
+
+    const handleSubmitReturn = async () => {
+        if (!order || !returnReason.trim()) return;
+        setIsSubmittingReturn(true);
+        try {
+            const res = await fetch(`/api/v1/orders/${orderId}/return`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: returnReason }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Failed to submit');
+            setReturnRequest(json.data);
+            setShowReturnForm(false);
+            toast.success('Return request submitted');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to submit return');
+        } finally {
+            setIsSubmittingReturn(false);
         }
     };
 
@@ -379,6 +414,16 @@ export default function OrderDetailPage() {
 
                         {/* Actions */}
                         <div className="space-y-3">
+                            {order.paymentStatus === 'paid' && (
+                                <a
+                                    href={`/api/v1/orders/${order.id}/invoice`}
+                                    download
+                                    className="w-full flex items-center justify-center gap-2 py-3.5 border-2 border-[#299e60]/40 text-[#299e60] text-[14px] font-black rounded-2xl hover:bg-[#299e60]/5 transition-all"
+                                >
+                                    <FileDown size={16} />
+                                    Download Invoice
+                                </a>
+                            )}
                             <button onClick={handleReorder}
                                 className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#299e60] text-white text-[14px] font-black rounded-2xl shadow-lg shadow-green-200/50 hover:bg-[#22844f] transition-all active:scale-[0.99]">
                                 <ShoppingCart size={16} />
@@ -390,6 +435,39 @@ export default function OrderDetailPage() {
                                     <Star size={16} />
                                     Rate This Order
                                 </button>
+                            )}
+                            {order.status === 'delivered' && !returnRequest && !showReturnForm && (
+                                <button onClick={() => setShowReturnForm(true)}
+                                    className="w-full py-3.5 border-2 border-gray-200 text-[14px] font-black text-gray-600 rounded-2xl hover:bg-gray-50 transition-all flex items-center justify-center gap-2">
+                                    Request Return
+                                </button>
+                            )}
+                            {returnRequest && (
+                                <div className="w-full py-3 text-center text-[13px] font-bold text-amber-600 bg-amber-50 rounded-2xl">
+                                    Return requested · {returnRequest.status}
+                                </div>
+                            )}
+                            {showReturnForm && (
+                                <div className="space-y-3 p-4 border-2 border-gray-200 rounded-2xl">
+                                    <p className="text-[13px] font-bold text-[#181725]">Reason for return</p>
+                                    <textarea
+                                        value={returnReason}
+                                        onChange={e => setReturnReason(e.target.value)}
+                                        rows={3}
+                                        placeholder="Describe the issue (damaged, wrong item, etc.)..."
+                                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] outline-none focus:border-[#299e60]/40 resize-none"
+                                    />
+                                    <div className="flex gap-2">
+                                        <button onClick={handleSubmitReturn} disabled={isSubmittingReturn || returnReason.trim().length < 10}
+                                            className="flex-1 py-2.5 bg-[#299e60] text-white text-[13px] font-black rounded-xl disabled:opacity-50">
+                                            {isSubmittingReturn ? 'Submitting...' : 'Submit Request'}
+                                        </button>
+                                        <button onClick={() => setShowReturnForm(false)}
+                                            className="px-4 py-2.5 border border-gray-200 text-[13px] font-bold rounded-xl">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
                             )}
                             <Link href="/orders"
                                 className="w-full py-3 flex items-center justify-center gap-1 text-[13px] font-bold text-gray-400 hover:text-gray-600 transition-colors">

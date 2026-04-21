@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil, Users, Crown, Shield, Eye, Edit3 } from 'lucide-react';
+import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil, Users, Crown, Shield, Eye, Edit3, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -35,6 +35,24 @@ interface VendorSettings {
     serviceAreas: ServiceArea[];
     deliverySlots: DeliverySlot[];
     user: { email: string; phone: string | null; fullName: string };
+}
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+    fssai: 'FSSAI License',
+    gst: 'GST Certificate',
+    pan: 'PAN Card',
+    bank_proof: 'Bank Proof',
+    other: 'Other Document',
+};
+
+interface VendorDocument {
+    id: string;
+    type: 'fssai' | 'gst' | 'pan' | 'bank_proof' | 'other';
+    fileUrl: string;
+    fileName: string;
+    status: string;
+    adminNote: string | null;
+    uploadedAt: string;
 }
 
 interface TeamMember {
@@ -92,6 +110,11 @@ export default function VendorSettingsPage() {
     const [slotCutoff, setSlotCutoff] = useState('');
     const [savingSlot, setSavingSlot] = useState(false);
 
+    // Documents state
+    const [documents, setDocuments] = useState<VendorDocument[]>([]);
+    const [docForm, setDocForm] = useState({ type: 'fssai' as VendorDocument['type'], fileUrl: '', fileName: '' });
+    const [uploadingDoc, setUploadingDoc] = useState(false);
+
     // Team state
     const [team, setTeam] = useState<TeamMember[]>([]);
     const [teamLoading, setTeamLoading] = useState(true);
@@ -144,7 +167,38 @@ export default function VendorSettingsPage() {
         }
     }, []);
 
-    useEffect(() => { fetchSettings(); fetchTeam(); }, [fetchSettings, fetchTeam]);
+    const fetchDocuments = useCallback(async () => {
+        try {
+            const res = await fetch('/api/v1/vendor/documents');
+            const json = await res.json();
+            if (json.success) setDocuments(json.data);
+        } catch (err) {
+            console.error('Failed to load documents:', err);
+        }
+    }, []);
+
+    useEffect(() => { fetchSettings(); fetchTeam(); fetchDocuments(); }, [fetchSettings, fetchTeam, fetchDocuments]);
+
+    const handleUploadDoc = async () => {
+        if (!docForm.fileUrl || !docForm.fileName) return;
+        try {
+            setUploadingDoc(true);
+            const res = await fetch('/api/v1/vendor/documents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(docForm),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Upload failed');
+            await fetchDocuments();
+            setDocForm({ type: 'fssai', fileUrl: '', fileName: '' });
+            toast.success('Document uploaded');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Upload failed');
+        } finally {
+            setUploadingDoc(false);
+        }
+    };
 
     // ── Profile Save ──
     const handleSave = async () => {
@@ -772,6 +826,76 @@ export default function VendorSettingsPage() {
                         })}
                     </div>
                 )}
+            </div>
+
+            {/* Verification Documents */}
+            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-[#EEEEEE] flex items-center gap-2">
+                    <FileText size={20} className="text-[#299E60]" />
+                    <h2 className="text-[18px] font-bold text-[#181725]">Verification Documents</h2>
+                </div>
+                <div className="p-6 space-y-4">
+                    <p className="text-[13px] text-[#7C7C7C]">Upload FSSAI license, GST certificate, PAN card, and bank proof so our team can verify your store.</p>
+
+                    {/* Uploaded docs */}
+                    {documents.length > 0 && (
+                        <div className="divide-y divide-[#F5F5F5] border border-[#EEEEEE] rounded-[10px] overflow-hidden">
+                            {documents.map(doc => (
+                                <div key={doc.id} className="flex items-center gap-3 px-4 py-3">
+                                    <FileText size={16} className="text-[#AEAEAE] shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[13px] font-bold text-[#181725] truncate">{DOC_TYPE_LABELS[doc.type] ?? doc.type}</p>
+                                        <p className="text-[11px] text-[#AEAEAE] truncate">{doc.fileName}</p>
+                                    </div>
+                                    {doc.status === 'verified' ? (
+                                        <span className="flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-[5px] shrink-0">
+                                            <CheckCircle2 size={11} /> Verified
+                                        </span>
+                                    ) : doc.status === 'rejected' ? (
+                                        <span className="flex items-center gap-1 text-[11px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-[5px] shrink-0">
+                                            <AlertCircle size={11} /> Rejected
+                                        </span>
+                                    ) : (
+                                        <span className="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-[5px] shrink-0">Pending</span>
+                                    )}
+                                    <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer"
+                                        className="text-[12px] font-bold text-[#299E60] hover:underline shrink-0">View</a>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Upload form */}
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <select
+                            value={docForm.type}
+                            onChange={e => setDocForm(f => ({ ...f, type: e.target.value as VendorDocument['type'] }))}
+                            className="h-[44px] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 bg-white"
+                        >
+                            {Object.entries(DOC_TYPE_LABELS).map(([val, label]) => (
+                                <option key={val} value={val}>{label}</option>
+                            ))}
+                        </select>
+                        <input type="text" placeholder="File URL (from ImageKit)"
+                            value={docForm.fileUrl}
+                            onChange={e => setDocForm(f => ({ ...f, fileUrl: e.target.value }))}
+                            className="h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40"
+                        />
+                        <input type="text" placeholder="File name (e.g. fssai-cert.pdf)"
+                            value={docForm.fileName}
+                            onChange={e => setDocForm(f => ({ ...f, fileName: e.target.value }))}
+                            className="h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40"
+                        />
+                    </div>
+                    <button
+                        onClick={handleUploadDoc}
+                        disabled={uploadingDoc || !docForm.fileUrl || !docForm.fileName}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-[#299E60] text-white text-[13px] font-bold rounded-[10px] disabled:opacity-50 hover:bg-[#22844f] transition-colors"
+                    >
+                        {uploadingDoc ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                        Upload Document
+                    </button>
+                </div>
             </div>
         </div>
     );

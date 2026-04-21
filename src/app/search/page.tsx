@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Search, ArrowLeft, Star, Clock, CreditCard, Package, ChevronRight } from 'lucide-react';
 import { dal } from '@/lib/dal';
 import type { VendorProduct, VendorSummary, Category } from '@/types';
@@ -179,8 +180,8 @@ function SearchPageContent() {
                                                 href={vendorPath}
                                                 className="flex items-center gap-4 bg-white rounded-2xl p-4 border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all group"
                                             >
-                                                <div className="w-14 h-14 bg-gray-50 rounded-xl flex items-center justify-center p-2 shrink-0 border border-gray-100">
-                                                    <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform" />
+                                                <div className="w-14 h-14 bg-gray-50 rounded-xl flex items-center justify-center p-2 shrink-0 border border-gray-100 relative overflow-hidden">
+                                                    <Image src={vendor.logo || '/placeholder.png'} alt={vendor.name} fill className="object-contain group-hover:scale-110 transition-transform" sizes="56px" />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-[14px] font-bold text-[#181725]">{vendor.name}</p>

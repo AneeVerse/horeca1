@@ -92,6 +92,7 @@ model User {
   adminMembership   AdminTeamMember?   @relation("AdminMembership")
   adminInvitesSent  AdminTeamMember[]  @relation("AdminInvites")
   savedAddresses    SavedAddress[]
+  returnRequests    ReturnRequest[] @relation("CustomerReturnRequests")
 
   @@index([email])
   @@index([phone])
@@ -173,6 +174,7 @@ model Vendor {
   collectionProducts CollectionProduct[]
   reviews            Review[]
   teamMembers        VendorTeamMember[]
+  documents          VendorDocument[]
 
   @@index([slug])
   @@index([isActive])
@@ -445,10 +447,11 @@ model Order {
   user         User          @relation(fields: [userId], references: [id])
   vendor       Vendor        @relation(fields: [vendorId], references: [id])
   deliverySlot DeliverySlot? @relation(fields: [deliverySlotId], references: [id])
-  items        OrderItem[]
-  payments     Payment[]
-  creditTxns   CreditTransaction[]
-  review       Review?
+  items          OrderItem[]
+  payments       Payment[]
+  creditTxns     CreditTransaction[]
+  review         Review?
+  returnRequest  ReturnRequest?
 
   @@index([userId])
   @@index([vendorId])
@@ -891,4 +894,41 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([at])
   @@map("audit_logs")
+}
+
+model ReturnRequest {
+  id           String   @id @default(uuid()) @db.Uuid
+  orderId      String   @map("order_id") @db.Uuid
+  customerId   String   @map("customer_id") @db.Uuid
+  reason       String   @db.Text
+  status       String   @default("pending") @db.VarChar(20)
+  adminNote    String?  @map("admin_note") @db.Text
+  refundAmount Decimal? @map("refund_amount") @db.Decimal(12, 2)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  order    Order @relation(fields: [orderId], references: [id])
+  customer User  @relation("CustomerReturnRequests", fields: [customerId], references: [id])
+
+  @@unique([orderId])
+  @@index([status])
+  @@map("return_requests")
+}
+
+model VendorDocument {
+  id         String   @id @default(uuid()) @db.Uuid
+  vendorId   String   @map("vendor_id") @db.Uuid
+  type       String   @db.VarChar(50)
+  fileUrl    String   @map("file_url") @db.VarChar(512)
+  fileName   String   @map("file_name") @db.VarChar(255)
+  status     String   @default("pending") @db.VarChar(20)
+  adminNote  String?  @map("admin_note") @db.Text
+  uploadedAt DateTime @default(now()) @map("uploaded_at") @db.Timestamptz
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@index([status])
+  @@map("vendor_documents")
 }

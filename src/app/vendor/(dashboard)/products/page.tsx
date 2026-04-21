@@ -50,6 +50,11 @@ interface Category {
     slug: string;
 }
 
+interface BrandOption {
+    id: string;
+    name: string;
+}
+
 interface PriceSlabRow {
     minQty: string;
     maxQty: string;
@@ -268,6 +273,7 @@ interface ProductSuggestion {
 export default function VendorProductsPage() {
     const [products, setProducts] = useState<VendorProduct[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
+    const [brands, setBrands] = useState<BrandOption[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
@@ -312,6 +318,10 @@ export default function VendorProductsPage() {
         fetch('/api/v1/categories')
             .then(r => r.json())
             .then(json => { if (json.success) setCategories(json.data); })
+            .catch(console.error);
+        fetch('/api/v1/brands?limit=200')
+            .then(r => r.json())
+            .then(json => { if (json.success) setBrands((json.data?.brands ?? json.data ?? []).map((b: { id: string; name: string }) => ({ id: b.id, name: b.name }))); })
             .catch(console.error);
     }, [fetchProducts]);
 
@@ -1169,14 +1179,22 @@ export default function VendorProductsPage() {
                                             </div>
                                             <div>
                                                 <FieldLabel>Brand</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={form.brand}
-                                                    onChange={(e) => updateField('brand', e.target.value)}
-                                                    className={cn(inputCls, (editingProduct?.approvalStatus === 'approved' || basedOnProductId) && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
-                                                    placeholder="e.g., India Gate"
-                                                    disabled={editingProduct?.approvalStatus === 'approved' || !!basedOnProductId}
-                                                />
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        list="brand-options"
+                                                        value={form.brand}
+                                                        onChange={(e) => updateField('brand', e.target.value)}
+                                                        className={cn(inputCls, (editingProduct?.approvalStatus === 'approved' || basedOnProductId) && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
+                                                        placeholder="Select or type brand name"
+                                                        disabled={editingProduct?.approvalStatus === 'approved' || !!basedOnProductId}
+                                                    />
+                                                    <datalist id="brand-options">
+                                                        {brands.map(b => (
+                                                            <option key={b.id} value={b.name} />
+                                                        ))}
+                                                    </datalist>
+                                                </div>
                                             </div>
                                             <div>
                                                 <FieldLabel>Barcode</FieldLabel>

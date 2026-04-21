@@ -314,8 +314,8 @@ export default function ProductDetailPage() {
                     <div className="flex gap-3 overflow-x-auto pb-6 no-scrollbar -mx-4 px-4 snap-x">
                         {similarItemsList.map((item) => (
                             <Link key={item.id} href={`/product/${item.originalId || item.id}`} className="min-w-[150px] bg-white border border-gray-100 rounded-[18px] p-3 flex flex-col snap-start shadow-sm">
-                                <div className="w-full aspect-[4/3] flex items-center justify-center mb-3">
-                                    <img src={item.image} alt={item.name} className="max-w-[80%] max-h-full object-contain" />
+                                <div className="w-full aspect-[4/3] relative mb-3">
+                                    <Image src={item.image || '/placeholder.png'} alt={item.name} fill className="object-contain" sizes="150px" />
                                 </div>
                                 <h3 className="text-[13px] font-bold text-[#181725] leading-tight line-clamp-1 mb-1">{item.name}</h3>
                                 <p className="text-[10px] text-[#7C7C7C] font-medium">Sold by {item.vendorCount || 3} vendors</p>
@@ -508,8 +508,8 @@ export default function ProductDetailPage() {
                         <div className="grid grid-cols-4 gap-10">
                             {similarItemsList.map((item) => (
                                 <Link key={item.id} href={`/product/${item.originalId || item.id}`} className="bg-white border border-gray-100 rounded-[48px] p-7 flex flex-col hover:shadow-[0_30px_70px_-15px_rgba(0,0,0,0.1)] hover:-translate-y-3 transition-all group relative overflow-hidden">
-                                    <div className="w-full aspect-square flex items-center justify-center mb-8 bg-[#F8F9FB]/50 rounded-[38px] overflow-hidden group-hover:bg-[#F1FBF4]/50 transition-colors duration-500">
-                                        <img src={item.image} alt={item.name} className="max-w-[75%] max-h-[75%] object-contain group-hover:scale-110 transition-transform duration-700" />
+                                    <div className="w-full aspect-square relative mb-8 bg-[#F8F9FB]/50 rounded-[38px] overflow-hidden group-hover:bg-[#F1FBF4]/50 transition-colors duration-500">
+                                        <Image src={item.image || '/placeholder.png'} alt={item.name} fill className="object-contain group-hover:scale-110 transition-transform duration-700" sizes="25vw" />
                                     </div>
                                     <h3 className="text-[18px] font-black text-[#181725] leading-tight line-clamp-2 mb-4 group-hover:text-[#53B175] transition-colors">{item.name}</h3>
                                     <div className="mt-auto flex items-center justify-between border-t border-gray-50 pt-6">

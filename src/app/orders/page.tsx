@@ -4,6 +4,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Star, Home, Package, LogIn, X, Loader2, Store, Clock, CheckCircle2, XCircle, Truck, CreditCard } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'sonner';
@@ -249,9 +250,9 @@ export default function OrderHistoryPage() {
                                 >
                                     {/* Header: vendor + status */}
                                     <div className="px-4 pt-4 pb-3 flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
+                                        <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0 overflow-hidden relative">
                                             {order.vendor?.logoUrl
-                                                ? <img src={order.vendor.logoUrl} alt={order.vendor.businessName} className="w-full h-full object-contain p-1" />
+                                                ? <Image src={order.vendor.logoUrl} alt={order.vendor.businessName} fill className="object-contain p-1" sizes="40px" />
                                                 : <Store size={16} className="text-gray-400" />
                                             }
                                         </div>
@@ -283,9 +284,9 @@ export default function OrderHistoryPage() {
                                             {order.items.map((item, idx) => {
                                                 const img = getProductImage(item);
                                                 return (
-                                                    <div key={idx} className="w-[52px] h-[52px] min-w-[52px] rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center p-1.5 shrink-0">
+                                                    <div key={idx} className="w-[52px] h-[52px] min-w-[52px] rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center p-1.5 shrink-0 relative overflow-hidden">
                                                         {img
-                                                            ? <img src={img} alt={item.productName} className="w-full h-full object-contain" />
+                                                            ? <Image src={img} alt={item.productName} fill className="object-contain p-1.5" sizes="52px" />
                                                             : <Package size={18} className="text-gray-300" />
                                                         }
                                                     </div>

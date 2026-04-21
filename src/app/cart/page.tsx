@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 declare global {
@@ -464,7 +465,7 @@ export default function CartPage() {
     if (cart.length === 0) {
         return (
             <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
-                <img src="/images/empty-cart.png" alt="Empty Cart" className="w-[180px] mb-8 opacity-20" />
+                <Image src="/images/empty-cart.png" alt="Empty Cart" width={180} height={180} className="mb-8 opacity-20" />
                 <h2 className="text-[20px] font-bold text-[#181725] mb-2">No items in cart</h2>
                 <p className="text-[#7C7C7C] text-center mb-8">Your cart is currently empty. Start adding some products!</p>
                 <button onClick={() => router.push('/')} className="bg-[#53B175] text-white px-12 py-4 rounded-xl font-bold hover:bg-[#48a068] transition-colors">
@@ -561,10 +562,10 @@ export default function CartPage() {
                                             {shipment.items.slice(0, 3).map((item, idx) => (
                                                 <div
                                                     key={idx}
-                                                    className="w-[52px] h-[52px] rounded-full bg-white flex items-center justify-center shrink-0 border border-gray-100 shadow-sm"
+                                                    className="w-[52px] h-[52px] rounded-full bg-white flex items-center justify-center shrink-0 border border-gray-100 shadow-sm relative overflow-hidden"
                                                     style={{ zIndex: shipment.items.length - idx }}
                                                 >
-                                                    <img src={item.image} alt="" className="max-w-[70%] max-h-[70%] object-contain" />
+                                                    <Image src={item.image || '/placeholder.png'} alt="" fill className="object-contain p-[15%]" sizes="52px" />
                                                 </div>
                                             ))}
                                         </div>
@@ -649,8 +650,8 @@ export default function CartPage() {
                                             {shipment.items.map((item) => (
                                                 <div key={item.id} className="px-7 py-5 flex items-center gap-5 hover:bg-gray-50/40 transition-colors group">
                                                     {/* Product Image */}
-                                                    <div className="w-[72px] h-[72px] rounded-2xl bg-[#F7F8F7] flex items-center justify-center shrink-0 border border-gray-100 p-2 group-hover:border-primary/10 transition-colors">
-                                                        <img src={item.image} alt={item.name} className="max-w-full max-h-full object-contain" />
+                                                    <div className="w-[72px] h-[72px] rounded-2xl bg-[#F7F8F7] shrink-0 border border-gray-100 group-hover:border-primary/10 transition-colors relative overflow-hidden">
+                                                        <Image src={item.image || '/placeholder.png'} alt={item.name} fill className="object-contain p-2" sizes="72px" />
                                                     </div>
 
                                                     {/* Product Info */}
