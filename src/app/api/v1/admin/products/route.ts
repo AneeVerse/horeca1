@@ -78,9 +78,6 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
         vendor: { select: { id: true, businessName: true } },
         category: { select: { id: true, name: true } },
         inventory: { select: { qtyAvailable: true } },
-        categoryLinks: {
-          include: { category: { select: { id: true, name: true } } },
-        },
       },
     });
 
