@@ -63,10 +63,10 @@ export class SearchService {
       const fuzzyRows = await prisma.$queryRaw<TrgmRow[]>(
         Prisma.sql`
           SELECT id
-          FROM   "Product"
+          FROM   products
           WHERE  name % ${query}
-             AND "is_active" = true
-             AND "approval_status" = 'approved'
+             AND is_active = true
+             AND approval_status = 'approved'
           ORDER  BY similarity(name, ${query}) DESC
           LIMIT  20
         `
