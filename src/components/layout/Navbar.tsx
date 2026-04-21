@@ -465,8 +465,8 @@ export function Navbar() {
                                             )}
                                         >
                                             <div className="flex items-center gap-3.5">
-                                                <div className="w-7 h-7 flex items-center justify-center transition-all">
-                                                    <img src={item.image} alt="" className="max-w-full max-h-full object-contain" />
+                                                <div className="w-7 h-7 flex items-center justify-center transition-all relative">
+                                                    <Image src={item.image} alt="" fill className="object-contain" />
                                                 </div>
                                                 <span className="text-[14px] font-bold">{item.name}</span>
                                             </div>
@@ -496,8 +496,8 @@ export function Navbar() {
                                                     }}
                                                     className="flex items-center gap-4 p-4 bg-white rounded-lg border border-gray-100 hover:border-primary/30 hover:shadow-md transition-all group/vendor cursor-pointer"
                                                 >
-                                                    <div className="w-12 h-12 rounded-lg border border-gray-50 flex items-center justify-center p-1.5 shrink-0 bg-white">
-                                                        <img src={vendor.logo} alt="" className="max-w-full max-h-full object-contain group-hover/vendor:scale-110 transition-transform" />
+                                                    <div className="w-12 h-12 rounded-lg border border-gray-50 flex items-center justify-center p-1.5 shrink-0 bg-white relative overflow-hidden">
+                                                        <Image src={vendor.logo || '/placeholder.png'} alt="" fill className="object-contain group-hover/vendor:scale-110 transition-transform" />
                                                     </div>
                                                     <div className="flex-1 min-w-0">
                                                         <h5 className="text-[14px] font-bold text-text truncate group-hover/vendor:text-primary transition-colors">{vendor.name}</h5>
@@ -732,10 +732,11 @@ export function Navbar() {
                                     }}
                                 >
                                     <div className="relative w-[75%] h-[75%]">
-                                        <img
+                                        <Image
                                             src={item.image}
                                             alt={item.name}
-                                            className="w-full h-full object-contain"
+                                            fill
+                                            className="object-contain"
                                         />
                                     </div>
                                 </div>

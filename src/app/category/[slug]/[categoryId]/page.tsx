@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { Search, Star, ArrowLeft, ChevronDown } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
@@ -170,11 +171,11 @@ function VendorCategoryPageContent() {
                                 >
                                     {isActive && <div className="absolute right-[-1px] top-[16px] h-[72px] w-[4px] bg-[#53B175] rounded-l-md z-20" />}
                                     <div className={cn(
-                                        "flex items-center justify-center mb-2 overflow-hidden transition-all",
+                                        "flex items-center justify-center mb-2 overflow-hidden transition-all relative",
                                         "w-[72px] h-[72px] md:w-[92px] md:h-[92px] rounded-[14px] md:rounded-[20px] bg-white p-2 md:p-3",
                                         isActive ? "border-[2px] border-[#53B175]" : "border border-gray-100"
                                     )}>
-                                        <img src={cat.image || '/images/category/vegitable.png'} alt="" className="w-full h-full object-contain" />
+                                        <Image src={cat.image || '/images/category/vegitable.png'} alt="" fill className="object-contain" />
                                     </div>
                                     <p className={cn(
                                         "text-[11px] md:text-[13px] text-center font-black leading-tight px-1",
@@ -252,8 +253,8 @@ function VendorCategoryPageContent() {
                         <aside className="w-[280px] shrink-0 sticky top-24">
                             <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm overflow-hidden">
                                 <div className="flex items-center gap-4 mb-8">
-                                    <div className="w-16 h-16 bg-gray-50 rounded-xl flex items-center justify-center p-2 shrink-0 border border-gray-100">
-                                        <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-contain" />
+                                    <div className="w-16 h-16 bg-gray-50 rounded-xl flex items-center justify-center p-2 shrink-0 border border-gray-100 relative overflow-hidden">
+                                        <Image src={vendor.logo || '/placeholder.png'} alt={vendor.name} fill className="object-contain" />
                                     </div>
                                     <div>
                                         <h2 className="text-[18px] font-bold text-[#181725] leading-tight mb-1">{vendor.name}</h2>
@@ -290,10 +291,10 @@ function VendorCategoryPageContent() {
                                             >
                                                 <div className="flex items-center gap-3">
                                                     <div className={cn(
-                                                        "w-8 h-8 rounded-lg flex items-center justify-center border transition-all",
+                                                        "w-8 h-8 rounded-lg flex items-center justify-center border transition-all relative overflow-hidden",
                                                         isActive ? "bg-white border-[#53B175]/20 shadow-sm" : "bg-gray-50 border-transparent group-hover:bg-white group-hover:border-gray-100"
                                                     )}>
-                                                        <img src={cat.image || '/images/category/vegitable.png'} alt="" className="w-6 h-6 object-contain" />
+                                                        <Image src={cat.image || '/images/category/vegitable.png'} alt="" width={24} height={24} className="object-contain" />
                                                     </div>
                                                     <span className={cn(
                                                         "text-[14px] font-bold transition-colors",

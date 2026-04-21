@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { Loader2, Package, AlertTriangle, Search, X, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -156,9 +157,9 @@ export default function VendorInventoryPage() {
                                         <tr key={item.id} className={cn('hover:bg-[#FAFAFA] transition-colors', item.isLowStock && 'bg-red-50/50')}>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-[40px] h-[40px] rounded-[8px] bg-[#F1F4F9] overflow-hidden shrink-0 flex items-center justify-center">
+                                                    <div className="w-[40px] h-[40px] rounded-[8px] bg-[#F1F4F9] overflow-hidden shrink-0 flex items-center justify-center relative">
                                                         {item.product.imageUrl ? (
-                                                            <img src={item.product.imageUrl} alt="" className="w-full h-full object-cover" />
+                                                            <Image src={item.product.imageUrl} alt="" fill className="object-cover" />
                                                         ) : (
                                                             <Package size={16} className="text-[#AEAEAE]" />
                                                         )}

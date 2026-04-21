@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
@@ -158,7 +159,9 @@ export function TopVendors() {
                         )}>
                             {/* Logo Wrapper */}
                             <div className="absolute -top-5 md:-top-6 left-1/2 -translate-x-1/2 w-12 h-12 md:w-16 md:h-16 bg-white rounded-full flex items-center justify-center shadow-lg border-2 md:border-4 border-white transition-transform duration-500 group-hover:scale-110">
-                                <img src={vendor.logo} alt={vendor.name} className="w-full h-full object-contain p-1.5 md:p-2" />
+                                <div className="relative w-full h-full p-1.5 md:p-2">
+                                    <Image src={vendor.logo} alt={vendor.name} fill className="object-contain" />
+                                </div>
                             </div>
 
                             {/* Vendor Info */}
@@ -177,8 +180,8 @@ export function TopVendors() {
                             {/* Product Previews */}
                             <div className="flex items-center justify-center gap-1 md:gap-2 px-2">
                                 {vendor.productImages.slice(0, 4).map((img, idx) => (
-                                    <div key={idx} className="w-6 h-6 md:w-10 md:h-10 bg-white rounded-full flex items-center justify-center p-0.5 md:p-1 shadow-sm overflow-hidden transition-transform duration-300 hover:-translate-y-1">
-                                        <img src={img} alt="Product Preview" className="w-full h-full object-contain hover:scale-110 transition-transform" />
+                                    <div key={idx} className="w-6 h-6 md:w-10 md:h-10 bg-white rounded-full flex items-center justify-center p-0.5 md:p-1 shadow-sm overflow-hidden transition-transform duration-300 hover:-translate-y-1 relative">
+                                        <Image src={img} alt="Product Preview" fill className="object-contain hover:scale-110 transition-transform" />
                                     </div>
                                 ))}
                             </div>

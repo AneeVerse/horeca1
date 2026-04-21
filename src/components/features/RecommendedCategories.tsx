@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 
 interface Product {
@@ -67,15 +68,16 @@ const ProductCard = ({ product }: { product: Product }) => (
     <div className="bg-white border border-gray-200 rounded-[16px] p-3 md:p-5 flex flex-col relative group transition-all duration-300 hover:shadow-md h-full">
         {/* Share Button — custom SVG */}
         <button className="absolute right-3 top-3 z-10 text-gray-400 hover:opacity-70 transition-opacity">
-            <img src="/images/share.svg" alt="share" className="w-[14px] h-[15px]" />
+            <Image src="/images/share.svg" alt="share" width={14} height={15} />
         </button>
 
         {/* Product Image */}
-        <Link href={`/product/${product.id}`} className="w-full aspect-square md:aspect-auto md:h-[220px] flex items-center justify-center p-2 mb-2 overflow-hidden">
-            <img
+        <Link href={`/product/${product.id}`} className="w-full aspect-square md:aspect-auto md:h-[220px] flex items-center justify-center p-2 mb-2 overflow-hidden relative">
+            <Image
                 src={product.image}
                 alt={product.name}
-                className="max-w-full max-h-full object-contain scale-[1.15]"
+                fill
+                className="object-contain scale-[1.15]"
             />
         </Link>
 
@@ -87,7 +89,7 @@ const ProductCard = ({ product }: { product: Product }) => (
         </Link>
 
         <div className="flex items-center gap-1.5 mb-2">
-            <img src="/images/shop.svg" alt="shop" className="w-[11px] h-[13px]" />
+            <Image src="/images/shop.svg" alt="shop" width={11} height={13} />
             <span className="text-[10px] md:text-[12px] text-gray-400">
                 Sold by: {product.soldBy} venders
             </span>
@@ -115,8 +117,8 @@ export function RecommendedCategories() {
                         {/* Category Header */}
                         <div className="flex items-center justify-between mb-4 md:mb-6">
                             <div className="flex items-center gap-3">
-                                <div className="w-[44px] h-[44px] md:w-[52px] md:h-[52px] rounded-[12px] overflow-hidden">
-                                    <img src={category.icon} alt={category.title} className="w-full h-full object-cover" />
+                                <div className="w-[44px] h-[44px] md:w-[52px] md:h-[52px] rounded-[12px] overflow-hidden relative">
+                                    <Image src={category.icon} alt={category.title} fill className="object-cover" />
                                 </div>
                                 <div>
                                     <h2 className="text-[20px] md:text-[22px] font-semibold text-[#1e293b]" style={{ lineHeight: '100%', letterSpacing: '0%' }}>

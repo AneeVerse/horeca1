@@ -19,6 +19,8 @@ import {
     ShieldX,
     User,
     CalendarClock,
+    FileText,
+    AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
@@ -56,6 +58,21 @@ interface VendorUser {
     isActive: boolean;
     createdAt: string;
 }
+
+interface VendorDocument {
+    id: string;
+    type: string;
+    fileUrl: string;
+    fileName: string;
+    status: string;
+    adminNote: string | null;
+    uploadedAt: string;
+}
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+    fssai: 'FSSAI License', gst: 'GST Certificate', pan: 'PAN Card',
+    bank_proof: 'Bank Proof', other: 'Other',
+};
 
 interface VendorData {
     id: string;
@@ -137,6 +154,8 @@ export default function VendorDetailsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [togglingVerification, setTogglingVerification] = useState(false);
+    const [documents, setDocuments] = useState<VendorDocument[]>([]);
+    const [updatingDoc, setUpdatingDoc] = useState<string | null>(null);
 
     const fetchVendor = useCallback(async () => {
         try {
@@ -161,8 +180,29 @@ export default function VendorDetailsPage() {
     useEffect(() => {
         if (vendorId) {
             fetchVendor();
+            fetch(`/api/v1/admin/vendors/${vendorId}/documents`)
+                .then(r => r.json())
+                .then(json => { if (json.success) setDocuments(json.data ?? []); })
+                .catch(() => {});
         }
     }, [vendorId, fetchVendor]);
+
+    const handleDocStatus = async (docId: string, status: 'verified' | 'rejected', adminNote?: string) => {
+        setUpdatingDoc(docId);
+        try {
+            await fetch(`/api/v1/admin/vendors/${vendorId}/documents/${docId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status, adminNote }),
+            });
+            setDocuments(prev => prev.map(d => d.id === docId ? { ...d, status, adminNote: adminNote ?? d.adminNote } : d));
+            toast.success(`Document marked as ${status}`);
+        } catch {
+            toast.error('Failed to update document');
+        } finally {
+            setUpdatingDoc(null);
+        }
+    };
 
     const handleToggleVerification = async () => {
         if (!vendor || togglingVerification) return;
@@ -675,6 +715,64 @@ export default function VendorDetailsPage() {
                         </div>
                     )}
                 </div>
+            </div>
+
+            {/* Verification Documents */}
+            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                <div className="p-6 flex items-center gap-2 border-b border-[#EEEEEE]">
+                    <FileText size={20} className="text-[#7C3AED]" />
+                    <h3 className="text-[18px] font-extrabold text-[#181725]">Verification Documents</h3>
+                    <span className="text-[14px] font-bold text-[#AEAEAE]">({documents.length})</span>
+                </div>
+                {documents.length === 0 ? (
+                    <div className="p-12 text-center">
+                        <FileText size={40} className="text-[#E5E7EB] mx-auto mb-3" />
+                        <p className="text-[14px] font-bold text-[#AEAEAE]">No documents uploaded</p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-[#F5F5F5]">
+                        {documents.map(doc => (
+                            <div key={doc.id} className="px-6 py-4 flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <div className="w-[36px] h-[36px] rounded-[10px] bg-[#F3EFFE] flex items-center justify-center text-[#7C3AED] shrink-0">
+                                        <FileText size={16} />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-[13px] font-bold text-[#181725]">{DOC_TYPE_LABELS[doc.type] ?? doc.type}</p>
+                                        <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer"
+                                            className="text-[12px] text-[#299E60] hover:underline truncate block max-w-[260px]">
+                                            {doc.fileName}
+                                        </a>
+                                        {doc.adminNote && <p className="text-[11px] text-[#AEAEAE] mt-0.5">{doc.adminNote}</p>}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <span className={cn('text-[11px] font-bold px-2.5 py-1 rounded-[6px] uppercase',
+                                        doc.status === 'verified' ? 'bg-green-50 text-green-700' :
+                                        doc.status === 'rejected' ? 'bg-red-50 text-red-700' :
+                                        'bg-amber-50 text-amber-700'
+                                    )}>{doc.status}</span>
+                                    {doc.status !== 'verified' && (
+                                        <button onClick={() => handleDocStatus(doc.id, 'verified')}
+                                            disabled={updatingDoc === doc.id}
+                                            className="px-3 py-1.5 bg-[#299E60] text-white text-[11px] font-bold rounded-[7px] disabled:opacity-50 flex items-center gap-1">
+                                            {updatingDoc === doc.id ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle2 size={11} />}
+                                            Verify
+                                        </button>
+                                    )}
+                                    {doc.status !== 'rejected' && (
+                                        <button onClick={() => handleDocStatus(doc.id, 'rejected')}
+                                            disabled={updatingDoc === doc.id}
+                                            className="px-3 py-1.5 bg-red-50 text-red-600 text-[11px] font-bold rounded-[7px] disabled:opacity-50 flex items-center gap-1 border border-red-100">
+                                            {updatingDoc === doc.id ? <Loader2 size={11} className="animate-spin" /> : <AlertCircle size={11} />}
+                                            Reject
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -25,6 +25,7 @@ import {
     Tag,
     Home,
     Sparkles,
+    RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AccountSwitcherDropdown } from '@/components/account-switcher/AccountSwitcherDropdown';
@@ -37,6 +38,7 @@ const SIDEBAR_LINKS = [
     { name: 'Products', icon: Package, href: '/admin/products' },
     { name: 'Categories', icon: Tag, href: '/admin/categories' },
     { name: 'Approvals', icon: CheckSquare, href: '/admin/approvals' },
+    { name: 'Returns', icon: RotateCcw, href: '/admin/returns' },
     { name: 'Brands', icon: Sparkles, href: '/admin/brands' },
     { name: 'Finance', icon: Wallet, href: '/admin/finance' },
     { name: 'Reports', icon: BarChart3, href: '/admin/reports' },

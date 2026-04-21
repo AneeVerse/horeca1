@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { ChevronLeft, ShoppingCart, Trash2, Heart, X, ArrowRight } from 'lucide-react';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
@@ -62,8 +63,8 @@ export function WishlistOverlay({ isOpen, onClose }: WishlistOverlayProps) {
                             {wishlist.map((item) => (
                                 <div key={item.id} className="bg-white md:bg-gray-50/80 border border-gray-100 rounded-[12px] md:rounded-2xl p-3 md:p-4 shadow-sm group">
                                     <div className="flex items-center gap-3 md:gap-4">
-                                        <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-xl flex items-center justify-center p-2 border border-gray-50 shrink-0">
-                                            <img src={item.images[0]} alt={item.name} className="max-w-full max-h-full object-contain" />
+                                        <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-xl flex items-center justify-center p-2 border border-gray-50 shrink-0 relative overflow-hidden">
+                                            <Image src={item.images[0] || '/placeholder.png'} alt={item.name} fill className="object-contain" />
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-start justify-between">

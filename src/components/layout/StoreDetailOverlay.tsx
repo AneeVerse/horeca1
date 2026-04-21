@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { ArrowLeft, Search, Star, ChevronDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MobileBottomNav } from './MobileBottomNav';
@@ -142,8 +143,8 @@ export function StoreDetailOverlay({ isOpen, onClose, store }: StoreDetailOverla
                 <div className="flex flex-col">
                     {STORE_ITEMS.map((item, idx) => (
                         <div key={idx} className="flex items-center gap-4 p-4 bg-white border-b border-gray-50">
-                            <div className="w-20 h-20 shrink-0 bg-gray-50 rounded-xl overflow-hidden border border-gray-100 p-1">
-                                <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
+                            <div className="w-20 h-20 shrink-0 bg-gray-50 rounded-xl overflow-hidden border border-gray-100 p-1 relative">
+                                <Image src={item.image} alt={item.name} fill className="object-contain" />
                             </div>
                             <div className="flex-1 min-w-0">
                                 <h3 className="text-sm font-bold text-gray-800">{item.name}</h3>

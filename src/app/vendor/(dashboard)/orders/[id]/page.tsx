@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ChevronLeft, User, Package, MapPin, Loader2, AlertCircle, Clock } from 'lucide-react';
@@ -259,8 +260,8 @@ export default function VendorOrderDetailPage() {
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 {item.product?.imageUrl ? (
-                                                    <div className="w-[40px] h-[40px] rounded-[8px] overflow-hidden bg-[#F1F4F9] shrink-0">
-                                                        <img src={item.product.imageUrl} alt={item.productName} className="w-full h-full object-cover" />
+                                                    <div className="w-[40px] h-[40px] rounded-[8px] overflow-hidden bg-[#F1F4F9] shrink-0 relative">
+                                                        <Image src={item.product.imageUrl} alt={item.productName} fill className="object-cover" />
                                                     </div>
                                                 ) : (
                                                     <div className="w-[40px] h-[40px] rounded-[8px] bg-[#F1F4F9] shrink-0 flex items-center justify-center">

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { ChevronLeft, CreditCard, Smartphone, Building2, FileText, Clock, CheckCircle2, Shield, User, Loader2, Check } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
@@ -328,8 +329,8 @@ export default function CheckoutPage() {
                                         </button>
                                     )}
                                     {group.vendorLogo && (
-                                        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center p-1 border border-gray-100">
-                                            <img src={group.vendorLogo} alt={group.vendorName} className="w-full h-full object-contain" />
+                                        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center p-1 border border-gray-100 relative overflow-hidden">
+                                            <Image src={group.vendorLogo} alt={group.vendorName} fill className="object-contain" />
                                         </div>
                                     )}
                                     <div className="flex-1">
@@ -355,8 +356,8 @@ export default function CheckoutPage() {
                                 {/* Items */}
                                 {group.items.map((item) => (
                                     <div key={item.productId} className="flex items-center gap-3 px-4 py-3 border-b border-gray-50">
-                                        <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center p-1 shrink-0">
-                                            <img src={item.product.images[0] || '/images/recom-product/product-img10.png'} alt={item.product.name} className="w-full h-full object-contain" />
+                                        <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center p-1 shrink-0 relative overflow-hidden">
+                                            <Image src={item.product.images[0] || '/images/recom-product/product-img10.png'} alt={item.product.name} fill className="object-contain" />
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-[12px] font-bold text-[#181725] line-clamp-1">{item.product.name}</p>

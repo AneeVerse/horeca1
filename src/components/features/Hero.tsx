@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import {
     ChevronLeft,
@@ -96,7 +97,7 @@ export function Hero() {
                         </div>
                         <div className={`flex items-center w-full transition-all duration-300 ${getAnimationClass()}`}>
                             <div className="flex-shrink-0 mr-4 md:mr-8 lg:mr-16 translate-y-2 relative z-10">
-                                <img src={SLIDES[currentSlide].image} alt={SLIDES[currentSlide].title} className="h-[120px] md:h-[140px] lg:h-[200px] w-auto object-contain drop-shadow-2xl brightness-110 mt-2" />
+                                <Image src={SLIDES[currentSlide].image} alt={SLIDES[currentSlide].title} width={200} height={200} className="h-[120px] md:h-[140px] lg:h-[200px] w-auto object-contain drop-shadow-2xl brightness-110 mt-2" priority />
                             </div>
                             <div className="flex-grow flex flex-col items-start justify-center text-white relative z-10">
                                 <h1 className="text-[1.8rem] md:text-[2.2rem] lg:text-[3rem] font-[900] leading-[1.1] tracking-tight drop-shadow-md">{SLIDES[currentSlide].title}</h1>
@@ -120,8 +121,8 @@ export function Hero() {
                                 <h2 className="text-[0.95rem] font-[800] text-[#0f172a] leading-[1.25] mb-5 max-w-[260px]">{MOBILE_HERO.title}</h2>
                                 <button className="bg-[#5cb85c] text-white px-5 py-2 rounded-[10px] text-[13px] font-medium transition-all active:scale-95">Shop Now</button>
                             </div>
-                            <div className="flex-shrink-0 w-[40%]">
-                                <img src={MOBILE_HERO.image} alt="Mobile Hero" className="w-full h-auto object-contain" />
+                            <div className="flex-shrink-0 w-[40%] relative h-[120px]">
+                                <Image src={MOBILE_HERO.image} alt="Mobile Hero" fill className="object-contain" />
                             </div>
                         </div>
                     </div>
@@ -152,8 +153,8 @@ export function Hero() {
                                     Shop Now
                                 </button>
                             </div>
-                            <div className="flex-shrink-0 w-[40%]">
-                                <img src={MOBILE_HERO.image} alt="Mobile Hero" className="w-full h-auto object-contain" />
+                            <div className="flex-shrink-0 w-[40%] relative h-[120px]">
+                                <Image src={MOBILE_HERO.image} alt="Mobile Hero" fill className="object-contain" />
                             </div>
                         </div>
                     </div>
@@ -187,8 +188,8 @@ export function Hero() {
                                     </button>
                                 </div>
                                 <div className="relative flex justify-end items-center w-full lg:mt-4 xl:mt-8 xl:ml-6">
-                                    <div className="relative w-full max-w-[clamp(200px,32vw,360px)] lg:max-w-[clamp(250px,35vw,420px)] xl:max-w-[clamp(280px,70vw,600px)]">
-                                        <img src={SLIDES[currentSlide].image} className="w-full h-auto object-contain drop-shadow-xl" alt="Hero" />
+                                    <div className="relative w-full max-w-[clamp(200px,32vw,360px)] lg:max-w-[clamp(250px,35vw,420px)] xl:max-w-[clamp(280px,70vw,600px)] aspect-square">
+                                        <Image src={SLIDES[currentSlide].image} fill className="object-contain drop-shadow-xl" alt="Hero" />
                                     </div>
                                 </div>
                             </div>
