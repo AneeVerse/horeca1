@@ -1,0 +1,49 @@
+name: CI / Deploy
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  ci:
+    name: Type check & lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+  deploy:
+    name: Deploy to production
+    needs: ci
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 64.227.187.210
+          username: root
+          key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+          known_hosts: |
+            |1|ECHv3/cxWTSFgSDTJuUm02GCJ8A=|CTDQ2VDxCXtoZdFwEON6VqXzEEs= ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCk92IFFhjKMvUgvmr15AABmewcZf8Aylo7r6dWWNQ08Sgjf+T+L4HOcEPgqmdSNlnjtVVZhxx1bsojAK6l+wR9kyTYxr/wrxNi5PYzn/0xOlydRHryLT47mMtZXa8xodKdJ/0A3A+rohWmJGxyzSvU9Dxw8UgZGtiyOblx7eOmRijpnH3ttzczG0j1Y9hDLofiEavwDzL8IIxw087Oq8fFaU0KqBq1qRA0sZZ3lAbopJagqbM05HAUZn3yAO073fz5P5uA+DdHLDj3gfpu2EtdSJdbgbPdCtG4s8jaRboCIENrxz2Jd+MZGhNATtt3SNHdSLgb3rE/aKoRayA4Z583wK6qA1NMnImVyYKl9W2HcfBdTaTjtCxiM3BqYJyvjCwMp4QoMZBeXAZGUJEYZXOVE+IW6qcStgCFdLOpUtKY5lB9bG5XSJDvLVoi0cyM20ISOdhoSMIJ2QumeYdyiZ/isr7LoEVrWoKBiYrUVuspUVkgAZYhfcm3wzJ7VBMzs7M=
+            |1|L9ethBecUPwFY9XBhBnvbG1W/No=|hGr3yWEHeJb6RjiLIh4BYUzLTGk= ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCbD1Siht1V/x1GNCw9dwtx8QtO1HNvrHIwhioGOe7yR6+jP7apYOJpB6bVjIkVGjcPe/wQfpqGFeeZwsyjAn8Q=
+            |1|VRJgZhC9/8BQLuPLteBMn+ujDrk=|RZ3l9MLs++8PI0yJCXbYh7Be3dE= ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPU8emimSY2TYtdEAKuYp2S8FxSfqIBB47HPjnKRVwTI
+          script: bash /opt/horeca1/deploy.sh
