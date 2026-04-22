@@ -20,6 +20,14 @@ ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=1536"
 RUN npm run build
 
+# Worker image — runs notification.worker.ts via tsx (has full src + node_modules)
+FROM base AS worker
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+ENV NODE_ENV=production
+CMD ["npx", "tsx", "src/workers/notification.worker.ts"]
+
 # Production image
 FROM base AS runner
 WORKDIR /app
