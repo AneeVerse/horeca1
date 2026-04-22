@@ -25,6 +25,11 @@ _Last updated: 2026-04-22. What's left before true v1 launch, grouped by priorit
 | P1.9 | Invoice PDF — GST-compliant PDF via pdfkit, `GET /api/v1/orders/[id]/invoice`, Download button on order detail | `14e7771` |
 | P1.11 | Brand dropdown — vendor product create/edit uses `<datalist>` populated from `/api/v1/brands` | `14e7771` |
 | P1.12 | Image optimization — 22 `<img>` → Next.js `<Image>` across Hero, Navbar, TopVendors, RecommendedCategories, checkout, category, vendor portal | `14e7771` + `d34cb93` |
+| P0.2 | WhatsApp MSG91 — code fully wired (`sms.ts` hits correct endpoint, `MSG91_WHATSAPP_NUMBER` env var added); waiting on Meta/MSG91 business approval to go live | `85f3faf` |
+| P0.3 | Database backups — `/opt/horeca1/backup.sh` on droplet, tested (44KB compressed dump), 7-day retention, cron ready to enable when needed | manual |
+| P1.11 | Sentry — DSN confirmed live in `.env.production` on droplet; errors reach Sentry dashboard | pre-existing |
+| — | Notification worker — now runs as `horeca1-worker` Docker container alongside app; Resend API key live in prod | `e244774` |
+| — | Email (Resend) — API key added to prod + local; emails will deliver after this deploy | `e244774` |
 
 Deployed on DO Droplet `64.227.187.210`. 16 migrations applied. Zero TS errors.
 
@@ -32,18 +37,10 @@ Deployed on DO Droplet `64.227.187.210`. 16 migrations applied. Zero TS errors.
 
 ## 🔴 P0 — Must ship before public launch
 
-### 2. WhatsApp notification channel (STUBBED)
-**What's there:** Email (Resend) + SMS (MSG91) live in `src/workers/notification.worker.ts`. WhatsApp channel routes into the SMS path (no-op effectively).
-**What's missing:** Dedicated WhatsApp send via Gupshup or MSG91 WhatsApp. Order confirmations + delivery updates on WhatsApp are table-stakes for Indian B2B.
-**Effort:** 1 day (Gupshup is simpler).
-**Files to add:** `src/lib/providers/whatsapp.ts`, wire into `notification.worker.ts` switch.
-
-### 3. Database backups (NOT AUTOMATED)
-**What's there:** Postgres running in Docker on the droplet.
-**What's missing:** No scheduled `pg_dump` to DO Spaces / S3. A droplet failure = total data loss.
-**Why critical:** Production data with no backup strategy is a ticking bomb.
-**Effort:** 2 hours.
-**Fix:** Cron on droplet → `pg_dump | gzip | aws s3 cp s3://horeca1-backups/` daily + weekly retention policy.
+### 2. WhatsApp notification channel (waiting on approval)
+**Code is complete.** MSG91 WhatsApp endpoint is wired, `MSG91_WHATSAPP_NUMBER` + `MSG91_WHATSAPP_TEMPLATE_ID` env vars are all that's needed.
+**Blocked by:** MSG91/Meta WhatsApp Business approval (external process, not code work).
+**When approved:** Add `MSG91_WHATSAPP_NUMBER=91XXXXXXXXXX` and `MSG91_WHATSAPP_TEMPLATE_ID=xxx` to `/opt/horeca1/.env.production` → restart worker → done.
 
 ### 4. SSL / HTTPS certificate
 **What's there:** Nginx on port 80 (HTTP only).
@@ -146,12 +143,13 @@ Deployed on DO Droplet `64.227.187.210`. 16 migrations applied. Zero TS errors.
 
 ## 📊 Suggested sequencing
 
-**Immediate (blockers):** P0 items 3–5 → backups + HTTPS + email smoke test.
-**Week 1:** P0.2 (WhatsApp) + P1.11 (Sentry).
-**Week 2:** P2.13 (CI/CD) + P2.16 (Analytics).
+**Now (1–2 days):** Email smoke test (P0.5) — place a test order, verify email arrives.
+**When domain arrives:** SSL/HTTPS + Resend domain verify → full email deliverability to all users.
+**When MSG91 approves WhatsApp:** Add 2 env vars to prod → WhatsApp live instantly.
+**Week 1:** P2.13 (CI/CD) + P2.16 (Analytics — PostHog).
 **Month 2+:** Tests, i18n, credit flow, push notifications.
 
-Nothing in P2/P3 blocks launch — P0 items 3–5 are the must-resolve before going public.
+The only true blocker left before public launch is **SSL + domain**. Everything else is either done or waiting on external approvals.
 
 ---
 
@@ -161,9 +159,9 @@ Before flipping DNS to the droplet and announcing publicly:
 
 - [ ] HTTPS + real domain + HSTS
 - [x] Razorpay webhook live + tested with a real payment
-- [ ] Daily Postgres backups to S3/Spaces, verified restore
-- [ ] Sentry receiving errors from prod
-- [ ] Email deliverability tested (SPF/DKIM for sending domain)
+- [ ] Daily Postgres backups enabled (script ready, cron needs uncommenting + S3 for off-droplet copy)
+- [x] Sentry receiving errors from prod (DSN live in .env.production)
+- [ ] Email deliverability tested — smoke test needed; SPF/DKIM requires verified domain in Resend
 - [ ] MSG91 SMS DLT templates approved (Indian regulation)
 - [ ] Terms of Service + Privacy Policy pages published
 - [ ] Legal entity + GST registration referenced in footer/invoice
