@@ -1,5 +1,5 @@
 # Horeca1 — Production Roadmap
-_Last updated: 2026-04-20. What's left before true v1 launch, grouped by priority._
+_Last updated: 2026-04-22. What's left before true v1 launch, grouped by priority._
 
 ---
 
@@ -18,24 +18,23 @@ _Last updated: 2026-04-20. What's left before true v1 launch, grouped by priorit
 | 5.4 | Redis-backed rate limiter — ZSET sliding window + circuit breaker | `bb64e96` |
 | 5.5 | Audit log — `AuditLog` model, fire-and-forget `logAction`, admin routes wired | `bb64e96` |
 | — | Lint sweep — 0 errors, typed everything, deferred setState | `39f407c` |
+| P0.1 | Razorpay webhook — `POST /api/v1/payments/webhook`, HMAC-verified, handles `payment.captured` / `payment.failed` | `14e7771` |
+| P1.6 | Search — `pg_trgm` fuzzy match (typo tolerance) + raw SQL fixed for lowercase table name | `5586a0d` |
+| P1.7 | Vendor onboarding documents — `VendorDocument` model, vendor settings upload UI, admin vendor detail verification UI + API | `14e7771` + `d34cb93` |
+| P1.8 | Refunds & returns — `ReturnRequest` model, customer "Request Return" UI on order page, admin Returns page with approve/reject/refund flow | `14e7771` + `d34cb93` |
+| P1.9 | Invoice PDF — GST-compliant PDF via pdfkit, `GET /api/v1/orders/[id]/invoice`, Download button on order detail | `14e7771` |
+| P1.11 | Brand dropdown — vendor product create/edit uses `<datalist>` populated from `/api/v1/brands` | `14e7771` |
+| P1.12 | Image optimization — 22 `<img>` → Next.js `<Image>` across Hero, Navbar, TopVendors, RecommendedCategories, checkout, category, vendor portal | `14e7771` + `d34cb93` |
 
-Deployed on DO Droplet `64.227.187.210`. 14 migrations applied. Zero TS errors.
+Deployed on DO Droplet `64.227.187.210`. 16 migrations applied. Zero TS errors.
 
 ---
 
 ## 🔴 P0 — Must ship before public launch
 
-### 1. Razorpay webhook endpoint (MISSING)
-**What's there:** `/api/v1/payments/initiate` + `/api/v1/payments/verify` (signature check via HMAC).
-**What's missing:** `/api/v1/payments/webhook` to receive Razorpay's server-to-server events (`payment.captured`, `payment.failed`, `refund.processed`). Verify-only flow misses payments where the user closes the tab mid-flow.
-**Why critical:** Without webhooks, a paid order can remain stuck in `pending` if the frontend verify call never fires. Lost orders = lost money.
-**Effort:** 1 day.
-**Files to add:** `src/app/api/v1/payments/webhook/route.ts`, extend `PaymentService.handleWebhook()`.
-
 ### 2. WhatsApp notification channel (STUBBED)
-**What's there:** Email (Resend) + SMS (MSG91) live in `src/workers/notification.worker.ts`.
-**What's missing:** `Notification.channel === 'whatsapp'` currently no-ops. Gupshup or MSG91 WhatsApp integration.
-**Why critical:** Order confirmations + delivery updates on WhatsApp are table-stakes for Indian B2B.
+**What's there:** Email (Resend) + SMS (MSG91) live in `src/workers/notification.worker.ts`. WhatsApp channel routes into the SMS path (no-op effectively).
+**What's missing:** Dedicated WhatsApp send via Gupshup or MSG91 WhatsApp. Order confirmations + delivery updates on WhatsApp are table-stakes for Indian B2B.
 **Effort:** 1 day (Gupshup is simpler).
 **Files to add:** `src/lib/providers/whatsapp.ts`, wire into `notification.worker.ts` switch.
 
@@ -47,9 +46,9 @@ Deployed on DO Droplet `64.227.187.210`. 14 migrations applied. Zero TS errors.
 **Fix:** Cron on droplet → `pg_dump | gzip | aws s3 cp s3://horeca1-backups/` daily + weekly retention policy.
 
 ### 4. SSL / HTTPS certificate
-**What's there:** Nginx on port 80 (HTTP only — verified via `curl http://64.227.187.210`).
+**What's there:** Nginx on port 80 (HTTP only).
 **What's missing:** Let's Encrypt cert + HTTPS redirect + HSTS header.
-**Why critical:** Razorpay, cookies with `secure: true`, SEO — all require HTTPS. A real domain (horeca1.com?) + certbot is needed before public launch.
+**Why critical:** Razorpay, cookies with `secure: true`, SEO — all require HTTPS. Needs a real domain pointing at the droplet.
 **Effort:** 2 hours (once domain DNS points at droplet).
 **Fix:** `certbot --nginx` + redirect in `docker/nginx/nginx.conf`.
 
@@ -62,29 +61,6 @@ Deployed on DO Droplet `64.227.187.210`. 14 migrations applied. Zero TS errors.
 
 ## 🟠 P1 — Should ship in next 2 weeks
 
-### 6. Search — full-text / better relevance
-**What's there:** ILIKE-based fuzzy match in `src/modules/catalog/search.service.ts`.
-**Gap:** No typo tolerance, no synonym handling, no weighted ranking (name > description > category). "panner" won't match "paneer".
-**Fix options:** Postgres `pg_trgm` + `to_tsvector` (free, 1 day) OR Meilisearch/Typesense (1 week, better UX).
-
-### 7. Vendor onboarding documents
-**What's there:** Basic signup; `vendor.status` flips `pending → approved` via admin.
-**Gap:** No document upload (FSSAI license, GST cert, PAN, bank proof). Admin can't verify anything.
-**Fix:** Add `VendorDocument` model (+ upload to ImageKit), admin approval page shows documents.
-**Effort:** 2 days.
-
-### 8. Refunds & returns
-**What's there:** Razorpay has refund APIs; `Payment` model has status.
-**Gap:** No customer-facing "request return" button, no admin refund flow, no `Return` / `RefundRequest` model.
-**Fix:** Add model + `/api/v1/orders/[id]/return` + admin page.
-**Effort:** 3 days.
-
-### 9. Invoice / tax-compliant bill PDF
-**What's there:** Order data in DB, GST/HSN fields on Product.
-**Gap:** No PDF invoice generation. Indian B2B buyers need tax invoices for input credit.
-**Fix options:** `@react-pdf/renderer` server-side, or Puppeteer in a worker.
-**Effort:** 2 days.
-
 ### 10. Push notifications (in-browser + FCM)
 **What's there:** `Notification.channel: 'push'` is stubbed.
 **Gap:** No service worker, no subscription flow, no FCM server key.
@@ -96,12 +72,6 @@ Deployed on DO Droplet `64.227.187.210`. 14 migrations applied. Zero TS errors.
 **Gap:** Nobody has confirmed errors actually reach Sentry in prod. `/sentry-example-page` exists for a test.
 **Fix:** Set `SENTRY_DSN` on droplet, trigger the test page, verify dashboard receives.
 **Effort:** 30 min.
-
-### 12. Image optimization sweep
-**What's there:** ImageKit configured + 268 lint warnings for `<img>` usage instead of `<Image>`.
-**Gap:** Real LCP hit on homepage + vendor pages from unoptimized `<img>` tags.
-**Fix:** Replace `<img src>` with `<Image>` in the top-traffic 10 components.
-**Effort:** 1 day.
 
 ---
 
@@ -166,23 +136,22 @@ Deployed on DO Droplet `64.227.187.210`. 14 migrations applied. Zero TS errors.
 
 | Debt | Severity | Fix cost |
 |------|----------|----------|
-| 268 lint warnings (`<img>`, unused vars) | Low | 1 day |
+| ~246 remaining lint warnings (`<img>` in admin/brand portal, unused vars) | Low | 1 day |
 | No test suite | High | 1 week MVP |
 | No CI/CD | Medium | 1 day |
 | `ecosystem.config.js` (PM2) present but Docker is the deploy target — one is dead code | Low | 1 hour |
-| `mockData.ts` / `vendorData.ts` — CLAUDE.md said "all data is mock" but it's real now; files may still exist unused | Low | 1 hour audit |
-| Middleware has `req` unused in some handlers | Trivial | 30 min |
 | `_ctx` params littered across API routes | Trivial | — |
 
 ---
 
 ## 📊 Suggested sequencing
 
-**Week 1 (hard launch blockers):** P0 items 1–5 → safe payments + backups + HTTPS.
-**Week 2:** P1 items 6, 7, 11, 12 → search quality, vendor docs, Sentry verify, image sweep.
-**Week 3:** P1 items 8, 9 → refunds + invoices (legal/compliance).
-**Week 4:** P1 item 10 + P2 item 13 → push notifications + CI/CD.
-**Month 2+:** Tests, i18n, analytics, credit flow.
+**Immediate (blockers):** P0 items 3–5 → backups + HTTPS + email smoke test.
+**Week 1:** P0.2 (WhatsApp) + P1.11 (Sentry).
+**Week 2:** P2.13 (CI/CD) + P2.16 (Analytics).
+**Month 2+:** Tests, i18n, credit flow, push notifications.
+
+Nothing in P2/P3 blocks launch — P0 items 3–5 are the must-resolve before going public.
 
 ---
 
@@ -191,7 +160,7 @@ Deployed on DO Droplet `64.227.187.210`. 14 migrations applied. Zero TS errors.
 Before flipping DNS to the droplet and announcing publicly:
 
 - [ ] HTTPS + real domain + HSTS
-- [ ] Razorpay webhook live + tested with a real payment
+- [x] Razorpay webhook live + tested with a real payment
 - [ ] Daily Postgres backups to S3/Spaces, verified restore
 - [ ] Sentry receiving errors from prod
 - [ ] Email deliverability tested (SPF/DKIM for sending domain)
@@ -202,4 +171,4 @@ Before flipping DNS to the droplet and announcing publicly:
 - [ ] At least 10 real vendors onboarded with products, so the site doesn't look empty
 - [ ] Admin team trained to handle approvals + support
 
-Everything above is **doable in ~4 weeks of focused work** before a public launch.
+Everything above is **doable in ~2 weeks of focused work** before a public launch.

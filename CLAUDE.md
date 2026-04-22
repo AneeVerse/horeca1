@@ -49,8 +49,8 @@ src/
 ├── types/index.ts             # All frontend type contracts (VendorProduct, Order, etc.)
 └── hooks/                     # useGooglePlacesAutocomplete, etc.
 
-prisma/schema.prisma           # 37 models (see DATABASE below)
-prisma/migrations/             # 14 migrations, all applied on prod
+prisma/schema.prisma           # 39 models (see DATABASE below)
+prisma/migrations/             # 16 migrations, all applied on prod
 docker/                        # docker-compose.prod.yml + nginx.conf
 ecosystem.config.js            # PM2 (used on droplet? check — Docker is the primary deploy path)
 ```
@@ -122,7 +122,7 @@ PostgreSQL 16 (self-hosted, Docker). 37 Prisma models. Core groupings:
 ```bash
 npm run dev                    # Local dev server (localhost:3000)
 npm run build                  # Production build (Next.js webpack)
-npm run lint                   # ESLint — 0 errors currently, 268 warnings (<img> + unused)
+npm run lint                   # ESLint — 0 errors currently, ~246 warnings (<img> in admin/brand pages + unused)
 npx tsc --noEmit               # Type check (always run before commit)
 npx prisma migrate dev         # Apply migrations locally
 npx prisma studio              # DB browser
@@ -168,12 +168,25 @@ const HeavyComponent = dynamic(() => import('./HeavyComponent'), { ssr: false })
 ### Performance targets
 LCP < 2.5s · FID < 100ms · CLS < 0.1 · TTI < 3.5s
 
-## CURRENT STATUS (updated 2026-04-20)
-- Phases 1–5.5 shipped (see [ROADMAP.md](ROADMAP.md) for what's left)
+## CURRENT STATUS (updated 2026-04-22)
+- Phases 1–5.5 shipped + all P0/P1 features except WhatsApp channel (see [ROADMAP.md](ROADMAP.md) for what's left)
 - Phase 4.3 (i18n / language switcher) deliberately deferred
-- Zero TS errors, 0 lint errors (268 warnings remain — mostly `<img>`→`<Image>`)
-- Production deploy on `64.227.187.210` includes audit log, Redis rate limiter, delivery slots, multi-category products, MOV enforcement, OOS alternates, pincode gate, notification worker (email + SMS live, WhatsApp stubbed)
-- 14 Prisma migrations applied
+- Zero TS errors, 0 lint errors (~246 warnings remain — `<img>` in admin/brand portal pages)
+- **What's live on `64.227.187.210`:**
+  - Full marketplace: homepage, vendor stores, product pages, cart, checkout with delivery slots, order tracking
+  - Bulk price slabs (3 tiers), MOV enforcement, OOS alternate vendor suggestions, pincode service-area gate
+  - Vendor portal: inventory, orders, products (with brand dropdown from DB), settings + document upload
+  - Admin portal: dashboard, orders, vendors (with document verification UI), products, categories, approvals, returns review, brands, finance, reports, team
+  - Payments: Razorpay initiate + verify + webhook (server-to-server, HMAC-verified)
+  - Invoice PDF: GST-compliant, downloadable from order detail page
+  - Returns: customer request flow + admin approve/reject/refund UI
+  - Vendor document verification: upload (vendor settings) + admin verify/reject (admin vendor detail)
+  - Notifications: BullMQ worker, email (Resend) + SMS (MSG91) live, WhatsApp stubbed
+  - Search: ILIKE exact match + `pg_trgm` fuzzy (typo tolerance)
+  - Auth: Auth.js v5 JWT, RBAC, team scoping
+  - Audit log, Redis rate limiter, multi-tenancy enforced
+  - Image optimization: Next.js `<Image>` on all high-traffic pages (hero, navbar, vendor cards, categories, checkout)
+- 16 Prisma migrations applied
 - Knowledge graph (code-review-graph MCP) is available — see below
 
 ## MCP Tools: code-review-graph
