@@ -1,0 +1,45 @@
+'use client';
+
+import { Bell, BellOff, Loader2 } from 'lucide-react';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { useSession } from 'next-auth/react';
+
+export function PushBell() {
+  const { data: session } = useSession();
+  const { permission, subscribed, loading, subscribe, unsubscribe } = usePushNotifications();
+
+  // Only show for logged-in users on supported browsers
+  if (!session || permission === 'unsupported') return null;
+
+  if (loading) {
+    return (
+      <button className="relative p-2 rounded-full hover:bg-gray-50 transition-colors" disabled>
+        <Loader2 size={20} className="animate-spin text-[#AEAEAE]" />
+      </button>
+    );
+  }
+
+  if (subscribed) {
+    return (
+      <button
+        onClick={unsubscribe}
+        title="Disable push notifications"
+        className="relative p-2 rounded-full hover:bg-gray-50 transition-colors"
+      >
+        <Bell size={20} className="text-[#299E60]" fill="#299E60" />
+      </button>
+    );
+  }
+
+  if (permission === 'denied') return null;
+
+  return (
+    <button
+      onClick={subscribe}
+      title="Enable push notifications"
+      className="relative p-2 rounded-full hover:bg-gray-50 transition-colors"
+    >
+      <BellOff size={20} className="text-[#AEAEAE]" />
+    </button>
+  );
+}

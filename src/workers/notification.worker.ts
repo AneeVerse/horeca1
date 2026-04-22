@@ -7,6 +7,7 @@ import IORedis from 'ioredis';
 import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/providers/email';
 import { sendSms } from '@/lib/providers/sms';
+import { sendPushToUser } from '@/lib/providers/push';
 
 interface NotificationJobData {
   notificationId: string;
@@ -22,10 +23,9 @@ interface NotificationJobData {
 async function processNotification(job: Job<NotificationJobData>) {
   const { notificationId, channel, title, body, userId } = job.data;
 
-  // Non-delivered channels just mark themselves sent (in_app lives in DB, push deferred).
-  if (channel === 'in_app' || channel === 'push') {
+  if (channel === 'in_app') {
     await prisma.notification.update({ where: { id: notificationId }, data: { status: 'sent' } });
-    return { delivered: false, reason: `${channel}: persisted only` };
+    return { delivered: false, reason: 'in_app: persisted only' };
   }
 
   const user = await prisma.user.findUnique({
@@ -41,6 +41,8 @@ async function processNotification(job: Job<NotificationJobData>) {
     } else if (channel === 'sms' || channel === 'whatsapp') {
       if (!user.phone) throw new Error('User has no phone number');
       await sendSms({ to: user.phone, body: `${title}\n\n${body}`, channel });
+    } else if (channel === 'push') {
+      await sendPushToUser(userId, title, body);
     }
     await prisma.notification.update({ where: { id: notificationId }, data: { status: 'sent' } });
     return { delivered: true };

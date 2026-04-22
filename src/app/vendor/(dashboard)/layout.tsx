@@ -9,6 +9,7 @@ import {
     ShoppingBag,
     Package,
     Warehouse,
+    BarChart3,
     Settings,
     Bell,
     Search,
@@ -30,6 +31,7 @@ const SIDEBAR_LINKS = [
     { name: 'Orders', icon: ShoppingBag, href: '/vendor/orders' },
     { name: 'Products', icon: Package, href: '/vendor/products' },
     { name: 'Inventory', icon: Warehouse, href: '/vendor/inventory' },
+    { name: 'Reports', icon: BarChart3, href: '/vendor/reports' },
     { name: 'Settings', icon: Settings, href: '/vendor/settings' },
 ];
 

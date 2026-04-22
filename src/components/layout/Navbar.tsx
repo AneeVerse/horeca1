@@ -29,6 +29,7 @@ import { AuthScreen } from '../auth/AuthScreen';
 import { ProfileScreen } from '../auth/ProfileScreen';
 import { InitialPincodeOverlay } from './InitialPincodeOverlay';
 import { WishlistOverlay } from '../auth/WishlistOverlay';
+import { PushBell } from '../features/PushBell';
 import { useWishlist } from '@/context/WishlistContext';
 import { dal } from '@/lib/dal';
 import type { Vendor, Category } from '@/types';
@@ -258,6 +259,7 @@ export function Navbar() {
 
                                 {/* Wishlist & Cart (Right) */}
                                 <div className="flex items-center gap-2">
+                                    <PushBell />
                                     <Link
                                         href="/wishlist"
                                         className="relative p-1 cursor-pointer"
