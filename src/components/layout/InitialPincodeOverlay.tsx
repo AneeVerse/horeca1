@@ -40,10 +40,18 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
 
     useEffect(() => {
         setIsMounted(true);
-        if (!hasBeenShownInSession) {
-            setIsVisible(true);
-            hasBeenShownInSession = true;
-        }
+        if (hasBeenShownInSession) return;
+
+        try {
+            // Don't show if user already has an address selected or has previously interacted
+            if (
+                localStorage.getItem('pincode_interacted') === 'true' ||
+                localStorage.getItem('horecahub_selected_address')
+            ) return;
+        } catch { /* ignore */ }
+
+        setIsVisible(true);
+        hasBeenShownInSession = true;
     }, []);
 
     if (!isMounted || !isVisible) return null;
