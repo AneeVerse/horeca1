@@ -42,8 +42,7 @@ jobs:
           host: 64.227.187.210
           username: root
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
-          known_hosts: |
-            |1|ECHv3/cxWTSFgSDTJuUm02GCJ8A=|CTDQ2VDxCXtoZdFwEON6VqXzEEs= ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCk92IFFhjKMvUgvmr15AABmewcZf8Aylo7r6dWWNQ08Sgjf+T+L4HOcEPgqmdSNlnjtVVZhxx1bsojAK6l+wR9kyTYxr/wrxNi5PYzn/0xOlydRHryLT47mMtZXa8xodKdJ/0A3A+rohWmJGxyzSvU9Dxw8UgZGtiyOblx7eOmRijpnH3ttzczG0j1Y9hDLofiEavwDzL8IIxw087Oq8fFaU0KqBq1qRA0sZZ3lAbopJagqbM05HAUZn3yAO073fz5P5uA+DdHLDj3gfpu2EtdSJdbgbPdCtG4s8jaRboCIENrxz2Jd+MZGhNATtt3SNHdSLgb3rE/aKoRayA4Z583wK6qA1NMnImVyYKl9W2HcfBdTaTjtCxiM3BqYJyvjCwMp4QoMZBeXAZGUJEYZXOVE+IW6qcStgCFdLOpUtKY5lB9bG5XSJDvLVoi0cyM20ISOdhoSMIJ2QumeYdyiZ/isr7LoEVrWoKBiYrUVuspUVkgAZYhfcm3wzJ7VBMzs7M=
-            |1|L9ethBecUPwFY9XBhBnvbG1W/No=|hGr3yWEHeJb6RjiLIh4BYUzLTGk= ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCbD1Siht1V/x1GNCw9dwtx8QtO1HNvrHIwhioGOe7yR6+jP7apYOJpB6bVjIkVGjcPe/wQfpqGFeeZwsyjAn8Q=
-            |1|VRJgZhC9/8BQLuPLteBMn+ujDrk=|RZ3l9MLs++8PI0yJCXbYh7Be3dE= ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPU8emimSY2TYtdEAKuYp2S8FxSfqIBB47HPjnKRVwTI
+          fingerprint: SHA256:zyqvn4dhznL9eHr1+31BEaI40EkJwCXHSUGyto3LXno
+          command_timeout: 15m
+          script_stop: true
           script: bash /opt/horeca1/deploy.sh
