@@ -44,5 +44,4 @@ jobs:
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
           fingerprint: SHA256:zyqvn4dhznL9eHr1+31BEaI40EkJwCXHSUGyto3LXno
           command_timeout: 15m
-          script_stop: true
-          script: bash /opt/horeca1/deploy.sh
+          script: bash -e /opt/horeca1/deploy.sh
