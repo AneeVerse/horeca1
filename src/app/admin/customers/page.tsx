@@ -7,11 +7,11 @@ import {
     Package,
     Eye,
     Search,
-    ChevronDown,
     MoreVertical,
     Loader2,
     UserCheck,
     UserX,
+    Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -58,6 +58,18 @@ export default function CustomersPage() {
         { label: 'Vendors', value: totalVendors.toString(), icon: Package, bgColor: 'bg-purple-50', iconColor: 'text-purple-600' },
         { label: 'Inactive', value: inactiveUsers.toString(), icon: UserX, bgColor: 'bg-red-50', iconColor: 'text-red-500' },
     ];
+
+    const deleteUser = async (userId: string, name: string) => {
+        if (!confirm(`Permanently delete "${name}"? This cannot be undone.`)) return;
+        try {
+            const res = await fetch(`/api/v1/admin/users/${userId}`, { method: 'DELETE' });
+            const json = await res.json();
+            if (json.success) setUsers(prev => prev.filter(u => u.id !== userId));
+        } catch (err) {
+            console.error('Failed to delete user:', err);
+        }
+        setActiveMenu(null);
+    };
 
     const toggleUserActive = async (userId: string, isActive: boolean) => {
         try {
@@ -207,13 +219,20 @@ export default function CustomersPage() {
                                                     </button>
 
                                                     {activeMenu === user.id && (
-                                                        <div className="absolute right-0 mt-2 w-40 bg-white rounded-[8px] shadow-xl border border-gray-100 z-50 py-1 overflow-hidden animate-in fade-in zoom-in duration-200">
+                                                        <div className="absolute right-0 mt-2 w-44 bg-white rounded-[8px] shadow-xl border border-gray-100 z-50 py-1 overflow-hidden animate-in fade-in zoom-in duration-200">
                                                             <button
                                                                 onClick={() => toggleUserActive(user.id, user.isActive)}
                                                                 className="w-full flex items-center gap-3 px-4 py-2 text-[13px] font-semibold text-[#4B4B4B] hover:bg-gray-50 transition-colors"
                                                             >
                                                                 {user.isActive ? <UserX size={14} className="text-red-400" /> : <UserCheck size={14} className="text-green-400" />}
                                                                 {user.isActive ? 'Deactivate' : 'Activate'}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => deleteUser(user.id, user.fullName)}
+                                                                className="w-full flex items-center gap-3 px-4 py-2 text-[13px] font-semibold text-red-500 hover:bg-red-50 transition-colors"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                                Delete permanently
                                                             </button>
                                                         </div>
                                                     )}

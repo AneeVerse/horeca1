@@ -53,7 +53,6 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
 
     const { data: session } = useSession();
 
-    // Derive user data from real Auth.js session
     const [userData, setUserData] = useState({
         fullName: '',
         phone: '',
@@ -63,20 +62,35 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
         address2: '',
         pincode: '',
         city: '',
+        image: '',
     });
 
-    // Update userData when session loads
+    // Fetch full profile from DB (session only carries name/email/role)
+    // Also pull the default saved address to fill address/city fields
     useEffect(() => {
-        if (session?.user) {
-            const newFullName = session.user?.name || 'Guest User';
-            const newEmail = session.user?.email || '';
-            queueMicrotask(() =>
-                setUserData(prev => {
-                    if (prev.fullName === newFullName && prev.email === newEmail) return prev;
-                    return { ...prev, fullName: newFullName, email: newEmail };
-                })
-            );
-        }
+        if (!session?.user) return;
+        Promise.all([
+            fetch('/api/v1/auth/me', { credentials: 'include' }).then(r => r.ok ? r.json() : null),
+            fetch('/api/v1/addresses', { credentials: 'include' }).then(r => r.ok ? r.json() : null),
+        ])
+            .then(([profileJson, addrJson]) => {
+                const p = profileJson?.success ? profileJson.data : null;
+                const addresses = addrJson?.success ? addrJson.data : [];
+                const defaultAddr = addresses?.[0]; // already sorted by isDefault desc, then createdAt desc
+                setUserData(prev => ({
+                    ...prev,
+                    fullName: p?.fullName || prev.fullName || '',
+                    phone: p?.phone || '',
+                    businessName: p?.businessName || '',
+                    email: p?.email || '',
+                    pincode: p?.pincode || defaultAddr?.pincode || '',
+                    image: p?.image || '',
+                    address: defaultAddr?.shortAddress || defaultAddr?.fullAddress || '',
+                    address2: defaultAddr?.flatInfo || defaultAddr?.landmark || '',
+                    city: defaultAddr?.city || '',
+                }));
+            })
+            .catch(() => {});
     }, [session]);
 
     if (!isOpen) return null;
@@ -171,7 +185,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                             <div className="flex flex-col items-center pb-6">
                                 <div className="relative mb-3">
                                     <div className="w-[82px] h-[82px] rounded-full overflow-hidden border-[2px] border-[#53B175] bg-white">
-                                        <img src="/images/profile/sample-profile.png" alt="Profile" className="w-full h-full object-cover" />
+                                        <img src={userData.image || '/images/profile/sample-profile.png'} alt="Profile" className="w-full h-full object-cover" />
                                     </div>
                                     <button className="absolute bottom-0.5 right-0.5 w-6 h-6 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm cursor-pointer">
                                         <Pencil size={11} className="text-gray-400" />
@@ -260,7 +274,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                     <div className="flex flex-col items-center">
                                         <div className="relative mb-4 lg:mb-5">
                                             <div className="w-[100px] h-[100px] lg:w-[120px] lg:h-[120px] rounded-full overflow-hidden border-[3px] border-[#53B175] bg-white transition-all">
-                                                <img src="/images/profile/sample-profile.png" alt="Profile" className="w-full h-full object-cover" />
+                                                <img src={userData.image || '/images/profile/sample-profile.png'} alt="Profile" className="w-full h-full object-cover" />
                                             </div>
                                             <button className="absolute bottom-1 right-1 w-7 h-7 lg:w-8 lg:h-8 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors cursor-pointer">
                                                 <Pencil size={12} className="text-gray-400 lg:!w-3.5 lg:!h-3.5" />
@@ -395,7 +409,25 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                 isOpen={isEditProfileOpen}
                 onClose={() => setIsEditProfileOpen(false)}
                 userData={userData}
-                onSave={(data) => setUserData(prev => ({ ...prev, ...data }))}
+                onSave={async (data) => {
+                    setUserData(prev => ({ ...prev, ...data }));
+                    try {
+                        const patch: Record<string, string> = {};
+                        if (data.fullName) patch.fullName = data.fullName;
+                        if (data.businessName) patch.businessName = data.businessName;
+                        if (/^\d{6}$/.test(data.pincode)) patch.pincode = data.pincode;
+                        await fetch('/api/v1/auth/me', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(patch),
+                        });
+                        // Mark profile complete when core fields are filled
+                        if (data.fullName && data.businessName && /^\d{6}$/.test(data.pincode)) {
+                            await fetch('/api/v1/me/profile', { method: 'POST', credentials: 'include' });
+                        }
+                    } catch { /* silent — local state already updated */ }
+                }}
             />
 
             {/* Wishlist Overlay */}

@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { ChevronLeft, Pencil, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, Pencil, X, Loader2 } from 'lucide-react';
 
 interface EditProfileOverlayProps {
     isOpen: boolean;
@@ -14,25 +14,73 @@ interface EditProfileOverlayProps {
         address2: string;
         pincode: string;
         city: string;
+        image?: string;
     };
-    onSave: (data: EditProfileOverlayProps['userData']) => void;
+    onSave: (data: EditProfileOverlayProps['userData']) => void | Promise<void>;
 }
 
 export function EditProfileOverlay({ isOpen, onClose, userData, onSave }: EditProfileOverlayProps) {
     const [fullName, setFullName] = useState(userData.fullName);
     const [businessName, setBusinessName] = useState(userData.businessName);
-    const [phone] = useState(userData.phone);
+    const [phone, setPhone] = useState(userData.phone);
     const [address, setAddress] = useState(userData.address);
     const [address2, setAddress2] = useState(userData.address2);
     const [pincode, setPincode] = useState(userData.pincode);
     const [city, setCity] = useState(userData.city);
+    const [image, setImage] = useState(userData.image || '');
+    const [uploading, setUploading] = useState(false);
+    const fileRef = useRef<HTMLInputElement>(null);
+
+    // Sync props → state whenever overlay opens or userData changes (API fetch completes after mount)
+    useEffect(() => {
+        if (!isOpen) return;
+        setFullName(userData.fullName);
+        setBusinessName(userData.businessName);
+        setPhone(userData.phone);
+        setAddress(userData.address);
+        setAddress2(userData.address2);
+        setPincode(userData.pincode);
+        setCity(userData.city);
+        setImage(userData.image || '');
+    }, [isOpen, userData]);
 
     if (!isOpen) return null;
 
-    const handleSave = () => {
-        onSave({ fullName, phone, businessName, address, address2, pincode, city });
+    const handleSave = async () => {
+        await onSave({ fullName, phone, businessName, address, address2, pincode, city, image });
         onClose();
     };
+
+    const handlePickImage = () => fileRef.current?.click();
+
+    const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setUploading(true);
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('folder', 'misc');
+            const res = await fetch('/api/v1/upload', { method: 'POST', body: fd, credentials: 'include' });
+            const json = await res.json();
+            if (json?.success && json.data?.url) {
+                setImage(json.data.url);
+                // Persist immediately so it survives even if user closes without Save
+                await fetch('/api/v1/auth/me', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ image: json.data.url }),
+                });
+            }
+        } catch { /* silent */ }
+        finally {
+            setUploading(false);
+            if (fileRef.current) fileRef.current.value = '';
+        }
+    };
+
+    const avatarSrc = image || '/images/profile/sample-profile.png';
 
     return (
         <div className="fixed inset-0 z-[14000] flex items-start justify-center animate-in fade-in duration-200">
@@ -63,17 +111,34 @@ export function EditProfileOverlay({ isOpen, onClose, userData, onSave }: EditPr
                     <div className="relative mb-2">
                         <div className="w-[85px] h-[85px] md:w-[100px] md:h-[100px] rounded-full overflow-hidden border-[2.5px] border-[#53B175]">
                             <img
-                                src="/images/profile/sample-profile.png"
+                                src={avatarSrc}
                                 alt="Profile"
                                 className="w-full h-full object-cover"
                             />
+                            {uploading && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full">
+                                    <Loader2 size={20} className="text-white animate-spin" />
+                                </div>
+                            )}
                         </div>
-                        <button className="absolute bottom-0 right-0 w-7 h-7 md:w-8 md:h-8 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors">
+                        <button
+                            type="button"
+                            onClick={handlePickImage}
+                            disabled={uploading}
+                            className="absolute bottom-0 right-0 w-7 h-7 md:w-8 md:h-8 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
+                        >
                             <Pencil size={14} className="text-gray-400" />
                         </button>
+                        <input
+                            ref={fileRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            onChange={handleImageChange}
+                            className="hidden"
+                        />
                     </div>
                     <h3 className="text-[16px] md:text-[18px] font-[800] text-[#181725] mb-0.5">{fullName || 'User'}</h3>
-                    <p className="text-[12px] md:text-[13px] text-gray-400 font-medium">+91 {phone}</p>
+                    <p className="text-[12px] md:text-[13px] text-gray-400 font-medium">{phone ? `+91 ${phone}` : '+91'}</p>
                 </div>
 
                 {/* Form Fields */}
@@ -101,7 +166,7 @@ export function EditProfileOverlay({ isOpen, onClose, userData, onSave }: EditPr
                             <label className="text-[12px] md:text-[13px] font-semibold text-[#181725] ml-0.5 mb-1.5 block">Phone number</label>
                             <input
                                 type="tel"
-                                value={`+91 ${phone}`}
+                                value={phone ? `+91 ${phone}` : '+91'}
                                 readOnly
                                 className="w-full px-3.5 py-2.5 md:px-4 md:py-3 bg-gray-50 border border-gray-200 rounded-lg md:rounded-xl text-[13px] md:text-[14px] font-medium text-gray-400 outline-none cursor-not-allowed"
                             />

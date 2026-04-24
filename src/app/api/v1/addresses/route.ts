@@ -51,6 +51,22 @@ export const POST = withRole([...ALL_ROLES], async (req: NextRequest, ctx) => {
           data: { isDefault: false },
         });
       }
+
+      // Sync pincode + businessName onto the User row if not yet set —
+      // the profile-completion check reads from User, not SavedAddress
+      const userPatch: Record<string, string> = {};
+      if (input.pincode || input.businessName) {
+        const current = await tx.user.findUnique({
+          where: { id: ctx.userId },
+          select: { pincode: true, businessName: true },
+        });
+        if (input.pincode && !current?.pincode) userPatch.pincode = input.pincode;
+        if (input.businessName && !current?.businessName) userPatch.businessName = input.businessName;
+        if (Object.keys(userPatch).length > 0) {
+          await tx.user.update({ where: { id: ctx.userId }, data: userPatch });
+        }
+      }
+
       return tx.savedAddress.create({
         data: {
           userId: ctx.userId,

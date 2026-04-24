@@ -13,12 +13,14 @@ type ProfileStatus = {
 };
 
 export function CompleteProfileBanner() {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const [data, setData] = useState<ProfileStatus | null>(null);
   const [hidden, setHidden] = useState(true);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
+    // Admins don't need to complete a customer profile
+    if ((session?.user as { role?: string })?.role === 'admin') return;
 
     const until = typeof window !== 'undefined' ? window.localStorage.getItem(DISMISS_KEY) : null;
     if (until && Number(until) > Date.now()) return;
@@ -29,7 +31,8 @@ export function CompleteProfileBanner() {
       .then((json) => {
         if (cancelled || !json?.success) return;
         setData(json.data);
-        if (!json.data.isComplete) setHidden(false);
+        // Hide banner when user has core info (name + business + pincode), even if profileCompletedAt isn't explicitly set
+        if (!json.data.isComplete && !json.data.hasCorePersonalization) setHidden(false);
       })
       .catch(() => {});
     return () => {
@@ -37,7 +40,7 @@ export function CompleteProfileBanner() {
     };
   }, [status]);
 
-  if (hidden || !data || data.isComplete) return null;
+  if (hidden || !data || data.isComplete || data.hasCorePersonalization) return null;
 
   const snooze = () => {
     if (typeof window === 'undefined') return;
@@ -57,7 +60,7 @@ export function CompleteProfileBanner() {
             Complete your profile for better recommendations
           </p>
           <p className="mt-0.5 text-[clamp(0.8rem,1.2vw,0.9rem)] text-amber-800/80">
-            Add your pincode, business details, and GST to see vendors and prices tailored to you.
+            Add your pincode and business details to see vendors and prices tailored to you.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

@@ -160,7 +160,7 @@ export async function generateInvoicePdf(orderId: string): Promise<Buffer> {
       .font('Helvetica')
       .fontSize(10)
       .text(order.user.fullName || '—', col1X, doc.y + 4)
-      .text(order.user.email, col1X, doc.y + 2);
+      .text(order.user.email ?? '', col1X, doc.y + 2);
 
     if (order.user.phone) {
       doc.text(order.user.phone, col1X, doc.y + 2);

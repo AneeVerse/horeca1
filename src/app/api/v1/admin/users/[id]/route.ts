@@ -1,5 +1,6 @@
-// GET  /api/v1/admin/users/:id — Get single user details
-// PATCH /api/v1/admin/users/:id — Update user (toggle isActive, change role)
+// GET    /api/v1/admin/users/:id — Get single user details
+// PATCH  /api/v1/admin/users/:id — Update user (toggle isActive, change role)
+// DELETE /api/v1/admin/users/:id — Permanently delete user (admin only)
 // WHY: Admin can view full user details and manage account status/roles
 // PROTECTED: Admin only
 
@@ -105,6 +106,28 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     });
 
     return NextResponse.json({ success: true, data: updated });
+  } catch (error) {
+    return errorResponse(error);
+  }
+});
+
+// DELETE — permanently remove a user from the database
+export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
+  try {
+    requireAdminPerm(ctx.adminTeamRole, 'settings:write');
+    const id = extractId(req);
+
+    // Prevent admin from deleting themselves
+    if (id === ctx.userId) {
+      throw Errors.badRequest('You cannot delete your own account');
+    }
+
+    const existing = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true } });
+    if (!existing) throw Errors.notFound('User');
+
+    await prisma.user.delete({ where: { id } });
+
+    return NextResponse.json({ success: true });
   } catch (error) {
     return errorResponse(error);
   }

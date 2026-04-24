@@ -53,7 +53,7 @@ model VerificationToken {
 
 model User {
   id            String    @id @default(uuid()) @db.Uuid
-  email         String    @unique @db.VarChar(255)
+  email         String?   @unique @db.VarChar(255)
   emailVerified DateTime? @map("email_verified")
   password      String?   @db.VarChar(255)
   phone         String?   @unique @db.VarChar(20)
@@ -947,4 +947,18 @@ model VendorDocument {
   @@index([vendorId])
   @@index([status])
   @@map("vendor_documents")
+}
+
+// ═══ OTP CODES ════════════════════════════════════════
+
+model OtpCode {
+  id        String   @id @default(uuid()) @db.Uuid
+  phone     String   @db.VarChar(20)
+  code      String   @db.VarChar(6)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([phone])
+  @@map("otp_codes")
 }

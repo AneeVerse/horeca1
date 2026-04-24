@@ -80,7 +80,7 @@ export class AuthService {
 
     emitEvent('UserRegistered', {
       userId: user.id,
-      email: user.email,
+      email: user.email ?? '',
       role: input.role || 'customer',
     });
 
