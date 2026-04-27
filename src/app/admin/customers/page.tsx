@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
     Users,
@@ -12,8 +12,13 @@ import {
     UserCheck,
     UserX,
     Trash2,
+    Plus,
+    X,
+    Eye as EyeIcon,
+    EyeOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface AdminUser {
     id: string;
@@ -31,21 +36,30 @@ export default function CustomersPage() {
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeMenu, setActiveMenu] = useState<string | null>(null);
+    const [showAddModal, setShowAddModal] = useState(false);
 
-    useEffect(() => {
-        fetch('/api/v1/admin/users?limit=50')
+    const refetch = useCallback(() => {
+        setLoading(true);
+        const url = new URL('/api/v1/admin/users', window.location.origin);
+        url.searchParams.set('limit', '50');
+        if (searchQuery.trim()) url.searchParams.set('search', searchQuery.trim());
+        fetch(url.toString())
             .then(res => res.json())
             .then(json => { if (json.success) setUsers(json.data.users); })
             .catch(console.error)
             .finally(() => setLoading(false));
-    }, []);
+    }, [searchQuery]);
 
-    const filteredUsers = users.filter(u =>
-        u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (u.phone || '').includes(searchQuery) ||
-        (u.businessName || '').toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    useEffect(() => {
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            if (cancelled) return;
+            refetch();
+        }, searchQuery ? 300 : 0);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [searchQuery, refetch]);
+
+    const filteredUsers = users;
 
     const totalCustomers = users.filter(u => u.role === 'customer').length;
     const totalVendors = users.filter(u => u.role === 'vendor').length;
@@ -141,6 +155,12 @@ export default function CustomersPage() {
                                 className="h-[40px] w-full bg-white border border-[#DCDCDC] rounded-[10px] pl-10 pr-4 text-[13px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 shadow-sm"
                             />
                         </div>
+                        <button
+                            onClick={() => setShowAddModal(true)}
+                            className="h-[40px] px-4 bg-[#299E60] hover:bg-[#238a53] text-white rounded-[10px] text-[13px] font-bold flex items-center gap-1.5 transition-colors shadow-sm shrink-0"
+                        >
+                            <Plus size={16} /> Add User
+                        </button>
                     </div>
                 </div>
 
@@ -254,6 +274,164 @@ export default function CustomersPage() {
             </div>
             </>
             )}
+
+            {showAddModal && (
+                <AddUserModal
+                    onClose={() => setShowAddModal(false)}
+                    onCreated={() => { setShowAddModal(false); refetch(); }}
+                />
+            )}
+        </div>
+    );
+}
+
+interface AddUserForm {
+    fullName: string;
+    phone: string;
+    email: string;
+    businessName: string;
+    password: string;
+    role: 'customer' | 'vendor';
+}
+
+function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+    const [form, setForm] = useState<AddUserForm>({ fullName: '', phone: '', email: '', businessName: '', password: '', role: 'customer' });
+    const [showPwd, setShowPwd] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const update = <K extends keyof AddUserForm>(k: K, v: AddUserForm[K]) => {
+        setForm(prev => ({ ...prev, [k]: v }));
+        setError(null);
+    };
+
+    const handleSubmit = async () => {
+        setError(null);
+        if (!form.fullName.trim()) { setError('Full name is required'); return; }
+        if (!/^\d{10}$/.test(form.phone)) { setError('Enter a valid 10-digit phone'); return; }
+        if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) { setError('Enter a valid email'); return; }
+        if (form.password && form.password.length < 6) { setError('Password must be at least 6 characters'); return; }
+        setSubmitting(true);
+        try {
+            const res = await fetch('/api/v1/admin/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fullName: form.fullName.trim(),
+                    phone: form.phone,
+                    email: form.email.trim() || undefined,
+                    businessName: form.businessName.trim() || undefined,
+                    password: form.password || undefined,
+                    role: form.role,
+                }),
+            });
+            const json = await res.json();
+            if (!json.success) {
+                setError(json.error?.message || json.error || 'Failed to create user');
+                return;
+            }
+            toast.success(`${form.role === 'vendor' ? 'Vendor' : 'Customer'} created`);
+            onCreated();
+        } catch {
+            setError('Something went wrong');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[10000] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
+            <div className="bg-white rounded-[16px] shadow-2xl w-full max-w-[480px] max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                <div className="px-6 py-4 border-b border-[#EEEEEE] flex items-center justify-between">
+                    <h2 className="text-[18px] font-[800] text-[#181725]">Add new user</h2>
+                    <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
+                        <X size={18} />
+                    </button>
+                </div>
+
+                <div className="p-6 space-y-4">
+                    {error && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-[13px] text-red-600 font-medium">
+                            {error}
+                        </div>
+                    )}
+
+                    <div className="flex p-0.5 bg-gray-50 rounded-lg border border-gray-100">
+                        {(['customer', 'vendor'] as const).map(r => (
+                            <button key={r} onClick={() => update('role', r)}
+                                className={cn(
+                                    'flex-1 py-2 text-[13px] font-bold rounded-md capitalize transition-all',
+                                    form.role === r ? 'bg-[#299E60] text-white shadow-sm' : 'text-gray-500',
+                                )}>
+                                {r}
+                            </button>
+                        ))}
+                    </div>
+
+                    <Field label="Full name *">
+                        <input type="text" value={form.fullName} onChange={e => update('fullName', e.target.value)}
+                            placeholder="Enter full name"
+                            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#299E60] transition-colors" />
+                    </Field>
+
+                    <Field label="Business name" hint={form.role === 'vendor' ? '(supplier / distributor name)' : '(restaurant / hotel)'}>
+                        <input type="text" value={form.businessName} onChange={e => update('businessName', e.target.value)}
+                            placeholder={form.role === 'vendor' ? 'Distributor name' : 'Restaurant / hotel'}
+                            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#299E60] transition-colors" />
+                    </Field>
+
+                    <Field label="Phone *" hint="10 digits, no +91">
+                        <div className="relative flex items-center">
+                            <span className="absolute left-3 text-[13px] font-bold text-gray-500 select-none">+91</span>
+                            <input type="tel" inputMode="numeric" maxLength={10}
+                                value={form.phone} onChange={e => update('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                placeholder="10 digit mobile number"
+                                className="w-full pl-11 pr-3 py-2.5 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#299E60] transition-colors" />
+                        </div>
+                    </Field>
+
+                    <Field label="Email" hint="(optional)">
+                        <input type="email" value={form.email} onChange={e => update('email', e.target.value)}
+                            placeholder="you@example.com"
+                            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#299E60] transition-colors" />
+                    </Field>
+
+                    <Field label="Password" hint="(optional — lets them skip OTP next time)">
+                        <div className="relative">
+                            <input type={showPwd ? 'text' : 'password'} value={form.password} onChange={e => update('password', e.target.value)}
+                                placeholder="At least 6 characters" autoComplete="new-password"
+                                className="w-full pl-3 pr-10 py-2.5 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#299E60] transition-colors" />
+                            <button type="button" onClick={() => setShowPwd(v => !v)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                {showPwd ? <EyeOff size={15} /> : <EyeIcon size={15} />}
+                            </button>
+                        </div>
+                    </Field>
+                </div>
+
+                <div className="px-6 py-4 border-t border-[#EEEEEE] flex justify-end gap-2">
+                    <button onClick={onClose} disabled={submitting}
+                        className="px-4 py-2 text-[13px] font-bold text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button onClick={handleSubmit} disabled={submitting}
+                        className="px-5 py-2 bg-[#299E60] hover:bg-[#238a53] text-white text-[13px] font-bold rounded-lg flex items-center gap-2 disabled:opacity-60 transition-colors">
+                        {submitting && <Loader2 size={14} className="animate-spin" />}
+                        Create user
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+    return (
+        <div className="space-y-1">
+            <label className="text-[12px] font-bold text-gray-700 ml-0.5">
+                {label} {hint && <span className="font-normal text-gray-400">{hint}</span>}
+            </label>
+            {children}
         </div>
     );
 }

@@ -5,10 +5,13 @@
 // PROTECTED: Admin only
 
 import { NextRequest, NextResponse } from 'next/server';
+import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requireAdminPerm } from '@/lib/teamPermissions';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Helper: extract the [id] segment from /api/v1/admin/users/{id}
 function extractId(req: NextRequest): string {
@@ -79,9 +82,43 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     if (body.role && ['customer', 'vendor', 'admin'].includes(body.role)) {
       allowedFields.role = body.role;
     }
+    if (typeof body.fullName === 'string' && body.fullName.trim()) {
+      allowedFields.fullName = body.fullName.trim();
+    }
+    if (typeof body.businessName === 'string') {
+      allowedFields.businessName = body.businessName.trim() || null;
+    }
+    if (typeof body.gstNumber === 'string') {
+      allowedFields.gstNumber = body.gstNumber.trim() || null;
+    }
+    if (typeof body.pincode === 'string') {
+      allowedFields.pincode = body.pincode.trim() || null;
+    }
+    if (typeof body.email === 'string') {
+      const e = body.email.trim().toLowerCase();
+      if (e && !EMAIL_RE.test(e)) throw Errors.badRequest('Enter a valid email address');
+      if (e) {
+        const taken = await prisma.user.findFirst({ where: { email: e, NOT: { id } }, select: { id: true } });
+        if (taken) throw Errors.badRequest('Another user already uses this email');
+      }
+      allowedFields.email = e || null;
+    }
+    if (typeof body.phone === 'string') {
+      const p = body.phone.replace(/\D/g, '').replace(/^91/, '');
+      if (p && !/^\d{10}$/.test(p)) throw Errors.badRequest('Enter a valid 10-digit phone number');
+      if (p) {
+        const taken = await prisma.user.findFirst({ where: { phone: p, NOT: { id } }, select: { id: true } });
+        if (taken) throw Errors.badRequest('Another user already uses this phone');
+      }
+      allowedFields.phone = p || null;
+    }
+    if (typeof body.password === 'string' && body.password.length > 0) {
+      if (body.password.length < 6) throw Errors.badRequest('Password must be at least 6 characters');
+      allowedFields.password = await bcrypt.hash(body.password, 10);
+    }
 
     if (Object.keys(allowedFields).length === 0) {
-      throw Errors.notFound('No valid fields to update');
+      throw Errors.badRequest('No valid fields to update');
     }
 
     // Verify user exists

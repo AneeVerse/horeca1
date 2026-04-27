@@ -17,6 +17,9 @@ import {
     Loader2,
     AlertCircle,
     Power,
+    Pencil,
+    Save,
+    X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
@@ -83,6 +86,13 @@ export default function CustomerDetailsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [toggling, setToggling] = useState(false);
+    const [editing, setEditing] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [draft, setDraft] = useState<{
+        fullName: string; email: string; phone: string;
+        businessName: string; gstNumber: string; pincode: string;
+        password: string;
+    }>({ fullName: '', email: '', phone: '', businessName: '', gstNumber: '', pincode: '', password: '' });
 
     useEffect(() => {
         async function fetchUser() {
@@ -109,6 +119,52 @@ export default function CustomerDetailsPage() {
             fetchUser();
         }
     }, [userId]);
+
+    function startEdit() {
+        if (!user) return;
+        setDraft({
+            fullName: user.fullName || '',
+            email: user.email || '',
+            phone: user.phone || '',
+            businessName: user.businessName || '',
+            gstNumber: user.gstNumber || '',
+            pincode: user.pincode || '',
+            password: '',
+        });
+        setEditing(true);
+    }
+
+    async function handleSave() {
+        if (!user || saving) return;
+        setSaving(true);
+        try {
+            const payload: Record<string, string> = {
+                fullName: draft.fullName.trim(),
+                email: draft.email.trim(),
+                phone: draft.phone.replace(/\D/g, '').replace(/^91/, ''),
+                businessName: draft.businessName.trim(),
+                gstNumber: draft.gstNumber.trim(),
+                pincode: draft.pincode.trim(),
+            };
+            if (draft.password) payload.password = draft.password;
+            const res = await fetch(`/api/v1/admin/users/${userId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const json = await res.json();
+            if (!json.success) {
+                throw new Error(json.error?.message || json.error || 'Failed to save');
+            }
+            setUser(prev => prev ? { ...prev, ...json.data } : prev);
+            setEditing(false);
+            toast.success('Customer updated');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to update');
+        } finally {
+            setSaving(false);
+        }
+    }
 
     async function handleToggleActive() {
         if (!user || toggling) return;
@@ -275,45 +331,76 @@ export default function CustomerDetailsPage() {
                             <h3 className="font-[800] text-[16px] text-[#181725]">
                                 Customer Details
                             </h3>
-                            <span
-                                className={cn(
-                                    'text-[11px] font-[800] px-2.5 py-1 rounded-md flex items-center gap-1.5',
-                                    user.isActive
-                                        ? 'bg-[#EEF8F1] text-[#299E60]'
-                                        : 'bg-red-50 text-red-500'
-                                )}
-                            >
-                                <span
-                                    className={cn(
-                                        'w-1.5 h-1.5 rounded-full',
-                                        user.isActive
-                                            ? 'bg-[#299E60] animate-pulse shadow-[0_0_8px_rgba(41,158,96,0.5)]'
-                                            : 'bg-red-400'
-                                    )}
-                                />
-                                {user.isActive ? 'Active' : 'Inactive'}
-                            </span>
+                            {editing ? (
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => setEditing(false)} disabled={saving}
+                                        className="px-3 py-1.5 text-[12px] font-bold text-gray-500 hover:bg-gray-50 rounded-lg transition-colors flex items-center gap-1">
+                                        <X size={14} /> Cancel
+                                    </button>
+                                    <button onClick={handleSave} disabled={saving}
+                                        className="px-3 py-1.5 bg-[#299E60] hover:bg-[#238a53] text-white text-[12px] font-bold rounded-lg flex items-center gap-1 disabled:opacity-60">
+                                        {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                        Save
+                                    </button>
+                                </div>
+                            ) : (
+                                <button onClick={startEdit}
+                                    className="px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-700 text-[12px] font-bold rounded-lg flex items-center gap-1 border border-gray-200 transition-colors">
+                                    <Pencil size={13} /> Edit
+                                </button>
+                            )}
                         </div>
                         <div className="divide-y divide-[#EEEEEE]">
                             <DetailRow label="Account ID" value={truncateId(user.id)} />
-                            <DetailRow label="Email" value={user.email} />
-                            <DetailRow label="Phone" value={user.phone} />
-                            <DetailRow
-                                label="Pincode"
-                                value={user.pincode || '--'}
-                            />
-                            <DetailRow
-                                label="Business Name"
-                                value={user.businessName || '--'}
-                            />
-                            <DetailRow
-                                label="GST Number"
-                                value={user.gstNumber || '--'}
-                            />
-                            <DetailRow
-                                label="Joined"
-                                value={formatDateIndian(user.createdAt)}
-                            />
+                            {editing ? (
+                                <>
+                                    <EditRow label="Full name">
+                                        <input value={draft.fullName} onChange={e => setDraft(d => ({ ...d, fullName: e.target.value }))}
+                                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] outline-none focus:border-[#299E60]" />
+                                    </EditRow>
+                                    <EditRow label="Email">
+                                        <input type="email" value={draft.email} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))}
+                                            placeholder="(none)"
+                                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] outline-none focus:border-[#299E60]" />
+                                    </EditRow>
+                                    <EditRow label="Phone">
+                                        <input type="tel" inputMode="numeric" maxLength={10}
+                                            value={draft.phone} onChange={e => setDraft(d => ({ ...d, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                                            placeholder="10 digits"
+                                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] outline-none focus:border-[#299E60]" />
+                                    </EditRow>
+                                    <EditRow label="Pincode">
+                                        <input value={draft.pincode} onChange={e => setDraft(d => ({ ...d, pincode: e.target.value }))}
+                                            placeholder="(none)"
+                                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] outline-none focus:border-[#299E60]" />
+                                    </EditRow>
+                                    <EditRow label="Business name">
+                                        <input value={draft.businessName} onChange={e => setDraft(d => ({ ...d, businessName: e.target.value }))}
+                                            placeholder="(none)"
+                                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] outline-none focus:border-[#299E60]" />
+                                    </EditRow>
+                                    <EditRow label="GST number">
+                                        <input value={draft.gstNumber} onChange={e => setDraft(d => ({ ...d, gstNumber: e.target.value }))}
+                                            placeholder="(none)"
+                                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] outline-none focus:border-[#299E60]" />
+                                    </EditRow>
+                                    <EditRow label="Set new password">
+                                        <input type="password" value={draft.password} onChange={e => setDraft(d => ({ ...d, password: e.target.value }))}
+                                            placeholder="Leave blank to keep existing" autoComplete="new-password"
+                                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] outline-none focus:border-[#299E60]" />
+                                    </EditRow>
+                                </>
+                            ) : (
+                                <>
+                                    <DetailRow label="Full name" value={user.fullName} />
+                                    <DetailRow label="Email" value={user.email || '--'} />
+                                    <DetailRow label="Phone" value={user.phone || '--'} />
+                                    <DetailRow label="Pincode" value={user.pincode || '--'} />
+                                    <DetailRow label="Business Name" value={user.businessName || '--'} />
+                                    <DetailRow label="GST Number" value={user.gstNumber || '--'} />
+                                    <DetailRow label="Joined" value={formatDateIndian(user.createdAt)} />
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -479,6 +566,15 @@ function DetailRow({ label, value }: { label: string; value: string }) {
             <span className="font-[800] text-[#181725] text-right max-w-[60%] truncate">
                 {value}
             </span>
+        </div>
+    );
+}
+
+function EditRow({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <div className="px-6 py-3 flex items-center justify-between text-[13px] gap-3">
+            <span className="font-[800] text-[#4B4B4B] shrink-0">{label} :</span>
+            <div className="max-w-[60%] w-full">{children}</div>
         </div>
     );
 }
