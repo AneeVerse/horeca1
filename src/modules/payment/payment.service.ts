@@ -4,6 +4,11 @@ import { emitEvent } from '@/events/emitter';
 import { Errors } from '@/middleware/errorHandler';
 import crypto from 'crypto';
 
+function timingSafeEqHex(expectedHex: string, providedHex: string): boolean {
+  if (expectedHex.length !== providedHex.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(expectedHex, 'utf8'), Buffer.from(providedHex, 'utf8'));
+}
+
 // Narrow helper — the Razorpay webhook payload shape we care about
 interface RazorpayWebhookPaymentEntity {
   id: string;
@@ -75,7 +80,7 @@ export class PaymentService {
       .update(body)
       .digest('hex');
 
-    if (expectedSignature !== razorpaySignature) {
+    if (!timingSafeEqHex(expectedSignature, razorpaySignature)) {
       throw Errors.unauthorized('Invalid payment signature');
     }
 
@@ -121,7 +126,7 @@ export class PaymentService {
       .update(rawBody)
       .digest('hex');
 
-    if (expectedSig !== signature) {
+    if (!timingSafeEqHex(expectedSig, signature)) {
       throw Errors.unauthorized('Invalid webhook signature');
     }
 

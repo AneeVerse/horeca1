@@ -40,6 +40,23 @@ export class OrderService {
         const vendor = await tx.vendor.findUnique({ where: { id: vo.vendorId } });
         if (!vendor) throw Errors.notFound('Vendor');
 
+        // 2b. Validate delivery slot — must belong to this vendor, be active, and not past cutoff
+        if (vo.deliverySlotId) {
+          const slot = await tx.deliverySlot.findUnique({ where: { id: vo.deliverySlotId } });
+          if (!slot || slot.vendorId !== vo.vendorId || !slot.isActive) {
+            throw Errors.badRequest('Invalid delivery slot for this vendor');
+          }
+          const now = new Date();
+          if (now.getDay() === slot.dayOfWeek) {
+            const [hh, mm] = slot.cutoffTime.split(':').map(Number);
+            const cutoff = new Date(now);
+            cutoff.setHours(hh || 0, mm || 0, 0, 0);
+            if (now >= cutoff) {
+              throw Errors.badRequest(`Cutoff time ${slot.cutoffTime} for this slot has passed`);
+            }
+          }
+        }
+
         // 3. Calculate subtotal (GST-inclusive gross prices — DB prices are ex-GST taxable rates)
         let subtotal = 0;
         const itemDetails = [];
@@ -125,7 +142,7 @@ export class OrderService {
       });
 
       return { orders };
-    });
+    }, { isolationLevel: 'Serializable' });
   }
 
   async list(userId: string, options: { status?: string; vendorId?: string; cursor?: string; limit?: number }) {

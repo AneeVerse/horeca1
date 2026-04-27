@@ -14,7 +14,9 @@ async function dispatchPhoneOTP(phone: string, otp: string): Promise<void> {
   const sender = process.env.MSG91_SENDER_ID ?? 'HCXGBL';
 
   if (!authKey || !templateId) {
-    console.log(`[OTP:dev] +91${phone} → ${otp}`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[OTP:dev] +91${phone} → ${otp}`);
+    }
     return;
   }
 
