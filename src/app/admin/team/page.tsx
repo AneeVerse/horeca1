@@ -27,7 +27,7 @@ const ROLE_CONFIG = {
 };
 
 export default function AdminTeamPage() {
-    const { data: session, update: updateSession } = useSession();
+    const { data: session, status: sessionStatus, update: updateSession } = useSession();
     const currentUserId = (session?.user as { id?: string })?.id;
     const perms = useAdminPermissions();
     const canManage = perms.canManageTeam;
@@ -118,6 +118,20 @@ export default function AdminTeamPage() {
             toast.error(err instanceof Error ? err.message : 'Failed to update role');
         }
     };
+
+    if (sessionStatus !== 'loading' && !canManage) {
+        return (
+            <div className="flex items-center justify-center py-24">
+                <div className="text-center max-w-md">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-[#FFF0F0] flex items-center justify-center mb-4">
+                        <AlertCircle size={22} className="text-[#E74C3C]" />
+                    </div>
+                    <h2 className="text-[18px] font-bold text-[#181725] mb-1">Access restricted</h2>
+                    <p className="text-[#7C7C7C] text-[14px]">Only owners can manage the admin team. Ask an owner to grant you the right role.</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6 pb-10 animate-in fade-in duration-300">

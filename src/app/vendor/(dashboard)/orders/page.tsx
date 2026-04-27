@@ -34,20 +34,23 @@ export default function VendorOrdersPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetch('/api/v1/vendor/orders?limit=50')
-            .then(res => res.json())
-            .then(json => { if (json.success) setOrders(json.data.orders); })
-            .catch(console.error)
-            .finally(() => setLoading(false));
-    }, []);
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            setLoading(true);
+            const url = new URL('/api/v1/vendor/orders', window.location.origin);
+            url.searchParams.set('limit', '50');
+            if (activeTab !== 'all') url.searchParams.set('status', activeTab);
+            if (searchQuery.trim()) url.searchParams.set('search', searchQuery.trim());
+            fetch(url.toString())
+                .then(res => res.json())
+                .then(json => { if (!cancelled && json.success) setOrders(json.data.orders); })
+                .catch(console.error)
+                .finally(() => { if (!cancelled) setLoading(false); });
+        }, searchQuery ? 300 : 0);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [searchQuery, activeTab]);
 
-    const filteredOrders = orders.filter(order => {
-        const matchesTab = activeTab === 'all' || order.status === activeTab;
-        const matchesSearch = !searchQuery ||
-            order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            order.user.fullName.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesTab && matchesSearch;
-    });
+    const filteredOrders = orders;
 
     return (
         <div className="space-y-6 pb-10">
@@ -82,11 +85,6 @@ export default function VendorOrdersPage() {
                         )}
                     >
                         {tab}
-                        {tab !== 'all' && (
-                            <span className="ml-1.5 text-[11px] opacity-75">
-                                ({orders.filter(o => o.status === tab).length})
-                            </span>
-                        )}
                     </button>
                 ))}
             </div>

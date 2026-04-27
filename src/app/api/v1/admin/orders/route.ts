@@ -2,7 +2,7 @@
 // WHY: Admin order management — view all orders across all vendors and customers,
 //      filter by status, vendor, customer, with full payment info
 // PROTECTED: Admin only
-// SUPPORTS: ?status=&vendorId=&customerId=&cursor=&limit=20
+// SUPPORTS: ?status=&vendorId=&customerId=&q=&cursor=&limit=20
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -16,6 +16,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
     const status = params.get('status') as OrderStatus | null;
     const vendorId = params.get('vendorId') || undefined;
     const customerId = params.get('customerId') || undefined;
+    const q = params.get('q')?.trim() || undefined;
     const cursor = params.get('cursor') || undefined;
     const limit = Math.min(Number(params.get('limit')) || 20, 100);
 
@@ -30,6 +31,14 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
     }
     if (customerId) {
       where.userId = customerId;
+    }
+    if (q) {
+      where.OR = [
+        { orderNumber: { contains: q, mode: 'insensitive' } },
+        { user: { fullName: { contains: q, mode: 'insensitive' } } },
+        { user: { email: { contains: q, mode: 'insensitive' } } },
+        { vendor: { businessName: { contains: q, mode: 'insensitive' } } },
+      ];
     }
 
     const orders = await prisma.order.findMany({

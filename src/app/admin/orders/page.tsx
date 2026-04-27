@@ -33,18 +33,22 @@ export default function OrdersPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetch('/api/v1/admin/orders?limit=50')
-            .then(res => res.json())
-            .then(json => { if (json.success) setOrders(json.data.orders); })
-            .catch(console.error)
-            .finally(() => setLoading(false));
-    }, []);
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            setLoading(true);
+            const url = new URL('/api/v1/admin/orders', window.location.origin);
+            url.searchParams.set('limit', '50');
+            if (searchQuery.trim()) url.searchParams.set('q', searchQuery.trim());
+            fetch(url.toString())
+                .then(res => res.json())
+                .then(json => { if (!cancelled && json.success) setOrders(json.data.orders); })
+                .catch(console.error)
+                .finally(() => { if (!cancelled) setLoading(false); });
+        }, searchQuery ? 300 : 0);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [searchQuery]);
 
-    const filteredOrders = orders.filter(order =>
-        order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.vendor.businessName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredOrders = orders;
 
     return (
         <div className="space-y-8 pb-10">
