@@ -19,40 +19,58 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
 
   providers: [
-    // ── OTP (phone) — for customers and vendors ──────────────────────────
+    // ── OTP (phone or email) — customers, vendors, team members ──────────
     Credentials({
       id: 'otp',
       name: 'OTP',
       credentials: {
         phone: {},
+        loginEmail: {},
         code: {},
         fullName: {},
         businessName: {},
         email: {},
+        password: {},
         role: {},
         isRegister: {},
       },
       async authorize(credentials) {
         const phone = String(credentials?.phone ?? '').replace(/\D/g, '').replace(/^91/, '');
+        const loginEmail = String(credentials?.loginEmail ?? '').trim().toLowerCase();
         const code = String(credentials?.code ?? '').trim();
-        if (!phone || !code) return null;
+        const isRegister = credentials?.isRegister === 'true' || credentials?.isRegister === true;
+        if (!code) return null;
 
-        // Verify OTP
+        const usePhone = !!phone;
+        const useEmail = !usePhone && !isRegister && !!loginEmail;
+        if (!usePhone && !useEmail) return null;
+
+        // Verify OTP against the chosen identifier
         const record = await prisma.otpCode.findFirst({
-          where: { phone, used: false, expiresAt: { gt: new Date() } },
+          where: usePhone
+            ? { phone, used: false, expiresAt: { gt: new Date() } }
+            : { email: loginEmail, used: false, expiresAt: { gt: new Date() } },
           orderBy: { createdAt: 'desc' },
         });
         if (!record || record.code !== code) return null;
 
         await prisma.otpCode.update({ where: { id: record.id }, data: { used: true } });
 
-        // Find existing user
-        let user = await prisma.user.findUnique({
-          where: { phone },
-          select: { id: true, email: true, fullName: true, role: true, image: true, isActive: true },
-        });
+        // Find existing user by whichever identifier was used
+        let user = usePhone
+          ? await prisma.user.findUnique({
+              where: { phone },
+              select: { id: true, email: true, fullName: true, role: true, image: true, isActive: true },
+            })
+          : await prisma.user.findUnique({
+              where: { email: loginEmail },
+              select: { id: true, email: true, fullName: true, role: true, image: true, isActive: true },
+            });
 
-        if (!user) {
+        // Email-OTP login requires an existing account (no auto-register via email)
+        if (useEmail && !user) return null;
+
+        if (!user && usePhone) {
           // No account yet — create one automatically.
           // Register form provides fullName/businessName/email/role; login form falls back to phone-only account.
           const fullName = String(credentials?.fullName ?? '').trim() || phone;
@@ -65,13 +83,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const emailTaken = email
             ? !!(await prisma.user.findUnique({ where: { email }, select: { id: true } }))
             : false;
+          const finalEmail = emailTaken ? null : email;
+
+          // Optional password set during registration — usable with phone or email
+          const rawPassword = String(credentials?.password ?? '');
+          const passwordHash = rawPassword.length >= 6
+            ? await bcrypt.hash(rawPassword, 10)
+            : null;
 
           user = await prisma.user.create({
             data: {
               phone,
               fullName,
               businessName,
-              email: emailTaken ? null : email,
+              email: finalEmail,
+              password: passwordHash,
               role,
               isActive: true,
             },
@@ -91,18 +117,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           }
         }
 
-        if (!user.isActive) return null;
+        if (!user || !user.isActive) return null;
 
         return { id: user.id, email: user.email ?? undefined, name: user.fullName, role: user.role, image: user.image ?? undefined };
       },
     }),
 
-    // ── Email + password — admin login + account switcher ────────────────
+    // ── Phone-or-email + password — team members, admins, registered users
     Credentials({
       id: 'credentials',
       name: 'credentials',
       credentials: {
-        email: { label: 'Email', type: 'email' },
+        email: { label: 'Phone or email', type: 'text' },
         password: { label: 'Password', type: 'password' },
         switchToken: { label: 'Switch Token', type: 'text' },
       },
@@ -125,16 +151,29 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return { id: link.linkedUser.id, email: link.linkedUser.email ?? undefined, name: link.linkedUser.fullName, role: link.linkedUser.role, image: link.linkedUser.image ?? undefined };
         }
 
-        // ── Normal email/password flow ──
-        if (!credentials?.email || !credentials?.password) return null;
+        // ── Phone or email + password flow ──
+        const identifier = String(credentials?.email ?? '').trim();
+        const password = String(credentials?.password ?? '');
+        if (!identifier || !password) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-          select: { id: true, email: true, password: true, fullName: true, role: true, image: true, isActive: true },
-        });
+        const looksEmail = identifier.includes('@');
+        const phoneDigits = identifier.replace(/\D/g, '').replace(/^91/, '');
+
+        const user = looksEmail
+          ? await prisma.user.findUnique({
+              where: { email: identifier.toLowerCase() },
+              select: { id: true, email: true, password: true, fullName: true, role: true, image: true, isActive: true },
+            })
+          : (phoneDigits.length === 10
+              ? await prisma.user.findUnique({
+                  where: { phone: phoneDigits },
+                  select: { id: true, email: true, password: true, fullName: true, role: true, image: true, isActive: true },
+                })
+              : null);
+
         if (!user || !user.password || !user.isActive) return null;
 
-        const isValid = await bcrypt.compare(credentials.password as string, user.password);
+        const isValid = await bcrypt.compare(password, user.password);
         if (!isValid) return null;
 
         return { id: user.id, email: user.email ?? undefined, name: user.fullName, role: user.role, image: user.image ?? undefined };

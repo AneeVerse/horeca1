@@ -953,12 +953,14 @@ model VendorDocument {
 
 model OtpCode {
   id        String   @id @default(uuid()) @db.Uuid
-  phone     String   @db.VarChar(20)
+  phone     String?  @db.VarChar(20)
+  email     String?  @db.VarChar(320)
   code      String   @db.VarChar(6)
   expiresAt DateTime @map("expires_at") @db.Timestamptz
   used      Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([phone])
+  @@index([email])
   @@map("otp_codes")
 }

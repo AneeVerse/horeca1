@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
-import { X, Phone, Loader2, ArrowLeft } from 'lucide-react';
+import { X, AtSign, Mail, Loader2, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { signIn } from 'next-auth/react';
@@ -13,11 +13,16 @@ interface LoginOverlayProps {
 }
 
 const RESEND_COOLDOWN = 60;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function looksLikeEmail(s: string) {
+  return s.includes('@') || /[a-zA-Z]/.test(s);
+}
 
 export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayProps) {
   const router = useRouter();
-  const [step, setStep] = useState<'phone' | 'otp'>('phone');
-  const [phone, setPhone] = useState('');
+  const [step, setStep] = useState<'identifier' | 'otp'>('identifier');
+  const [identifier, setIdentifier] = useState('');
   const [otp, setOtp] = useState<string[]>(['', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -44,8 +49,8 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
   const handleClose = () => {
     onClose();
     setTimeout(() => {
-      setStep('phone');
-      setPhone('');
+      setStep('identifier');
+      setIdentifier('');
       setOtp(['', '', '', '']);
       setError('');
       setResendTimer(0);
@@ -55,15 +60,27 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
 
   if (!isOpen) return null;
 
+  const trimmedId = identifier.trim();
+  const isEmail = looksLikeEmail(trimmedId);
+  const phoneDigits = trimmedId.replace(/\D/g, '').replace(/^91/, '').slice(0, 10);
+
   const handleSendOtp = async () => {
     setError('');
-    if (!/^\d{10}$/.test(phone)) { setError('Enter a valid 10-digit mobile number'); return; }
+    if (!trimmedId) { setError('Enter your mobile number or email'); return; }
+    if (isEmail) {
+      if (!EMAIL_RE.test(trimmedId.toLowerCase())) { setError('Enter a valid email address'); return; }
+    } else {
+      if (!/^\d{10}$/.test(phoneDigits)) { setError('Enter a valid 10-digit mobile number'); return; }
+    }
     setIsLoading(true);
     try {
+      const body = isEmail
+        ? { email: trimmedId.toLowerCase(), mode: 'login' }
+        : { phone: phoneDigits, mode: 'login' };
       const res = await fetch('/api/v1/auth/otp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, mode: 'login' }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!data.success) { setError(data.error || 'Failed to send OTP'); return; }
@@ -105,7 +122,14 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
     setError('');
     try {
       const result = await signIn('otp', {
-        phone, code, fullName: '', businessName: '', role: 'customer', isRegister: 'false', redirect: false,
+        phone: isEmail ? '' : phoneDigits,
+        loginEmail: isEmail ? trimmedId.toLowerCase() : '',
+        code,
+        fullName: '',
+        businessName: '',
+        role: 'customer',
+        isRegister: 'false',
+        redirect: false,
       });
       if (result?.error) {
         setError('Invalid or expired OTP. Please try again.');
@@ -119,6 +143,10 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
     finally { setIsLoading(false); }
   };
 
+  const sentToLabel = isEmail
+    ? trimmedId.toLowerCase()
+    : `+91 ${phoneDigits.slice(0, 5)} ${phoneDigits.slice(5)}`;
+
   return (
     <>
       <div className="fixed inset-0 z-[13000] bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={handleClose} />
@@ -128,7 +156,7 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
 
           <div className="flex items-center justify-between mb-6">
             {step === 'otp' ? (
-              <button onClick={() => { setStep('phone'); setOtp(['', '', '', '']); setError(''); }}
+              <button onClick={() => { setStep('identifier'); setOtp(['', '', '', '']); setError(''); }}
                 className="flex items-center gap-2 text-[13px] text-gray-400 hover:text-gray-600 transition-colors">
                 <ArrowLeft size={16} /> Back
               </button>
@@ -146,16 +174,28 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
             </div>
           )}
 
-          {step === 'phone' ? (
+          {step === 'identifier' ? (
             <>
-              <p className="text-[13px] text-gray-400 mb-5">Enter your mobile number to receive a one-time password</p>
-              <div className="relative mb-5">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[14px] font-bold text-gray-500 select-none">+91</span>
-                <input type="tel" inputMode="numeric" maxLength={10} autoFocus
-                  value={phone} onChange={e => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 10)); setError(''); }}
+              <label className="text-[13px] font-semibold text-gray-400 ml-1 tracking-tight">
+                Mobile Number or Email
+              </label>
+              <div className="relative mt-1.5 mb-5 flex items-center">
+                {isEmail ? (
+                  <Mail size={18} className="absolute left-4 text-[#53B175] pointer-events-none" />
+                ) : trimmedId.length > 0 ? (
+                  <span className="absolute left-4 text-[14px] font-bold text-gray-500 select-none">+91</span>
+                ) : (
+                  <AtSign size={18} className="absolute left-4 text-gray-300 pointer-events-none" />
+                )}
+                <input type="text" autoFocus inputMode={isEmail ? 'email' : 'text'} autoComplete="username"
+                  value={identifier}
+                  onChange={e => { setIdentifier(e.target.value); setError(''); }}
                   onKeyDown={e => e.key === 'Enter' && handleSendOtp()}
-                  placeholder="10-digit mobile number"
-                  className="w-full pl-14 pr-4 py-3.5 bg-[#F7F8FA] border border-gray-100 rounded-xl text-[14px] font-bold outline-none focus:border-[#53B175] focus:bg-white transition-all"
+                  placeholder="Phone or email"
+                  className={cn(
+                    'w-full pr-4 py-3.5 bg-[#F7F8FA] border border-gray-100 rounded-xl text-[14px] font-bold outline-none focus:border-[#53B175] focus:bg-white transition-all',
+                    isEmail || trimmedId.length > 0 ? 'pl-14' : 'pl-12',
+                  )}
                 />
               </div>
               <button onClick={handleSendOtp} disabled={isLoading}
@@ -172,7 +212,7 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
           ) : (
             <>
               <p className="text-[13px] text-gray-400 text-center mb-6">
-                Code sent to <span className="font-bold text-gray-700">+91 {phone.slice(0, 5)} {phone.slice(5)}</span>
+                Code sent to <span className="font-bold text-gray-700">{sentToLabel}</span>
               </p>
               <div className="flex gap-3 justify-center mb-6">
                 {otp.map((digit, i) => (
