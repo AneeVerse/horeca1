@@ -1062,19 +1062,16 @@ export default function ProductsPage() {
                                     <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
                                         Brand
                                     </label>
-                                    <input
-                                        type="text"
-                                        list="admin-brand-options"
+                                    <select
                                         value={formData.brand}
                                         onChange={e => updateField('brand', e.target.value)}
-                                        placeholder="Select or type brand"
-                                        className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
-                                    />
-                                    <datalist id="admin-brand-options">
+                                        className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white cursor-pointer"
+                                    >
+                                        <option value="">Select brand</option>
                                         {brands.map(b => (
-                                            <option key={b.id} value={b.name} />
+                                            <option key={b.id} value={b.name}>{b.name}</option>
                                         ))}
-                                    </datalist>
+                                    </select>
                                     {brands.length === 0 && (
                                         <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
                                             No brands yet — add one in <a href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</a>
