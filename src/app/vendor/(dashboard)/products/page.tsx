@@ -319,7 +319,7 @@ export default function VendorProductsPage() {
             .then(r => r.json())
             .then(json => { if (json.success) setCategories(json.data); })
             .catch(console.error);
-        fetch('/api/v1/brands?limit=200')
+        fetch('/api/v1/brands?limit=100')
             .then(r => r.json())
             .then(json => { if (json.success) setBrands((json.data?.brands ?? json.data ?? []).map((b: { id: string; name: string }) => ({ id: b.id, name: b.name }))); })
             .catch(console.error);
