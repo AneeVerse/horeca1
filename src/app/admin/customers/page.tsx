@@ -291,11 +291,10 @@ interface AddUserForm {
     email: string;
     businessName: string;
     password: string;
-    role: 'customer' | 'vendor';
 }
 
 function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-    const [form, setForm] = useState<AddUserForm>({ fullName: '', phone: '', email: '', businessName: '', password: '', role: 'customer' });
+    const [form, setForm] = useState<AddUserForm>({ fullName: '', phone: '', email: '', businessName: '', password: '' });
     const [showPwd, setShowPwd] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -322,7 +321,7 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
                     email: form.email.trim() || undefined,
                     businessName: form.businessName.trim() || undefined,
                     password: form.password || undefined,
-                    role: form.role,
+                    role: 'customer',
                 }),
             });
             const json = await res.json();
@@ -330,7 +329,7 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
                 setError(json.error?.message || json.error || 'Failed to create user');
                 return;
             }
-            toast.success(`${form.role === 'vendor' ? 'Vendor' : 'Customer'} created`);
+            toast.success('Customer created');
             onCreated();
         } catch {
             setError('Something went wrong');
@@ -343,30 +342,22 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
         <div className="fixed inset-0 z-[10000] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
             <div className="bg-white rounded-[16px] shadow-2xl w-full max-w-[480px] max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-[#EEEEEE] flex items-center justify-between">
-                    <h2 className="text-[18px] font-[800] text-[#181725]">Add new user</h2>
+                    <h2 className="text-[18px] font-[800] text-[#181725]">Add new customer</h2>
                     <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
                         <X size={18} />
                     </button>
                 </div>
 
                 <div className="p-6 space-y-4">
+                    <p className="text-[12px] text-gray-500 -mt-1">
+                        Adding a vendor? Use <a href="/admin/vendors" className="font-bold text-[#299E60] hover:underline">Vendors → Add Vendor</a>.
+                    </p>
+
                     {error && (
                         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-[13px] text-red-600 font-medium">
                             {error}
                         </div>
                     )}
-
-                    <div className="flex p-0.5 bg-gray-50 rounded-lg border border-gray-100">
-                        {(['customer', 'vendor'] as const).map(r => (
-                            <button key={r} onClick={() => update('role', r)}
-                                className={cn(
-                                    'flex-1 py-2 text-[13px] font-bold rounded-md capitalize transition-all',
-                                    form.role === r ? 'bg-[#299E60] text-white shadow-sm' : 'text-gray-500',
-                                )}>
-                                {r}
-                            </button>
-                        ))}
-                    </div>
 
                     <Field label="Full name *">
                         <input type="text" value={form.fullName} onChange={e => update('fullName', e.target.value)}
@@ -374,9 +365,9 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
                             className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#299E60] transition-colors" />
                     </Field>
 
-                    <Field label="Business name" hint={form.role === 'vendor' ? '(supplier / distributor name)' : '(restaurant / hotel)'}>
+                    <Field label="Business name" hint="(restaurant / hotel)">
                         <input type="text" value={form.businessName} onChange={e => update('businessName', e.target.value)}
-                            placeholder={form.role === 'vendor' ? 'Distributor name' : 'Restaurant / hotel'}
+                            placeholder="Restaurant / hotel"
                             className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#299E60] transition-colors" />
                     </Field>
 

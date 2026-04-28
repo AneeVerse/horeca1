@@ -68,10 +68,22 @@ interface Category {
     name: string;
 }
 
+interface BrandOption {
+    id: string;
+    name: string;
+}
+
+interface SlabRow {
+    minQty: string;
+    maxQty: string;
+    price: string;
+}
+
 interface ProductFormData {
     name: string;
     sku: string;
     hsn: string;
+    barcode: string;
     brand: string;
     categoryId: string;
     additionalCategoryIds: string[];
@@ -80,15 +92,23 @@ interface ProductFormData {
     originalPrice: string;
     vendorId: string;
     taxPercent: string;
+    unit: string;
     minOrderQty: string;
     creditEligible: boolean;
     imageUrl: string;
+    priceSlabs: SlabRow[];
 }
+
+// Same enum-like constants used by vendor form. GST slabs are government-fixed,
+// units are universal SI/business units — these are not "mock data".
+const UNIT_OPTIONS = ['kg', 'g', 'ml', 'L', 'piece', 'pack', 'box', 'dozen', 'case', 'bag', 'bottle', 'can', 'carton', 'tray'];
+const TAX_OPTIONS = ['0', '5', '12', '18', '28'];
 
 const EMPTY_FORM: ProductFormData = {
     name: '',
     sku: '',
     hsn: '',
+    barcode: '',
     brand: '',
     categoryId: '',
     additionalCategoryIds: [],
@@ -97,9 +117,11 @@ const EMPTY_FORM: ProductFormData = {
     originalPrice: '',
     vendorId: '',
     taxPercent: '0',
+    unit: 'piece',
     minOrderQty: '1',
     creditEligible: false,
     imageUrl: '',
+    priceSlabs: [],
 };
 
 const STATUS_CONFIG = {
@@ -123,6 +145,7 @@ export default function ProductsPage() {
     const [products, setProducts] = useState<Product[]>([]);
     const [vendors, setVendors] = useState<Vendor[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
+    const [brands, setBrands] = useState<BrandOption[]>([]);
 
     // Loading state
     const [loading, setLoading] = useState(true);
@@ -203,6 +226,16 @@ export default function ProductsPage() {
                 if (json.success) {
                     const c = json.data?.categories ?? json.data ?? [];
                     setCategories(Array.isArray(c) ? c : []);
+                }
+            })
+            .catch(console.error);
+
+        fetch('/api/v1/brands?limit=200')
+            .then(res => res.json())
+            .then(json => {
+                if (json.success) {
+                    const b = json.data?.brands ?? json.data ?? [];
+                    setBrands(Array.isArray(b) ? b.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : []);
                 }
             })
             .catch(console.error);
@@ -371,6 +404,7 @@ export default function ProductsPage() {
             name: product.name,
             sku: product.sku ?? '',
             hsn: product.hsn ?? '',
+            barcode: '',
             brand: product.brand ?? '',
             categoryId: primaryId,
             additionalCategoryIds: additionalIds,
@@ -379,9 +413,11 @@ export default function ProductsPage() {
             originalPrice: product.originalPrice != null ? String(product.originalPrice) : '',
             vendorId: product.vendor?.id ?? '',
             taxPercent: String(product.taxPercent),
+            unit: 'piece',
             minOrderQty: String(product.minOrderQty),
             creditEligible: product.creditEligible,
             imageUrl: product.imageUrl ?? '',
+            priceSlabs: [],
         });
         setFormErrors({});
         setPanelOpen(true);
@@ -423,7 +459,17 @@ export default function ProductsPage() {
             if (formData.imageUrl) payload.imageUrl = formData.imageUrl;
             if (formData.sku.trim()) payload.sku = formData.sku.trim();
             if (formData.hsn.trim()) payload.hsn = formData.hsn.trim();
+            if (formData.barcode.trim()) payload.barcode = formData.barcode.trim();
             if (formData.brand.trim()) payload.brand = formData.brand.trim();
+            if (formData.unit) payload.unit = formData.unit;
+            const slabs = formData.priceSlabs
+                .filter(s => s.minQty && s.price)
+                .map(s => ({
+                    minQty: Number(s.minQty),
+                    maxQty: s.maxQty ? Number(s.maxQty) : undefined,
+                    price: Number(s.price),
+                }));
+            if (slabs.length > 0) payload.priceSlabs = slabs;
             if (formData.categoryId) {
                 payload.categoryId = formData.categoryId;
                 const joinIds = Array.from(new Set([formData.categoryId, ...formData.additionalCategoryIds]));
@@ -964,12 +1010,10 @@ export default function ProductsPage() {
                                 )}
                             </div>
 
-                            {/* SKU + HSN */}
-                            <div className="grid grid-cols-2 gap-4">
+                            {/* SKU + HSN + Barcode + Unit */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div>
-                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                        SKU
-                                    </label>
+                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">SKU</label>
                                     <input
                                         type="text"
                                         value={formData.sku}
@@ -979,9 +1023,7 @@ export default function ProductsPage() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                        HSN Code
-                                    </label>
+                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">HSN Code</label>
                                     <input
                                         type="text"
                                         value={formData.hsn}
@@ -989,6 +1031,28 @@ export default function ProductsPage() {
                                         placeholder="e.g. 2106"
                                         className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
                                     />
+                                </div>
+                                <div>
+                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">Barcode</label>
+                                    <input
+                                        type="text"
+                                        value={formData.barcode}
+                                        onChange={e => updateField('barcode', e.target.value)}
+                                        placeholder="EAN / UPC"
+                                        className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">Unit</label>
+                                    <select
+                                        value={formData.unit}
+                                        onChange={e => updateField('unit', e.target.value)}
+                                        className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white cursor-pointer"
+                                    >
+                                        {UNIT_OPTIONS.map(u => (
+                                            <option key={u} value={u}>{u}</option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
 
@@ -1000,11 +1064,22 @@ export default function ProductsPage() {
                                     </label>
                                     <input
                                         type="text"
+                                        list="admin-brand-options"
                                         value={formData.brand}
                                         onChange={e => updateField('brand', e.target.value)}
-                                        placeholder="Brand name"
+                                        placeholder="Select or type brand"
                                         className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
                                     />
+                                    <datalist id="admin-brand-options">
+                                        {brands.map(b => (
+                                            <option key={b.id} value={b.name} />
+                                        ))}
+                                    </datalist>
+                                    {brands.length === 0 && (
+                                        <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
+                                            No brands yet — add one in <a href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</a>
+                                        </p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
@@ -1117,18 +1192,17 @@ export default function ProductsPage() {
                             </div>
                             <div>
                                 <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                    Tax % <span className="text-[#E74C3C]">*</span>
+                                    Tax % (GST) <span className="text-[#E74C3C]">*</span>
                                 </label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    step="0.01"
+                                <select
                                     value={formData.taxPercent}
                                     onChange={e => updateField('taxPercent', e.target.value)}
-                                    placeholder="0"
-                                    className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
-                                />
+                                    className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white cursor-pointer"
+                                >
+                                    {TAX_OPTIONS.map(t => (
+                                        <option key={t} value={t}>{t}%</option>
+                                    ))}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
@@ -1161,6 +1235,82 @@ export default function ProductsPage() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Bulk Pricing Slabs (up to 3 tiers) \u2014 only useful when assigned to a vendor */}
+                    {formData.vendorId && (
+                        <div>
+                            <div className="flex items-center justify-between mb-5">
+                                <div>
+                                    <h3 className="text-[16px] font-[800] text-[#181725]">Bulk Pricing Slabs</h3>
+                                    <p className="text-[12px] text-[#7C7C7C] font-medium mt-0.5">Up to 3 quantity-based discount tiers (taxable rate, ex-GST)</p>
+                                </div>
+                                {formData.priceSlabs.length < 3 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData(prev => ({
+                                            ...prev,
+                                            priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '' }],
+                                        }))}
+                                        className="px-3 py-2 text-[12px] font-bold text-[#299E60] bg-[#EEF8F1] hover:bg-[#dff2e7] rounded-[10px] transition-colors flex items-center gap-1"
+                                    >
+                                        <Plus size={14} /> Add tier
+                                    </button>
+                                )}
+                            </div>
+                            {formData.priceSlabs.length === 0 ? (
+                                <p className="text-[13px] text-[#AEAEAE] font-medium bg-[#F8F9FB] border border-dashed border-[#EEEEEE] rounded-[12px] px-4 py-6 text-center">
+                                    No bulk tiers yet. Click <strong className="text-[#299E60]">Add tier</strong> to offer discounts above the base price.
+                                </p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {formData.priceSlabs.map((slab, i) => (
+                                        <div key={i} className="grid grid-cols-12 gap-3 items-end">
+                                            <div className="col-span-3">
+                                                <label className="block text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-1.5">Min qty *</label>
+                                                <input type="number" min="1" value={slab.minQty}
+                                                    onChange={e => setFormData(prev => ({
+                                                        ...prev,
+                                                        priceSlabs: prev.priceSlabs.map((s, idx) => idx === i ? { ...s, minQty: e.target.value } : s),
+                                                    }))}
+                                                    placeholder="e.g. 10"
+                                                    className="w-full h-[44px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] font-medium outline-none focus:border-[#299E60]/40 focus:bg-white" />
+                                            </div>
+                                            <div className="col-span-3">
+                                                <label className="block text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-1.5">Max qty</label>
+                                                <input type="number" min="1" value={slab.maxQty}
+                                                    onChange={e => setFormData(prev => ({
+                                                        ...prev,
+                                                        priceSlabs: prev.priceSlabs.map((s, idx) => idx === i ? { ...s, maxQty: e.target.value } : s),
+                                                    }))}
+                                                    placeholder="(optional)"
+                                                    className="w-full h-[44px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] font-medium outline-none focus:border-[#299E60]/40 focus:bg-white" />
+                                            </div>
+                                            <div className="col-span-5">
+                                                <label className="block text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-1.5">Price per unit (\u20B9) *</label>
+                                                <input type="number" min="0" step="0.01" value={slab.price}
+                                                    onChange={e => setFormData(prev => ({
+                                                        ...prev,
+                                                        priceSlabs: prev.priceSlabs.map((s, idx) => idx === i ? { ...s, price: e.target.value } : s),
+                                                    }))}
+                                                    placeholder="0.00"
+                                                    className="w-full h-[44px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] font-medium outline-none focus:border-[#299E60]/40 focus:bg-white" />
+                                            </div>
+                                            <div className="col-span-1 flex justify-end">
+                                                <button type="button"
+                                                    onClick={() => setFormData(prev => ({
+                                                        ...prev,
+                                                        priceSlabs: prev.priceSlabs.filter((_, idx) => idx !== i),
+                                                    }))}
+                                                    className="w-[44px] h-[44px] flex items-center justify-center rounded-[10px] bg-[#FFF0F0] text-[#E74C3C] hover:bg-[#FFE4E4] transition-colors">
+                                                    <Trash2 size={15} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Vendor Selection (Optional) */}
                     <div>
