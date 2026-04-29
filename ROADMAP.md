@@ -185,7 +185,7 @@ Findings from a 3-agent code audit on the deployed `64.227.187.210` build. Each 
 
 ### 🔴 STUBBED FEATURES — UI present, key flow missing
 
-- [ ] **S1.** Brand storefronts (`/brand/[slug]`) render hardcoded `BRAND_DATA` mock products instead of API data for the seed brand slugs. [src/components/features/brand/BrandStore.tsx:304](src/components/features/brand/BrandStore.tsx#L304)
+- [x] **S1.** Brand storefronts — ✅ fixed in commit `3418571`. Removed the 200-line `BRAND_DATA` mock; component always fetches `/api/v1/brands/[id]` now.
 - [ ] **S2.** Credit payment is cosmetic — order created with `paymentMethod='credit'` but `creditUsed` never debited. [src/modules/order/order.service.ts](src/modules/order/order.service.ts)
 - [ ] **S3.** Wallet system has schema only — no UI, no top-up, no admin credit. Either build it or remove the model.
 - [ ] **S4.** Credit signup API works but no customer-facing apply form, no admin underwriting page.
@@ -197,12 +197,12 @@ Findings from a 3-agent code audit on the deployed `64.227.187.210` build. Each 
 
 ### 🟠 MAJOR BUGS — security / scaling / data integrity
 
-- [ ] **M1.** OTP rate-limit TOCTOU race — wrap count + invalidate + create in `$transaction({ isolationLevel: 'Serializable' })`. [src/app/api/v1/auth/otp/send/route.ts:60](src/app/api/v1/auth/otp/send/route.ts#L60)
-- [ ] **M2.** Cutoff-time check uses Node's local timezone — force IST. [src/modules/order/order.service.ts:49](src/modules/order/order.service.ts#L49)
+- [x] **M1.** OTP rate-limit TOCTOU race — ✅ fixed in commit `3418571`. Count + invalidate + create now run inside `$transaction({ isolationLevel: 'Serializable' })`; conflicting concurrent sends abort with a 429.
+- [x] **M2.** Cutoff-time check uses Node's local timezone — ✅ fixed in commit `3418571`. Day + HH:mm now derived via `Intl.DateTimeFormat({ timeZone: 'Asia/Kolkata' })` and compared as minutes-since-midnight.
 - [ ] **M3.** N+1 in `inventory.bulkCheck` — replace `Promise.all` loop with single `findMany({ in: ids })`. [src/modules/inventory/inventory.service.ts:33](src/modules/inventory/inventory.service.ts#L33)
 - [ ] **M4.** Admin order status-change skips events — no `OrderShipped` emit means no SMS/email to customer. [src/app/api/v1/admin/orders/[id]/route.ts:133](src/app/api/v1/admin/orders/[id]/route.ts#L133)
 - [ ] **M5.** Cart guest→login merge missing — items in localStorage vanish when user logs in.
-- [ ] **M6.** Hard-delete user cascades and destroys audit trail — switch to soft-delete (`isActive=false`). [src/app/api/v1/admin/users/[id]/route.ts:128](src/app/api/v1/admin/users/[id]/route.ts#L128)
+- [x] **M6.** Hard-delete user cascades and destroys audit trail — ✅ fixed in commit `3418571`. DELETE handler now sets `isActive=false`; vendors/orders/audit links preserved.
 - [ ] **M7.** Email enumeration via `code: 'NO_ACCOUNT'` response — return generic message. [src/app/api/v1/auth/otp/send/route.ts:91](src/app/api/v1/auth/otp/send/route.ts#L91)
 - [ ] **M8.** No webhook idempotency table — add `WebhookEvent { providerEventId @unique, processedAt }`.
 - [ ] **M9.** Refund webhook can refund any payment (same shape bug as B3 but for `payment.refunded` event).
