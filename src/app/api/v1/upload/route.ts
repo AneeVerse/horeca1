@@ -6,13 +6,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getImageKit, IMAGEKIT_FOLDERS, type ImageFolder } from '@/lib/imagekit';
 import { withRole } from '@/middleware/rbac';
+import { withRateLimit } from '@/middleware/withRateLimit';
 import { errorResponse } from '@/middleware/errorHandler';
 import { toFile } from '@imagekit/nodejs';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
-export const POST = withRole(['admin', 'vendor', 'customer'], async (req: NextRequest) => {
+export const POST = withRateLimit(withRole(['admin', 'vendor', 'customer'], async (req: NextRequest) => {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
@@ -81,4 +82,4 @@ export const POST = withRole(['admin', 'vendor', 'customer'], async (req: NextRe
     console.error('Image upload failed:', error);
     return errorResponse(error);
   }
-});
+}), 'upload');

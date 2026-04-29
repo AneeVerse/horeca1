@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/providers/email';
+import { withRateLimit } from '@/middleware/withRateLimit';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -42,7 +43,7 @@ async function dispatchEmailOTP(email: string, otp: string): Promise<void> {
   });
 }
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   try {
     const body = await req.json();
     const mode: 'login' | 'register' = body.mode === 'register' ? 'register' : 'login';
@@ -146,3 +147,5 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+export const POST = withRateLimit(postHandler, 'auth');

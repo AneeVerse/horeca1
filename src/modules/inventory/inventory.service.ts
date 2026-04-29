@@ -32,18 +32,23 @@ export class InventoryService {
 
   async bulkCheck(items: Array<{ productId: string; quantity: number }>, tx?: TxClient) {
     const db = tx || prisma;
-    const results = await Promise.all(
-      items.map(async (item) => {
-        const inv = await db.inventory.findUnique({ where: { productId: item.productId } });
-        const available = inv ? inv.qtyAvailable - inv.qtyReserved : 0;
-        return {
-          productId: item.productId,
-          available: available >= item.quantity,
-          qtyAvailable: available,
-        };
-      })
-    );
-    return results;
+    const ids = items.map(i => i.productId);
+    // Single round-trip instead of N parallel findUnique calls (which all
+    // hit the same Postgres connection pool and bottleneck on big carts)
+    const inventories = await db.inventory.findMany({
+      where: { productId: { in: ids } },
+      select: { productId: true, qtyAvailable: true, qtyReserved: true },
+    });
+    const invByProductId = new Map(inventories.map(inv => [inv.productId, inv]));
+    return items.map(item => {
+      const inv = invByProductId.get(item.productId);
+      const available = inv ? inv.qtyAvailable - inv.qtyReserved : 0;
+      return {
+        productId: item.productId,
+        available: available >= item.quantity,
+        qtyAvailable: available,
+      };
+    });
   }
 
   async reserveStock(items: Array<{ productId: string; quantity: number }>, tx?: TxClient) {

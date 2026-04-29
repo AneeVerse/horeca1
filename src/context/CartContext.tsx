@@ -182,11 +182,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const [cart, setCart] = useState<CartItemWithId[]>([]);
     const [isInitialized, setIsInitialized] = useState(false);
 
-    // On mount: load cart (API if logged in, localStorage if guest)
+    // On mount: load cart (API if logged in, localStorage if guest).
+    // On guest→login transition: merge localStorage items into the server cart
+    // first, then load — otherwise items added while logged-out vanish.
     useEffect(() => {
         if (sessionStatus === 'loading') return;
         if (isLoggedIn) {
-            dal.cart.get()
+            const guestItems = loadLocalCart();
+            const mergePayload = guestItems
+                .map(it => ({
+                    productId: it.productId,
+                    vendorId: (it.product as { vendorId?: string })?.vendorId ?? '',
+                    quantity: it.quantity,
+                }))
+                .filter(p => p.productId && p.vendorId && p.quantity > 0);
+
+            const mergeFirst = mergePayload.length > 0
+                ? fetch('/api/v1/cart/merge', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items: mergePayload }),
+                  })
+                    .then(() => { try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ } })
+                    .catch(() => { /* server merge failed — keep localStorage so we can retry on next login */ })
+                : Promise.resolve();
+
+            mergeFirst
+                .then(() => dal.cart.get())
                 .then(apiData => {
                     const items = fromApiCart(apiData as { vendorGroups: unknown[]; total: number });
                     setCart(items);

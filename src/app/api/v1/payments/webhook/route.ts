@@ -13,10 +13,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PaymentService } from '@/modules/payment/payment.service';
 import { ApiError } from '@/middleware/errorHandler';
+import { withRateLimit } from '@/middleware/withRateLimit';
 
 const paymentService = new PaymentService();
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
+async function postHandler(req: NextRequest): Promise<NextResponse> {
   // Read the raw body — must NOT be parsed before HMAC verification
   const rawBody = await req.text();
   const signature = req.headers.get('x-razorpay-signature') ?? '';
@@ -40,3 +41,5 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ received: true, error: 'Processing error — logged' });
   }
 }
+
+export const POST = withRateLimit(postHandler, 'webhook');

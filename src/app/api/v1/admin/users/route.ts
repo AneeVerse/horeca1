@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requireAdminPerm } from '@/lib/teamPermissions';
+import { withRateLimit } from '@/middleware/withRateLimit';
 import type { Role } from '@prisma/client';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -83,7 +84,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 });
 
 // POST — admin creates a user (customer or vendor) without OTP
-export const POST = adminOnly(async (req: NextRequest, ctx) => {
+export const POST = withRateLimit(adminOnly(async (req: NextRequest, ctx) => {
   try {
     requireAdminPerm(ctx.adminTeamRole, 'settings:write');
     const body = await req.json();
@@ -154,4 +155,4 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
   } catch (error) {
     return errorResponse(error);
   }
-});
+}), 'mutation');

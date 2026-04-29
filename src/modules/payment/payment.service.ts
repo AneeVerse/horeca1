@@ -139,6 +139,31 @@ export class PaymentService {
 
     const { event, payload } = parsed;
 
+    // 2b. Idempotency — Razorpay can replay the same event (network glitch on
+    // their side, our 200 took >5s, etc.). Insert into a unique index keyed by
+    // ${event}:${entityId}; duplicate insert means we already processed it and
+    // we should ack without redoing the side effects.
+    const dedupId = (() => {
+      if (event.startsWith('payment.')) return `${event}:${payload.payment?.entity?.id ?? ''}`;
+      if (event.startsWith('refund.')) return `${event}:${payload.refund?.entity?.id ?? ''}`;
+      return '';
+    })();
+    if (dedupId && dedupId.endsWith(':')) {
+      // Couldn't extract an entity id — skip dedup and let the caller decide
+    } else if (dedupId) {
+      try {
+        await prisma.webhookEvent.create({
+          data: { provider: 'razorpay', providerEventId: dedupId, event },
+        });
+      } catch (err) {
+        // P2002 = unique constraint violation = we've seen this event before
+        if (err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'P2002') {
+          return { processed: true, event };
+        }
+        throw err;
+      }
+    }
+
     // 3. Handle payment.captured
     if (event === 'payment.captured') {
       const entity = payload.payment?.entity;

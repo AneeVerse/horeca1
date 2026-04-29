@@ -949,6 +949,24 @@ model VendorDocument {
   @@map("vendor_documents")
 }
 
+// ═══ WEBHOOK EVENTS (idempotency) ═════════════════════
+//
+// Razorpay (and any future provider) can replay webhooks if our 200 ack is
+// delayed. Insert-on-arrival into a unique index is the simplest dedup —
+// duplicate event_ids fail the insert and we ack without re-running the work.
+
+model WebhookEvent {
+  id              String   @id @default(uuid()) @db.Uuid
+  provider        String   @db.VarChar(20)            // 'razorpay' | future
+  providerEventId String   @map("provider_event_id") @db.VarChar(100)
+  event           String   @db.VarChar(60)            // e.g. 'payment.captured'
+  receivedAt      DateTime @default(now()) @map("received_at") @db.Timestamptz
+
+  @@unique([provider, providerEventId])
+  @@index([event])
+  @@map("webhook_events")
+}
+
 // ═══ OTP CODES ════════════════════════════════════════
 
 model OtpCode {
