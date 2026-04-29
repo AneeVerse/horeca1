@@ -179,9 +179,9 @@ Findings from a 3-agent code audit on the deployed `64.227.187.210` build. Each 
 
 ### 🚨 BLOCKERS — money loss / data corruption / broken core
 
-- [ ] **B1.** Returns refund never calls Razorpay — admin clicks "Refund" → only DB row updates, customer never gets money. [src/app/api/v1/admin/returns/[id]/route.ts:27](src/app/api/v1/admin/returns/[id]/route.ts#L27)
-- [ ] **B2.** Order cancellation doesn't release inventory — `qtyReserved` permanently locked after each cancel. [src/app/api/v1/admin/orders/[id]/route.ts:133](src/app/api/v1/admin/orders/[id]/route.ts#L133)
-- [ ] **B3.** Webhook amount not verified — handler trusts the signed event without checking amount matches stored payment. [src/modules/payment/payment.service.ts:142](src/modules/payment/payment.service.ts#L142)
+- [x] **B1.** Returns refund never calls Razorpay — ✅ fixed in commit `6780ba3`. Admin "Refund" now calls `razorpay.payments.refund()` with paise, stores the refund id, flips `Order.paymentStatus='refunded'` + `Payment.status='refunded'` atomically, audit-logged.
+- [x] **B2.** Order cancellation doesn't release inventory — ✅ fixed in commit `6780ba3`. `releaseStock()` runs in the same transaction; `OrderConfirmed/Shipped/Delivered/Cancelled` events now emitted on every admin status transition so the customer gets notified.
+- [x] **B3.** Webhook amount not verified — ✅ fixed in commit `6780ba3`. `payment.captured` rejects if `entity.amount` (paise) ≠ stored `payment.amount × 100`. `refund.processed` rejects amounts ≤0 or > original payment.
 
 ### 🔴 STUBBED FEATURES — UI present, key flow missing
 
