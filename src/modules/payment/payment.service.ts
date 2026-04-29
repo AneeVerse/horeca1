@@ -158,6 +158,15 @@ export class PaymentService {
         return { processed: true, event };
       }
 
+      // Amount check — webhook is signed but the signature attests to the payload,
+      // not to "this is for OUR order". Reject if Razorpay says they captured a
+      // different amount than we charged. Razorpay sends amount in paise.
+      const expectedPaise = Math.round(Number(payment.amount) * 100);
+      if (entity.amount !== expectedPaise) {
+        console.error(`[webhook] amount mismatch on ${entity.order_id}: expected ${expectedPaise} paise, got ${entity.amount}`);
+        return { processed: false, event };
+      }
+
       await prisma.$transaction([
         prisma.payment.update({
           where: { id: payment.id },
@@ -235,6 +244,16 @@ export class PaymentService {
       });
 
       if (!payment) return { processed: false, event };
+
+      // Sanity check: refund amount can't exceed what we actually charged.
+      // Anything beyond is either a Razorpay bug or a forged event for a payment_id
+      // we happen to know — refuse either way. Razorpay sends amount in paise.
+      const maxPaise = Math.round(Number(payment.amount) * 100);
+      const refundPaise = Number((refundEntity as { amount?: number }).amount ?? 0);
+      if (refundPaise <= 0 || refundPaise > maxPaise) {
+        console.error(`[webhook] refund amount mismatch on payment ${payment.id}: max ${maxPaise} paise, got ${refundPaise}`);
+        return { processed: false, event };
+      }
 
       // Mark as refunded if not already
       if (payment.status !== 'refunded') {

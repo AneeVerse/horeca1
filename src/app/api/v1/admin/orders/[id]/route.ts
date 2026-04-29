@@ -10,6 +10,10 @@ import { adminOnly } from '@/middleware/rbac';
 import { ApiError, errorResponse, Errors } from '@/middleware/errorHandler';
 import type { OrderStatus } from '@prisma/client';
 import { requireAdminPerm } from '@/lib/teamPermissions';
+import { emitEvent } from '@/events/emitter';
+import { InventoryService } from '@/modules/inventory/inventory.service';
+
+const inventoryService = new InventoryService();
 
 const VALID_STATUSES: OrderStatus[] = [
   'pending',
@@ -120,34 +124,54 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       );
     }
 
-    // Verify order exists
+    // Verify order exists + grab items so we can release stock on cancel
     const existing = await prisma.order.findUnique({
       where: { id },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        userId: true,
+        vendorId: true,
+        orderNumber: true,
+        items: { select: { productId: true, quantity: true } },
+      },
     });
 
     if (!existing) {
       throw Errors.notFound('Order');
     }
 
-    const updated = await prisma.order.update({
-      where: { id },
-      data: { status },
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        totalAmount: true,
-        paymentStatus: true,
-        updatedAt: true,
-        vendor: {
-          select: { id: true, businessName: true },
+    const isCancelTransition = status === 'cancelled' && existing.status !== 'cancelled';
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // 1. Release reserved inventory if we're moving into 'cancelled'
+      if (isCancelTransition && existing.items.length > 0) {
+        await inventoryService.releaseStock(existing.items, tx);
+      }
+      // 2. Update the order itself
+      return tx.order.update({
+        where: { id },
+        data: { status },
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          totalAmount: true,
+          paymentStatus: true,
+          updatedAt: true,
+          vendor: { select: { id: true, businessName: true } },
+          user: { select: { id: true, fullName: true, email: true } },
         },
-        user: {
-          select: { id: true, fullName: true, email: true },
-        },
-      },
+      });
     });
+
+    // 3. Fan out the appropriate event (after the transaction commits) so the
+    //    notification worker sends an SMS / email / push to the customer.
+    const basePayload = { orderId: existing.id, userId: existing.userId, vendorId: existing.vendorId };
+    if (status === 'confirmed') emitEvent('OrderConfirmed', basePayload);
+    else if (status === 'shipped') emitEvent('OrderShipped', basePayload);
+    else if (status === 'delivered') emitEvent('OrderDelivered', basePayload);
+    else if (status === 'cancelled') emitEvent('OrderCancelled', { ...basePayload, reason: 'Cancelled by admin' });
 
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {

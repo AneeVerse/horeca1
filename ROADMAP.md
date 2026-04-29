@@ -170,3 +170,71 @@ Before flipping DNS to the droplet and announcing publicly:
 - [ ] Admin team trained to handle approvals + support
 
 Everything above is **doable in ~2 weeks of focused work** before a public launch.
+
+---
+
+## 🔍 2026-04-29 Full Audit — pending items
+
+Findings from a 3-agent code audit on the deployed `64.227.187.210` build. Each item links to file:line evidence. Tick the box when fixed; agent re-audit will catch regressions.
+
+### 🚨 BLOCKERS — money loss / data corruption / broken core
+
+- [ ] **B1.** Returns refund never calls Razorpay — admin clicks "Refund" → only DB row updates, customer never gets money. [src/app/api/v1/admin/returns/[id]/route.ts:27](src/app/api/v1/admin/returns/[id]/route.ts#L27)
+- [ ] **B2.** Order cancellation doesn't release inventory — `qtyReserved` permanently locked after each cancel. [src/app/api/v1/admin/orders/[id]/route.ts:133](src/app/api/v1/admin/orders/[id]/route.ts#L133)
+- [ ] **B3.** Webhook amount not verified — handler trusts the signed event without checking amount matches stored payment. [src/modules/payment/payment.service.ts:142](src/modules/payment/payment.service.ts#L142)
+
+### 🔴 STUBBED FEATURES — UI present, key flow missing
+
+- [ ] **S1.** Brand storefronts (`/brand/[slug]`) render hardcoded `BRAND_DATA` mock products instead of API data for the seed brand slugs. [src/components/features/brand/BrandStore.tsx:304](src/components/features/brand/BrandStore.tsx#L304)
+- [ ] **S2.** Credit payment is cosmetic — order created with `paymentMethod='credit'` but `creditUsed` never debited. [src/modules/order/order.service.ts](src/modules/order/order.service.ts)
+- [ ] **S3.** Wallet system has schema only — no UI, no top-up, no admin credit. Either build it or remove the model.
+- [ ] **S4.** Credit signup API works but no customer-facing apply form, no admin underwriting page.
+- [ ] **S5.** Admin dashboard charts are hardcoded arrays (`DATA_30D`, `SALES_COMPARISON_DATA`) — no Prisma aggregation. Vendor reports are real, only admin's are fake. [src/app/admin/reports/page.tsx:39](src/app/admin/reports/page.tsx#L39)
+- [ ] **S6.** Push notifications half-wired — service worker, VAPID keys, subscribe button all present, but `sendPushToUser()` has no callers anywhere.
+- [ ] **S7.** Vendor follow/favorite button on store header has no `onClick`. [src/components/features/vendor/VendorStoreHeader.tsx:229](src/components/features/vendor/VendorStoreHeader.tsx#L229)
+- [ ] **S8.** Recently-viewed page exists but no code calls `trackProductView()` — page always empty.
+- [ ] **S9.** Collections — homepage carousel renders, no admin CRUD page. Schema + API exist.
+
+### 🟠 MAJOR BUGS — security / scaling / data integrity
+
+- [ ] **M1.** OTP rate-limit TOCTOU race — wrap count + invalidate + create in `$transaction({ isolationLevel: 'Serializable' })`. [src/app/api/v1/auth/otp/send/route.ts:60](src/app/api/v1/auth/otp/send/route.ts#L60)
+- [ ] **M2.** Cutoff-time check uses Node's local timezone — force IST. [src/modules/order/order.service.ts:49](src/modules/order/order.service.ts#L49)
+- [ ] **M3.** N+1 in `inventory.bulkCheck` — replace `Promise.all` loop with single `findMany({ in: ids })`. [src/modules/inventory/inventory.service.ts:33](src/modules/inventory/inventory.service.ts#L33)
+- [ ] **M4.** Admin order status-change skips events — no `OrderShipped` emit means no SMS/email to customer. [src/app/api/v1/admin/orders/[id]/route.ts:133](src/app/api/v1/admin/orders/[id]/route.ts#L133)
+- [ ] **M5.** Cart guest→login merge missing — items in localStorage vanish when user logs in.
+- [ ] **M6.** Hard-delete user cascades and destroys audit trail — switch to soft-delete (`isActive=false`). [src/app/api/v1/admin/users/[id]/route.ts:128](src/app/api/v1/admin/users/[id]/route.ts#L128)
+- [ ] **M7.** Email enumeration via `code: 'NO_ACCOUNT'` response — return generic message. [src/app/api/v1/auth/otp/send/route.ts:91](src/app/api/v1/auth/otp/send/route.ts#L91)
+- [ ] **M8.** No webhook idempotency table — add `WebhookEvent { providerEventId @unique, processedAt }`.
+- [ ] **M9.** Refund webhook can refund any payment (same shape bug as B3 but for `payment.refunded` event).
+- [ ] **M10.** No vendor settlement / payout model — needed before paying vendors. Add `Settlement` model.
+- [ ] **M11.** Most API routes have no rate limiting — only auth uses it. Apply per-role caps globally.
+- [ ] **M12.** Audit log spotty — only 4 actions logged. Add for user delete, brand approve, category approve, price edits, refunds.
+
+### 🟡 POLISH — small fixes, no rush
+
+- [ ] **P1.** GST per-item rounding can drift 1 paisa over big carts → round only the final subtotal.
+- [ ] **P2.** `ListOrdered` event in EventMap but never emitted — dead declaration.
+- [ ] **P3.** WhatsApp channel in worker has no env-var sanity check at startup.
+- [ ] **P4.** Upload route trusts filename extension — derive from MIME type instead.
+- [ ] **P5.** `AUTH_SECRET` length not validated (no min ≥32 chars check).
+- [ ] **P6.** No scheduled jobs: cancel-unpaid-orders (24h), expire-OTP-cleanup, abandoned-cart-reminder.
+- [ ] **P7.** `ecosystem.config.js` (PM2) is dead code — Docker is the deploy target.
+- [ ] **P8.** ~246 lint warnings (mostly `<img>` in admin/brand portal).
+
+### ✅ Verified working (good — these were on the worry list)
+
+- Quick Order Lists — full CRUD + reorder
+- Customer reviews + vendor rating recompute
+- Vendor reports page — real data, real charts (better than ROADMAP.md claimed)
+- Profile completeness banner — real flag toggle
+- Product `tags` indexed in search (exact-match)
+
+### 📅 ROADMAP claims to correct
+
+| Old claim | Reality after audit |
+|---|---|
+| ✅ Vendor reports = P2 / 3 days | Already shipped + working |
+| ✅ Refunds & returns "live" | Customer + admin UI ✓, **money movement ✗ (B1)** |
+| ✅ Razorpay webhook live + tested | Live but **amount not verified (B3)** |
+| ✅ Email (Resend) live | Code live, **Resend in sandbox** — only sends to `team.horeca1@gmail.com` until domain verified |
+
