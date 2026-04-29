@@ -199,15 +199,15 @@ Findings from a 3-agent code audit on the deployed `64.227.187.210` build. Each 
 
 - [x] **M1.** OTP rate-limit TOCTOU race — ✅ fixed in commit `3418571`. Count + invalidate + create now run inside `$transaction({ isolationLevel: 'Serializable' })`; conflicting concurrent sends abort with a 429.
 - [x] **M2.** Cutoff-time check uses Node's local timezone — ✅ fixed in commit `3418571`. Day + HH:mm now derived via `Intl.DateTimeFormat({ timeZone: 'Asia/Kolkata' })` and compared as minutes-since-midnight.
-- [ ] **M3.** N+1 in `inventory.bulkCheck` — replace `Promise.all` loop with single `findMany({ in: ids })`. [src/modules/inventory/inventory.service.ts:33](src/modules/inventory/inventory.service.ts#L33)
-- [ ] **M4.** Admin order status-change skips events — no `OrderShipped` emit means no SMS/email to customer. [src/app/api/v1/admin/orders/[id]/route.ts:133](src/app/api/v1/admin/orders/[id]/route.ts#L133)
-- [ ] **M5.** Cart guest→login merge missing — items in localStorage vanish when user logs in.
+- [x] **M3.** N+1 in `inventory.bulkCheck` — ✅ fixed in commit `6cf5a7c`. Single `findMany({ in: ids })` + Map lookup.
+- [x] **M4.** Admin order status-change skips events — ✅ fixed in commit `6780ba3` alongside B2. Status transitions now emit `OrderConfirmed/Shipped/Delivered/Cancelled` events.
+- [x] **M5.** Cart guest→login merge missing — ✅ fixed in commit `6cf5a7c`. New `POST /api/v1/cart/merge` + CartContext sends localStorage items before fetching the server cart.
 - [x] **M6.** Hard-delete user cascades and destroys audit trail — ✅ fixed in commit `3418571`. DELETE handler now sets `isActive=false`; vendors/orders/audit links preserved.
 - [ ] **M7.** Email enumeration via `code: 'NO_ACCOUNT'` response — return generic message. [src/app/api/v1/auth/otp/send/route.ts:91](src/app/api/v1/auth/otp/send/route.ts#L91)
-- [ ] **M8.** No webhook idempotency table — add `WebhookEvent { providerEventId @unique, processedAt }`.
+- [x] **M8.** No webhook idempotency table — ✅ fixed in commit `6cf5a7c`. New `WebhookEvent` model + migration; Razorpay handler dedups by `${event}:${entityId}`.
 - [ ] **M9.** Refund webhook can refund any payment (same shape bug as B3 but for `payment.refunded` event).
 - [ ] **M10.** No vendor settlement / payout model — needed before paying vendors. Add `Settlement` model.
-- [ ] **M11.** Most API routes have no rate limiting — only auth uses it. Apply per-role caps globally.
+- [x] **M11.** Most API routes have no rate limiting — ✅ partial fix in commit `6cf5a7c`. New `withRateLimit()` helper with presets (auth/mutation/upload/webhook). Applied to OTP send, file upload, Razorpay webhook, admin user create. More routes can opt in with one line.
 - [ ] **M12.** Audit log spotty — only 4 actions logged. Add for user delete, brand approve, category approve, price edits, refunds.
 
 ### 🟡 POLISH — small fixes, no rush
