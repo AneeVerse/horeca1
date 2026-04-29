@@ -159,12 +159,23 @@ export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
       throw Errors.badRequest('You cannot delete your own account');
     }
 
-    const existing = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true } });
+    const existing = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true, isActive: true } });
     if (!existing) throw Errors.notFound('User');
 
-    await prisma.user.delete({ where: { id } });
+    // Soft delete — preserves vendor, orders, audit trail. A hard delete would
+    // cascade and destroy historical financial records (orders, payments, audit
+    // log entries actor links). Admins should never be able to nuke that data
+    // from a single click.
+    if (!existing.isActive) {
+      // Already deactivated — nothing more to do
+      return NextResponse.json({ success: true, data: { id, alreadyDeactivated: true } });
+    }
+    await prisma.user.update({
+      where: { id },
+      data: { isActive: false },
+    });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, data: { id, deactivated: true } });
   } catch (error) {
     return errorResponse(error);
   }

@@ -46,13 +46,26 @@ export class OrderService {
           if (!slot || slot.vendorId !== vo.vendorId || !slot.isActive) {
             throw Errors.badRequest('Invalid delivery slot for this vendor');
           }
-          const now = new Date();
-          if (now.getDay() === slot.dayOfWeek) {
+          // Slots are stored as IST wall-clock (HH:mm). Force the comparison into
+          // IST so a UTC server doesn't accept orders past the Mumbai cutoff —
+          // or refuse them too early.
+          const istParts = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Asia/Kolkata',
+            weekday: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }).formatToParts(new Date());
+          const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+          const istDay = dayMap[istParts.find(p => p.type === 'weekday')?.value ?? ''] ?? -1;
+          const istHour = Number(istParts.find(p => p.type === 'hour')?.value ?? 0);
+          const istMin = Number(istParts.find(p => p.type === 'minute')?.value ?? 0);
+          if (istDay === slot.dayOfWeek) {
             const [hh, mm] = slot.cutoffTime.split(':').map(Number);
-            const cutoff = new Date(now);
-            cutoff.setHours(hh || 0, mm || 0, 0, 0);
-            if (now >= cutoff) {
-              throw Errors.badRequest(`Cutoff time ${slot.cutoffTime} for this slot has passed`);
+            const nowMins = istHour * 60 + istMin;
+            const cutoffMins = (hh || 0) * 60 + (mm || 0);
+            if (nowMins >= cutoffMins) {
+              throw Errors.badRequest(`Cutoff time ${slot.cutoffTime} IST for this slot has passed`);
             }
           }
         }

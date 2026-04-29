@@ -350,7 +350,7 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
 
                 <div className="p-6 space-y-4">
                     <p className="text-[12px] text-gray-500 -mt-1">
-                        Adding a vendor? Use <a href="/admin/vendors" className="font-bold text-[#299E60] hover:underline">Vendors → Add Vendor</a>.
+                        Adding a vendor? Use <Link href="/admin/vendors" className="font-bold text-[#299E60] hover:underline">Vendors → Add Vendor</Link>.
                     </p>
 
                     {error && (

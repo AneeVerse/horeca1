@@ -95,35 +95,44 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Rate limit: max 3 OTPs per identifier per 10 minutes
+    // Rate limit + invalidate-old + create-new must happen atomically. With the
+    // default isolation level, two concurrent requests both see count<3, both
+    // pass, and end up creating 4+ OTPs in a 10-minute window. Serializable
+    // forces Postgres to fail one of the conflicting transactions instead.
     const since = new Date(Date.now() - 10 * 60 * 1000);
-    const recentCount = await prisma.otpCode.count({
-      where: usePhone
-        ? { phone, createdAt: { gte: since } }
-        : { email, createdAt: { gte: since } },
-    });
-    if (recentCount >= 3) {
-      return NextResponse.json(
-        { success: false, error: 'Too many requests. Please wait 10 minutes.' },
-        { status: 429 }
-      );
-    }
-
-    // Invalidate existing unused OTPs for this identifier
-    await prisma.otpCode.updateMany({
-      where: usePhone ? { phone, used: false } : { email, used: false },
-      data: { used: true },
-    });
-
     const otp = generateOTP();
-    await prisma.otpCode.create({
-      data: {
-        phone: usePhone ? phone : null,
-        email: useEmail ? email : null,
-        code: otp,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-      },
-    });
+    try {
+      await prisma.$transaction(async (tx) => {
+        const recentCount = await tx.otpCode.count({
+          where: usePhone
+            ? { phone, createdAt: { gte: since } }
+            : { email, createdAt: { gte: since } },
+        });
+        if (recentCount >= 3) {
+          throw new Error('RATE_LIMITED');
+        }
+        await tx.otpCode.updateMany({
+          where: usePhone ? { phone, used: false } : { email, used: false },
+          data: { used: true },
+        });
+        await tx.otpCode.create({
+          data: {
+            phone: usePhone ? phone : null,
+            email: useEmail ? email : null,
+            code: otp,
+            expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+          },
+        });
+      }, { isolationLevel: 'Serializable' });
+    } catch (err) {
+      if (err instanceof Error && err.message === 'RATE_LIMITED') {
+        return NextResponse.json(
+          { success: false, error: 'Too many requests. Please wait 10 minutes.' },
+          { status: 429 }
+        );
+      }
+      throw err;
+    }
 
     if (usePhone) await dispatchPhoneOTP(phone, otp);
     else await dispatchEmailOTP(email, otp);
