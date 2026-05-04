@@ -9,7 +9,8 @@ import {
     Facebook,
     Twitter,
     Instagram,
-    Linkedin
+    Linkedin,
+    PhoneCall,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -124,6 +125,15 @@ export function Footer() {
                         <div className="min-w-fit">
                             <h4 className="text-[16px] md:text-[18px] font-bold text-[#181725] mb-5">Customer Support</h4>
                             <ul className="space-y-4">
+                                <li>
+                                    <a
+                                        href="tel:7710920002"
+                                        className="flex items-center gap-2 text-[14px] text-[#299E60] font-semibold hover:text-[#1e7a49] transition-colors"
+                                    >
+                                        <PhoneCall size={15} />
+                                        7710920002
+                                    </a>
+                                </li>
                                 {FOOTER_LINKS.support.map((link) => (
                                     <li key={link}>
                                         <Link href="/under-construction" className="text-[14px] text-[#7C7C7C] hover:text-[#299E60] transition-colors">

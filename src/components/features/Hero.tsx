@@ -85,8 +85,8 @@ export function Hero() {
 
     // === DEFAULT BANNER (compact dark-green, shown for everyone) ===
     return (
-        <section className="w-full max-w-full pt-[var(--space-md)] pb-8 relative px-[var(--container-padding)]">
-            <div className="relative w-full max-w-[var(--container-max)] mx-auto">
+        <section className="w-full pt-[var(--space-md)] pb-8 relative">
+            <div className="relative w-full max-w-[var(--container-max)] mx-auto px-[var(--container-padding)]">
                 <div className="hidden md:block">
                     <div className="relative w-full h-[180px] lg:h-[220px] rounded-[32px] md:rounded-[40px] overflow-hidden bg-gradient-to-r from-[#22844f] via-[#299e60] to-[#22c55e] flex items-center px-6 md:px-10 lg:px-20 shadow-lg">
                         <div className="absolute left-0 top-0 w-full h-full opacity-10 pointer-events-none">

@@ -37,7 +37,7 @@
 
   /* Container & Layout */
   --container-padding: clamp(0.75rem, 2.5vw, 2.5rem);
-  --container-max: 1700px;
+  --container-max: 1380px;
 
   /* Radii */
   --radius-xl: 40px;
@@ -66,8 +66,14 @@
     width: 100%;
   }
 
-  a, button, [role="button"], select, label[for],
-  input[type="submit"], input[type="button"], input[type="reset"] {
+  a,
+  button,
+  [role="button"],
+  select,
+  label[for],
+  input[type="submit"],
+  input[type="button"],
+  input[type="reset"] {
     cursor: pointer;
   }
 }
@@ -281,17 +287,55 @@
 
 /* Floating animations for promo section */
 @keyframes float-slow {
-  0%, 100% { transform: translateY(0px); opacity: 0.6; }
-  50% { transform: translateY(-12px); opacity: 1; }
+
+  0%,
+  100% {
+    transform: translateY(0px);
+    opacity: 0.6;
+  }
+
+  50% {
+    transform: translateY(-12px);
+    opacity: 1;
+  }
 }
+
 @keyframes float-mid {
-  0%, 100% { transform: translateY(0px); opacity: 0.5; }
-  50% { transform: translateY(-8px); opacity: 0.9; }
+
+  0%,
+  100% {
+    transform: translateY(0px);
+    opacity: 0.5;
+  }
+
+  50% {
+    transform: translateY(-8px);
+    opacity: 0.9;
+  }
 }
+
 @keyframes float-fast {
-  0%, 100% { transform: translateY(0px); opacity: 0.5; }
-  50% { transform: translateY(-15px); opacity: 1; }
+
+  0%,
+  100% {
+    transform: translateY(0px);
+    opacity: 0.5;
+  }
+
+  50% {
+    transform: translateY(-15px);
+    opacity: 1;
+  }
 }
-.animate-float-slow { animation: float-slow 4s ease-in-out infinite; }
-.animate-float-mid { animation: float-mid 3s ease-in-out infinite 0.5s; }
-.animate-float-fast { animation: float-fast 2.5s ease-in-out infinite 1s; }
+
+.animate-float-slow {
+  animation: float-slow 4s ease-in-out infinite;
+}
+
+.animate-float-mid {
+  animation: float-mid 3s ease-in-out infinite 0.5s;
+}
+
+.animate-float-fast {
+  animation: float-fast 2.5s ease-in-out infinite 1s;
+}
