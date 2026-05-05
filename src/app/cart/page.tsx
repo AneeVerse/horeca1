@@ -71,6 +71,29 @@ export default function CartPage() {
         });
         if (ok) clearCart();
     };
+
+    const handleClearVendor = async (vendorId: string, vendorName: string) => {
+        const group = groups.find(g => g.vendorId === vendorId);
+        if (!group) return;
+        const ok = await confirm({
+            title: `Clear ${vendorName}?`,
+            message: `This will remove all ${group.items.length} item${group.items.length !== 1 ? 's' : ''} from ${vendorName} from your cart.`,
+            confirmText: 'Clear PO',
+            tone: 'danger',
+        });
+        if (!ok) return;
+        group.items.forEach(item => removeFromCart(item.productId));
+    };
+
+    const handleRemoveItem = async (itemId: string, itemName: string) => {
+        const ok = await confirm({
+            title: 'Remove item?',
+            message: `Remove "${itemName}" from your cart?`,
+            confirmText: 'Remove',
+            tone: 'danger',
+        });
+        if (ok) removeFromCart(itemId);
+    };
     const [expandedVendors, setExpandedVendors] = useState<Record<string, boolean>>({});
     const [paymentMethod, setPaymentMethod] = useState('razorpay');
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
@@ -614,6 +637,13 @@ export default function CartPage() {
                                                 <ChevronRight size={14} strokeWidth={3} />
                                             </Link>
                                             <button
+                                                onClick={() => handleClearVendor(shipment.id, shipment.vendor)}
+                                                className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                                title={`Clear ${shipment.vendor} from cart`}
+                                            >
+                                                <Trash2 size={17} strokeWidth={2.2} />
+                                            </button>
+                                            <button
                                                 onClick={() => toggleVendor(shipment.id)}
                                                 className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors"
                                             >
@@ -702,6 +732,15 @@ export default function CartPage() {
                                                     <div className="text-right shrink-0 w-[80px]">
                                                         <span className="text-[16px] font-black text-[#181725]">₹{(item.price * item.pcs).toFixed(0)}</span>
                                                     </div>
+
+                                                    {/* Remove item */}
+                                                    <button
+                                                        onClick={() => handleRemoveItem(item.id, item.name)}
+                                                        className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                                                        title="Remove from cart"
+                                                    >
+                                                        <X size={16} strokeWidth={2.5} />
+                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
