@@ -152,15 +152,25 @@ export function CategoryShowcase({ filterByProducts, title = "Shop By Category",
                         </div>
                     </div>
 
-                    {/* Desktop: Single row scroller (no-wrap) */}
+                    {/* Desktop: default = single-row scroll, See All = grid (2 rows visible) */}
                     <div className="hidden md:block relative w-full">
-                        <div className="flex items-center gap-6 overflow-x-auto no-scrollbar pb-4 px-6 md:px-[var(--container-padding)]">
-                            {categories.map((cat) => (
-                                <div key={cat.id} className="w-[120px] lg:w-[140px] shrink-0">
-                                    <CategoryCard cat={cat} />
-                                </div>
-                            ))}
-                        </div>
+                        {isDesktopExpanded ? (
+                            <div className="grid grid-cols-6 lg:grid-cols-8 gap-x-6 gap-y-8 pb-4 px-6 md:px-[var(--container-padding)]">
+                                {categories.map((cat) => (
+                                    <div key={cat.id} className="w-full">
+                                        <CategoryCard cat={cat} />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-6 overflow-x-auto no-scrollbar pb-4 px-6 md:px-[var(--container-padding)]">
+                                {categories.map((cat) => (
+                                    <div key={cat.id} className="w-[120px] lg:w-[140px] shrink-0">
+                                        <CategoryCard cat={cat} />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

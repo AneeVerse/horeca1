@@ -22,30 +22,30 @@ const VENDOR_COVERS = [
 
 function VendorCard({ vendor, index }: { vendor: Vendor; index: number }) {
     const cover = VENDOR_COVERS[index % VENDOR_COVERS.length];
-    const cuisineLabel = vendor.categories.slice(0, 2).join(' • ');
+    const categoryPills = vendor.categories.slice(0, 4);
     const addressLine = vendor.address ? `${vendor.address.city}${vendor.address.state ? ', ' + vendor.address.state : ''}` : null;
 
     return (
         <Link
             href={`/vendor/${vendor.id}`}
-            className="flex-none w-[230px] md:w-[270px] bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:-translate-y-1.5 transition-transform duration-300 group"
+            className="flex-none w-[260px] md:w-[300px] bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:-translate-y-1.5 transition-transform duration-300 group"
         >
             {/* Cover Image */}
-            <div className="relative w-full h-[160px] md:h-[180px] overflow-hidden">
+            <div className="relative w-full h-[180px] md:h-[200px] overflow-hidden">
                 <Image
                     src={cover}
                     alt={vendor.name}
                     fill
-                    sizes="(max-width: 768px) 230px, 270px"
+                    sizes="(max-width: 768px) 260px, 300px"
                     className="object-cover"
                 />
             </div>
 
             {/* Info */}
-            <div className="p-3.5">
+            <div className="p-4">
                 {/* Name + Bookmark */}
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <h3 className="text-[15px] md:text-[16px] font-extrabold text-[#111] line-clamp-1 leading-tight">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                    <h3 className="text-[17px] md:text-[19px] font-extrabold text-[#111] line-clamp-1 leading-tight">
                         {vendor.name}
                     </h3>
                     <button
@@ -56,20 +56,30 @@ function VendorCard({ vendor, index }: { vendor: Vendor; index: number }) {
                     </button>
                 </div>
 
-                {/* Rating + Cuisine */}
-                <div className="flex items-center gap-1.5 text-[12px] md:text-[13px] text-gray-600 mb-1.5">
-                    <div className="flex items-center gap-0.5 bg-[#53B175] text-white rounded-md px-1.5 py-0.5 text-[11px] font-bold">
+                {/* Rating + MOV */}
+                <div className="flex items-center gap-2 text-[12px] md:text-[13px] text-gray-600 mb-2.5">
+                    <div className="flex items-center gap-0.5 bg-[#53B175] text-white rounded-md px-1.5 py-0.5 text-[11px] font-bold shrink-0">
                         {vendor.rating}
                         <Star size={10} fill="white" className="text-white" />
                     </div>
-                    {cuisineLabel && <span className="font-semibold text-gray-700 truncate">{cuisineLabel}</span>}
                     {vendor.minOrderValue > 0 && (
-                        <>
-                            <span className="text-gray-300">•</span>
-                            <span className="font-semibold text-gray-700">MOV ₹{vendor.minOrderValue}</span>
-                        </>
+                        <span className="font-semibold text-gray-500 text-[12px]">MOV ₹{vendor.minOrderValue}</span>
                     )}
                 </div>
+
+                {/* Category Pills (3-4) */}
+                {categoryPills.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2.5 h-[60px] content-start overflow-hidden">
+                        {categoryPills.map((cat) => (
+                            <span
+                                key={cat}
+                                className="text-[11px] font-semibold bg-gray-100 text-gray-700 rounded-full px-2.5 py-1"
+                            >
+                                {cat}
+                            </span>
+                        ))}
+                    </div>
+                )}
 
                 {/* Address (real data only) */}
                 {addressLine && (

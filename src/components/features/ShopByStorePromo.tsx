@@ -113,19 +113,29 @@ export function ShopByStorePromo() {
                         </div>
                     </div>
 
-                    {/* Desktop: 6-column grid — no card border, images directly on green */}
+                    {/* Desktop: portrait cards (district-style) — image on top, white name+tag pad below */}
                     <div className="hidden md:grid md:grid-cols-6 gap-4">
                         {BRANDS.map((brand) => (
                             <Link
                                 key={brand.name}
                                 href={brand.href}
-                                className="flex flex-col items-center hover:-translate-y-1 transition-all duration-200"
+                                className="group rounded-[18px] overflow-hidden shadow-sm hover:shadow-2xl hover:scale-105 transition-all duration-300 flex flex-col"
                             >
-                                <img
-                                    src={brand.image}
-                                    alt={brand.name}
-                                    className="w-full h-auto object-contain rounded-[16px]"
-                                />
+                                <div className="relative w-full aspect-[3/4] overflow-hidden block leading-none">
+                                    <img
+                                        src={brand.image}
+                                        alt={brand.name}
+                                        className="absolute inset-0 w-full h-full object-cover scale-105 transition-transform duration-500"
+                                    />
+                                </div>
+                                <div className="px-3 py-3 bg-white">
+                                    <h3 className="text-[14px] font-extrabold text-[#181725] truncate leading-tight group-hover:text-[#53B175] transition-colors">
+                                        {brand.name}
+                                    </h3>
+                                    <p className="text-[11px] font-semibold text-gray-500 truncate mt-0.5">
+                                        {brand.tag}
+                                    </p>
+                                </div>
                             </Link>
                         ))}
                     </div>

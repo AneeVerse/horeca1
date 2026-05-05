@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { X, Search, ChevronRight, Plus, Minus, Check, AlertCircle, ChevronDown, Store } from 'lucide-react';
+import { X, Search, ChevronRight, Plus, Minus, Check, AlertCircle, Store } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { dal } from '@/lib/dal';
 import { toast } from 'sonner';
@@ -15,15 +15,17 @@ interface CreateListOverlayProps {
 }
 
 export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: CreateListOverlayProps) {
-    const [step, setStep] = useState<'name' | 'items'>('name');
+    const [step, setStep] = useState<'vendor' | 'items'>('vendor');
     const [listName, setListName] = useState('');
+    const [editingName, setEditingName] = useState(false);
     const [dalVendors, setDalVendors] = useState<Vendor[]>([]);
     const [activeVendor, setActiveVendor] = useState<Vendor | null>(null);
     const [selectedItems, setSelectedItems] = useState<Record<string, number>>({});
     // Maps productId -> vendorId so we know which vendor each item belongs to
     const [itemVendorMap, setItemVendorMap] = useState<Record<string, string>>({});
+    const [vendorSearchQuery, setVendorSearchQuery] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [showVendorPicker, setShowVendorPicker] = useState(false);
     const [vendorProductsMap, setVendorProductsMap] = useState<Record<string, VendorProduct[]>>({});
 
     // Fetch vendors from DAL on mount
@@ -55,7 +57,6 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                 Promise.resolve().then(() => setListName(initialData.name));
                 const qtys = Object.fromEntries(initialData.items.map(i => [i.productId, i.defaultQty]));
                 Promise.resolve().then(() => setSelectedItems(qtys));
-                // Build vendor map from existing items (VendorProduct has vendorId)
                 const vmap: Record<string, string> = {};
                 initialData.items.forEach(item => {
                     if (item.product?.vendorId) {
@@ -63,23 +64,24 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                     }
                 });
                 Promise.resolve().then(() => setItemVendorMap(vmap));
-                // Start on first vendor from items
                 const firstVendorId = initialData.items[0]?.product?.vendorId;
                 const firstVendor = firstVendorId ? dalVendors.find(v => v.id === firstVendorId) : null;
-                Promise.resolve().then(() => setActiveVendor(firstVendor || dalVendors[0] || null));
+                Promise.resolve().then(() => setActiveVendor(firstVendor || null));
                 Promise.resolve().then(() => setStep('items'));
             } else {
                 Promise.resolve().then(() => {
-                    setStep('name');
+                    setStep('vendor');
                     setListName('');
-                    setActiveVendor(dalVendors[0] || null);
+                    setActiveVendor(null);
                     setSelectedItems({});
                     setItemVendorMap({});
                 });
             }
             Promise.resolve().then(() => {
+                setVendorSearchQuery('');
+                setSelectedCategory(null);
                 setSearchQuery('');
-                setShowVendorPicker(false);
+                setEditingName(false);
             });
         }
     }, [isOpen, initialData, dalVendors]);
@@ -91,6 +93,33 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
         if (!searchQuery) return products;
         return products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
     }, [activeVendor, searchQuery, vendorProductsMap]);
+
+    // All categories across vendors (deduped) — for category-suggestion chips
+    const allCategories = useMemo(() => {
+        const set = new Set<string>();
+        dalVendors.forEach(v => v.categories.forEach(c => set.add(c)));
+        return Array.from(set);
+    }, [dalVendors]);
+
+    // Categories matching the search query — shown as clickable chips
+    const matchingCategories = useMemo(() => {
+        const q = vendorSearchQuery.trim().toLowerCase();
+        if (!q) return [];
+        return allCategories.filter(c => c.toLowerCase().includes(q)).slice(0, 6);
+    }, [allCategories, vendorSearchQuery]);
+
+    // Vendors filtered: 1) by selectedCategory if set, 2) else by search query (name or category match)
+    const filteredVendors = useMemo(() => {
+        if (selectedCategory) {
+            return dalVendors.filter(v => v.categories.includes(selectedCategory));
+        }
+        const q = vendorSearchQuery.trim().toLowerCase();
+        if (!q) return dalVendors;
+        return dalVendors.filter(v =>
+            v.name.toLowerCase().includes(q) ||
+            v.categories.some(c => c.toLowerCase().includes(q))
+        );
+    }, [dalVendors, vendorSearchQuery, selectedCategory]);
 
     // Count items added per vendor
     const itemsPerVendor = useMemo(() => {
@@ -138,7 +167,7 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
     const handleSave = () => {
         if (!listName.trim()) {
             toast.error('Please enter a list name');
-            setStep('name');
+            setStep('vendor');
             return;
         }
 
@@ -158,9 +187,9 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
         onSave({ name: listName, items });
 
         // Reset
-        setStep('name');
+        setStep('vendor');
         setListName('');
-        setActiveVendor(dalVendors[0] || null);
+        setActiveVendor(null);
         setSelectedItems({});
         setItemVendorMap({});
         onClose();
@@ -177,114 +206,186 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
 
                 {/* Header */}
                 <div className="px-6 pt-6 pb-4 border-b border-gray-100 shrink-0">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-2 gap-3">
                         <h2 className="text-[20px] font-black text-[#181725]">
-                            {initialData ? 'Edit Order List' : (step === 'name' ? 'Name your list' : 'Add Items')}
+                            {step === 'vendor' ? 'Choose Vendor' : 'Add Items'}
                         </h2>
-                        <button onClick={onClose} className="p-2 -mr-2 bg-gray-50 rounded-full">
+                        <button onClick={onClose} className="p-2 -mr-2 bg-gray-50 rounded-full shrink-0">
                             <X size={20} className="text-gray-400" />
                         </button>
                     </div>
+
+                    {/* Editable list name shown on items step */}
+                    {step === 'items' && (
+                        <div className="mt-1">
+                            {editingName ? (
+                                <input
+                                    type="text"
+                                    autoFocus
+                                    value={listName}
+                                    onChange={(e) => setListName(e.target.value)}
+                                    onBlur={() => setEditingName(false)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') setEditingName(false); }}
+                                    className="w-full bg-[#F7F8FA] border border-[#53B175]/30 rounded-xl px-3 py-2 text-[14px] font-bold text-[#181725] focus:bg-white focus:border-[#53B175] outline-none"
+                                />
+                            ) : (
+                                <button
+                                    onClick={() => setEditingName(true)}
+                                    className="flex items-center gap-1.5 text-[13px] text-gray-500 hover:text-[#53B175] transition-colors"
+                                >
+                                    <span className="font-bold text-[#181725]">{listName || 'Untitled list'}</span>
+                                    <span className="text-[11px] text-[#53B175] font-semibold underline">edit</span>
+                                </button>
+                            )}
+                        </div>
+                    )}
+
                     {/* Progress Bar — 2 steps */}
                     <div className="flex gap-1 h-1 mt-4">
                         <div className="flex-1 rounded-full bg-[#53B175]" />
-                        <div className={cn("flex-1 rounded-full transition-colors", (initialData || step === 'items') ? "bg-[#53B175]" : "bg-gray-100")} />
+                        <div className={cn("flex-1 rounded-full transition-colors", step === 'items' ? "bg-[#53B175]" : "bg-gray-100")} />
                     </div>
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6">
 
-                    {/* ── STEP 1: Name ── */}
-                    {step === 'name' && (
-                        <div className="space-y-4">
-                            <p className="text-[14px] text-gray-500 font-medium leading-relaxed">
-                                Give your order list a name like &quot;Weekly Dairy&quot; or &quot;Monthly Staples&quot; to find it easily later.
-                            </p>
+                    {/* ── STEP 1: Choose Vendor ── */}
+                    {step === 'vendor' && (
+                        <div className="space-y-5">
+                            {/* List name input */}
                             <div className="space-y-2">
                                 <label className="text-[12px] font-bold text-gray-400 uppercase tracking-wider ml-1">List Name</label>
                                 <input
                                     type="text"
-                                    autoFocus
-                                    placeholder="e.g. My Custom List"
+                                    placeholder="e.g. Weekly Dairy"
                                     value={listName}
                                     onChange={(e) => setListName(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && listName.trim() && setStep('items')}
-                                    className="w-full bg-[#F7F8FA] border border-gray-100 rounded-[20px] px-6 py-4 text-[16px] font-bold text-[#181725] focus:bg-white focus:border-[#53B175] focus:ring-4 focus:ring-[#53B175]/10 outline-none transition-all placeholder:text-gray-300"
+                                    className="w-full bg-[#F7F8FA] border border-gray-100 rounded-[16px] px-5 py-3 text-[15px] font-bold text-[#181725] focus:bg-white focus:border-[#53B175] focus:ring-4 focus:ring-[#53B175]/10 outline-none transition-all placeholder:text-gray-300"
                                 />
+                            </div>
+
+                            {/* Search vendors / categories */}
+                            <div className="space-y-2">
+                                <label className="text-[12px] font-bold text-gray-400 uppercase tracking-wider ml-1">Search Vendors</label>
+                                <div className="relative">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search by vendor or category..."
+                                        value={vendorSearchQuery}
+                                        onChange={(e) => {
+                                            setVendorSearchQuery(e.target.value);
+                                            if (selectedCategory) setSelectedCategory(null);
+                                        }}
+                                        className="w-full bg-[#F7F8FA] border border-transparent rounded-full pl-12 pr-4 py-3 text-[14px] font-medium text-[#181725] focus:bg-white focus:border-[#53B175]/20 outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Active category filter pill */}
+                            {selectedCategory && (
+                                <div className="flex items-center gap-2 bg-[#53B175]/10 border border-[#53B175]/30 px-3 py-2 rounded-xl">
+                                    <span className="text-[11px] font-bold text-gray-500">Category:</span>
+                                    <span className="text-[12px] font-bold text-[#53B175]">{selectedCategory}</span>
+                                    <button
+                                        onClick={() => setSelectedCategory(null)}
+                                        className="ml-auto text-[#53B175] hover:text-[#181725]"
+                                        title="Clear category filter"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Matching category chips — clickable to filter vendors */}
+                            {!selectedCategory && matchingCategories.length > 0 && (
+                                <div className="space-y-1.5">
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Matching categories</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {matchingCategories.map(cat => (
+                                            <button
+                                                key={cat}
+                                                onClick={() => {
+                                                    setSelectedCategory(cat);
+                                                    setVendorSearchQuery('');
+                                                }}
+                                                className="text-[11px] font-bold bg-white border border-[#53B175]/30 text-[#53B175] hover:bg-[#53B175] hover:text-white rounded-full px-3 py-1 transition-colors"
+                                            >
+                                                {cat}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Vendor grid */}
+                            <div>
+                                {filteredVendors.length > 0 ? (
+                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                                        {filteredVendors.map(vendor => {
+                                            const isActive = activeVendor?.id === vendor.id;
+                                            return (
+                                                <button
+                                                    key={vendor.id}
+                                                    onClick={() => setActiveVendor(vendor)}
+                                                    className={cn(
+                                                        "flex flex-col items-center text-center p-3 rounded-2xl border transition-all active:scale-95",
+                                                        isActive
+                                                            ? "bg-[#53B175]/10 border-[#53B175] ring-2 ring-[#53B175]/20"
+                                                            : "bg-white border-gray-100 hover:border-[#53B175]/40"
+                                                    )}
+                                                >
+                                                    <div className="w-12 h-12 rounded-xl border border-gray-100 p-1 bg-white overflow-hidden mb-2">
+                                                        <img src={vendor.logo} alt="" className="w-full h-full object-contain" />
+                                                    </div>
+                                                    <div className="text-[12px] font-bold text-[#181725] truncate w-full">{vendor.name}</div>
+                                                    <div className="text-[10px] text-gray-400 font-medium truncate w-full">{vendor.categories[0]}</div>
+                                                    {isActive && <Check size={13} className="text-[#53B175] mt-1" />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-10">
+                                        <AlertCircle size={32} className="mx-auto text-gray-200 mb-2" />
+                                        <p className="text-[13px] text-gray-400 font-medium">No vendors match your search</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
 
-                    {/* ── STEP 2: Items (multi-vendor) ── */}
+                    {/* ── STEP 2: Add Items ── */}
                     {step === 'items' && (
                         <div className="flex flex-col space-y-4">
 
-                            {/* Vendor Selector Dropdown */}
-                            <div className="relative">
-                                <button
-                                    onClick={() => setShowVendorPicker(v => !v)}
-                                    className="w-full flex items-center justify-between bg-[#53B175]/10 p-3.5 rounded-2xl border border-[#53B175]/20 transition-all active:scale-[0.99]"
-                                >
-                                    <div className="flex items-center gap-3">
+                            {/* Active vendor pill */}
+                            {activeVendor && (
+                                <div className="flex items-center justify-between bg-[#53B175]/10 p-3 rounded-2xl border border-[#53B175]/20">
+                                    <div className="flex items-center gap-3 min-w-0">
                                         <div className="w-8 h-8 rounded-lg border border-gray-100 p-1 bg-white overflow-hidden shrink-0">
-                                            <img src={activeVendor?.logo || ''} alt="" className="w-full h-full object-contain" />
+                                            <img src={activeVendor.logo} alt="" className="w-full h-full object-contain" />
                                         </div>
-                                        <div className="text-left">
-                                            <div className="text-[13px] font-bold text-[#53B175]">{activeVendor?.name || 'Select vendor'}</div>
+                                        <div className="text-left min-w-0">
+                                            <div className="text-[13px] font-bold text-[#53B175] truncate">{activeVendor.name}</div>
                                             <div className="text-[10px] text-[#53B175]/70 font-medium">
-                                                {activeVendor && itemsPerVendor[activeVendor.id]
-                                                    ? `${itemsPerVendor[activeVendor.id]} item${itemsPerVendor[activeVendor.id] !== 1 ? 's' : ''} added · `
-                                                    : ''}
-                                                tap to switch vendor
+                                                {itemsPerVendor[activeVendor.id]
+                                                    ? `${itemsPerVendor[activeVendor.id]} item${itemsPerVendor[activeVendor.id] !== 1 ? 's' : ''} added`
+                                                    : 'No items added yet'}
                                             </div>
                                         </div>
                                     </div>
-                                    <ChevronDown size={16} className={cn("text-[#53B175] transition-transform duration-200", showVendorPicker && "rotate-180")} />
-                                </button>
+                                    <button
+                                        onClick={() => { setStep('vendor'); setSearchQuery(''); }}
+                                        className="text-[11px] font-bold text-[#53B175] underline shrink-0 ml-2"
+                                    >
+                                        Change
+                                    </button>
+                                </div>
+                            )}
 
-                                {/* Vendor Picker Dropdown */}
-                                {showVendorPicker && (
-                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-gray-100 shadow-xl z-20 overflow-hidden">
-                                        <div className="p-2 max-h-[220px] overflow-y-auto">
-                                            {dalVendors.map(vendor => (
-                                                <button
-                                                    key={vendor.id}
-                                                    onClick={() => {
-                                                        setActiveVendor(vendor);
-                                                        setSearchQuery('');
-                                                        setShowVendorPicker(false);
-                                                    }}
-                                                    className={cn(
-                                                        "w-full flex items-center justify-between p-3 rounded-xl transition-all",
-                                                        activeVendor?.id === vendor.id ? "bg-[#53B175]/10" : "hover:bg-gray-50"
-                                                    )}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-lg border border-gray-100 p-1 bg-white overflow-hidden shrink-0">
-                                                            <img src={vendor.logo} alt="" className="w-full h-full object-contain" />
-                                                        </div>
-                                                        <div className="text-left">
-                                                            <span className="text-[13px] font-bold text-[#181725]">{vendor.name}</span>
-                                                            <p className="text-[10px] text-gray-400 font-medium">{vendor.categories[0]}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 shrink-0">
-                                                        {itemsPerVendor[vendor.id] > 0 && (
-                                                            <span className="bg-[#53B175] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                                                                {itemsPerVendor[vendor.id]}
-                                                            </span>
-                                                        )}
-                                                        {activeVendor?.id === vendor.id && <Check size={15} className="text-[#53B175]" />}
-                                                    </div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Summary pill — how many items from how many vendors */}
+                            {/* Summary pill */}
                             {totalItemCount > 0 && (
                                 <div className="flex items-center gap-2 bg-[#181725]/5 px-4 py-2.5 rounded-xl">
                                     <Store size={14} className="text-[#181725]/60 shrink-0" />
@@ -297,16 +398,19 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                                 </div>
                             )}
 
-                            {/* Search */}
-                            <div className="relative">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                <input
-                                    type="text"
-                                    placeholder={`Search in ${activeVendor?.name || 'vendor'}...`}
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full bg-[#F7F8FA] border border-transparent rounded-full pl-12 pr-4 py-3 text-[14px] font-medium text-[#181725] focus:bg-white focus:border-[#53B175]/20 outline-none transition-all"
-                                />
+                            {/* Add Items label above search */}
+                            <div className="space-y-2">
+                                <label className="text-[12px] font-bold text-gray-400 uppercase tracking-wider ml-1">Add Items</label>
+                                <div className="relative">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                    <input
+                                        type="text"
+                                        placeholder={`Search in ${activeVendor?.name || 'vendor'}...`}
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full bg-[#F7F8FA] border border-transparent rounded-full pl-12 pr-4 py-3 text-[14px] font-medium text-[#181725] focus:bg-white focus:border-[#53B175]/20 outline-none transition-all"
+                                    />
+                                </div>
                             </div>
 
                             {/* Product list for active vendor */}
@@ -315,37 +419,73 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                                     vendorProducts.map(product => {
                                         const qty = selectedItems[product.id] || 0;
                                         return (
-                                            <div key={product.id} className="flex items-center justify-between p-3 bg-[#FCFDFF] border border-gray-50 rounded-2xl">
-                                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                    <div className="w-12 h-12 rounded-xl bg-white border border-gray-100 p-1 flex items-center justify-center shrink-0">
-                                                        <img src={product.images[0]} alt="" className="w-full h-full object-contain" />
+                                            <div key={product.id} className="p-3 bg-[#FCFDFF] border border-gray-50 rounded-2xl">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                        <div className="w-12 h-12 rounded-xl bg-white border border-gray-100 p-1 flex items-center justify-center shrink-0">
+                                                            <img src={product.images[0]} alt="" className="w-full h-full object-contain" />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <h4 className="text-[13px] font-bold text-[#181725] truncate">{product.name}</h4>
+                                                            <p className="text-[11px] text-gray-700 font-bold">₹{product.price} <span className="text-gray-400 font-medium">/ {product.packSize}</span></p>
+                                                        </div>
                                                     </div>
-                                                    <div className="min-w-0">
-                                                        <h4 className="text-[13px] font-bold text-[#181725] truncate">{product.name}</h4>
-                                                        <p className="text-[11px] text-gray-400 font-bold">₹{product.price} / {product.packSize}</p>
+
+                                                    <div className="flex items-center gap-3 shrink-0">
+                                                        {qty > 0 ? (
+                                                            <div className="flex items-center gap-3 bg-white border border-[#53B175]/20 px-2 py-1.5 rounded-full shadow-sm">
+                                                                <button onClick={() => handleRemoveItem(product.id)} className="text-[#53B175] active:scale-75 transition-transform">
+                                                                    <Minus size={14} strokeWidth={3} />
+                                                                </button>
+                                                                <span className="text-[13px] font-extrabold text-[#181725] w-4 text-center">{qty}</span>
+                                                                <button onClick={() => handleAddItem(product.id)} className="text-[#53B175] active:scale-75 transition-transform">
+                                                                    <Plus size={14} strokeWidth={3} />
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => handleAddItem(product.id)}
+                                                                className="bg-white border-2 border-dashed border-gray-100 p-2 rounded-full text-gray-300 hover:text-[#53B175] hover:border-[#53B175] transition-all active:scale-90"
+                                                            >
+                                                                <Plus size={18} />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
 
-                                                <div className="flex items-center gap-3 shrink-0">
-                                                    {qty > 0 ? (
-                                                        <div className="flex items-center gap-3 bg-white border border-[#53B175]/20 px-2 py-1.5 rounded-full shadow-sm">
-                                                            <button onClick={() => handleRemoveItem(product.id)} className="text-[#53B175] active:scale-75 transition-transform">
-                                                                <Minus size={14} strokeWidth={3} />
-                                                            </button>
-                                                            <span className="text-[13px] font-extrabold text-[#181725] w-4 text-center">{qty}</span>
-                                                            <button onClick={() => handleAddItem(product.id)} className="text-[#53B175] active:scale-75 transition-transform">
-                                                                <Plus size={14} strokeWidth={3} />
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => handleAddItem(product.id)}
-                                                            className="bg-white border-2 border-dashed border-gray-100 p-2 rounded-full text-gray-300 hover:text-[#53B175] hover:border-[#53B175] transition-all active:scale-90"
-                                                        >
-                                                            <Plus size={18} />
-                                                        </button>
-                                                    )}
-                                                </div>
+                                                {/* Bulk pricing slabs — click sets qty to slab.minQty (capped at stock) */}
+                                                {product.bulkPrices && product.bulkPrices.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1.5 mt-2 pl-[60px] items-center">
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Bulk:</span>
+                                                        {product.bulkPrices.map((slab, idx) => {
+                                                            const exceedsStock = slab.minQty > product.stock;
+                                                            const active = qty >= slab.minQty;
+                                                            return (
+                                                                <button
+                                                                    key={idx}
+                                                                    type="button"
+                                                                    disabled={exceedsStock}
+                                                                    onClick={() => {
+                                                                        if (!activeVendor) return;
+                                                                        const target = Math.min(product.stock, slab.minQty);
+                                                                        setSelectedItems(prev => ({ ...prev, [product.id]: target }));
+                                                                        setItemVendorMap(prev => ({ ...prev, [product.id]: activeVendor.id }));
+                                                                    }}
+                                                                    title={exceedsStock ? `Only ${product.stock} in stock` : `Set qty to ${slab.minQty}`}
+                                                                    className={`text-[10px] font-bold rounded-full px-2.5 py-0.5 transition-all border ${
+                                                                        exceedsStock
+                                                                            ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed'
+                                                                            : active
+                                                                                ? 'bg-[#53B175] border-[#53B175] text-white'
+                                                                                : 'bg-[#53B175]/10 border-[#53B175]/30 text-[#53B175] hover:bg-[#53B175] hover:text-white'
+                                                                    }`}
+                                                                >
+                                                                    {slab.minQty}+ @ ₹{slab.price}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })
@@ -362,20 +502,20 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
 
                 {/* Footer Actions */}
                 <div className="p-6 border-t border-gray-50 bg-gray-50/30 shrink-0">
-                    {step === 'name' && (
+                    {step === 'vendor' && (
                         <button
-                            disabled={!listName.trim()}
+                            disabled={!listName.trim() || !activeVendor}
                             onClick={() => setStep('items')}
                             className="w-full bg-[#181725] text-white py-[18px] rounded-[22px] font-bold text-[16px] flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale transition-all active:scale-95"
                         >
-                            Add Items
+                            Continue
                             <ChevronRight size={18} />
                         </button>
                     )}
                     {step === 'items' && (
                         <div className="flex gap-3">
                             <button
-                                onClick={() => { setStep('name'); setSearchQuery(''); setShowVendorPicker(false); }}
+                                onClick={() => { setStep('vendor'); setSearchQuery(''); }}
                                 className="flex-1 bg-white border border-gray-200 text-[#181725] py-[18px] rounded-[22px] font-bold text-[16px] transition-all active:scale-95"
                             >
                                 Back

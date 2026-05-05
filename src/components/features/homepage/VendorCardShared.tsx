@@ -27,6 +27,7 @@ interface VendorCardProps {
 export function VendorCard({ vendor, index, fluid = false }: VendorCardProps) {
     const cover = VENDOR_COVERS[index % VENDOR_COVERS.length];
     const cuisineLabel = vendor.categories.slice(0, 2).join(' • ');
+    const categoryPills = vendor.categories.slice(0, 4);
     const cityLine = vendor.address
         ? `${vendor.address.city}${vendor.address.state ? ', ' + vendor.address.state : ''}`
         : null;
@@ -34,7 +35,7 @@ export function VendorCard({ vendor, index, fluid = false }: VendorCardProps) {
     return (
         <Link
             href={`/vendor/${vendor.id}`}
-            className={`${fluid ? 'w-full max-w-[480px] min-[500px]:max-w-none mx-auto min-[500px]:mx-0' : 'flex-none w-[230px] md:w-[270px]'}
+            className={`${fluid ? 'w-full max-w-[480px] min-[500px]:max-w-none mx-auto min-[500px]:mx-0' : 'flex-none w-[260px] md:w-[300px]'}
                 bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100
                 flex flex-row min-[500px]:flex-col
                 hover:-translate-y-1.5 transition-transform duration-400 group`}
@@ -76,7 +77,7 @@ export function VendorCard({ vendor, index, fluid = false }: VendorCardProps) {
 
             {/* 🖥️ DESKTOP VIEW: Identical to Homepage "Shop by Vendor" */}
             <div className="hidden min-[500px]:flex flex-col w-full h-full">
-                <div className="relative w-full aspect-[16/10] min-[500px]:h-[180px] overflow-hidden">
+                <div className="relative w-full aspect-[16/10] min-[500px]:h-[200px] overflow-hidden">
                     <Image
                         src={cover}
                         alt={vendor.name}
@@ -99,18 +100,25 @@ export function VendorCard({ vendor, index, fluid = false }: VendorCardProps) {
                         </button>
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-[13px] text-gray-600 mb-1.5">
-                        <div className="flex items-center gap-0.5 bg-[#53B175] text-white rounded-md px-1.5 py-0.5 text-[11px] font-bold">
+                    <div className="flex items-center gap-1.5 text-[13px] text-gray-600 mb-2">
+                        <div className="flex items-center gap-0.5 bg-[#53B175] text-white rounded-md px-1.5 py-0.5 text-[11px] font-bold shrink-0">
                             {vendor.rating}
                             <Star size={10} fill="white" className="text-white" />
                         </div>
-                        <span className="font-semibold text-gray-700 truncate">{cuisineLabel}</span>
                         {vendor.minOrderValue > 0 && (
-                            <>
-                                <span className="text-gray-300">•</span>
-                                <span className="font-semibold text-gray-700 truncate">MOV ₹{vendor.minOrderValue}</span>
-                            </>
+                            <span className="font-semibold text-gray-500 text-[12px] shrink-0">MOV ₹{vendor.minOrderValue}</span>
                         )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                        {categoryPills.map((cat) => (
+                            <span
+                                key={cat}
+                                className="text-[11px] font-semibold bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5"
+                            >
+                                {cat}
+                            </span>
+                        ))}
                     </div>
 
                     <div className="flex items-center gap-1 text-[12px] text-gray-500">

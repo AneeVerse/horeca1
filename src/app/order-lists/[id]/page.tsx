@@ -23,6 +23,8 @@ export default function OrderListDetailPage() {
 
     const [quantities, setQuantities] = useState<Record<string, number>>({});
     const [expandedVendors, setExpandedVendors] = useState<Record<string, boolean>>({});
+    // Fresh per-product stock (productId -> stock) — refreshed periodically so others' purchases lower this in near real-time.
+    const [freshStock, setFreshStock] = useState<Record<string, number>>({});
 
     const toggleVendor = (vendorId: string) => {
         setExpandedVendors(prev => ({ ...prev, [vendorId]: prev[vendorId] !== false ? false : true }));
@@ -75,15 +77,94 @@ export default function OrderListDetailPage() {
         setIsLoading(false);
     }, [listId]);
 
+    // Poll fresh stock every 30s + on focus, so other shoppers' purchases lower stock here too.
+    React.useEffect(() => {
+        if (!orderList) return;
+        const vendorIds = Array.from(new Set(orderList.items.map(i => i.product?.vendorId).filter(Boolean) as string[]));
+        if (vendorIds.length === 0) return;
+
+        let cancelled = false;
+        const refresh = async () => {
+            try {
+                const results = await Promise.all(vendorIds.map(vid => dal.vendors.getProducts(vid).catch(() => ({ products: [] as VendorProduct[] }))));
+                if (cancelled) return;
+                const map: Record<string, number> = {};
+                results.forEach(r => {
+                    r.products.forEach(p => { map[p.id] = p.stock; });
+                });
+                setFreshStock(map);
+            } catch (err) {
+                console.error('Stock refresh failed', err);
+            }
+        };
+
+        refresh();
+        const interval = setInterval(refresh, 30_000);
+        const onFocus = () => refresh();
+        window.addEventListener('focus', onFocus);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+            window.removeEventListener('focus', onFocus);
+        };
+    }, [orderList]);
+
+    // Resolve current stock — fresh poll value if available, else original product stock.
+    const getStock = (productId: string, fallback: number) =>
+        freshStock[productId] !== undefined ? freshStock[productId] : fallback;
+
+    const stockOf = (productId: string): number => {
+        const item = orderList?.items.find(i => i.productId === productId);
+        return getStock(productId, item?.product?.stock ?? 0);
+    };
+
     const updateQty = (productId: string, delta: number) => {
-        setQuantities(prev => ({
-            ...prev,
-            [productId]: Math.max(0, (prev[productId] || 0) + delta),
-        }));
+        setQuantities(prev => {
+            const cap = stockOf(productId);
+            const next = Math.max(0, (prev[productId] || 0) + delta);
+            if (delta > 0 && next > cap) {
+                toast.error(`Only ${cap} in stock`, { duration: 1500 });
+                return { ...prev, [productId]: cap };
+            }
+            return { ...prev, [productId]: next };
+        });
     };
 
     const setQty = (productId: string, val: number) => {
-        setQuantities(prev => ({ ...prev, [productId]: Math.max(0, val) }));
+        const cap = stockOf(productId);
+        const clamped = Math.min(cap, Math.max(0, val));
+        if (val > cap) {
+            toast.error(`Only ${cap} in stock`, { duration: 1500 });
+        }
+        setQuantities(prev => ({ ...prev, [productId]: clamped }));
+    };
+
+    const removeProduct = (productId: string) => {
+        if (!orderList) return;
+        const productName = orderList.items.find(i => i.productId === productId)?.product.name || 'Item';
+        const nextItems = orderList.items.filter(i => i.productId !== productId);
+        const nextList: OrderList = { ...orderList, items: nextItems };
+        setOrderList(nextList);
+        setQuantities(prev => {
+            const next = { ...prev };
+            delete next[productId];
+            return next;
+        });
+
+        // Persist to localStorage if list lives there
+        const saved = localStorage.getItem('horeca_order_lists_all');
+        if (saved) {
+            try {
+                const parsed: OrderList[] = JSON.parse(saved);
+                const updated = parsed.map(l => l.id === orderList.id ? nextList : l);
+                localStorage.setItem('horeca_order_lists_all', JSON.stringify(updated));
+                window.dispatchEvent(new Event('storage'));
+            } catch (e) {
+                console.error('Failed to persist removal', e);
+            }
+        }
+
+        toast.success(`${productName} removed from list`, { duration: 1500 });
     };
 
     const activeItems = useMemo(() => {
@@ -107,13 +188,47 @@ export default function OrderListDetailPage() {
         toast.info("Quantities filled based on last order", { duration: 1500 });
     };
 
-    const handleAddAllToCart = () => {
+    const handleAddAllToCart = async () => {
         if (!orderList) return;
 
         if (activeItems.length === 0) {
             toast.error("No items selected", {
                 description: "Please select quantities for items or use 'Re-fill Last Qty' to add products.",
                 duration: 3000,
+            });
+            return;
+        }
+
+        // Final stock validation — refetch live stock right before adding so concurrent buyers
+        // can't push us past available inventory.
+        const vendorIds = Array.from(new Set(activeItems.map(([pid]) => orderList.items.find(i => i.productId === pid)?.product?.vendorId).filter(Boolean) as string[]));
+        const liveStock: Record<string, number> = { ...freshStock };
+        try {
+            const results = await Promise.all(vendorIds.map(vid => dal.vendors.getProducts(vid).catch(() => ({ products: [] as VendorProduct[] }))));
+            results.forEach(r => r.products.forEach(p => { liveStock[p.id] = p.stock; }));
+            setFreshStock(liveStock);
+        } catch (err) {
+            console.error('Pre-add stock refresh failed', err);
+        }
+
+        const oversold = activeItems.filter(([pid, qty]) => {
+            const item = orderList.items.find(i => i.productId === pid);
+            const cap = liveStock[pid] !== undefined ? liveStock[pid] : (item?.product?.stock ?? 0);
+            return qty > cap;
+        });
+
+        if (oversold.length > 0) {
+            toast.error("Some items are out of stock", {
+                description: "Quantities have been adjusted to available stock. Please review and try again.",
+                duration: 3500,
+            });
+            setQuantities(prev => {
+                const next = { ...prev };
+                oversold.forEach(([pid]) => {
+                    const item = orderList.items.find(i => i.productId === pid);
+                    next[pid] = liveStock[pid] !== undefined ? liveStock[pid] : (item?.product?.stock ?? 0);
+                });
+                return next;
             });
             return;
         }
@@ -202,8 +317,10 @@ export default function OrderListDetailPage() {
 
     const isMultiVendor = vendorGroups.length > 1;
 
-    // Responsive vendor card layout (collapsible) — used on all devices
-    const ResponsiveVendorCard = ({ group }: { group: typeof vendorGroups[0] }) => {
+    // Responsive vendor card layout (collapsible) — used on all devices.
+    // Rendered as a function call (not a component) so it doesn't remount on every parent
+    // re-render — keeps qty input focus while typing.
+    const renderVendorCard = (group: typeof vendorGroups[0]) => {
         const expanded = isExpanded(group.vendorId);
         return (
             <div className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
@@ -235,66 +352,102 @@ export default function OrderListDetailPage() {
                         {group.items.map((item) => {
                             const qty = quantities[item.productId] || 0;
                             const itemTotal = item.product.price * qty;
+                            const stock = stockOf(item.productId);
+                            const lowStock = stock > 0 && stock <= 5;
+                            const oos = stock === 0;
+                            const slabs = item.product.bulkPrices ?? [];
                             return (
-                                <div key={item.productId} className="px-3 py-3 min-[340px]:px-5 min-[340px]:py-4 md:px-7 md:py-5 flex items-center gap-2 min-[340px]:gap-3 md:gap-5 hover:bg-gray-50/40 transition-colors group">
-                                    {/* Image */}
-                                    <div className="w-10 h-10 min-[340px]:w-14 min-[340px]:h-14 md:w-[72px] md:h-[72px] rounded-xl md:rounded-2xl bg-[#F7F8F7] flex items-center justify-center shrink-0 border border-gray-100 p-1 md:p-2 group-hover:border-primary/10 transition-colors">
-                                        <img src={item.product.images[0] || '/images/recom-product/product-img10.png'} alt={item.product.name} className="max-w-full max-h-full object-contain" />
-                                    </div>
-
-                                    {/* Info */}
-                                    <div className="flex-1 min-w-0">
-                                        <h4 className="text-[12px] min-[340px]:text-[14px] md:text-[15px] font-bold text-[#181725] leading-snug line-clamp-2">{item.product.name}</h4>
-                                        <p className="text-[10px] min-[340px]:text-[12px] md:text-[13px] text-gray-400 font-medium mt-0.5">{item.product.packSize || '1 pc'}</p>
-                                        <div className="flex items-center gap-1.5 md:gap-2 mt-1">
-                                            <div className="w-[4px] h-[4px] md:w-[6px] md:h-[6px] rounded-full bg-primary" />
-                                            <span className="text-[9px] min-[340px]:text-[11px] md:text-[12px] text-gray-400 font-medium whitespace-nowrap">₹{item.product.price}/pc</span>
-                                            {item.lastOrderedQty && (
-                                                <span className="text-[9px] min-[340px]:text-[11px] md:text-[11px] text-gray-400 font-bold whitespace-nowrap">· Last: {item.lastOrderedQty}</span>
-                                            )}
+                                <div key={item.productId} className="px-3 py-3 min-[340px]:px-5 min-[340px]:py-4 md:px-7 md:py-5 hover:bg-gray-50/40 transition-colors group">
+                                    <div className="flex items-center gap-2 min-[340px]:gap-3 md:gap-5">
+                                        {/* Image */}
+                                        <div className="w-10 h-10 min-[340px]:w-14 min-[340px]:h-14 md:w-[72px] md:h-[72px] rounded-xl md:rounded-2xl bg-[#F7F8F7] flex items-center justify-center shrink-0 border border-gray-100 p-1 md:p-2 group-hover:border-primary/10 transition-colors">
+                                            <img src={item.product.images[0] || '/images/recom-product/product-img10.png'} alt={item.product.name} className="max-w-full max-h-full object-contain" />
                                         </div>
-                                    </div>
 
-                                    {/* Qty Controls */}
-                                    <div className="flex items-center gap-0 border border-gray-200 rounded-lg md:rounded-xl overflow-hidden shrink-0">
-                                        <button
-                                            onClick={() => updateQty(item.productId, -1)}
-                                            className="w-7 h-7 min-[340px]:w-8 min-[340px]:h-8 md:w-10 md:h-10 flex items-center justify-center text-red-400 hover:bg-red-50 transition-colors"
-                                        >
-                                            <Minus className="w-3 h-3 min-[340px]:w-3.5 min-[340px]:h-3.5 md:w-4 md:h-4" strokeWidth={3} />
-                                        </button>
-                                        <div className="w-8 h-7 min-[340px]:w-10 min-[340px]:h-8 md:w-12 md:h-10 flex items-center justify-center border-x border-gray-200">
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                value={qty}
-                                                onChange={(e) => setQty(item.productId, parseInt(e.target.value) || 0)}
-                                                className="w-full text-center text-[12px] md:text-[15px] font-bold text-[#181725] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-transparent"
-                                            />
+                                        {/* Info */}
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="text-[12px] min-[340px]:text-[14px] md:text-[15px] font-bold text-[#181725] leading-snug line-clamp-2">{item.product.name}</h4>
+                                            <p className="text-[10px] min-[340px]:text-[12px] md:text-[13px] text-gray-400 font-medium mt-0.5">{item.product.packSize || '1 pc'}</p>
+                                            <div className="flex items-center flex-wrap gap-1.5 md:gap-2 mt-1">
+                                                <div className="w-[4px] h-[4px] md:w-[6px] md:h-[6px] rounded-full bg-primary" />
+                                                <span className="text-[9px] min-[340px]:text-[11px] md:text-[12px] text-gray-700 font-bold whitespace-nowrap">₹{item.product.price}/pc</span>
+                                                <span className={`text-[9px] min-[340px]:text-[11px] md:text-[11px] font-bold whitespace-nowrap ${oos ? 'text-red-500' : lowStock ? 'text-orange-500' : 'text-gray-500'}`}>
+                                                    · {oos ? 'Out of stock' : `Stock: ${stock}`}
+                                                </span>
+                                            </div>
                                         </div>
+
+                                        {/* Qty Controls */}
+                                        <div className={`flex items-center gap-0 border border-gray-200 rounded-lg md:rounded-xl overflow-hidden shrink-0 ${oos ? 'opacity-50 pointer-events-none' : ''}`}>
+                                            <button
+                                                onClick={() => updateQty(item.productId, -1)}
+                                                className="w-7 h-7 min-[340px]:w-8 min-[340px]:h-8 md:w-10 md:h-10 flex items-center justify-center text-red-400 hover:bg-red-50 transition-colors"
+                                            >
+                                                <Minus className="w-3 h-3 min-[340px]:w-3.5 min-[340px]:h-3.5 md:w-4 md:h-4" strokeWidth={3} />
+                                            </button>
+                                            <div className="w-8 h-7 min-[340px]:w-10 min-[340px]:h-8 md:w-12 md:h-10 flex items-center justify-center border-x border-gray-200">
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max={stock}
+                                                    value={qty}
+                                                    onChange={(e) => setQty(item.productId, parseInt(e.target.value) || 0)}
+                                                    className="w-full text-center text-[12px] md:text-[15px] font-bold text-[#181725] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-transparent"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => updateQty(item.productId, 1)}
+                                                className="w-7 h-7 min-[340px]:w-8 min-[340px]:h-8 md:w-10 md:h-10 flex items-center justify-center text-primary hover:bg-green-50 transition-colors"
+                                            >
+                                                <Plus className="w-3 h-3 min-[340px]:w-3.5 min-[340px]:h-3.5 md:w-4 md:h-4" strokeWidth={2.5} />
+                                            </button>
+                                        </div>
+
+                                        {/* Total — hidden on mobile */}
+                                        <div className="hidden md:block text-right shrink-0 w-[90px]">
+                                            <span className={`text-[16px] font-black ${qty > 0 ? 'text-[#181725]' : 'text-gray-400'}`}>
+                                                {qty > 0 ? `₹${itemTotal.toLocaleString('en-IN')}` : '—'}
+                                            </span>
+                                        </div>
+
+                                        {/* Remove product button — hidden on mobile */}
                                         <button
-                                            onClick={() => updateQty(item.productId, 1)}
-                                            className="w-7 h-7 min-[340px]:w-8 min-[340px]:h-8 md:w-10 md:h-10 flex items-center justify-center text-primary hover:bg-green-50 transition-colors"
+                                            onClick={() => removeProduct(item.productId)}
+                                            className="hidden md:flex w-8 h-8 rounded-lg items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                                            title="Remove from list"
                                         >
-                                            <Plus className="w-3 h-3 min-[340px]:w-3.5 min-[340px]:h-3.5 md:w-4 md:h-4" strokeWidth={2.5} />
+                                            <X size={16} strokeWidth={3} />
                                         </button>
                                     </div>
 
-                                    {/* Total — hidden on mobile */}
-                                    <div className="hidden md:block text-right shrink-0 w-[90px]">
-                                        <span className={`text-[16px] font-black ${qty > 0 ? 'text-[#181725]' : 'text-gray-400'}`}>
-                                            {qty > 0 ? `₹${itemTotal.toLocaleString('en-IN')}` : '—'}
-                                        </span>
-                                    </div>
-
-                                    {/* Clear qty button — hidden on mobile */}
-                                    <button
-                                        onClick={() => setQty(item.productId, 0)}
-                                        className="hidden md:flex w-8 h-8 rounded-lg items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
-                                        title="Clear quantity"
-                                    >
-                                        <X size={16} strokeWidth={3} />
-                                    </button>
+                                    {/* Bulk pricing slabs — clickable to set qty to slab.minQty */}
+                                    {slabs.length > 0 && !oos && (
+                                        <div className="flex flex-wrap gap-1.5 mt-2 md:mt-3 md:pl-[88px]">
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider self-center">Bulk:</span>
+                                            {slabs.map((slab, i) => {
+                                                const active = qty >= slab.minQty;
+                                                const exceedsStock = slab.minQty > stock;
+                                                return (
+                                                    <button
+                                                        key={i}
+                                                        type="button"
+                                                        disabled={exceedsStock}
+                                                        onClick={() => setQty(item.productId, Math.min(stock, slab.minQty))}
+                                                        title={exceedsStock ? `Only ${stock} in stock` : `Set qty to ${slab.minQty}`}
+                                                        className={`text-[10px] md:text-[11px] font-bold rounded-full px-2.5 py-1 transition-all border ${
+                                                            exceedsStock
+                                                                ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed'
+                                                                : active
+                                                                    ? 'bg-[#53B175] border-[#53B175] text-white shadow-sm'
+                                                                    : 'bg-[#F7FBF8] border-[#EAF5ED] text-[#1B5E20] hover:bg-[#53B175] hover:text-white hover:border-[#53B175]'
+                                                        }`}
+                                                    >
+                                                        {slab.minQty}+ @ ₹{slab.price}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -381,7 +534,7 @@ export default function OrderListDetailPage() {
                         {/* Responsive Vendor Cards (Collapsible) */}
                         <div className="space-y-4 md:space-y-5">
                             {vendorGroups.map(group => (
-                                <ResponsiveVendorCard key={group.vendorId} group={group} />
+                                <React.Fragment key={group.vendorId}>{renderVendorCard(group)}</React.Fragment>
                             ))}
                         </div>
                     </div>
