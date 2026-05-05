@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { X, UserCog } from 'lucide-react';
+import { X, Sparkles, MapPin, Briefcase } from 'lucide-react';
 
 const DISMISS_KEY = 'horeca1:profile-nudge-dismissed-until';
 
@@ -50,34 +50,53 @@ export function CompleteProfileBanner() {
   };
 
   return (
-    <div className="mx-[clamp(1rem,3vw,3rem)] mt-[clamp(0.75rem,2vw,1.5rem)] rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 via-yellow-50 to-orange-50 p-[clamp(0.875rem,2vw,1.25rem)] shadow-sm">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-          <UserCog className="h-5 w-5" />
-        </div>
-        <div className="flex-1">
-          <p className="text-[clamp(0.95rem,1.4vw,1.05rem)] font-semibold text-amber-900">
-            Complete your profile for better recommendations
-          </p>
-          <p className="mt-0.5 text-[clamp(0.8rem,1.2vw,0.9rem)] text-amber-800/80">
-            Add your pincode and business details to see vendors and prices tailored to you.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Link
-            href="/profile"
-            className="rounded-full bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700"
-          >
-            Complete
-          </Link>
-          <button
-            type="button"
-            onClick={snooze}
-            aria-label="Remind me later"
-            className="rounded-full p-2 text-amber-700 transition hover:bg-amber-100"
-          >
-            <X className="h-4 w-4" />
-          </button>
+    <div className="mx-[clamp(1rem,3vw,3rem)] mt-[clamp(0.75rem,2vw,1.5rem)] flex justify-start">
+      <div className="relative w-full max-w-[560px] overflow-hidden rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 p-[clamp(0.875rem,1.6vw,1.1rem)] shadow-md transition hover:shadow-lg">
+        {/* Decorative blobs */}
+        <div className="pointer-events-none absolute -top-6 -right-6 h-24 w-24 rounded-full bg-orange-200/50 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-8 -left-4 h-20 w-20 rounded-full bg-amber-300/40 blur-2xl" />
+
+        <div className="relative flex items-center gap-3">
+          {/* Icon stack */}
+          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 shadow-lg shadow-orange-200">
+            <Sparkles className="h-6 w-6 text-white drop-shadow" strokeWidth={2.5} />
+            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-300 opacity-75" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-amber-400" />
+            </span>
+          </div>
+
+          {/* Copy */}
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-bold text-orange-900 leading-tight">
+              Unlock your personalised feed!
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-orange-800/80">
+              <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Pincode</span>
+              <span className="text-orange-300">•</span>
+              <span className="inline-flex items-center gap-1"><Briefcase className="h-3 w-3" /> Business</span>
+              <span className="text-orange-300">•</span>
+              <span>Tailored prices</span>
+            </div>
+          </div>
+
+          {/* CTA + dismiss */}
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Link
+              href="/profile"
+              className="rounded-full bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-1.5 text-[12px] font-bold text-white shadow-md shadow-orange-200/60 transition hover:shadow-lg hover:-translate-y-0.5 active:scale-95"
+            >
+              Complete
+            </Link>
+            <button
+              type="button"
+              onClick={snooze}
+              aria-label="Remind me later"
+              className="rounded-full p-1.5 text-orange-700/70 transition hover:bg-orange-100 hover:text-orange-900"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
