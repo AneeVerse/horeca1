@@ -41,27 +41,50 @@ function isWebhookPayload(value: unknown): value is RazorpayWebhookPayload {
 }
 
 export class PaymentService {
-  async initiate(orderId: string, userId: string) {
-    const order = await prisma.order.findFirst({
-      where: { id: orderId, userId },
+  /**
+   * Create a single Razorpay order that covers one or more horeca orders (POs).
+   *
+   * Why: when a customer pays for multiple vendor POs in one checkout, we still
+   * keep them as separate horeca Order rows (so each vendor sees their own PO,
+   * gets their own GST invoice, can be refunded independently). But we open ONE
+   * Razorpay popup for the combined amount instead of N popups in a loop.
+   *
+   * Implementation: create ONE razorpayOrder for the summed amount, then write
+   * one Payment row per horeca order — all sharing the same razorpayOrderId. On
+   * verify/webhook, we resolve all rows by razorpayOrderId and mark every linked
+   * order paid in a single transaction.
+   */
+  async initiate(orderIds: string[], userId: string) {
+    if (orderIds.length === 0) throw Errors.badRequest('No orders to pay for');
+
+    const orders = await prisma.order.findMany({
+      where: { id: { in: orderIds }, userId },
     });
-    if (!order) throw Errors.notFound('Order');
+    if (orders.length !== orderIds.length) {
+      throw Errors.notFound('Order');
+    }
+
+    const totalAmount = orders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
+    const receipt = orders.length === 1
+      ? orders[0].orderNumber
+      : `multi-${orders[0].orderNumber}-${orders.length}`;
 
     const razorpayOrder = await getRazorpay().orders.create({
-      amount: Math.round(Number(order.totalAmount) * 100), // paise
+      amount: Math.round(totalAmount * 100), // paise
       currency: 'INR',
-      receipt: order.orderNumber,
+      receipt,
     });
 
-    await prisma.payment.create({
-      data: {
-        orderId,
-        vendorId: order.vendorId,
+    // One Payment row per horeca order — all linked to the same razorpayOrderId.
+    await prisma.payment.createMany({
+      data: orders.map(o => ({
+        orderId: o.id,
+        vendorId: o.vendorId,
         userId,
         razorpayOrderId: razorpayOrder.id,
-        amount: order.totalAmount,
-        status: 'created',
-      },
+        amount: o.totalAmount,
+        status: 'created' as const,
+      })),
     });
 
     return {
@@ -84,32 +107,35 @@ export class PaymentService {
       throw Errors.unauthorized('Invalid payment signature');
     }
 
-    const payment = await prisma.payment.findFirst({
+    // A single Razorpay order can map to multiple horeca Payment/Order rows
+    // (multi-PO combined checkout). Mark every linked row paid atomically.
+    const payments = await prisma.payment.findMany({
       where: { razorpayOrderId },
     });
-    if (!payment) throw Errors.notFound('Payment');
+    if (payments.length === 0) throw Errors.notFound('Payment');
 
-    // Update payment and order
     await prisma.$transaction([
-      prisma.payment.update({
-        where: { id: payment.id },
+      prisma.payment.updateMany({
+        where: { razorpayOrderId },
         data: { razorpayPaymentId, razorpaySignature, status: 'captured' },
       }),
-      prisma.order.update({
-        where: { id: payment.orderId },
+      prisma.order.updateMany({
+        where: { id: { in: payments.map(p => p.orderId) } },
         data: { paymentStatus: 'paid' },
       }),
     ]);
 
-    emitEvent('PaymentReceived', {
-      orderId: payment.orderId,
-      paymentId: payment.id,
-      userId: payment.userId,
-      vendorId: payment.vendorId,
-      amount: Number(payment.amount),
-    });
+    for (const payment of payments) {
+      emitEvent('PaymentReceived', {
+        orderId: payment.orderId,
+        paymentId: payment.id,
+        userId: payment.userId,
+        vendorId: payment.vendorId,
+        amount: Number(payment.amount),
+      });
+    }
 
-    return { success: true, payment_status: 'captured' };
+    return { success: true, payment_status: 'captured', orders_paid: payments.length };
   }
 
   // handleWebhook — called by the unauthenticated POST /api/v1/payments/webhook route.
@@ -169,40 +195,41 @@ export class PaymentService {
       const entity = payload.payment?.entity;
       if (!entity) return { processed: false, event };
 
-      const payment = await prisma.payment.findFirst({
+      // A combined-checkout Razorpay order maps to multiple Payment rows.
+      const payments = await prisma.payment.findMany({
         where: { razorpayOrderId: entity.order_id },
       });
 
-      if (!payment) {
-        // No matching payment record — ack silently
+      if (payments.length === 0) {
+        // No matching payment records — ack silently
         return { processed: false, event };
       }
 
       // Idempotency: already captured by /verify or a prior webhook delivery
-      if (payment.status === 'captured') {
+      if (payments.every(p => p.status === 'captured')) {
         return { processed: true, event };
       }
 
       // Amount check — webhook is signed but the signature attests to the payload,
       // not to "this is for OUR order". Reject if Razorpay says they captured a
       // different amount than we charged. Razorpay sends amount in paise.
-      const expectedPaise = Math.round(Number(payment.amount) * 100);
+      const expectedPaise = Math.round(payments.reduce((s, p) => s + Number(p.amount), 0) * 100);
       if (entity.amount !== expectedPaise) {
         console.error(`[webhook] amount mismatch on ${entity.order_id}: expected ${expectedPaise} paise, got ${entity.amount}`);
         return { processed: false, event };
       }
 
       await prisma.$transaction([
-        prisma.payment.update({
-          where: { id: payment.id },
+        prisma.payment.updateMany({
+          where: { razorpayOrderId: entity.order_id },
           data: {
             razorpayPaymentId: entity.id,
             status: 'captured',
             method: entity.method ?? null,
           },
         }),
-        prisma.order.update({
-          where: { id: payment.orderId },
+        prisma.order.updateMany({
+          where: { id: { in: payments.map(p => p.orderId) } },
           data: {
             paymentStatus: 'paid',
             status: 'confirmed',
@@ -210,19 +237,21 @@ export class PaymentService {
         }),
       ]);
 
-      emitEvent('PaymentReceived', {
-        orderId: payment.orderId,
-        paymentId: payment.id,
-        userId: payment.userId,
-        vendorId: payment.vendorId,
-        amount: Number(payment.amount),
-      });
+      for (const payment of payments) {
+        emitEvent('PaymentReceived', {
+          orderId: payment.orderId,
+          paymentId: payment.id,
+          userId: payment.userId,
+          vendorId: payment.vendorId,
+          amount: Number(payment.amount),
+        });
 
-      emitEvent('OrderConfirmed', {
-        orderId: payment.orderId,
-        userId: payment.userId,
-        vendorId: payment.vendorId,
-      });
+        emitEvent('OrderConfirmed', {
+          orderId: payment.orderId,
+          userId: payment.userId,
+          vendorId: payment.vendorId,
+        });
+      }
 
       return { processed: true, event };
     }
@@ -232,28 +261,30 @@ export class PaymentService {
       const entity = payload.payment?.entity;
       if (!entity) return { processed: false, event };
 
-      const payment = await prisma.payment.findFirst({
+      const payments = await prisma.payment.findMany({
         where: { razorpayOrderId: entity.order_id },
       });
 
-      if (!payment) return { processed: false, event };
+      if (payments.length === 0) return { processed: false, event };
 
       // Idempotency: skip if already in a terminal state
-      if (payment.status === 'captured' || payment.status === 'failed') {
+      if (payments.every(p => p.status === 'captured' || p.status === 'failed')) {
         return { processed: true, event };
       }
 
-      await prisma.payment.update({
-        where: { id: payment.id },
+      await prisma.payment.updateMany({
+        where: { razorpayOrderId: entity.order_id, status: { notIn: ['captured', 'failed'] } },
         data: { status: 'failed' },
       });
 
-      emitEvent('PaymentFailed', {
-        orderId: payment.orderId,
-        userId: payment.userId,
-        vendorId: payment.vendorId,
-        reason: 'Payment failed via Razorpay webhook',
-      });
+      for (const payment of payments) {
+        emitEvent('PaymentFailed', {
+          orderId: payment.orderId,
+          userId: payment.userId,
+          vendorId: payment.vendorId,
+          reason: 'Payment failed via Razorpay webhook',
+        });
+      }
 
       return { processed: true, event };
     }

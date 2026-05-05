@@ -7,6 +7,18 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   reactStrictMode: true,
 
+  // pdfkit ships .afm font metric files alongside its JS that webpack cannot bundle.
+  // Marking it external means Next loads it from node_modules at runtime, so
+  // PDFDocument can resolve `js/data/Helvetica.afm` and friends.
+  serverExternalPackages: ['pdfkit'],
+
+  // The .afm files are not detected by Next's static analysis (they're loaded via
+  // fs.readFileSync at runtime). Force-include them so the standalone build copies
+  // them into the production output bundle.
+  outputFileTracingIncludes: {
+    '/api/v1/orders/*/invoice': ['./node_modules/pdfkit/js/data/**/*'],
+  },
+
   images: {
     formats: ['image/avif', 'image/webp'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048],

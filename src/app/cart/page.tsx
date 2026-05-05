@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -61,6 +61,9 @@ export default function CartPage() {
     const [screen, setScreen] = useState<'cart' | 'payment' | 'success'>('cart');
     const { cart, groups, removeFromCart, updateQuantity, totalItems, subtotal, totalGST, totalTaxable, clearCart } = useCart();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const initialVendorParam = searchParams?.get('vendor') ?? null;
+    const initialStepParam = searchParams?.get('step') ?? null;
     const confirm = useConfirm();
     const handleClearCart = async () => {
         const ok = await confirm({
@@ -143,10 +146,52 @@ export default function CartPage() {
     const getShipmentTotal = (items: {price: number; pcs: number}[]) => items.reduce((sum, item) => sum + item.price * item.pcs, 0);
     const getShipmentItemCount = (items: {pcs: number}[]) => items.reduce((sum, item) => sum + item.pcs, 0);
 
-    const itemTaxable = totalTaxable;  // taxable value (ex-GST)
-    const itemGST = totalGST;          // GST portion extracted from gross
-    const itemTotal = subtotal;        // gross total (GST-inclusive) = itemTaxable + itemGST
+    // Per-vendor (PO) selection — user picks which POs to pay for now.
+    const [selectedVendors, setSelectedVendors] = useState<Set<string>>(new Set());
+    const [showBreakdown, setShowBreakdown] = useState(true);
+    const vendorIdsKey = groups.map(g => g.vendorId).join(',');
+
+    // Default: select every vendor whenever the set of vendors in cart changes.
+    // If the URL carries ?vendor=<id>, pre-select only that vendor (deep-link from shipment-detail page).
+    React.useEffect(() => {
+        if (initialVendorParam && groups.some(g => g.vendorId === initialVendorParam)) {
+            setSelectedVendors(new Set([initialVendorParam]));
+        } else {
+            setSelectedVendors(new Set(groups.map(g => g.vendorId)));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [vendorIdsKey, initialVendorParam]);
+
+    // Deep-link to payment step if URL carries ?step=payment and we have a valid selection.
+    const jumpedToPayment = React.useRef(false);
+    React.useEffect(() => {
+        if (jumpedToPayment.current) return;
+        if (initialStepParam !== 'payment') return;
+        if (groups.length === 0) return;
+        if (initialVendorParam && !groups.some(g => g.vendorId === initialVendorParam)) return;
+        jumpedToPayment.current = true;
+        Promise.resolve().then(() => setScreen('payment'));
+    }, [initialStepParam, initialVendorParam, groups]);
+
+    const toggleVendorSelection = (vendorId: string) => {
+        setSelectedVendors(prev => {
+            const next = new Set(prev);
+            if (next.has(vendorId)) next.delete(vendorId);
+            else next.add(vendorId);
+            return next;
+        });
+    };
+
+    const selectedGroups = groups.filter(g => selectedVendors.has(g.vendorId));
+    const selectedTaxable = selectedGroups.reduce((s, g) => s + g.subtotalTaxable, 0);
+    const selectedGST = selectedGroups.reduce((s, g) => s + g.totalGST, 0);
+    const selectedTotal = selectedGroups.reduce((s, g) => s + g.subtotal, 0);
+
+    const itemTaxable = selectedGroups.length > 0 ? selectedTaxable : totalTaxable;
+    const itemGST = selectedGroups.length > 0 ? selectedGST : totalGST;
+    const itemTotal = selectedGroups.length > 0 ? selectedTotal : subtotal;
     const totalPay = itemTotal;
+    const fullCartSelected = selectedGroups.length === groups.length;
 
     // --- SUCCESS SCREEN ---
     if (screen === 'success') {
@@ -227,10 +272,14 @@ export default function CartPage() {
     ] as const;
 
     const confirmOrder = async () => {
+        if (selectedGroups.length === 0) {
+            setOrderError('Select at least one PO to checkout.');
+            return;
+        }
         setIsPlacingOrder(true);
         setOrderError(null);
         try {
-            const vendorOrders = groups.map(group => ({
+            const vendorOrders = selectedGroups.map(group => ({
                 vendorId: group.vendorId,
                 items: group.items.map(item => ({
                     productId: item.productId,
@@ -244,49 +293,53 @@ export default function CartPage() {
             };
             const createdOrders = result.orders || [];
 
-            // 2. For Razorpay: open payment popup for each order
+            // 2. For Razorpay: open ONE combined Razorpay popup for all selected POs
+            //    (separate horeca orders, but a single Razorpay order spanning the sum).
             if (paymentMethod === 'razorpay') {
                 await loadRazorpayScript();
 
-                for (let i = 0; i < createdOrders.length; i++) {
-                    const order = createdOrders[i];
+                const initiateRes = await fetch('/api/v1/payments/initiate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ orderIds: createdOrders.map(o => o.id) }),
+                });
+                const initiateData = await initiateRes.json();
+                if (!initiateRes.ok) throw new Error(initiateData.error?.message || 'Payment initiation failed');
 
-                    // Get razorpay_order_id from backend
-                    const initiateRes = await fetch('/api/v1/payments/initiate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ orderId: order.id }),
-                    });
-                    const initiateData = await initiateRes.json();
-                    if (!initiateRes.ok) throw new Error(initiateData.error?.message || 'Payment initiation failed');
+                const { razorpay_order_id, amount, currency, key_id } = initiateData.data;
 
-                    const { razorpay_order_id, amount, currency, key_id } = initiateData.data;
+                const description = createdOrders.length === 1
+                    ? `Order ${createdOrders[0].orderNumber}`
+                    : `${createdOrders.length} orders · ${createdOrders[0].orderNumber} +${createdOrders.length - 1}`;
 
-                    // Open Razorpay popup — waits for user to pay or cancel
-                    const payment = await openRazorpayPopup({
-                        key: key_id,
-                        amount,
-                        currency,
-                        order_id: razorpay_order_id,
-                        description: `Order ${order.orderNumber}${createdOrders.length > 1 ? ` (${i + 1}/${createdOrders.length})` : ''}`,
-                    });
+                const payment = await openRazorpayPopup({
+                    key: key_id,
+                    amount,
+                    currency,
+                    order_id: razorpay_order_id,
+                    description,
+                });
 
-                    // Verify HMAC signature
-                    const verifyRes = await fetch('/api/v1/payments/verify', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            razorpay_order_id: payment.razorpay_order_id,
-                            razorpay_payment_id: payment.razorpay_payment_id,
-                            razorpay_signature: payment.razorpay_signature,
-                        }),
-                    });
-                    const verifyData = await verifyRes.json();
-                    if (!verifyRes.ok) throw new Error(verifyData.error?.message || 'Payment verification failed');
-                }
+                // Single verify call covers all linked Payment rows on the backend.
+                const verifyRes = await fetch('/api/v1/payments/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        razorpay_order_id: payment.razorpay_order_id,
+                        razorpay_payment_id: payment.razorpay_payment_id,
+                        razorpay_signature: payment.razorpay_signature,
+                    }),
+                });
+                const verifyData = await verifyRes.json();
+                if (!verifyRes.ok) throw new Error(verifyData.error?.message || 'Payment verification failed');
             }
 
-            clearCart();
+            // Remove only the paid-for items so unpaid POs stay in cart for later.
+            if (selectedGroups.length === groups.length) {
+                clearCart();
+            } else {
+                selectedGroups.forEach(g => g.items.forEach(item => removeFromCart(item.productId)));
+            }
             setScreen('success');
         } catch (err: unknown) {
             setOrderError(err instanceof Error ? err.message : 'Order failed. Please try again.');
@@ -577,10 +630,24 @@ export default function CartPage() {
                                 <Link
                                     key={shipment.id}
                                     href={shipment.id === 's1' ? '#' : `/cart/shipment/${shipment.id}`}
-                                    className="block bg-white rounded-[16px] border border-[#CFCECE] overflow-hidden hover:shadow-md transition-shadow"
+                                    className={cn(
+                                        "block bg-white rounded-[16px] border overflow-hidden hover:shadow-md transition-all",
+                                        selectedVendors.has(shipment.id) ? "border-[#53B175]/40 ring-1 ring-[#53B175]/15" : "border-[#CFCECE] opacity-75"
+                                    )}
                                 >
                                     <div className="w-full p-4 flex items-center gap-3 active:bg-gray-50/50 transition-colors">
-                                        <div className="w-[7px] h-[7px] rounded-full bg-[#53B175] shrink-0" />
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleVendorSelection(shipment.id); }}
+                                            className={cn(
+                                                "w-6 h-6 rounded-md border-2 flex items-center justify-center shrink-0 transition-all",
+                                                selectedVendors.has(shipment.id)
+                                                    ? "bg-[#53B175] border-[#53B175] text-white"
+                                                    : "bg-white border-gray-300"
+                                            )}
+                                        >
+                                            {selectedVendors.has(shipment.id) && <Check size={14} strokeWidth={3.5} />}
+                                        </button>
                                         <div className="flex items-center -space-x-6 mr-auto pl-2">
                                             {shipment.items.slice(0, 3).map((item, idx) => (
                                                 <div
@@ -613,9 +680,25 @@ export default function CartPage() {
                         {/* === DESKTOP: Full Item List grouped by vendor === */}
                         <div className="hidden lg:block space-y-5">
                             {shipments.map((shipment) => (
-                                <div key={shipment.id} className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
+                                <div key={shipment.id} className={cn(
+                                    "bg-white rounded-2xl border overflow-hidden shadow-sm transition-all",
+                                    selectedVendors.has(shipment.id) ? "border-[#53B175]/40 ring-1 ring-[#53B175]/15" : "border-[#E2E2E2] opacity-75"
+                                )}>
                                     {/* Vendor Group Header */}
                                     <div className="px-7 py-5 flex items-center justify-between bg-[#FAFAFA]">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.preventDefault(); toggleVendorSelection(shipment.id); }}
+                                            className={cn(
+                                                "w-6 h-6 rounded-md border-2 flex items-center justify-center mr-4 shrink-0 transition-all",
+                                                selectedVendors.has(shipment.id)
+                                                    ? "bg-[#53B175] border-[#53B175] text-white"
+                                                    : "bg-white border-gray-300 hover:border-[#53B175]"
+                                            )}
+                                            title={selectedVendors.has(shipment.id) ? 'Skip this PO at checkout' : 'Pay for this PO at checkout'}
+                                        >
+                                            {selectedVendors.has(shipment.id) && <Check size={15} strokeWidth={3.5} />}
+                                        </button>
                                         <Link
                                             href={`/cart/shipment/${shipment.id}`}
                                             className="flex items-center gap-3 hover:opacity-80 transition-opacity flex-1 min-w-0"
@@ -769,8 +852,85 @@ export default function CartPage() {
                                 <span className="text-[17px] font-bold text-[#181725]">Bill Summary</span>
                             </div>
 
+                            {/* Selected POs notice */}
+                            <div className="px-7 pt-4 -mb-1">
+                                <div className="flex items-center justify-between text-[12px]">
+                                    <span className="text-gray-500 font-medium">
+                                        Paying for {selectedGroups.length} of {groups.length} PO{groups.length !== 1 ? 's' : ''}
+                                        {!fullCartSelected && selectedGroups.length > 0 && (
+                                            <span className="text-amber-600"> · others saved for later</span>
+                                        )}
+                                    </span>
+                                    {groups.length > 1 && (
+                                        <button
+                                            onClick={() => setSelectedVendors(fullCartSelected ? new Set() : new Set(groups.map(g => g.vendorId)))}
+                                            className="text-[12px] font-bold text-[#53B175] hover:underline"
+                                        >
+                                            {fullCartSelected ? 'Deselect all' : 'Select all'}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Per-PO breakdown — collapsible */}
+                            {groups.length > 0 && (
+                                <div className="px-7 pt-3">
+                                    <button
+                                        onClick={() => setShowBreakdown(s => !s)}
+                                        className="w-full flex items-center justify-between text-[13px] font-bold text-[#181725] py-2 hover:text-[#53B175] transition-colors"
+                                    >
+                                        <span>Per-vendor breakdown</span>
+                                        {showBreakdown
+                                            ? <ChevronUp size={16} className="text-gray-400" />
+                                            : <ChevronDown size={16} className="text-gray-400" />}
+                                    </button>
+                                    {showBreakdown && (
+                                        <div className="space-y-2 pb-3">
+                                            {groups.map(g => {
+                                                const sel = selectedVendors.has(g.vendorId);
+                                                return (
+                                                    <div
+                                                        key={g.vendorId}
+                                                        className={cn(
+                                                            "rounded-xl border px-3 py-2.5 transition-all",
+                                                            sel ? "bg-[#53B175]/5 border-[#53B175]/20" : "bg-gray-50 border-gray-100"
+                                                        )}
+                                                    >
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <div className={cn(
+                                                                    "w-4 h-4 rounded-sm border flex items-center justify-center shrink-0",
+                                                                    sel ? "bg-[#53B175] border-[#53B175] text-white" : "border-gray-300 bg-white"
+                                                                )}>
+                                                                    {sel && <Check size={11} strokeWidth={3.5} />}
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <p className={cn("text-[13px] font-bold truncate", sel ? "text-[#181725]" : "text-gray-400")}>
+                                                                        {g.vendorName}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-gray-400 font-medium">{g.items.length} item{g.items.length !== 1 ? 's' : ''}</p>
+                                                                </div>
+                                                            </div>
+                                                            <span className={cn("text-[13px] font-black shrink-0", sel ? "text-[#181725]" : "text-gray-400 line-through")}>
+                                                                ₹{g.subtotal.toFixed(0)}
+                                                            </span>
+                                                        </div>
+                                                        {sel && (
+                                                            <div className="mt-1.5 pl-6 flex items-center justify-between text-[10px] text-gray-500 font-medium">
+                                                                <span>Taxable ₹{g.subtotalTaxable.toFixed(2)}</span>
+                                                                <span>GST ₹{g.totalGST.toFixed(2)}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Line Items */}
-                            <div className="px-7 py-6 space-y-4">
+                            <div className="px-7 py-5 space-y-4 border-t border-[#F0F0F0]">
                                 <div className="flex justify-between items-center">
                                     <span className="text-[15px] text-[#4C4F4D] font-medium">Taxable</span>
                                     <span className="text-[15px] font-bold text-[#181725]">₹{itemTaxable.toFixed(2)}</span>
@@ -795,9 +955,10 @@ export default function CartPage() {
                         {/* Checkout Button */}
                         <button
                             onClick={() => setScreen('payment')}
-                            className="w-full bg-[#53B175] text-white py-5 rounded-2xl font-bold text-[18px] transition-all hover:bg-[#48a068] active:scale-[0.98] shadow-lg shadow-[#53B175]/20 flex items-center justify-center gap-3"
+                            disabled={selectedGroups.length === 0}
+                            className="w-full bg-[#53B175] text-white py-5 rounded-2xl font-bold text-[18px] transition-all hover:bg-[#48a068] active:scale-[0.98] shadow-lg shadow-[#53B175]/20 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#53B175]"
                         >
-                            Checkout
+                            {selectedGroups.length === 0 ? 'Select a PO to checkout' : `Checkout (${selectedGroups.length} PO${selectedGroups.length !== 1 ? 's' : ''})`}
                             <ChevronRight size={20} strokeWidth={3} />
                         </button>
 
@@ -846,9 +1007,10 @@ export default function CartPage() {
             <div className="lg:hidden fixed bottom-0 left-0 right-0 px-5 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50">
                 <button
                     onClick={() => setScreen('payment')}
-                    className="w-full bg-[#53B175] text-white py-[18px] rounded-[16px] font-bold text-[18px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20"
+                    disabled={selectedGroups.length === 0}
+                    className="w-full bg-[#53B175] text-white py-[18px] rounded-[16px] font-bold text-[18px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    Proceed to Pay
+                    {selectedGroups.length === 0 ? 'Select a PO' : `Pay ₹${totalPay.toFixed(0)} · ${selectedGroups.length} PO${selectedGroups.length !== 1 ? 's' : ''}`}
                 </button>
             </div>
         </div>

@@ -32,6 +32,11 @@ interface VendorSettings {
     creditEnabled: boolean;
     deliveryFee: number;
     freeDeliveryAbove: number | null;
+    addressLine: string | null;
+    city: string | null;
+    state: string | null;
+    addressPincode: string | null;
+    gstNumber: string | null;
     serviceAreas: ServiceArea[];
     deliverySlots: DeliverySlot[];
     user: { email: string; phone: string | null; fullName: string };
@@ -97,6 +102,13 @@ export default function VendorSettingsPage() {
     const [minOrderValue, setMinOrderValue] = useState('');
     const [creditEnabled, setCreditEnabled] = useState(false);
 
+    // Registered business address — shown on tax invoices
+    const [addressLine, setAddressLine] = useState('');
+    const [city, setCity] = useState('');
+    const [stateName, setStateName] = useState('');
+    const [addressPincode, setAddressPincode] = useState('');
+    const [gstNumber, setGstNumber] = useState('');
+
     // Service area add form
     const [newPincode, setNewPincode] = useState('');
     const [addingArea, setAddingArea] = useState(false);
@@ -138,6 +150,11 @@ export default function VendorSettingsPage() {
                 setBannerUrl(data.bannerUrl || '');
                 setMinOrderValue(String(data.minOrderValue));
                 setCreditEnabled(data.creditEnabled);
+                setAddressLine(data.addressLine || '');
+                setCity(data.city || '');
+                setStateName(data.state || '');
+                setAddressPincode(data.addressPincode || '');
+                setGstNumber(data.gstNumber || '');
             }
         } catch (err) {
             console.error('Failed to load settings:', err);
@@ -215,6 +232,11 @@ export default function VendorSettingsPage() {
                     bannerUrl: bannerUrl || null,
                     minOrderValue: parseFloat(minOrderValue) || 0,
                     creditEnabled,
+                    addressLine: addressLine || undefined,
+                    city: city || undefined,
+                    state: stateName || undefined,
+                    addressPincode: addressPincode || undefined,
+                    gstNumber: gstNumber || undefined,
                 }),
             });
             const json = await res.json();
@@ -517,6 +539,71 @@ export default function VendorSettingsPage() {
                             </label>
                         </div>
                     </div>
+
+                    {/* Registered business address — appears on tax invoices */}
+                    <div className="pt-4 mt-2 border-t border-[#EEEEEE]">
+                        <h3 className="text-[15px] font-bold text-[#181725] mb-1">Registered Business Address</h3>
+                        <p className="text-[12px] text-[#7C7C7C] mb-4">Used as the &quot;Bill From / Shipped From&quot; on every tax invoice you issue.</p>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Street / Building / Locality</label>
+                                <textarea
+                                    value={addressLine}
+                                    onChange={(e) => setAddressLine(e.target.value)}
+                                    placeholder="e.g. Shop 12, Sai Plaza, Andheri Kurla Road, Marol"
+                                    rows={2}
+                                    className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#299E60]/40 resize-none"
+                                />
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-[13px] font-bold text-[#181725] mb-1.5">City</label>
+                                    <input
+                                        type="text"
+                                        value={city}
+                                        onChange={(e) => setCity(e.target.value)}
+                                        placeholder="Mumbai"
+                                        className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[13px] font-bold text-[#181725] mb-1.5">State</label>
+                                    <input
+                                        type="text"
+                                        value={stateName}
+                                        onChange={(e) => setStateName(e.target.value)}
+                                        placeholder="Maharashtra"
+                                        className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Pincode</label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={6}
+                                        value={addressPincode}
+                                        onChange={(e) => setAddressPincode(e.target.value.replace(/[^\d]/g, ''))}
+                                        placeholder="400069"
+                                        className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[13px] font-bold text-[#181725] mb-1.5">GSTIN</label>
+                                <input
+                                    type="text"
+                                    value={gstNumber}
+                                    onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
+                                    placeholder="27AAACZ8867B1Z7"
+                                    maxLength={15}
+                                    className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-mono outline-none focus:border-[#299E60]/40"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="pt-4 flex items-center gap-3">
                         <button onClick={handleSave} disabled={saving}
                             className="h-[48px] px-8 bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 disabled:opacity-50">

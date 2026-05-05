@@ -20,6 +20,12 @@ const updateSettingsSchema = z.object({
   bannerUrl: z.string().url().optional(),
   minOrderValue: z.number().min(0).optional(),
   creditEnabled: z.boolean().optional(),
+  // Registered business address — used on tax invoices as Bill From / Shipped From.
+  addressLine: z.string().max(500).optional(),
+  city: z.string().max(100).optional(),
+  state: z.string().max(100).optional(),
+  addressPincode: z.string().regex(/^\d{6}$/, 'Invalid pincode').optional().or(z.literal('')),
+  gstNumber: z.string().max(20).optional().or(z.literal('')),
 });
 
 // GET — full vendor profile with service areas, delivery slots, and account info

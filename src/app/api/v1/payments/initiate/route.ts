@@ -12,9 +12,11 @@ import { withAuth } from '@/middleware/auth';
 import { errorResponse } from '@/middleware/errorHandler';
 import { checkRateLimit } from '@/lib/rateLimit';
 
-const initiateSchema = z.object({
-  orderId: z.string().uuid('Invalid order ID'),
-});
+// Accept either a single orderId (legacy callers) or an orderIds array (multi-PO combined checkout).
+const initiateSchema = z.union([
+  z.object({ orderId: z.string().uuid('Invalid order ID') }),
+  z.object({ orderIds: z.array(z.string().uuid('Invalid order ID')).min(1, 'At least one order required') }),
+]);
 
 const paymentService = new PaymentService();
 
@@ -30,9 +32,10 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     }
 
     const body = await req.json();
-    const { orderId } = initiateSchema.parse(body);
+    const parsed = initiateSchema.parse(body);
+    const orderIds = 'orderIds' in parsed ? parsed.orderIds : [parsed.orderId];
 
-    const result = await paymentService.initiate(orderId, ctx.userId);
+    const result = await paymentService.initiate(orderIds, ctx.userId);
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
     return errorResponse(error);

@@ -33,7 +33,7 @@ export class OrderService {
         const stockCheck = await this.inventoryService.bulkCheck(vo.items, tx);
         const outOfStock = stockCheck.find((s) => !s.available);
         if (outOfStock) {
-          throw Errors.outOfStock(outOfStock.productId, outOfStock.qtyAvailable);
+          throw Errors.outOfStock(outOfStock.productName, outOfStock.qtyAvailable);
         }
 
         // 2. Validate MOV

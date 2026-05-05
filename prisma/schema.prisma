@@ -155,6 +155,12 @@ model Vendor {
   creditEnabled Boolean  @default(false) @map("credit_enabled")
   isActive      Boolean  @default(true) @map("is_active")
   isVerified    Boolean  @default(false) @map("is_verified")
+  // Registered business address — shown on tax invoices as "Bill From / Shipped From".
+  addressLine   String?  @map("address_line") @db.Text
+  city          String?  @db.VarChar(100)
+  state         String?  @db.VarChar(100)
+  addressPincode String? @map("address_pincode") @db.VarChar(10)
+  gstNumber     String?  @map("gst_number") @db.VarChar(20)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, Search, ChevronRight, Plus, Minus, FileText, AlertTriangle, Home, Check } from 'lucide-react';
+import { ArrowLeft, Search, ChevronRight, Plus, Minus, FileText, AlertTriangle, Home } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import Link from 'next/link';
 
@@ -11,9 +11,7 @@ const SavingsDemo = 131;
 export default function ShipmentDetailPage() {
     const router = useRouter();
     const { id } = useParams();
-    const { cart, groups, removeFromCart, updateQuantity } = useCart();
-    const [demoQuantities, setDemoQuantities] = React.useState<Record<string, number>>({});
-    const [orderPlaced, setOrderPlaced] = React.useState(false);
+    const { groups, removeFromCart, updateQuantity } = useCart();
 
     const shipment = React.useMemo(() => {
         if (id === 'cart-shipment') {
@@ -77,75 +75,18 @@ export default function ShipmentDetailPage() {
     const totalPay = itemTotal;
     const minOrder = 600;
     const shortfall = minOrder - itemTotal;
-    const isDemo = id !== 'cart-shipment';
 
     const handleProceedToPay = () => {
-        // Create order for only this vendor's items
-        const newOrder = {
-            // eslint-disable-next-line react-hooks/purity
-            id: `ORD-${Date.now()}-${shipment.vendorId}`,
-            status: 'Order Placed',
-            date: `Placed at ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
-            price: totalPay,
-            items: shipment.items.map((item) => ({
-                id: item.id,
-                image: item.image,
-                fullProduct: cart.find(ci => String(ci.productId) === String(item.id))?.product
-            })),
-            canRate: false,
-            vendor: shipment.vendor,
-        };
-
-        // Save to localStorage
-        try {
-            const existingOrders = JSON.parse(localStorage.getItem('horeca_orders') || '[]');
-            localStorage.setItem('horeca_orders', JSON.stringify([newOrder, ...existingOrders]));
-        } catch (e) {
-            console.error('Failed to save order:', e);
+        // Hand off to the cart's real payment flow — the cart page will pre-select only this
+        // vendor (via ?vendor=<id>) and jump straight to the Razorpay/COD payment screen
+        // (via ?step=payment). This keeps order creation, payment popup, and signature verify
+        // logic in one place.
+        if (shipment.vendorId === 'cart') {
+            router.push(`/cart?step=payment`);
+            return;
         }
-
-        // Remove only this vendor's items from cart
-        shipment.items.forEach(item => {
-            removeFromCart(item.id);
-        });
-
-        setOrderPlaced(true);
+        router.push(`/cart?vendor=${encodeURIComponent(shipment.vendorId)}&step=payment`);
     };
-
-    // --- ORDER SUCCESS SCREEN ---
-    if (orderPlaced) {
-        return (
-            <div className="min-h-screen bg-white flex flex-col items-center justify-center px-8 text-center animate-in fade-in duration-500">
-                <div className="w-[120px] h-[120px] md:w-[150px] md:h-[150px] bg-[#53B175]/10 rounded-full flex items-center justify-center mb-8 md:mb-10 relative">
-                    <div className="absolute inset-0 bg-[#53B175]/5 rounded-full animate-ping duration-[2000ms]" />
-                    <Check size={60} className="text-[#53B175] relative z-10 md:!w-20 md:!h-20" strokeWidth={3} />
-                </div>
-                <h1 className="text-[28px] md:text-[40px] font-black text-[#181725] leading-tight mb-4 tracking-tight">
-                    Order Placed!
-                </h1>
-                <p className="text-[16px] md:text-[18px] text-[#7C7C7C] font-medium mb-3 max-w-[450px]">
-                    Your order from <span className="font-bold text-[#181725]">{shipment.vendor}</span> has been placed successfully.
-                </p>
-                <p className="text-[14px] text-primary font-bold mb-12">
-                    Total: ₹{totalPay.toFixed(2)}
-                </p>
-                <div className="w-full max-w-[400px] flex flex-col gap-4">
-                    <button
-                        onClick={() => router.push('/orders')}
-                        className="w-full bg-[#53B175] text-white py-[18px] md:py-[22px] rounded-[18px] font-black text-[18px] shadow-xl shadow-green-100/80 hover:bg-[#48a068] transition-all hover:-translate-y-0.5"
-                    >
-                        Track Your Order
-                    </button>
-                    <button
-                        onClick={() => router.push('/cart')}
-                        className="w-full text-[#181725] font-black text-[18px] py-4 hover:bg-gray-50 rounded-xl transition-colors"
-                    >
-                        Back to Cart
-                    </button>
-                </div>
-            </div>
-        );
-    }
 
     if (shipment.items.length === 0) {
         return (

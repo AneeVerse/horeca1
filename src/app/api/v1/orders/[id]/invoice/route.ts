@@ -21,7 +21,13 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
     });
     if (!order) throw Errors.notFound('Order');
 
-    const pdfBuffer = await generateInvoicePdf(orderId);
+    let pdfBuffer: Buffer;
+    try {
+      pdfBuffer = await generateInvoicePdf(orderId);
+    } catch (pdfErr) {
+      console.error('[invoice] PDF generation failed for order', orderId, pdfErr);
+      throw pdfErr;
+    }
 
     return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
