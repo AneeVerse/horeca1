@@ -501,13 +501,13 @@ export function ContinueOrdering() {
     const getSubtitleColor = (type: ContinueCard['subtitleIcon']) => {
         switch (type) {
             case 'cart':
-                return 'text-[#e67e22] font-bold'; // orange for abandoned cart
+                return 'text-[#e67e22] font-bold';
             case 'order':
-                return 'text-[#299e60] font-bold'; // green for past orders
+                return 'text-[#299e60] font-bold';
             case 'list':
-                return 'text-[#3b82f6] font-bold'; // blue for order lists
+                return 'text-[#3b82f6] font-bold';
             case 'viewed':
-                return 'text-[#8b5cf6] font-bold'; // purple for recently viewed
+                return 'text-[#8b5cf6] font-bold';
         }
     };
 
@@ -543,7 +543,7 @@ export function ContinueOrdering() {
                                     <Link
                                         key={card.id}
                                         href={card.href}
-                                        className="flex items-center gap-3 md:gap-4 min-w-[260px] md:min-w-[320px] bg-white rounded-2xl p-3 md:p-4 border border-gray-200 shadow-sm hover:shadow-xl hover:shadow-gray-200/40 hover:border-[#53B175]/40 transition-all group shrink-0"
+                                        className="flex items-center gap-3 md:gap-4 min-w-[260px] md:min-w-[320px] bg-white rounded-2xl p-3 md:p-4 border border-gray-200 shadow-sm hover:shadow-2xl hover:shadow-gray-500/15 hover:border-[#53B175] hover:-translate-y-1.5 transition-all duration-300 group shrink-0"
                                     >
                                         {/* Vendor Logo or Logo Stack */}
                                         <div className="w-12 h-12 md:w-16 md:h-16 shrink-0 relative flex items-center justify-center">
@@ -610,7 +610,7 @@ export function ContinueOrdering() {
                                         </div>
 
                                         {/* Chevron */}
-                                        <div className="w-7 h-7 md:w-9 md:h-9 rounded-full bg-white flex items-center justify-center border border-gray-200 text-gray-400 group-hover:text-[#53B175] group-hover:border-[#53B175]/30 transition-all group-hover:translate-x-1 shadow-sm">
+                                        <div className="w-7 h-7 md:w-9 md:h-9 rounded-full bg-white flex items-center justify-center border border-gray-200 text-gray-400 group-hover:text-[#53B175] group-hover:border-[#53B175] transition-all group-hover:translate-x-1 shadow-sm">
                                             <ChevronRight className="w-4 h-4 md:w-5 md:h-5 shrink-0" strokeWidth={2.5} />
                                         </div>
                                     </Link>
