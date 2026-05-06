@@ -39,8 +39,8 @@ export function BrandStoreCard({
         >
             {/* ── TOP: coloured product-image area ── */}
             <div
-                className="relative w-full rounded-t-[24px] overflow-hidden"
-                style={{ backgroundColor: bgColor, height: 160 }}
+                className="relative w-full rounded-t-[24px] overflow-hidden h-[110px] md:h-[160px]"
+                style={{ backgroundColor: bgColor }}
             >
                 {img ? (
                     <Image
@@ -58,10 +58,7 @@ export function BrandStoreCard({
             </div>
 
             {/* ── LOGO bubble — overlaps colour/white boundary ── */}
-            <div
-                className="absolute left-1/2 -translate-x-1/2 z-10"
-                style={{ top: 124 }}
-            >
+            <div className="absolute left-1/2 -translate-x-1/2 z-10 top-[78px] md:top-[124px]">
                 <div className="w-[64px] h-[64px] rounded-full border-4 border-white shadow-[0_4px_16px_rgba(0,0,0,0.14)] overflow-hidden bg-white flex items-center justify-center">
                     {logoUrl ? (
                         <Image
@@ -78,7 +75,7 @@ export function BrandStoreCard({
             </div>
 
             {/* ── BOTTOM: name, categories, CTA ── */}
-            <div className="pt-10 pb-4 px-4 flex flex-col items-center gap-2">
+            <div className="pt-8 md:pt-10 pb-3 md:pb-4 px-3 md:px-4 flex flex-col items-center gap-2">
                 <h3 className="text-[15px] font-black italic text-[#1a1a5e] text-center leading-tight tracking-tight">
                     {name}
                 </h3>
