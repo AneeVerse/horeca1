@@ -3,143 +3,113 @@
 import React from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
+import { BrandStoreCard } from '@/components/features/brand/BrandStoreCard';
 
-const BRANDS = [
+// Google Favicons API (sz=256) — always returns an image for any domain, no auth.
+const gf = (domain: string) =>
+    `https://www.google.com/s2/favicons?sz=256&domain=${domain}`;
+
+const BRANDS: {
+    name: string;
+    slug: string;
+    logoUrl?: string;
+    productImages: string[];
+    categories: string[];
+    bgColor: string;
+}[] = [
     {
-        name: 'Kitchen Smith',
-        image: '/images/brand/03b885b1-5477-4aa9-af03-d948165745e61771835977.png',
-        href: '/brand/kitchen-smith',
-        tag: 'Spices & Grains',
+        name: 'Amul',
+        slug: 'amul',
+        logoUrl: gf('amul.com'),
+        productImages: [
+            'https://images.unsplash.com/photo-1589985270958-bf087b2d76ee?w=600&q=80',
+        ],
+        categories: ['Butter', 'Cheese', 'Ghee', 'Paneer'],
+        bgColor: '#fff8e1',
     },
     {
         name: 'Kissan',
-        image: '/images/brand/dc458c67-3702-4da8-8cb8-8011f0d3e17a1767094486.png',
-        href: '/brand/kissan',
-        tag: 'Jams & Sauces',
+        slug: 'kissan',
+        logoUrl: gf('kissan.in'),
+        productImages: [
+            'https://images.unsplash.com/photo-1597475681053-bfdfa8d28f5f?w=600&q=80',
+        ],
+        categories: ['Jams', 'Ketchup', 'Sauces', 'Squashes'],
+        bgColor: '#fde8e8',
     },
     {
-        name: 'Dhampure',
-        image: '/images/brand/a9559b8a-60e4-4f54-aa70-30f0752505301767094501.png',
-        href: '/brand/dhampure',
-        tag: 'Sugar & Jaggery',
+        name: 'Britannia',
+        slug: 'britannia',
+        logoUrl: gf('britanniaindustries.com'),
+        productImages: [
+            'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=600&q=80',
+        ],
+        categories: ['Biscuits', 'Bread', 'Cheese', 'Cake'],
+        bgColor: '#fdf6e3',
     },
     {
-        name: 'Marim Bula',
-        image: '/images/brand/ef12f3b4-b55f-4042-a2ae-2d1083071fd61767094388.png',
-        href: '/brand/marim-bula',
-        tag: 'Marinades',
+        name: 'Veeba',
+        slug: 'veeba',
+        logoUrl: gf('veeba.in'),
+        productImages: [
+            'https://images.unsplash.com/photo-1559054663-e8d23213f55c?w=600&q=80',
+        ],
+        categories: ['Mayonnaise', 'Dressings', 'Sauces', 'Dips'],
+        bgColor: '#e8f5e9',
     },
     {
-        name: 'Everest',
-        image: '/images/brand/cd69ab10-d9a6-4756-a99a-d330bad80ad41767094494.png',
-        href: '/brand/everest',
-        tag: 'Masalas',
+        name: 'Tata Sampann',
+        slug: 'tata-sampann',
+        logoUrl: gf('tataconsumer.com'),
+        productImages: [
+            'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80',
+        ],
+        categories: ['Spices', 'Pulses', 'Atta', 'Salt'],
+        bgColor: '#fce4ec',
     },
     {
-        name: 'Alu-Freshh',
-        image: '/images/brand/b82cb9a4-f54b-4cee-b2da-27216caf0f0d1768981196.png',
-        href: '/brand/alu-freshh',
-        tag: 'Packaging',
+        name: 'Maggi',
+        slug: 'maggi',
+        logoUrl: gf('nestle.com'),
+        productImages: [
+            'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=600&q=80',
+        ],
+        categories: ['Noodles', 'Ketchup', 'Soups', 'Sauces'],
+        bgColor: '#fff3e0',
     },
 ];
 
 export function ShopByStorePromo() {
     return (
-        <section className="w-full py-6 md:py-10">
-            <div className="max-w-[var(--container-max)] mx-auto px-4 md:px-[var(--container-padding)]">
-                <div className="bg-gradient-to-b from-[#4CAF50] to-[#3d9e41] rounded-[20px] p-5 md:p-8 shadow-lg">
+        <section className="w-full py-8 md:py-12">
+            <div className="max-w-[var(--container-max)] mx-auto">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4 md:mb-6 px-4 md:px-[var(--container-padding)]">
+                    <h2 className="text-[20px] md:text-[24px] font-[900] text-[#181725] tracking-tight">
+                        Shop by Brand
+                    </h2>
+                    <Link
+                        href="/brands"
+                        className="flex items-center gap-1 text-[13px] font-bold text-[#53B175] hover:text-[#3d9e56] transition-colors"
+                    >
+                        See all <ChevronRight size={14} />
+                    </Link>
+                </div>
 
-                    {/* Header row */}
-                    <div className="flex items-center justify-between mb-5">
-                        <h2 className="text-[22px] md:text-[24px] font-[800] text-white leading-tight">
-                            Shop by Brand
-                        </h2>
-                        <Link
-                            href="/search"
-                            className="flex items-center gap-1 text-[12px] font-bold text-white/80 hover:text-white transition"
-                        >
-                            See all <ChevronRight size={14} />
-                        </Link>
-                    </div>
-
-                    {/* Mobile: Row 1 (3 large) + Row 2 (3 small) */}
-                    <div className="md:hidden flex flex-col gap-3">
-                        {/* Row 1 */}
-                        <div className="grid grid-cols-3 gap-2.5">
-                            {BRANDS.slice(0, 3).map((brand) => (
-                                <Link
-                                    key={brand.name}
-                                    href={brand.href}
-                                    className="flex flex-col bg-white rounded-[14px] overflow-hidden shadow-sm active:scale-95 transition-all"
-                                >
-                                    <div className="flex-1 flex items-center justify-center p-2.5 min-h-[72px]">
-                                        <img
-                                            src={brand.image}
-                                            alt={brand.name}
-                                            className="w-full h-auto object-contain"
-                                        />
-                                    </div>
-                                    <div className="bg-[#53B175] py-1.5 text-center">
-                                        <span className="text-[8px] font-black text-white uppercase tracking-wide block truncate px-1">
-                                            {brand.tag}
-                                        </span>
-                                    </div>
-                                </Link>
-                            ))}
+                {/* Mobile: horizontal scroll */}
+                <div className="md:hidden flex gap-3 overflow-x-auto pb-3 px-4 scrollbar-none snap-x snap-mandatory">
+                    {BRANDS.map((brand) => (
+                        <div key={brand.slug} className="snap-start shrink-0 w-[140px]">
+                            <BrandStoreCard {...brand} />
                         </div>
+                    ))}
+                </div>
 
-                        {/* Row 2 */}
-                        <div className="grid grid-cols-3 gap-2.5">
-                            {BRANDS.slice(3, 6).map((brand) => (
-                                <Link
-                                    key={brand.name}
-                                    href={brand.href}
-                                    className="flex flex-col bg-white rounded-[14px] overflow-hidden shadow-sm active:scale-95 transition-all"
-                                >
-                                    <div className="flex-1 flex items-center justify-center p-2.5 min-h-[60px]">
-                                        <img
-                                            src={brand.image}
-                                            alt={brand.name}
-                                            className="w-full h-auto object-contain"
-                                        />
-                                    </div>
-                                    <div className="bg-[#53B175] py-1.5 text-center">
-                                        <span className="text-[8px] font-black text-white uppercase tracking-wide block truncate px-1">
-                                            {brand.tag}
-                                        </span>
-                                    </div>
-                                </Link>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Desktop: portrait cards (district-style) — image on top, white name+tag pad below */}
-                    <div className="hidden md:grid md:grid-cols-6 gap-4">
-                        {BRANDS.map((brand) => (
-                            <Link
-                                key={brand.name}
-                                href={brand.href}
-                                className="group rounded-[18px] overflow-hidden shadow-sm hover:shadow-2xl hover:scale-105 transition-all duration-300 flex flex-col"
-                            >
-                                <div className="relative w-full aspect-[3/4] overflow-hidden block leading-none">
-                                    <img
-                                        src={brand.image}
-                                        alt={brand.name}
-                                        className="absolute inset-0 w-full h-full object-cover scale-105 transition-transform duration-500"
-                                    />
-                                </div>
-                                <div className="px-3 py-3 bg-white">
-                                    <h3 className="text-[14px] font-extrabold text-[#181725] truncate leading-tight group-hover:text-[#53B175] transition-colors">
-                                        {brand.name}
-                                    </h3>
-                                    <p className="text-[11px] font-semibold text-gray-500 truncate mt-0.5">
-                                        {brand.tag}
-                                    </p>
-                                </div>
-                            </Link>
-                        ))}
-                    </div>
-
+                {/* Desktop: 6-column grid — portrait cards */}
+                <div className="hidden md:grid md:grid-cols-4 lg:grid-cols-6 gap-4 px-[var(--container-padding)]">
+                    {BRANDS.map((brand) => (
+                        <BrandStoreCard key={brand.slug} {...brand} />
+                    ))}
                 </div>
             </div>
         </section>

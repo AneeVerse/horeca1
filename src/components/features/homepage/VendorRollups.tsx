@@ -196,12 +196,125 @@ export function TopRatedVendors() {
 
     return (
         <section className="w-full py-8 overflow-hidden">
+            {/* 3D card CSS */}
+            <style>{`
+                .tr-card-parent { perspective: 1000px; }
+                .tr-card {
+                    padding-top: 44px;
+                    border: 1.5px solid #b2dfc3;
+                    transform-style: preserve-3d;
+                    background:
+                        linear-gradient(135deg, transparent 18.75%, rgba(83,177,117,0.10) 0 31.25%, transparent 0),
+                        repeating-linear-gradient(45deg, rgba(83,177,117,0.09) -6.25% 6.25%, #f0faf4 0 18.75%);
+                    background-size: 50px 50px;
+                    background-color: #f0faf4;
+                    width: 100%;
+                    box-shadow: rgba(83,177,117,0.18) 0px 20px 24px -8px;
+                    transition: all 0.5s ease-in-out;
+                }
+                .tr-card:hover {
+                    background-position: -80px 80px, -80px 80px;
+                    transform: rotate3d(0.5, 1, 0, 25deg);
+                    box-shadow: rgba(83,177,117,0.32) 0px 32px 36px -8px;
+                }
+                .tr-content {
+                    background: #53B175;
+                    transform-style: preserve-3d;
+                    transition: all 0.5s ease-in-out;
+                    padding: 14px 16px 16px 16px;
+                }
+                .tr-title {
+                    display: block;
+                    color: #fff;
+                    font-size: 15px;
+                    font-weight: 900;
+                    line-height: 1.2;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    transition: all 0.5s ease-in-out;
+                    transform: translate3d(0, 0, 40px);
+                }
+                .tr-title:hover { transform: translate3d(0, 0, 55px); }
+                .tr-cats {
+                    margin-top: 6px;
+                    font-size: 10px;
+                    font-weight: 700;
+                    color: rgba(255,255,255,0.88);
+                    transition: all 0.5s ease-in-out;
+                    transform: translate3d(0, 0, 25px);
+                }
+                .tr-cats:hover { transform: translate3d(0, 0, 50px); }
+                .tr-cta {
+                    cursor: pointer;
+                    margin-top: 10px;
+                    display: inline-block;
+                    font-weight: 900;
+                    font-size: 9px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.06em;
+                    color: #53B175;
+                    background: #fff;
+                    padding: 5px 10px;
+                    transition: all 0.5s ease-in-out;
+                    transform: translate3d(0, 0, 18px);
+                }
+                .tr-cta:hover { transform: translate3d(0, 0, 55px); }
+                .tr-badge {
+                    position: absolute;
+                    top: 18px;
+                    right: 18px;
+                    width: 52px;
+                    height: 52px;
+                    background: #fff;
+                    border: 1.5px solid #b2dfc3;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 2px;
+                    transform: translate3d(0, 0, 70px);
+                    box-shadow: rgba(83,177,117,0.18) 0px 12px 10px -8px;
+                    transition: all 0.5s ease-in-out;
+                }
+                .tr-badge-rank {
+                    display: block;
+                    text-align: center;
+                    color: #53B175;
+                    font-size: 8px;
+                    font-weight: 700;
+                    letter-spacing: 0.05em;
+                }
+                .tr-badge-num {
+                    display: block;
+                    text-align: center;
+                    font-size: 18px;
+                    font-weight: 900;
+                    color: #181725;
+                    line-height: 1;
+                }
+                .tr-logo {
+                    position: absolute;
+                    top: 14px;
+                    left: 16px;
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 50%;
+                    overflow: hidden;
+                    border: 2px solid #fff;
+                    background: #fff;
+                    transform: translate3d(0, 0, 60px);
+                    box-shadow: rgba(83,177,117,0.22) 0px 6px 12px -4px;
+                    transition: all 0.5s ease-in-out;
+                }
+            `}</style>
+
             <div className="max-w-[var(--container-max)] mx-auto">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6 px-6 md:px-[var(--container-padding)]">
                     <h2 className="text-[18px] md:text-[22px] lg:text-[24px] font-[900] text-[#181725] tracking-tight flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#53B175] to-[#299e60] flex items-center justify-center shadow-md shadow-green-200/50">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="white" className="drop-shadow-sm">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
                                 <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
                             </svg>
                         </div>
@@ -220,72 +333,50 @@ export function TopRatedVendors() {
                         <ChevronLeft size={24} className="text-[#181725]" strokeWidth={2.5} />
                     </button>
                     <div ref={scrollRef} onScroll={checkScroll} className="overflow-x-auto no-scrollbar scroll-smooth w-full">
-                        <div className="flex gap-4 md:gap-5 py-4 px-6 md:px-[var(--container-padding)] w-max">
+                        <div className="flex gap-6 py-6 px-6 md:px-[var(--container-padding)] w-max items-start">
                             {vendors.map((vendor, index) => {
                                 const ratingNum = Number(vendor.rating);
-                                const fullStars = Math.round(ratingNum);
+                                const cover = VENDOR_COVERS[index % VENDOR_COVERS.length];
                                 const rank = index + 1;
                                 return (
                                     <Link key={vendor.id} href={`/vendor/${vendor.id}`}
-                                        className="flex-none w-[180px] md:w-[200px] bg-white rounded-2xl overflow-hidden border border-gray-100 hover:border-[#53B175]/25 hover:shadow-[0_12px_40px_rgba(83,177,117,0.12)] hover:-translate-y-1.5 transition-all duration-400 group relative"
+                                        className="tr-card-parent flex-none w-[220px]"
                                     >
-                                        {/* Rating Hero — large rating number as hero */}
-                                        <div className="relative h-[100px] md:h-[110px] bg-gradient-to-br from-[#53B175] to-[#299e60] flex flex-col items-center justify-center">
-                                            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIzMCIgY3k9IjMwIiByPSIxLjUiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wOCkiLz48L3N2Zz4=')] opacity-30" />
-                                            <span className="text-[42px] md:text-[48px] font-black text-white leading-none drop-shadow-md tracking-tight">
-                                                {ratingNum.toFixed(1)}
-                                            </span>
-                                            <div className="flex items-center gap-0.5 mt-1">
-                                                {[1, 2, 3, 4, 5].map((star) => (
-                                                    <svg key={star} width="10" height="10" viewBox="0 0 24 24"
-                                                        fill={star <= fullStars ? 'white' : 'none'}
-                                                        className={star <= fullStars ? 'text-white' : 'text-white/30'}
-                                                        stroke="currentColor" strokeWidth="1.5">
-                                                        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
-                                                    </svg>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* Vendor info */}
-                                        <div className="px-4 pb-4 -mt-8 relative z-10">
-                                            {/* Logo circle — overlaps green area */}
-                                            <div className="w-[52px] h-[52px] md:w-[56px] md:h-[56px] rounded-xl overflow-hidden bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] border-2 border-white mx-auto mb-2.5 group-hover:shadow-[0_6px_20px_rgba(83,177,117,0.2)] transition-shadow">
-                                                <div className="w-full h-full relative">
-                                                    <Image
-                                                        src={vendor.logo || VENDOR_COVERS[index % VENDOR_COVERS.length]}
-                                                        alt={vendor.name}
-                                                        fill
-                                                        sizes="56px"
-                                                        className="object-cover"
-                                                    />
-                                                </div>
+                                        <div className="tr-card relative">
+                                            {/* Floating logo — top-left */}
+                                            <div className="tr-logo">
+                                                <Image
+                                                    src={vendor.logo || cover}
+                                                    alt={vendor.name}
+                                                    fill
+                                                    sizes="36px"
+                                                    className="object-cover"
+                                                />
                                             </div>
 
-                                            {/* Vendor name */}
-                                            <h3 className="text-[13px] md:text-[14px] font-[900] text-[#181725] text-center line-clamp-1 leading-tight">
-                                                {vendor.name}
-                                            </h3>
-
-                                            {/* Categories */}
-                                            {vendor.categories.slice(0, 2).length > 0 && (
-                                                <div className="flex items-center justify-center gap-1 mt-1.5">
-                                                    {vendor.categories.slice(0, 2).map((cat) => (
-                                                        <span key={cat} className="text-[9px] font-bold text-gray-400 bg-gray-50 border border-gray-100 rounded-md px-1.5 py-0.5 truncate max-w-[70px]">
-                                                            {cat}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            )}
-
-                                            {/* Rank badge */}
-                                            <div className="flex items-center justify-center gap-1 mt-2">
-                                                <div className="text-[10px] font-black text-gray-300 bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5">
-                                                    #{rank}
-                                                </div>
-                                                {vendor.minOrderValue > 0 && (
-                                                    <span className="text-[9px] font-bold text-gray-400">MOV ₹{vendor.minOrderValue}</span>
+                                            {/* Floating rank/rating badge — top-right */}
+                                            <div className="tr-badge">
+                                                <span className="tr-badge-rank">RANK</span>
+                                                <span className="tr-badge-num">#{rank}</span>
+                                                {ratingNum > 0 && (
+                                                    <span className="tr-badge-rank" style={{ fontSize: '9px' }}>
+                                                        ★ {ratingNum.toFixed(1)}
+                                                    </span>
                                                 )}
+                                            </div>
+
+                                            {/* Green content box */}
+                                            <div className="tr-content">
+                                                <span className="tr-title">{vendor.name}</span>
+                                                {vendor.categories.length > 0 && (
+                                                    <p className="tr-cats">
+                                                        {vendor.categories.slice(0, 3).join(' · ')}
+                                                    </p>
+                                                )}
+                                                {vendor.minOrderValue > 0 && (
+                                                    <p className="tr-cats">MOV ₹{vendor.minOrderValue}</p>
+                                                )}
+                                                <span className="tr-cta">Visit Store →</span>
                                             </div>
                                         </div>
                                     </Link>
