@@ -295,16 +295,16 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                         }
                     }}
                     className={cn(
-                        "w-full py-4 md:py-3 rounded-2xl font-black text-[13px] md:text-[13px] flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-95 border uppercase tracking-[0.05em]",
+                        "w-full rounded-2xl font-black flex items-center justify-center gap-1 transition-all duration-300 active:scale-95 border uppercase tracking-[0.05em]",
                         isOutOfStock
-                            ? "bg-white text-[#53B175] border-[#53B175] hover:bg-[#f7fbf8] hover:shadow-[0_8px_25px_rgba(83,177,117,0.15)] cursor-pointer"
-                            : "bg-[#53B175] text-white border-[#53B175] shadow-[0_8px_25px_rgba(83,177,117,0.2)] hover:bg-[#489d67] hover:shadow-[0_12px_30px_rgba(83,177,117,0.3)]"
+                            ? "bg-white text-[#53B175] border-[#53B175] hover:bg-[#f7fbf8] cursor-pointer text-[9px] py-2 px-1.5"
+                            : "bg-[#53B175] text-white border-[#53B175] shadow-[0_8px_25px_rgba(83,177,117,0.2)] hover:bg-[#489d67] hover:shadow-[0_12px_30px_rgba(83,177,117,0.3)] text-[11px] py-3 md:py-2.5"
                     )}
                 >
                     {isOutOfStock ? (
-                        <>Find at another vendor <Navigation size={15} strokeWidth={3} className="shrink-0 -rotate-45" /></>
+                        <>Find at another vendor <Navigation size={11} strokeWidth={3} className="shrink-0 -ml-1" /></>
                     ) : (
-                        <>Quick Add<ShoppingCart size={15} strokeWidth={3} className="shrink-0" /></>
+                        <>Quick Add<ShoppingCart size={13} strokeWidth={3} className="shrink-0" /></>
                     )}
                 </button>
             </div>

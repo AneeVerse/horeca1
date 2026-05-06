@@ -59,7 +59,7 @@ export default function OrderListDetailPage() {
                     const typedList = list as OrderList | null;
 if (typedList) {
                         setOrderList({ ...typedList, items: typedList.items ?? [] });
-                        setQuantities(Object.fromEntries((typedList.items || []).map((item) => [item.productId, 0])));
+                        setQuantities(Object.fromEntries((typedList.items || []).map((item) => [item.productId, item.defaultQty || 0])));
                     }
                     setIsLoading(false);
                 })
@@ -71,8 +71,7 @@ if (typedList) {
 
 if (found) {
             setOrderList({ ...found, items: found.items ?? [] });
-            // All quantities start at 0 per spec
-            setQuantities(Object.fromEntries((found.items ?? []).map(item => [item.productId, 0])));
+            setQuantities(Object.fromEntries((found.items ?? []).map(item => [item.productId, item.defaultQty || 0])));
         }
         setIsLoading(false);
     }, [listId]);
