@@ -11,6 +11,7 @@ import { Collections } from "@/components/features/homepage/Collections";
 import { NewsletterBanner } from "@/components/features/NewsletterBanner";
 import { CompleteProfileBanner } from "@/components/features/homepage/CompleteProfileBanner";
 import { FeaturedDeals } from "@/components/features/homepage/FeaturedDeals";
+import { FrequentlyOrderedVendors, TopRatedVendors } from "@/components/features/homepage/VendorRollups";
 
 export default function Home() {
   return (
@@ -29,6 +30,12 @@ export default function Home() {
 
       {/* Vendors Near You (Now Shop By Vendor) */}
       <NearbyVendors />
+
+      {/* Frequently Ordered Vendors — shown for logged-in users */}
+      <FrequentlyOrderedVendors />
+
+      {/* Top Rated Vendors */}
+      <TopRatedVendors />
 
       {/* Featured Deals: products with a real promo or MRP markdown */}
       <FeaturedDeals />

@@ -51,7 +51,7 @@ function CategoryVendorsContent() {
             ]))
             .then(async ([cats, searchRes]) => {
                 setAllCategories(cats);
-                setTopProducts(searchRes.products.slice(0, 6));
+                setTopProducts(searchRes.products.slice(0, 5));
                 const found = cats.find(c =>
                     c.slug === slug ||
                     c.slug.toLowerCase() === slug.toLowerCase() ||
@@ -220,7 +220,7 @@ function CategoryVendorsContent() {
                             <h2 className="text-[16px] font-black text-[#181725]">Quick Access</h2>
                             <span className="text-[12px] text-gray-400 font-bold">Tap a vendor below to see full catalog</span>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                             {topProducts.map(p => (
                                 <VendorProductCard key={p.id} product={p} />
                             ))}

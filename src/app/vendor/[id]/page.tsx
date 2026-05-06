@@ -44,6 +44,8 @@ export default function VendorStorePage() {
         totalCount: number;
     } | null>(null);
     const [reviewsLoading, setReviewsLoading] = useState(false);
+    const [prevOrderedProducts, setPrevOrderedProducts] = useState<VendorProduct[]>([]);
+    const [prevOrderedLoading, setPrevOrderedLoading] = useState(false);
 
     // Ensure page starts at the top on entry
     useEffect(() => {
@@ -106,6 +108,17 @@ export default function VendorStorePage() {
 
     useEffect(() => {
         if (activeTab === 'orders') Promise.resolve().then(() => loadPrevOrders());
+        if (activeTab === 'prev-ordered' && !prevOrderedLoading && prevOrderedProducts.length === 0) {
+            Promise.resolve().then(async () => {
+                setPrevOrderedLoading(true);
+                try {
+                    const res = await fetch(`/api/v1/vendors/${vendorId}/previously-ordered`);
+                    const json = await res.json();
+                    setPrevOrderedProducts((json.data || json.items || []).map((p: any) => ({ ...p, id: p.id, name: p.name, price: Number(p.basePrice || p.price) || 0, images: p.imageUrl ? [p.imageUrl] : [], category: p.categoryName || '', packSize: p.packSize || '1 unit', unit: 'unit', stock: 99, isActive: true, createdAt: new Date(), updatedAt: new Date(), vendorId: vendorId, vendorName: vendor?.name || '', vendorLogo: vendor?.logo || '', bulkPrices: [], creditBadge: false, minOrderQuantity: 1, frequentlyOrdered: true, isDeal: false, description: '', lastOrderedQty: p.lastOrderedQty, lastOrderedDate: p.lastOrderedDate } as VendorProduct)));
+                } catch { setPrevOrderedProducts([]); }
+                finally { setPrevOrderedLoading(false); }
+            });
+        }
     }, [activeTab, loadPrevOrders]);
 
     // Load reviews when ratings tab is activated
@@ -126,6 +139,8 @@ export default function VendorStorePage() {
             result = result.filter(p => p.frequentlyOrdered);
         } else if (activeTab === 'deals') {
             result = result.filter(p => p.isDeal);
+        } else if (activeTab === 'prev-ordered') {
+            result = prevOrderedProducts;
         } else if (activeTab.startsWith('cat:')) {
             const category = activeTab.replace('cat:', '');
             result = result.filter(p => p.category === category || p.subcategory === category);
@@ -184,13 +199,12 @@ export default function VendorStorePage() {
             {/* ── DYNAMIC CATEGORY SHOWCASE & NAVIGATION (Only shown in shop views) ── */}
             {activeTab !== 'ratings' && activeTab !== 'about' && activeTab !== 'orders' && (
                 <>
-                    <CategoryShowcase 
-                        filterByProducts={products} 
-                        onCategoryClick={(cat) => setActiveTab(activeTab === `cat:${cat}` ? 'all' : `cat:${cat}`)} 
-                        activeCategory={activeTab} 
-                        title="" 
+                    <CategoryShowcase
+                        filterByProducts={products}
+                        onCategoryClick={(cat) => setActiveTab(activeTab === `cat:${cat}` ? 'all' : `cat:${cat}`)}
+                        activeCategory={activeTab}
+                        title=""
                     />
-
                     <VendorCatalogNav
                         activeTab={activeTab}
                         onTabChange={setActiveTab}
@@ -242,7 +256,7 @@ export default function VendorStorePage() {
                             ))
                         )}
                     </div>
-                ) : activeTab === 'all' || activeTab === 'deals' || activeTab === 'frequent' || activeTab.startsWith('cat:') ? (
+                ) : activeTab === 'all' || activeTab === 'deals' || activeTab === 'frequent' || activeTab === 'prev-ordered' || activeTab.startsWith('cat:') ? (
                     filteredProducts.length > 0 ? (
                         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
                             {filteredProducts.map((product) => (

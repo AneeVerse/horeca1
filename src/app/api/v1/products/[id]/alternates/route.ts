@@ -1,13 +1,31 @@
 // GET /api/v1/products/:id/alternates
-// WHY: When a product is out of stock on the PDP, surface up to 3 alternate
-//      vendors that carry a similar product (same category or name token match)
-//      with available stock so the buyer doesn't bounce.
+// WHY: When a product is out of stock on the PDP, surface alternate vendors
+//      that carry the SAME product (or a closely-matching one) so the buyer
+//      doesn't bounce. Match hierarchy:
+//        1. Same BrandMasterProduct via verified BrandProductMapping (best — exact SKU)
+//        2. Same barcode (exact SKU, no brand mapping needed)
+//        3. Same brand + same category + same pack size (e.g. "Veeba 250ml")
+//        4. Same category + name has 2+ overlapping tokens (≥4 chars)
 // PUBLIC: No auth required — anyone browsing a PDP can read these suggestions.
 
 import { NextRequest, NextResponse } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { errorResponse } from '@/middleware/errorHandler';
+
+const STOPWORDS = new Set(['the', 'and', 'for', 'with', 'pcs', 'kgs', 'ltr', 'pack']);
+
+const productInclude = {
+  vendor: { select: { id: true, businessName: true, logoUrl: true, minOrderValue: true } },
+  inventory: { select: { qtyAvailable: true } },
+  category: { select: { id: true, name: true } },
+} as const;
+
+const baseFilter: Prisma.ProductWhereInput = {
+  isActive: true,
+  approvalStatus: 'approved',
+  inventory: { qtyAvailable: { gt: 0 } },
+};
 
 export async function GET(
   _req: NextRequest,
@@ -16,53 +34,146 @@ export async function GET(
   try {
     const { id: productId } = await params;
 
-    // 1. Resolve the source product (just need name + category to find similar).
     const source = await prisma.product.findUnique({
       where: { id: productId },
-      select: { id: true, name: true, categoryId: true },
+      select: {
+        id: true,
+        name: true,
+        categoryId: true,
+        brand: true,
+        barcode: true,
+        packSize: true,
+      },
     });
 
     if (!source) {
       return NextResponse.json({ success: true, data: { alternates: [] } });
     }
 
-    // Build name-token matchers: split on whitespace, keep tokens >= 3 chars.
-    const tokens = (source.name || '')
-      .split(/\s+/)
-      .map(t => t.trim())
-      .filter(t => t.length >= 3);
-
-    const orClauses: Prisma.ProductWhereInput[] = [];
-    if (source.categoryId) {
-      orClauses.push({ categoryId: source.categoryId });
-    }
-    for (const token of tokens) {
-      orClauses.push({ name: { contains: token, mode: 'insensitive' } });
-    }
-
-    // If we have neither a category nor usable tokens, no meaningful query.
-    if (orClauses.length === 0) {
-      return NextResponse.json({ success: true, data: { alternates: [] } });
-    }
-
-    const alternates = await prisma.product.findMany({
+    // ── Tier 1: Brand-mapping match (same BrandMasterProduct → same SKU) ──
+    const sourceMappings = await prisma.brandProductMapping.findMany({
       where: {
-        id: { not: productId },
-        isActive: true,
-        approvalStatus: 'approved',
-        inventory: { qtyAvailable: { gt: 0 } },
-        OR: orClauses,
+        distributorProductId: productId,
+        status: { in: ['verified', 'auto_mapped'] },
       },
-      include: {
-        vendor: { select: { id: true, businessName: true, minOrderValue: true } },
-        inventory: { select: { qtyAvailable: true } },
-        category: { select: { id: true, name: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 3,
+      select: { brandMasterProductId: true },
     });
 
-    return NextResponse.json({ success: true, data: { alternates } });
+    if (sourceMappings.length > 0) {
+      const masterIds = sourceMappings.map(m => m.brandMasterProductId);
+      const linked = await prisma.brandProductMapping.findMany({
+        where: {
+          brandMasterProductId: { in: masterIds },
+          distributorProductId: { not: productId },
+          status: { in: ['verified', 'auto_mapped'] },
+          distributorProduct: baseFilter,
+        },
+        include: { distributorProduct: { include: productInclude } },
+        take: 3,
+      });
+      if (linked.length > 0) {
+        return NextResponse.json({
+          success: true,
+          data: { alternates: linked.map(l => l.distributorProduct), matchType: 'brand_mapping' },
+        });
+      }
+    }
+
+    // ── Tier 2: Barcode match ──
+    if (source.barcode && source.barcode.trim().length >= 6) {
+      const byBarcode = await prisma.product.findMany({
+        where: {
+          ...baseFilter,
+          id: { not: productId },
+          barcode: source.barcode,
+        },
+        include: productInclude,
+        take: 3,
+      });
+      if (byBarcode.length > 0) {
+        return NextResponse.json({
+          success: true,
+          data: { alternates: byBarcode, matchType: 'barcode' },
+        });
+      }
+    }
+
+    // ── Tier 3: Same brand + same category (+ same pack size if present) ──
+    if (source.brand && source.brand.trim().length >= 2 && source.categoryId) {
+      const byBrand = await prisma.product.findMany({
+        where: {
+          ...baseFilter,
+          id: { not: productId },
+          brand: { equals: source.brand, mode: 'insensitive' },
+          categoryId: source.categoryId,
+          ...(source.packSize ? { packSize: source.packSize } : {}),
+        },
+        include: productInclude,
+        take: 3,
+      });
+      if (byBrand.length > 0) {
+        return NextResponse.json({
+          success: true,
+          data: { alternates: byBrand, matchType: 'brand_category' },
+        });
+      }
+    }
+
+    // ── Tier 4: Same category + 2+ token overlap (tokens ≥ 4 chars, no stopwords) ──
+    if (!source.categoryId) {
+      return NextResponse.json({ success: true, data: { alternates: [], matchType: 'none' } });
+    }
+
+    const tokens = (source.name || '')
+      .toLowerCase()
+      .split(/\s+/)
+      .map(t => t.replace(/[^a-z0-9]/g, ''))
+      .filter(t => t.length >= 4 && !STOPWORDS.has(t) && !/^\d+$/.test(t));
+
+    if (tokens.length === 0) {
+      // No usable tokens — fall back to plain category match (loose but at least same shelf).
+      const sameCategory = await prisma.product.findMany({
+        where: { ...baseFilter, id: { not: productId }, categoryId: source.categoryId },
+        include: productInclude,
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+      });
+      return NextResponse.json({
+        success: true,
+        data: { alternates: sameCategory, matchType: 'category' },
+      });
+    }
+
+    const candidates = await prisma.product.findMany({
+      where: {
+        ...baseFilter,
+        id: { not: productId },
+        categoryId: source.categoryId,
+        OR: tokens.map(t => ({ name: { contains: t, mode: 'insensitive' as const } })),
+      },
+      include: productInclude,
+      take: 20,
+    });
+
+    const ranked = candidates
+      .map(p => {
+        const candTokens = (p.name || '')
+          .toLowerCase()
+          .split(/\s+/)
+          .map(t => t.replace(/[^a-z0-9]/g, ''))
+          .filter(t => t.length >= 4);
+        const overlap = tokens.filter(t => candTokens.includes(t)).length;
+        return { product: p, overlap };
+      })
+      .filter(r => r.overlap >= 2)
+      .sort((a, b) => b.overlap - a.overlap)
+      .slice(0, 3)
+      .map(r => r.product);
+
+    return NextResponse.json({
+      success: true,
+      data: { alternates: ranked, matchType: ranked.length > 0 ? 'token_overlap' : 'none' },
+    });
   } catch (error) {
     return errorResponse(error);
   }

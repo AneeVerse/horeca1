@@ -1,11 +1,12 @@
 'use client';
 
 import React from 'react';
-import { Star, MapPin, Phone, Heart, Share2, ChevronLeft, Image as ImageIcon, Navigation, ClipboardList } from 'lucide-react';
+import { Star, MapPin, Phone, Heart, Share2, ChevronLeft, Image as ImageIcon, Navigation, ClipboardList, CreditCard, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { toast } from 'sonner';
+import { useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import type { Vendor } from '@/types';
 import { VENDOR_COVERS } from '@/components/features/homepage/VendorCardShared';
@@ -18,6 +19,7 @@ interface VendorStoreHeaderProps {
 
 export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStoreHeaderProps) {
     const router = useRouter();
+    const { data: session } = useSession();
     const coverIndex = Math.abs(vendor.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % VENDOR_COVERS.length;
     const coverImage = vendor.coverImage || VENDOR_COVERS[coverIndex];
     
@@ -60,7 +62,8 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                                 <span className="bg-[#1C8C44] text-white px-2 py-0.5 rounded-md flex items-center gap-1 text-[11px] font-black shadow-sm">
                                     {vendor.rating} <Star size={10} fill="white" className="text-white" />
                                 </span>
-                                <span className="text-[10px] text-[#1C8C44] font-black uppercase tracking-tighter">Open till 8PM</span>
+                                {vendor.deliverySchedule ? <span className="text-[10px] text-[#1C8C44] font-black uppercase tracking-tighter"><Clock size={10} className="inline mr-0.5" />{vendor.deliverySchedule}</span> : <span className="text-[10px] text-[#1C8C44] font-black uppercase tracking-tighter">Open till 8PM</span>}
+                        {vendor.creditEnabled && <span className="bg-[#F3E5F5]/80 text-[#7B1FA2] text-[9px] font-black px-1.5 py-0.5 rounded-lg flex items-center gap-0.5"><CreditCard size={9} strokeWidth={2.5} />Credit</span>}
                             </div>
                             <h1 className="text-[20px] font-[900] text-[#0f172a] leading-[1.15] mb-1 line-clamp-2">
                                 {vendor.name}
@@ -174,9 +177,8 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                                 <span className="bg-white text-[#181725] px-2.5 py-1 rounded-lg flex items-center gap-1 text-[12px] font-black shadow-md">
                                     {vendor.rating} <Star size={11} fill="#FBC02D" className="text-[#FBC02D]" />
                                 </span>
-                                <span className="bg-white/15 backdrop-blur-sm border border-white/25 text-white text-[10px] md:text-[11px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg">
-                                    Open till 8:00 PM
-                                </span>
+                                {vendor.deliverySchedule ? <span className="bg-white/15 backdrop-blur-sm border border-white/25 text-white text-[10px] md:text-[11px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg">{vendor.deliverySchedule}</span> : <span className="bg-white/15 backdrop-blur-sm border border-white/25 text-white text-[10px] md:text-[11px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg">Open till 8:00 PM</span>}
+                                {vendor.creditEnabled && <span className="bg-[#F3E5F5]/80 backdrop-blur-sm text-[#7B1FA2] text-[10px] md:text-[11px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg flex items-center gap-1"><CreditCard size={11} strokeWidth={2.5} />Credit Available</span>}
                             </div>
                             <h1 className="text-[1.6rem] md:text-[2rem] lg:text-[2.8rem] font-[900] leading-[1.05] tracking-tight drop-shadow-md line-clamp-1">
                                 {vendor.name}

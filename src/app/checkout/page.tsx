@@ -3,7 +3,8 @@
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ChevronLeft, CreditCard, Smartphone, Building2, FileText, Clock, CheckCircle2, Shield, User, Loader2, Check } from 'lucide-react';
+import { ChevronLeft, Clock, CheckCircle2, Shield, User, Loader2, Check } from 'lucide-react';
+import { CreditCard, Smartphone, Building2, FileText, Wallet as WalletIcon } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { useSession } from 'next-auth/react';
@@ -62,6 +63,7 @@ type CheckoutStep = 'review' | 'payment' | 'confirmation';
 
 const PAYMENT_OPTIONS = [
     { id: 'credit', name: 'DiSCCO Credit Line', desc: 'Pay later with credit', icon: CreditCard, color: 'purple' },
+  { id: 'wallet', name: 'H1 Wallet', desc: 'Pay from wallet balance', icon: WalletIcon, color: 'yellow' },
     { id: 'online', name: 'Pay Online', desc: 'UPI, Cards, Netbanking', icon: Smartphone, color: 'blue' },
     { id: 'bank_transfer', name: 'Bank Transfer', desc: 'NEFT / RTGS / IMPS', icon: Building2, color: 'green' },
     { id: 'po_number', name: 'PO Number', desc: 'Enterprise purchase order', icon: FileText, color: 'orange' },
@@ -74,8 +76,12 @@ export default function CheckoutPage() {
     const [selectedPayment, setSelectedPayment] = useState('');
     const [orderSnapshot, setOrderSnapshot] = useState<{ groups: VendorCartGroup[], total: number, count: number } | null>(null);
     const [showAuthScreen, setShowAuthScreen] = useState(false);
-    const [availableCredit, setAvailableCredit] = useState<number | null>(null);
+const [availableCredit, setAvailableCredit] = useState<number | null>(null);
     const [creditDueDate, setCreditDueDate] = useState<string | null>(null);
+    const [creditUpcomingDates, setCreditUpcomingDates] = useState<string[]>([]);
+    const [walletBalance, setWalletBalance] = useState<number | null>(null);
+    const [bankTransferInput, setBankTransferInput] = useState('');
+    const [poNumberInput, setPoNumberInput] = useState('');
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
     const [orderError, setOrderError] = useState<string | null>(null);
     const [placedOrderIds, setPlacedOrderIds] = useState<string[]>([]);
@@ -114,9 +120,17 @@ export default function CheckoutPage() {
                 if (d.data) {
                     setAvailableCredit(d.data.availableCredit ?? d.data.creditLimit ?? null);
                     setCreditDueDate(d.data.nextDueDate ?? null);
+                    setCreditUpcomingDates(d.data.upcomingDueDates ?? []);
                 }
             })
-            .catch(() => {}); // silently fall back to null
+.catch(() => {});
+        // Fetch wallet balance
+        fetch('/api/v1/wallet')
+            .then(r => r.json())
+            .then(d => {
+                if (d.data) { setWalletBalance(d.data.balance ?? 0); }
+            })
+            .catch(() => {});
     }, [step, sessionStatus]);
 
     const handlePlaceOrder = async () => {
@@ -187,7 +201,12 @@ export default function CheckoutPage() {
             // 3. Show confirmation
             setPlacedOrderIds(createdOrders.map(o => o.orderNumber || o.id));
             setOrderSnapshot({ groups: [...selectedGroups], total: selectedTotal, count: selectedVendorCount });
-            setStep('confirmation');
+            
+            // Redirect to dedicated order-success page
+            const ids = createdOrders.map((o: { id: string }) => o.id).join(',');
+            const lastVendor = selectedGroups[selectedGroups.length - 1]?.vendorId || '';
+            window.location.href = `/order-success?ids=${ids}&vendor=${lastVendor}`;
+            return;
 
             // Remove only the placed vendor groups from cart; leave unselected ones intact.
             const placedAllGroups = selectedGroups.length === groups.length;
@@ -444,7 +463,7 @@ export default function CheckoutPage() {
                         </div>
 
                         {/* Credit info if selected */}
-                        {selectedPayment === 'credit' && (
+{selectedPayment === 'credit' && (
                             <div className="bg-purple-50 rounded-2xl p-4 border border-purple-100">
                                 <div className="flex items-center gap-2 mb-2">
                                     <Shield size={16} className="text-purple-600" />
@@ -467,7 +486,61 @@ export default function CheckoutPage() {
                                             {creditDueDate ? new Date(creditDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                                         </span>
                                     </div>
+                                    {creditUpcomingDates.length > 0 && (
+                                        <div className="mt-2 pt-2 border-t border-purple-200/50">
+                                            <span className="text-[10px] font-black text-purple-500 uppercase tracking-wider">Upcoming Due Dates</span>
+                                            <div className="space-y-1 mt-1">
+                                                {creditUpcomingDates.slice(0, 3).map((d, i) => (
+                                                    <div key={i} className="flex justify-between text-[11px]">
+                                                        <span className="text-purple-500 font-medium">{new Date(d).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+                                                        <span className="font-bold text-purple-700">Due</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Wallet info if selected */}
+                        {selectedPayment === 'wallet' && (
+                            <div className="bg-yellow-50 rounded-2xl p-4 border border-yellow-100">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <WalletIcon size={16} className="text-yellow-600" />
+                                    <span className="text-[13px] font-bold text-yellow-800">H1 Wallet</span>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <div className="flex justify-between text-[12px]">
+                                        <span className="text-yellow-600">Available balance</span>
+                                        <span className="font-bold text-yellow-800">
+                                            {walletBalance !== null ? `₹${walletBalance.toLocaleString('en-IN')}` : 'Loading...'}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between text-[12px]">
+                                        <span className="text-yellow-600">This order</span>
+                                        <span className="font-bold text-yellow-800">₹{selectedTotal.toLocaleString('en-IN')}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Bank Transfer input */}
+                        {selectedPayment === 'bank_transfer' && (
+                            <div className="bg-green-50 rounded-2xl p-4 border border-green-100">
+                                <p className="text-[12px] font-bold text-green-700 mb-2">Bank Account Details</p>
+                                <p className="text-[11px] text-green-600 mb-2">Transfer to: Horeca1 Pvt Ltd · A/C 1234567890 · IFSC HDFC0001234</p>
+                                <input type="text" placeholder="Enter UTR / Transaction Ref Number..." value={bankTransferInput} onChange={(e) => setBankTransferInput(e.target.value)}
+                                    className="w-full border border-green-200 rounded-xl px-3 py-2 text-[13px] font-bold outline-none focus:border-green-400 placeholder:text-gray-400" />
+                            </div>
+                        )}
+
+                        {/* PO Number input */}
+                        {selectedPayment === 'po_number' && (
+                            <div className="bg-orange-50 rounded-2xl p-4 border border-orange-100">
+                                <p className="text-[12px] font-bold text-orange-700 mb-2">Enter Purchase Order Number</p>
+                                <input type="text" placeholder="e.g. PO-2024-001" value={poNumberInput} onChange={(e) => setPoNumberInput(e.target.value)}
+                                    className="w-full border border-orange-200 rounded-xl px-3 py-2 text-[13px] font-bold outline-none focus:border-orange-400 placeholder:text-gray-400" />
                             </div>
                         )}
 

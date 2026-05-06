@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { CreditCard, Share2, ShoppingCart, Heart, ListPlus, Plus, Check } from 'lucide-react';
+import { CreditCard, Share2, ShoppingCart, Heart, ListPlus, Plus, Minus, Check, Navigation, X, Loader2, Package } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { toast } from 'sonner';
@@ -27,6 +27,44 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
     const [listLoading, setListLoading] = useState(false);
     const [addedToList, setAddedToList] = useState<string | null>(null);
     const pickerRef = useRef<HTMLDivElement>(null);
+
+    // ── OOS Alternate Vendors state ──
+    const [showAlternates, setShowAlternates] = useState(false);
+    const [alternateVendors, setAlternateVendors] = useState<Array<{
+        id: string;
+        name: string;
+        vendor: { id: string; businessName: string; logoUrl?: string | null };
+        inventory?: { qtyAvailable: number };
+        images?: string[];
+    }>>([]);
+    const [alternatesLoading, setAlternatesLoading] = useState(false);
+
+    // ── Bulk Slab Stepper state ──
+    const [openStepperIdx, setOpenStepperIdx] = useState<number | null>(null);
+    const [stepperQty, setStepperQty] = useState(0);
+
+    const fetchAlternates = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowAlternates(true);
+        setAlternatesLoading(true);
+        try {
+            const res = await fetch(`/api/v1/products/${product.id}/alternates`);
+            const json = await res.json();
+            const alternates = json?.data?.alternates || [];
+            setAlternateVendors(alternates.map((a: Record<string, unknown>) => ({
+                id: a.id as string,
+                name: a.name as string,
+                vendor: a.vendor as { id: string; businessName: string; logoUrl?: string | null },
+                inventory: a.inventory as { qtyAvailable: number } | undefined,
+                images: a.images as string[] | undefined,
+            })));
+        } catch {
+            setAlternateVendors([]);
+        } finally {
+            setAlternatesLoading(false);
+        }
+    };
 
     useEffect(() => {
         if (!showListPicker) return;
@@ -138,7 +176,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
         }
     };
 
-    return (
+    return (<>
         <Link
             href={isOutOfStock ? '#' : `/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`}
             className={cn(
@@ -277,13 +315,68 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                             )}>
                                 ₹{tier.price} <span className="opacity-60 text-[9px]">({tier.minQty}+ pcs)</span>
                             </span>
-                            {!isOutOfStock && (
+                            {!isOutOfStock && openStepperIdx !== i && (
                                 <button
-                                    onClick={(e) => handleAdd(e, tier.minQty)}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setOpenStepperIdx(i);
+                                        setStepperQty(tier.minQty);
+                                    }}
                                     className="text-[#53B175] text-[10px] font-black uppercase tracking-widest hover:text-[#2c7a2c] transition-colors"
                                 >
                                     + Add
                                 </button>
+                            )}
+                            {!isOutOfStock && openStepperIdx === i && (
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    {/* Decrement */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            if (stepperQty <= tier.minQty) return;
+                                            setStepperQty(stepperQty - 1);
+                                        }}
+                                        disabled={stepperQty <= tier.minQty}
+                                        className={cn(
+                                            "w-6 h-6 rounded-lg flex items-center justify-center transition-colors",
+                                            stepperQty <= tier.minQty
+                                                ? "text-gray-300 cursor-not-allowed"
+                                                : "text-red-400 hover:bg-red-50"
+                                        )}
+                                    >
+                                        <Minus size={12} strokeWidth={3} />
+                                    </button>
+
+                                    {/* Qty display */}
+                                    <span className="text-[12px] font-black text-[#181725] w-6 text-center tabular-nums">
+                                        {stepperQty}
+                                    </span>
+
+                                    {/* Increment */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setStepperQty(stepperQty + 1);
+                                        }}
+                                        className="w-6 h-6 rounded-lg flex items-center justify-center text-[#53B175] hover:bg-green-50 transition-colors"
+                                    >
+                                        <Plus size={12} strokeWidth={3} />
+                                    </button>
+
+                                    {/* Confirm */}
+                                    <button
+                                        onClick={(e) => {
+                                            handleAdd(e, stepperQty);
+                                            setOpenStepperIdx(null);
+                                        }}
+                                        className="ml-1 px-2.5 py-1 rounded-lg bg-[#53B175] text-white text-[10px] font-black uppercase tracking-wider hover:bg-[#489d67] transition-colors"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
                             )}
                         </div>
                     ))}
@@ -303,19 +396,113 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                 </div>
 
                 <button
-                    disabled={isOutOfStock}
-                    onClick={(e) => handleAdd(e, 1)}
+                    onClick={(e) => {
+                        if (isOutOfStock) {
+                            fetchAlternates(e);
+                        } else {
+                            handleAdd(e, 1);
+                        }
+                    }}
                     className={cn(
-                        "w-full py-4 md:py-3 rounded-2xl font-black text-[13px] md:text-[13px] flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-95 border uppercase tracking-[0.05em]",
+                        "w-full py-3 rounded-2xl font-black flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-95 border uppercase tracking-wide leading-none",
                         isOutOfStock
-                            ? "bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed"
-                            : "bg-[#53B175] text-white border-[#53B175] shadow-[0_8px_25px_rgba(83,177,117,0.2)] hover:bg-[#489d67] hover:shadow-[0_12px_30px_rgba(83,177,117,0.3)]"
+                            ? "text-[11px] md:text-[12px] bg-white text-[#53B175] border-[#53B175] hover:bg-[#f7fbf8] hover:shadow-[0_8px_25px_rgba(83,177,117,0.15)] cursor-pointer"
+                            : "text-[13px] bg-[#53B175] text-white border-[#53B175] shadow-[0_8px_25px_rgba(83,177,117,0.2)] hover:bg-[#489d67] hover:shadow-[0_12px_30px_rgba(83,177,117,0.3)]"
                     )}
                 >
-                    {isOutOfStock ? 'Sold Out' : 'Quick Add'}
-                    {!isOutOfStock && <ShoppingCart size={15} strokeWidth={3} className="shrink-0" />}
+                    {isOutOfStock ? (
+                        <><Navigation size={12} strokeWidth={3} className="shrink-0 -rotate-45" /><span>Other Vendors</span></>
+                    ) : (
+                        <>Quick Add<ShoppingCart size={15} strokeWidth={3} className="shrink-0" /></>
+                    )}
                 </button>
             </div>
         </Link>
+
+        {/* ── OOS ALTERNATE VENDORS MODAL ── */}
+        {showAlternates && (
+            <div
+                className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+                onClick={() => setShowAlternates(false)}
+            >
+                {/* Backdrop */}
+                <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+                
+                {/* Modal */}
+                <div
+                    className="relative bg-white rounded-[28px] border border-gray-100 shadow-[0_30px_80px_rgba(0,0,0,0.15)] w-full max-w-md p-6 z-10 max-h-[80vh] overflow-y-auto"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex items-center justify-between mb-5">
+                        <h3 className="text-[18px] font-black text-[#181725]">Alternate Vendors</h3>
+                        <button
+                            onClick={() => setShowAlternates(false)}
+                            className="p-2 rounded-xl bg-gray-50 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                        >
+                            <X size={18} strokeWidth={2.5} />
+                        </button>
+                    </div>
+
+                    <p className="text-[13px] font-bold text-gray-500 mb-4">
+                        &ldquo;{product.name}&rdquo; is available from these vendors:
+                    </p>
+
+                    {alternatesLoading ? (
+                        <div className="flex items-center justify-center py-10">
+                            <Loader2 size={24} className="animate-spin text-[#53B175]" strokeWidth={3} />
+                        </div>
+                    ) : alternateVendors.length === 0 ? (
+                        <div className="text-center py-8 text-gray-400 font-bold text-[14px]">
+                            No alternate vendors found at this time.
+                        </div>
+                    ) : (
+                        <div className="flex flex-col gap-3">
+                            {alternateVendors.map((alt) => (
+                                <a
+                                    key={alt.id}
+                                    href={`/vendor/${alt.vendor.id}`}
+                                    className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 hover:border-[#53B175]/30 hover:bg-[#f7fbf8] transition-all group"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <div className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center shrink-0 overflow-hidden">
+                                        {(alt.images?.[0] || alt.vendor.logoUrl) ? (
+                                            <Image
+                                                src={alt.images?.[0] || alt.vendor.logoUrl!}
+                                                alt={alt.name}
+                                                width={48}
+                                                height={48}
+                                                className="object-contain w-full h-full"
+                                            />
+                                        ) : (
+                                            <Package size={20} className="text-gray-300" strokeWidth={2} />
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[14px] font-black text-[#181725] truncate">{alt.name}</p>
+                                        <p className="text-[12px] font-bold text-[#53B175]">
+                                            {alt.vendor.businessName}
+                                            {alt.inventory && (
+                                                <span className="text-gray-400 ml-1">
+                                                    · {alt.inventory.qtyAvailable} in stock
+                                                </span>
+                                            )}
+                                        </p>
+                                    </div>
+                                    <Navigation size={16} className="text-gray-300 group-hover:text-[#53B175] shrink-0 transition-colors -rotate-45" strokeWidth={2.5} />
+                                </a>
+                            ))}
+                        </div>
+                    )}
+
+                    <button
+                        onClick={() => setShowAlternates(false)}
+                        className="mt-5 w-full py-3 rounded-2xl bg-gray-50 border border-gray-100 text-gray-500 font-black text-[13px] uppercase tracking-wider hover:bg-gray-100 transition-colors"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        )}
+    </>
     );
 });

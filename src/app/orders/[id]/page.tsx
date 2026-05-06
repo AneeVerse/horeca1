@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Home, Package, Store, Clock, CheckCircle2, XCircle, Truck, CreditCard, Star, Loader2, X, ShoppingCart, FileDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home, Package, Store, Clock, CheckCircle2, XCircle, Truck, CreditCard, Star, Loader2, X, ShoppingCart, FileDown, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useCart } from '@/context/CartContext';
@@ -133,17 +133,15 @@ export default function OrderDetailPage() {
 
     const handleReorder = () => {
         if (!order) return;
-        let added = 0;
-        for (const item of order.items) {
-            const product = allProducts.find(p => p.id === item.productId);
-            if (product) { addToCart(product, item.quantity); added++; }
-        }
-        if (added > 0) {
-            toast.success(`${added} item${added > 1 ? 's' : ''} added to cart`);
-            router.push('/cart');
-        } else {
-            toast.error('Products not found in current catalog');
-        }
+        // Navigate to a review-style reorder page where user can adjust qty before adding
+        router.push(`/order-lists/reorder?orderId=${order.id}&items=${encodeURIComponent(JSON.stringify(order.items.map((item: ApiOrderItem) => ({ 
+            productId: item.productId, 
+            productName: item.productName, 
+            quantity: item.quantity,
+            unitPrice: typeof item.unitPrice === 'string' ? parseFloat(item.unitPrice) : item.unitPrice,
+            image: getImg(item),
+            packSize: '',
+        }))))}&vendorId=${encodeURIComponent(order.vendor?.id || '')}&vendorName=${encodeURIComponent(order.vendor?.businessName || '')}`);
     };
 
     React.useEffect(() => {
@@ -428,6 +426,35 @@ export default function OrderDetailPage() {
                                 className="w-full flex items-center justify-center gap-2 py-3.5 bg-[#299e60] text-white text-[14px] font-black rounded-2xl shadow-lg shadow-green-200/50 hover:bg-[#22844f] transition-all active:scale-[0.99]">
                                 <ShoppingCart size={16} />
                                 Reorder All Items
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (!order) return;
+                                    try {
+                                        const res = await fetch('/api/v1/lists', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                name: `${order.vendor?.businessName || 'Vendor'} — Order ${order.orderNumber}`,
+                                                vendorId: order.vendor?.id || '',
+                                                items: order.items.map(item => ({
+                                                    productId: item.productId,
+                                                    defaultQty: item.quantity,
+                                                })),
+                                            }),
+                                        });
+                                        const json = await res.json();
+                                        if (json.data?.id) {
+                                            toast.success('Saved to My Order Lists');
+                                        } else {
+                                            toast.error('Failed to save list');
+                                        }
+                                    } catch { toast.error('Failed to save list'); }
+                                }}
+                                className="w-full py-3.5 border-2 border-[#299e60]/30 text-[#299e60] text-[14px] font-black rounded-2xl hover:bg-[#299e60]/5 transition-all flex items-center justify-center gap-2"
+                            >
+                                <ClipboardList size={16} />
+                                Save as Order List
                             </button>
                             {!order.review?.rating && !showRating && (
                                 <button onClick={() => setShowRating(true)}

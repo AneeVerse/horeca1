@@ -229,7 +229,7 @@ export default function CartPage() {
     const PAYMENT_METHODS = [
         {
             id: 'razorpay',
-            label: 'Razorpay',
+            label: 'Pay Online',
             sub: 'Cards, UPI, Netbanking & Wallets',
             badge: <Zap size={18} strokeWidth={2.5} />,
             badgeBg: 'bg-[#3395FF]',
@@ -237,24 +237,8 @@ export default function CartPage() {
             tag: 'RECOMMENDED',
         },
         {
-            id: 'cheque',
-            label: 'Pay by Cheque',
-            sub: 'Business cheque, processed in 2–3 days',
-            badge: <FileCheck size={18} strokeWidth={2.5} />,
-            badgeBg: 'bg-amber-50',
-            badgeText: 'text-amber-600',
-        },
-        {
-            id: 'cod',
-            label: 'Cash on Delivery',
-            sub: 'Pay in cash when order arrives',
-            badge: <Banknote size={18} strokeWidth={2.5} />,
-            badgeBg: 'bg-green-50',
-            badgeText: 'text-green-600',
-        },
-        {
             id: 'disco',
-            label: 'Credit (DISCO)',
+            label: 'DiSCCO Credit Line',
             sub: 'Buy now, pay later — up to 30 days',
             badge: <BadgePercent size={18} strokeWidth={2.5} />,
             badgeBg: 'bg-purple-50',
@@ -264,10 +248,26 @@ export default function CartPage() {
         {
             id: 'wallet',
             label: 'H1 Wallet',
-            sub: 'Available balance: ₹0.00',
+            sub: 'Pay from wallet balance',
             badge: <Wallet size={18} strokeWidth={2.5} />,
+            badgeBg: 'bg-yellow-50',
+            badgeText: 'text-yellow-600',
+        },
+        {
+            id: 'bank_transfer',
+            label: 'Bank Transfer',
+            sub: 'NEFT / RTGS / IMPS',
+            badge: <Banknote size={18} strokeWidth={2.5} />,
+            badgeBg: 'bg-green-50',
+            badgeText: 'text-green-600',
+        },
+        {
+            id: 'po_number',
+            label: 'PO Number',
+            sub: 'Enterprise purchase order',
+            badge: <FileText size={18} strokeWidth={2.5} />,
             badgeBg: 'bg-orange-50',
-            badgeText: 'text-orange-500',
+            badgeText: 'text-orange-600',
         },
     ] as const;
 
@@ -340,7 +340,10 @@ export default function CartPage() {
             } else {
                 selectedGroups.forEach(g => g.items.forEach(item => removeFromCart(item.productId)));
             }
-            setScreen('success');
+            // Redirect to order-success page with order IDs
+            const ids = createdOrders.map((o: { id: string }) => o.id).join(',');
+            const lastVendor = selectedGroups[selectedGroups.length - 1]?.vendorId || '';
+            router.push(`/order-success?ids=${ids}&vendor=${lastVendor}`);
         } catch (err: unknown) {
             setOrderError(err instanceof Error ? err.message : 'Order failed. Please try again.');
         } finally {

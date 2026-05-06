@@ -339,6 +339,23 @@ export default function VendorDetailsPage() {
                                       ? 'Revoke Verification'
                                       : 'Verify Vendor'}
                             </button>
+                            {!vendor.isVerified && (
+                                <button
+                                    onClick={() => {
+                                        const reason = window.prompt('Reason for rejection (will be sent to vendor):');
+                                        if (!reason || !reason.trim()) return;
+                                        fetch(`/api/v1/vendors/${vendor.id}`, {
+                                            method: 'PATCH',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ isActive: false, rejectionReason: reason.trim() }),
+                                        }).then(r => { if (r.ok) window.location.reload(); });
+                                    }}
+                                    className="mt-2 w-full py-2.5 rounded-[10px] text-[13px] font-bold transition-all shadow-sm flex items-center justify-center gap-2 bg-red-500 text-white hover:bg-red-600"
+                                >
+                                    <XCircle size={14} />
+                                    Reject Vendor
+                                </button>
+                            )}
                         </div>
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3">
