@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { CreditCard, Share2, ShoppingCart, Heart, ListPlus, Plus, Minus, Check, Navigation, X, Loader2, Package } from 'lucide-react';
+import React, { useState } from 'react';
+import { CreditCard, Share2, ShoppingCart, Plus, Minus, Navigation, X, Loader2, Package } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { toast } from 'sonner';
@@ -9,7 +9,6 @@ import { useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import type { VendorProduct } from '@/types';
 import { useCart } from '@/context/CartContext';
-import { useWishlist } from '@/context/WishlistContext';
 
 interface VendorProductCardProps {
     product: VendorProduct;
@@ -17,16 +16,7 @@ interface VendorProductCardProps {
 
 export const VendorProductCard = React.memo(function VendorProductCard({ product }: VendorProductCardProps) {
     const { addToCart, groups, updateQuantity } = useCart();
-    const { isInWishlist, toggleWishlist } = useWishlist();
     const { status: sessionStatus } = useSession();
-    const isLiked = isInWishlist(product.id);
-
-    // Save to Order List state
-    const [showListPicker, setShowListPicker] = useState(false);
-    const [lists, setLists] = useState<{ id: string; name: string }[]>([]);
-    const [listLoading, setListLoading] = useState(false);
-    const [addedToList, setAddedToList] = useState<string | null>(null);
-    const pickerRef = useRef<HTMLDivElement>(null);
 
     // ── OOS Alternate Vendors state ──
     const [showAlternates, setShowAlternates] = useState(false);
@@ -66,59 +56,6 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
         }
     };
 
-    useEffect(() => {
-        if (!showListPicker) return;
-        const handler = (e: MouseEvent) => {
-            if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-                setShowListPicker(false);
-            }
-        };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, [showListPicker]);
-
-    const openListPicker = async (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (sessionStatus !== 'authenticated') {
-            toast.error('Please log in to save to an order list');
-            return;
-        }
-        setShowListPicker(true);
-        setListLoading(true);
-        try {
-            const res = await fetch('/api/v1/lists');
-            const json = await res.json();
-            setLists(json.data || []);
-        } catch { setLists([]); }
-        finally { setListLoading(false); }
-    };
-
-    const addToList = async (listId: string, listName: string) => {
-        try {
-            await fetch(`/api/v1/lists/${listId}/items`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ productId: product.id, vendorId: product.vendorId, defaultQty: 1 }),
-            });
-            setAddedToList(listId);
-            toast.success(`Added to "${listName}"`);
-            setTimeout(() => { setShowListPicker(false); setAddedToList(null); }, 1200);
-        } catch { toast.error('Failed to add to list'); }
-    };
-
-    const createAndAdd = async () => {
-        try {
-            const res = await fetch('/api/v1/lists', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: `${product.name} List`, vendorId: product.vendorId }),
-            });
-            const json = await res.json();
-            if (json.data?.id) await addToList(json.data.id, json.data.name);
-        } catch { toast.error('Failed to create list'); }
-    };
-
     const vendorGroup = groups.find(g => g.vendorId === product.vendorId);
     const cartItem = vendorGroup?.items.find(i => i.productId === product.id);
     const currentQty = cartItem?.quantity || 0;
@@ -147,13 +84,13 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
     const bulkTiers = (product.bulkPrices ?? []).slice(0, 3);
 
     const isOutOfStock = product.stock === 0 || product.isActive === false;
-    
+
     const handleShare = async (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        
+
         const shareUrl = `${window.location.origin}/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`;
-        
+
         const shareData = {
             title: product.name,
             text: `Check out ${product.name} from ${product.vendorName} on Horeca1`,
@@ -190,47 +127,8 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                 }
             }}
         >
-            {/* Top Quick Actions - Glass Icons */}
-            <div className="absolute top-4 right-4 z-10 flex flex-col gap-2.5 translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-500">
-                <button
-                    className="p-2 rounded-xl backdrop-blur-md bg-white/70 border border-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:bg-[#FF4D4D]/10 hover:text-[#FF4D4D] transition-all"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleWishlist(product); }}
-                >
-                    <Heart size={15} className={cn("transition-colors", isLiked ? "text-red-500 fill-red-500" : "text-gray-400")} strokeWidth={2.5} />
-                </button>
-                {/* Save to Order List */}
-                <div className="relative" ref={pickerRef}>
-                    <button
-                        className="p-2 rounded-xl backdrop-blur-md bg-white/70 border border-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:bg-[#53B175]/10 hover:text-[#53B175] transition-all"
-                        onClick={openListPicker}
-                        title="Save to Order List"
-                    >
-                        <ListPlus size={15} className="text-gray-400" strokeWidth={2.5} />
-                    </button>
-                    {showListPicker && (
-                        <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden z-50">
-                            <p className="text-[11px] font-black text-gray-400 uppercase tracking-wider px-3 pt-3 pb-1">Save to List</p>
-                            {listLoading ? (
-                                <p className="text-[12px] text-gray-400 px-3 py-2">Loading...</p>
-                            ) : lists.length === 0 ? (
-                                <p className="text-[12px] text-gray-400 px-3 py-2">No lists yet</p>
-                            ) : (
-                                lists.map(l => (
-                                    <button key={l.id} onClick={() => addToList(l.id, l.name)}
-                                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 text-left transition-colors">
-                                        <span className="text-[13px] font-bold text-[#181725] truncate">{l.name}</span>
-                                        {addedToList === l.id && <Check size={14} className="text-[#53B175] shrink-0" />}
-                                    </button>
-                                ))
-                            )}
-                            <button onClick={createAndAdd}
-                                className="w-full flex items-center gap-2 px-3 py-2.5 border-t border-gray-50 hover:bg-[#53B175]/5 transition-colors">
-                                <Plus size={13} className="text-[#53B175]" strokeWidth={3} />
-                                <span className="text-[13px] font-black text-[#53B175]">Create & Add</span>
-                            </button>
-                        </div>
-                    )}
-                </div>
+            {/* Share Button Only */}
+            <div className="absolute top-4 right-4 z-10">
                 <button
                     className="p-2 rounded-xl backdrop-blur-md bg-white/70 border border-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:bg-[#53B175]/10 hover:text-[#53B175] transition-all"
                     onClick={handleShare}
@@ -330,7 +228,6 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                             )}
                             {!isOutOfStock && openStepperIdx === i && (
                                 <div className="flex items-center gap-1.5 shrink-0">
-                                    {/* Decrement */}
                                     <button
                                         onClick={(e) => {
                                             e.preventDefault();
@@ -348,13 +245,9 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                                     >
                                         <Minus size={12} strokeWidth={3} />
                                     </button>
-
-                                    {/* Qty display */}
                                     <span className="text-[12px] font-black text-[#181725] w-6 text-center tabular-nums">
                                         {stepperQty}
                                     </span>
-
-                                    {/* Increment */}
                                     <button
                                         onClick={(e) => {
                                             e.preventDefault();
@@ -365,8 +258,6 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                                     >
                                         <Plus size={12} strokeWidth={3} />
                                     </button>
-
-                                    {/* Confirm */}
                                     <button
                                         onClick={(e) => {
                                             handleAdd(e, stepperQty);
@@ -404,14 +295,14 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                         }
                     }}
                     className={cn(
-                        "w-full py-3 rounded-2xl font-black flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-95 border uppercase tracking-wide leading-none",
+                        "w-full py-4 md:py-3 rounded-2xl font-black text-[13px] md:text-[13px] flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-95 border uppercase tracking-[0.05em]",
                         isOutOfStock
-                            ? "text-[11px] md:text-[12px] bg-white text-[#53B175] border-[#53B175] hover:bg-[#f7fbf8] hover:shadow-[0_8px_25px_rgba(83,177,117,0.15)] cursor-pointer"
-                            : "text-[13px] bg-[#53B175] text-white border-[#53B175] shadow-[0_8px_25px_rgba(83,177,117,0.2)] hover:bg-[#489d67] hover:shadow-[0_12px_30px_rgba(83,177,117,0.3)]"
+                            ? "bg-white text-[#53B175] border-[#53B175] hover:bg-[#f7fbf8] hover:shadow-[0_8px_25px_rgba(83,177,117,0.15)] cursor-pointer"
+                            : "bg-[#53B175] text-white border-[#53B175] shadow-[0_8px_25px_rgba(83,177,117,0.2)] hover:bg-[#489d67] hover:shadow-[0_12px_30px_rgba(83,177,117,0.3)]"
                     )}
                 >
                     {isOutOfStock ? (
-                        <><Navigation size={12} strokeWidth={3} className="shrink-0 -rotate-45" /><span>Other Vendors</span></>
+                        <>Find at another vendor <Navigation size={15} strokeWidth={3} className="shrink-0 -rotate-45" /></>
                     ) : (
                         <>Quick Add<ShoppingCart size={15} strokeWidth={3} className="shrink-0" /></>
                     )}
@@ -425,28 +316,21 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                 className="fixed inset-0 z-[60] flex items-center justify-center p-4"
                 onClick={() => setShowAlternates(false)}
             >
-                {/* Backdrop */}
                 <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-                
-                {/* Modal */}
                 <div
                     className="relative bg-white rounded-[28px] border border-gray-100 shadow-[0_30px_80px_rgba(0,0,0,0.15)] w-full max-w-md p-6 z-10 max-h-[80vh] overflow-y-auto"
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="flex items-center justify-between mb-5">
                         <h3 className="text-[18px] font-black text-[#181725]">Alternate Vendors</h3>
-                        <button
-                            onClick={() => setShowAlternates(false)}
-                            className="p-2 rounded-xl bg-gray-50 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-                        >
+                        <button onClick={() => setShowAlternates(false)}
+                            className="p-2 rounded-xl bg-gray-50 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
                             <X size={18} strokeWidth={2.5} />
                         </button>
                     </div>
-
                     <p className="text-[13px] font-bold text-gray-500 mb-4">
                         &ldquo;{product.name}&rdquo; is available from these vendors:
                     </p>
-
                     {alternatesLoading ? (
                         <div className="flex items-center justify-center py-10">
                             <Loader2 size={24} className="animate-spin text-[#53B175]" strokeWidth={3} />
@@ -458,21 +342,12 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                     ) : (
                         <div className="flex flex-col gap-3">
                             {alternateVendors.map((alt) => (
-                                <a
-                                    key={alt.id}
-                                    href={`/vendor/${alt.vendor.id}`}
+                                <a key={alt.id} href={`/vendor/${alt.vendor.id}`}
                                     className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 hover:border-[#53B175]/30 hover:bg-[#f7fbf8] transition-all group"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
+                                    onClick={(e) => e.stopPropagation()}>
                                     <div className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center shrink-0 overflow-hidden">
-                                        {(alt.images?.[0] || alt.vendor.logoUrl) ? (
-                                            <Image
-                                                src={alt.images?.[0] || alt.vendor.logoUrl!}
-                                                alt={alt.name}
-                                                width={48}
-                                                height={48}
-                                                className="object-contain w-full h-full"
-                                            />
+                                        {alt.images?.[0] ? (
+                                            <Image src={alt.images[0]} alt={alt.name} width={48} height={48} className="object-cover w-full h-full" />
                                         ) : (
                                             <Package size={20} className="text-gray-300" strokeWidth={2} />
                                         )}
@@ -481,11 +356,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                                         <p className="text-[14px] font-black text-[#181725] truncate">{alt.name}</p>
                                         <p className="text-[12px] font-bold text-[#53B175]">
                                             {alt.vendor.businessName}
-                                            {alt.inventory && (
-                                                <span className="text-gray-400 ml-1">
-                                                    · {alt.inventory.qtyAvailable} in stock
-                                                </span>
-                                            )}
+                                            {alt.inventory && <span className="text-gray-400 ml-1">· {alt.inventory.qtyAvailable} in stock</span>}
                                         </p>
                                     </div>
                                     <Navigation size={16} className="text-gray-300 group-hover:text-[#53B175] shrink-0 transition-colors -rotate-45" strokeWidth={2.5} />
@@ -493,11 +364,8 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                             ))}
                         </div>
                     )}
-
-                    <button
-                        onClick={() => setShowAlternates(false)}
-                        className="mt-5 w-full py-3 rounded-2xl bg-gray-50 border border-gray-100 text-gray-500 font-black text-[13px] uppercase tracking-wider hover:bg-gray-100 transition-colors"
-                    >
+                    <button onClick={() => setShowAlternates(false)}
+                        className="mt-5 w-full py-3 rounded-2xl bg-gray-50 border border-gray-100 text-gray-500 font-black text-[13px] uppercase tracking-wider hover:bg-gray-100 transition-colors">
                         Close
                     </button>
                 </div>

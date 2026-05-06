@@ -57,8 +57,8 @@ export default function OrderListDetailPage() {
             dal.lists.getById(listId)
                 .then((list) => {
                     const typedList = list as OrderList | null;
-                    if (typedList) {
-                        setOrderList(typedList);
+if (typedList) {
+                        setOrderList({ ...typedList, items: typedList.items ?? [] });
                         setQuantities(Object.fromEntries((typedList.items || []).map((item) => [item.productId, 0])));
                     }
                     setIsLoading(false);
@@ -69,10 +69,10 @@ export default function OrderListDetailPage() {
             return;
         }
 
-        if (found) {
-            setOrderList(found);
+if (found) {
+            setOrderList({ ...found, items: found.items ?? [] });
             // All quantities start at 0 per spec
-            setQuantities(Object.fromEntries(found.items.map(item => [item.productId, 0])));
+            setQuantities(Object.fromEntries((found.items ?? []).map(item => [item.productId, 0])));
         }
         setIsLoading(false);
     }, [listId]);
@@ -80,7 +80,7 @@ export default function OrderListDetailPage() {
     // Poll fresh stock every 30s + on focus, so other shoppers' purchases lower stock here too.
     React.useEffect(() => {
         if (!orderList) return;
-        const vendorIds = Array.from(new Set(orderList.items.map(i => i.product?.vendorId).filter(Boolean) as string[]));
+        const vendorIds = Array.from(new Set((orderList.items ?? []).map(i => i.product?.vendorId).filter(Boolean) as string[]));
         if (vendorIds.length === 0) return;
 
         let cancelled = false;
@@ -142,7 +142,7 @@ export default function OrderListDetailPage() {
     const removeProduct = (productId: string) => {
         if (!orderList) return;
         const productName = orderList.items.find(i => i.productId === productId)?.product.name || 'Item';
-        const nextItems = orderList.items.filter(i => i.productId !== productId);
+        const nextItems = (orderList.items ?? []).filter(i => i.productId !== productId);
         const nextList: OrderList = { ...orderList, items: nextItems };
         setOrderList(nextList);
         setQuantities(prev => {
@@ -182,7 +182,7 @@ export default function OrderListDetailPage() {
     const handleFillLastQty = () => {
         if (!orderList) return;
         const newQtys = Object.fromEntries(
-            orderList.items.map(item => [item.productId, item.lastOrderedQty || item.defaultQty || 1])
+            (orderList.items ?? []).map(item => [item.productId, item.lastOrderedQty || item.defaultQty || 1])
         );
         setQuantities(newQtys);
         toast.info("Quantities filled based on last order", { duration: 1500 });
@@ -299,7 +299,7 @@ export default function OrderListDetailPage() {
     // Group items by vendor
     const vendorGroups: { vendorId: string; vendorName: string; vendorLogo?: string; items: typeof orderList.items }[] = [];
     const seen = new Set<string>();
-    orderList.items.forEach(item => {
+    (orderList.items ?? []).forEach(item => {
         const vid = item.product?.vendorId || orderList.vendorId;
         if (!seen.has(vid)) {
             seen.add(vid);
@@ -349,7 +349,7 @@ export default function OrderListDetailPage() {
                 {/* Items — collapsible */}
                 {expanded && (
                     <div className="divide-y divide-[#F5F5F5] border-t border-[#F0F0F0]">
-                        {group.items.map((item) => {
+                        {(group.items ?? []).map((item) => {
                             const qty = quantities[item.productId] || 0;
                             const itemTotal = item.product.price * qty;
                             const stock = stockOf(item.productId);

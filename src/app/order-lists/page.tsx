@@ -287,7 +287,7 @@ export default function OrderListsPage() {
                                 >
                                 {(() => {
                                     // Extract all unique vendor IDs from the items
-                                    const itemsVendorIds = Array.from(new Set(list.items.map(i => i.product?.vendorId || list.vendorId)));
+                                    const itemsVendorIds = Array.from(new Set((list.items ?? []).map(i => i.product?.vendorId || list.vendorId)));
                                     // Map them to their actual logos from vendorsList
                                     const logos = itemsVendorIds
                                         .map(vid => vendorsList.find(v => v.id === vid)?.logo)
@@ -341,7 +341,7 @@ export default function OrderListsPage() {
                                         </div>
                                         <p className="text-[10px] min-[340px]:text-[12px] md:text-[14px] text-[#299e60] font-bold mt-0.5 truncate">
                                             {(() => {
-                                                const itemsVendorIds = Array.from(new Set(list.items.map(i => i.product?.vendorId || list.vendorId)));
+                                                const itemsVendorIds = Array.from(new Set((list.items ?? []).map(i => i.product?.vendorId || list.vendorId)));
                                                 const firstVendor = vendorsList.find(v => v.id === itemsVendorIds[0]) || { name: list.vendorName };
                                                 return itemsVendorIds.length > 1 
                                                     ? `${firstVendor.name} +${itemsVendorIds.length - 1} more` 
@@ -350,7 +350,7 @@ export default function OrderListsPage() {
                                         </p>
                                         <div className="flex flex-wrap items-center gap-1.5 min-[340px]:gap-3 mt-1 min-[340px]:mt-1.5">
                                             <span className="text-[10px] min-[340px]:text-[12px] md:text-[13px] text-gray-400 font-semibold">
-                                                {list.items.length} items
+                                                {(list.items ?? []).length} items
                                             </span>
                                             {list.lastUsed ? (
                                                 <span className="flex items-center gap-0.5 text-[10px] min-[340px]:text-[12px] md:text-[13px] text-[#299e60] font-bold whitespace-nowrap">
@@ -374,7 +374,7 @@ export default function OrderListsPage() {
                                                 e.preventDefault();
                                                 e.stopPropagation();
                                                 // Quick Order Logic: Use defaultQty if defined, fallback to 1
-                                                list.items.forEach(item => {
+                                                (list.items ?? []).forEach(item => {
                                                     if (item.product) addToCart(item.product, item.defaultQty || 1);
                                                 });
                                                 
