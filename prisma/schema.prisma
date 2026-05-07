@@ -717,19 +717,22 @@ enum NotificationStatus {
 
 // The brand company entity (e.g. "Kissan", "Everest")
 model Brand {
-  id             String         @id @default(uuid()) @db.Uuid
-  userId         String         @unique @map("user_id") @db.Uuid
-  name           String         @unique @db.VarChar(255)
-  slug           String         @unique @db.VarChar(255)
-  description    String?        @db.Text
-  logoUrl        String?        @map("logo_url") @db.VarChar(512)
-  bannerUrl      String?        @map("banner_url") @db.VarChar(512)
-  website        String?        @db.VarChar(512)
-  tagline        String?        @db.VarChar(512)
-  approvalStatus ApprovalStatus @default(pending) @map("approval_status")
-  isActive       Boolean        @default(true) @map("is_active")
-  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id              String         @id @default(uuid()) @db.Uuid
+  userId          String         @unique @map("user_id") @db.Uuid
+  name            String         @unique @db.VarChar(255)
+  slug            String         @unique @db.VarChar(255)
+  description     String?        @db.Text
+  logoUrl         String?        @map("logo_url") @db.VarChar(512)
+  bannerUrl       String?        @map("banner_url") @db.VarChar(512)
+  website         String?        @db.VarChar(512)
+  tagline         String?        @db.VarChar(512)
+  categories      String[]       @default([]) @map("categories")
+  bgColor         String?        @map("bg_color") @db.VarChar(20)
+  showcaseImages  String[]       @default([]) @map("showcase_images")
+  approvalStatus  ApprovalStatus @default(pending) @map("approval_status")
+  isActive        Boolean        @default(true) @map("is_active")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   user            User                  @relation(fields: [userId], references: [id])
   masterProducts  BrandMasterProduct[]

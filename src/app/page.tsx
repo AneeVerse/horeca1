@@ -27,6 +27,8 @@ export default function Home() {
 
       {/* Continue Ordering: Recent vendors */}
       <ContinueOrdering />
+      {/* Top Rated Vendors */}
+      <TopRatedVendors />
 
       {/* Vendors Near You (Now Shop By Vendor) */}
       <NearbyVendors />
@@ -34,8 +36,7 @@ export default function Home() {
       {/* Frequently Ordered Vendors — shown for logged-in users */}
       <FrequentlyOrderedVendors />
 
-      {/* Top Rated Vendors */}
-      <TopRatedVendors />
+
 
       {/* Featured Deals: products with a real promo or MRP markdown */}
       <FeaturedDeals />
@@ -44,6 +45,7 @@ export default function Home() {
 
       {/* Categories */}
       <CategoryShowcase />
+
 
       {/* Shop By Store Alt (Design 2 - Popular Chains white clean style) */}
       {/* <ShopByStoreAlt /> */}

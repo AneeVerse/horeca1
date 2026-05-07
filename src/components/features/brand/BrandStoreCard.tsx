@@ -83,13 +83,16 @@ export function BrandStoreCard({
                 {categories.length > 0 && (
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 w-full px-1">
                         {categories.slice(0, 4).map((cat) => (
-                            <span
+                            // Stop propagation so clicking a category doesn't also navigate to brand store
+                            <Link
                                 key={cat}
-                                className="text-[11px] font-semibold italic text-[#1a1a5e] flex items-start gap-1 leading-snug"
+                                href={`/search?q=${encodeURIComponent(cat)}&brand=${encodeURIComponent(name)}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[11px] font-semibold italic text-[#1a1a5e] flex items-start gap-1 leading-snug hover:text-[#53B175] transition-colors"
                             >
                                 <span className="mt-[2px] shrink-0">•</span>
                                 <span className="truncate">{cat}</span>
-                            </span>
+                            </Link>
                         ))}
                     </div>
                 )}

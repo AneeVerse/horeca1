@@ -7,6 +7,9 @@ export const createBrandSchema = z.object({
   bannerUrl: z.string().url().optional(),
   website: z.string().url().optional(),
   tagline: z.string().max(512).optional(),
+  categories: z.array(z.string().max(80)).max(12).optional(),
+  bgColor: z.string().max(20).optional(),
+  showcaseImages: z.array(z.string().url()).max(5).optional(),
 });
 
 export const updateBrandSchema = createBrandSchema.partial();

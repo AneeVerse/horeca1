@@ -16,6 +16,9 @@ interface CreateBrandInput {
   bannerUrl?: string;
   website?: string;
   tagline?: string;
+  categories?: string[];
+  bgColor?: string;
+  showcaseImages?: string[];
 }
 
 interface UpdateBrandInput {
@@ -25,6 +28,9 @@ interface UpdateBrandInput {
   bannerUrl?: string;
   website?: string;
   tagline?: string;
+  categories?: string[];
+  bgColor?: string;
+  showcaseImages?: string[];
 }
 
 interface CreateBrandProductInput {
@@ -65,6 +71,9 @@ export class BrandService {
         logoUrl: true,
         bannerUrl: true,
         tagline: true,
+        categories: true,
+        bgColor: true,
+        showcaseImages: true,
         _count: { select: { masterProducts: { where: { isActive: true } } } },
       },
     });
@@ -80,6 +89,9 @@ export class BrandService {
         logo: b.logoUrl,
         banner: b.bannerUrl,
         tagline: b.tagline,
+        categories: b.categories,
+        bgColor: b.bgColor,
+        showcaseImages: b.showcaseImages,
         productCount: b._count.masterProducts,
       })),
       hasMore,
@@ -214,6 +226,9 @@ export class BrandService {
         bannerUrl: input.bannerUrl,
         website: input.website,
         tagline: input.tagline,
+        categories: input.categories ?? [],
+        bgColor: input.bgColor,
+        showcaseImages: input.showcaseImages ?? [],
       },
     });
 

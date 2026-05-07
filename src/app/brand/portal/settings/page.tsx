@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Check, Save, Users, Plus, Trash2, Crown, Shield, Edit3, Eye } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Image from 'next/image';
+import { Loader2, Check, Save, Users, Plus, Trash2, Crown, Shield, Edit3, Eye, Upload, X, Palette } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { toast } from 'sonner';
+
+const BG_PRESETS = ['#fff8e1','#fde8e8','#fdf6e3','#e8f5e9','#fce4ec','#fff3e0','#e3f2fd','#f3e5f5','#e8eaf6','#e0f2f1'];
 
 interface BrandProfile {
     id: string;
@@ -15,6 +18,9 @@ interface BrandProfile {
     logoUrl: string | null;
     bannerUrl: string | null;
     website: string | null;
+    categories: string[];
+    bgColor: string | null;
+    showcaseImages: string[];
     approvalStatus: string;
 }
 
@@ -43,7 +49,7 @@ export default function BrandSettingsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
-    const [form, setForm] = useState({ name: '', tagline: '', description: '', logoUrl: '', bannerUrl: '', website: '' });
+    const [form, setForm] = useState({ name: '', tagline: '', description: '', logoUrl: '' as string | null, bannerUrl: '' as string | null, website: '', categories: [] as string[], bgColor: '#f0faf4', showcaseImages: [] as string[] });
     const [error, setError] = useState<string | null>(null);
 
     // Team state
@@ -78,9 +84,12 @@ export default function BrandSettingsPage() {
                         name: json.data.name ?? '',
                         tagline: json.data.tagline ?? '',
                         description: json.data.description ?? '',
-                        logoUrl: json.data.logoUrl ?? '',
-                        bannerUrl: json.data.bannerUrl ?? '',
+                        logoUrl: json.data.logoUrl ?? null,
+                        bannerUrl: json.data.bannerUrl ?? null,
                         website: json.data.website ?? '',
+                        categories: json.data.categories ?? [],
+                        bgColor: json.data.bgColor ?? '#f0faf4',
+                        showcaseImages: json.data.showcaseImages ?? [],
                     });
                 }
             })
@@ -100,9 +109,12 @@ export default function BrandSettingsPage() {
                     name: form.name || undefined,
                     tagline: form.tagline || undefined,
                     description: form.description || undefined,
-                    logoUrl: form.logoUrl || undefined,
-                    bannerUrl: form.bannerUrl || undefined,
+                    logoUrl: form.logoUrl,
+                    bannerUrl: form.bannerUrl,
                     website: form.website || undefined,
+                    categories: form.categories,
+                    bgColor: form.bgColor,
+                    showcaseImages: form.showcaseImages,
                 }),
             });
             const json = await res.json();
@@ -171,13 +183,53 @@ export default function BrandSettingsPage() {
         return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="w-8 h-8 animate-spin text-[#53B175]" /></div>;
     }
 
-    const fields = [
-        { key: 'name', label: 'Brand Name', placeholder: 'Your brand name', required: true },
-        { key: 'tagline', label: 'Tagline', placeholder: 'Short brand description' },
-        { key: 'website', label: 'Website', placeholder: 'https://yourbrand.com' },
-        { key: 'logoUrl', label: 'Logo URL', placeholder: 'https://...' },
-        { key: 'bannerUrl', label: 'Banner URL', placeholder: 'https://...' },
-    ];
+    // ── Image upload helper ──────────────────────────────────
+    const uploadImage = async (file: File): Promise<string> => {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('folder', 'brands');
+        const res = await fetch('/api/v1/upload', { method: 'POST', body: fd });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error?.message || 'Upload failed');
+        return json.data.url as string;
+    };
+
+    const [catInput, setCatInput] = useState('');
+    const logoRef = useRef<HTMLInputElement>(null);
+    const bannerRef = useRef<HTMLInputElement>(null);
+    const showcaseRef = useRef<HTMLInputElement>(null);
+    const [uploadingLogo, setUploadingLogo] = useState(false);
+    const [uploadingBanner, setUploadingBanner] = useState(false);
+    const [uploadingShowcase, setUploadingShowcase] = useState(false);
+
+    const handleLogoFile = async (file: File) => {
+        setUploadingLogo(true);
+        try { setForm(p => ({ ...p, logoUrl: '' })); const url = await uploadImage(file); setForm(p => ({ ...p, logoUrl: url })); toast.success('Logo uploaded'); }
+        catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Upload failed'); }
+        finally { setUploadingLogo(false); }
+    };
+
+    const handleBannerFile = async (file: File) => {
+        setUploadingBanner(true);
+        try { const url = await uploadImage(file); setForm(p => ({ ...p, bannerUrl: url })); toast.success('Banner uploaded'); }
+        catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Upload failed'); }
+        finally { setUploadingBanner(false); }
+    };
+
+    const handleShowcaseFile = async (file: File) => {
+        if (form.showcaseImages.length >= 5) { toast.error('Max 5 showcase images'); return; }
+        setUploadingShowcase(true);
+        try { const url = await uploadImage(file); setForm(p => ({ ...p, showcaseImages: [...p.showcaseImages, url] })); toast.success('Image added'); }
+        catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Upload failed'); }
+        finally { setUploadingShowcase(false); }
+    };
+
+    const addCategory = () => {
+        const t = catInput.trim();
+        if (!t || form.categories.includes(t) || form.categories.length >= 12) return;
+        setForm(p => ({ ...p, categories: [...p.categories, t] }));
+        setCatInput('');
+    };
 
     return (
         <div className="max-w-[700px] mx-auto space-y-6 animate-in fade-in duration-500">
@@ -197,40 +249,154 @@ export default function BrandSettingsPage() {
                 </div>
             )}
 
-            {/* Brand Profile Form */}
-            <div className="bg-white rounded-[20px] border border-[#EEEEEE] p-6 space-y-5">
-                {fields.map(field => (
-                    <div key={field.key}>
-                        <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">
-                            {field.label}{field.required && ' *'}
-                        </label>
-                        <input
-                            type="text"
-                            value={form[field.key as keyof typeof form]}
-                            onChange={e => setForm(prev => ({ ...prev, [field.key]: e.target.value }))}
-                            placeholder={field.placeholder}
-                            className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-2.5 text-[14px] font-medium outline-none focus:border-[#53B175]/50 bg-[#FAFAFA] focus:bg-white transition-colors"
-                        />
+            {/* Basic info */}
+            <div className="bg-white rounded-[20px] border border-[#EEEEEE] p-6 space-y-4">
+                <h2 className="text-[15px] font-bold text-[#181725]">Brand Info</h2>
+                {[
+                    { key: 'name', label: 'Brand Name *', placeholder: 'Your brand name' },
+                    { key: 'tagline', label: 'Tagline', placeholder: 'Short brand description' },
+                    { key: 'website', label: 'Website', placeholder: 'https://yourbrand.com' },
+                ].map(f => (
+                    <div key={f.key}>
+                        <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">{f.label}</label>
+                        <input type="text" value={(form as Record<string, unknown>)[f.key] as string}
+                            onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                            placeholder={f.placeholder}
+                            className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-2.5 text-[14px] font-medium outline-none focus:border-[#53B175]/50 bg-[#FAFAFA] focus:bg-white transition-colors" />
                     </div>
                 ))}
                 <div>
                     <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">Description</label>
-                    <textarea
-                        value={form.description}
+                    <textarea value={form.description}
                         onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
-                        placeholder="Tell buyers about your brand..."
-                        rows={4}
-                        className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] font-medium outline-none focus:border-[#53B175]/50 bg-[#FAFAFA] focus:bg-white transition-colors resize-none"
-                    />
+                        placeholder="Tell buyers about your brand..." rows={3}
+                        className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] font-medium outline-none focus:border-[#53B175]/50 bg-[#FAFAFA] focus:bg-white transition-colors resize-none" />
                 </div>
-                {error && <p className="text-[13px] text-[#E74C3C] font-bold">{error}</p>}
-                <div className="flex items-center justify-end pt-2">
-                    <button onClick={handleSave} disabled={saving}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold disabled:opacity-60 hover:bg-[#3d9e41] transition-colors">
-                        {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />}
-                        {saved ? 'Saved!' : 'Save Changes'}
-                    </button>
+            </div>
+
+            {/* Images */}
+            <div className="bg-white rounded-[20px] border border-[#EEEEEE] p-6 space-y-5">
+                <h2 className="text-[15px] font-bold text-[#181725]">Images</h2>
+
+                {/* Logo */}
+                <div className="space-y-2">
+                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">Brand Logo <span className="font-normal normal-case text-gray-400">(square, 200×200px)</span></label>
+                    <div className="flex items-center gap-4">
+                        <div onClick={() => logoRef.current?.click()}
+                            className="w-[80px] h-[80px] rounded-xl border-2 border-dashed border-gray-200 hover:border-[#53B175] transition-colors cursor-pointer flex items-center justify-center overflow-hidden bg-gray-50 shrink-0">
+                            {uploadingLogo ? <Loader2 size={20} className="animate-spin text-[#53B175]" /> :
+                                form.logoUrl ? <Image src={form.logoUrl} alt="logo" width={80} height={80} className="object-cover w-full h-full" /> :
+                                <Upload size={20} className="text-gray-400" />}
+                        </div>
+                        <div className="flex-1 space-y-1">
+                            <button type="button" onClick={() => logoRef.current?.click()}
+                                className="text-[13px] font-bold text-[#53B175] hover:underline">Upload file</button>
+                            <input type="url" value={form.logoUrl ?? ''} onChange={e => setForm(p => ({ ...p, logoUrl: e.target.value || null }))}
+                                placeholder="Or paste URL…"
+                                className="w-full border border-[#EEEEEE] rounded-[8px] px-3 py-2 text-[12px] focus:outline-none focus:border-[#53B175]/50 bg-[#FAFAFA]" />
+                        </div>
+                        {form.logoUrl && <button type="button" onClick={() => setForm(p => ({ ...p, logoUrl: null }))} className="text-gray-400 hover:text-red-500"><X size={16} /></button>}
+                    </div>
+                    <input ref={logoRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoFile(f); e.target.value = ''; }} />
                 </div>
+
+                {/* Banner */}
+                <div className="space-y-2">
+                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">Store Banner <span className="font-normal normal-case text-gray-400">(1200×400px)</span></label>
+                    <div onClick={() => bannerRef.current?.click()}
+                        className={cn('relative border-2 border-dashed border-gray-200 hover:border-[#53B175] transition-colors cursor-pointer rounded-xl overflow-hidden',
+                            form.bannerUrl ? 'h-[120px]' : 'h-[80px] flex items-center justify-center bg-gray-50')}>
+                        {uploadingBanner ? <Loader2 size={20} className="animate-spin text-[#53B175]" /> :
+                            form.bannerUrl ? <>
+                                <Image src={form.bannerUrl} alt="banner" fill className="object-cover" sizes="700px" />
+                                <button type="button" onClick={e => { e.stopPropagation(); setForm(p => ({ ...p, bannerUrl: null })); }}
+                                    className="absolute top-2 right-2 w-6 h-6 bg-white/90 rounded-full flex items-center justify-center shadow"><X size={12} /></button>
+                            </> :
+                            <div className="flex items-center gap-2 text-gray-400"><Upload size={18} /><span className="text-[13px] font-medium">Click to upload banner</span></div>}
+                    </div>
+                    <input ref={bannerRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleBannerFile(f); e.target.value = ''; }} />
+                    <input type="url" value={form.bannerUrl ?? ''} onChange={e => setForm(p => ({ ...p, bannerUrl: e.target.value || null }))}
+                        placeholder="Or paste banner URL…"
+                        className="w-full border border-[#EEEEEE] rounded-[8px] px-3 py-2 text-[12px] focus:outline-none focus:border-[#53B175]/50 bg-[#FAFAFA]" />
+                </div>
+
+                {/* Showcase images */}
+                <div className="space-y-2">
+                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">Showcase Images <span className="font-normal normal-case text-gray-400">(first shows on brand card, max 5)</span></label>
+                    <div className="flex flex-wrap gap-3">
+                        {form.showcaseImages.map((img, i) => (
+                            <div key={i} className="relative w-[90px] h-[70px] rounded-xl overflow-hidden border border-gray-200">
+                                <Image src={img} alt="" fill className="object-cover" sizes="90px" />
+                                <button type="button" onClick={() => setForm(p => ({ ...p, showcaseImages: p.showcaseImages.filter((_, j) => j !== i) }))}
+                                    className="absolute top-1 right-1 w-5 h-5 bg-white/90 rounded-full flex items-center justify-center shadow">
+                                    <X size={10} className="text-gray-600" /></button>
+                            </div>
+                        ))}
+                        {form.showcaseImages.length < 5 && (
+                            <button type="button" onClick={() => showcaseRef.current?.click()}
+                                className="w-[90px] h-[70px] rounded-xl border-2 border-dashed border-gray-200 hover:border-[#53B175] transition-colors flex flex-col items-center justify-center gap-1 text-gray-400 hover:text-[#53B175]">
+                                {uploadingShowcase ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                                <span className="text-[10px] font-medium">{uploadingShowcase ? 'Uploading…' : 'Add'}</span>
+                            </button>
+                        )}
+                    </div>
+                    <input ref={showcaseRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleShowcaseFile(f); e.target.value = ''; }} />
+                </div>
+            </div>
+
+            {/* Card appearance */}
+            <div className="bg-white rounded-[20px] border border-[#EEEEEE] p-6 space-y-5">
+                <h2 className="text-[15px] font-bold text-[#181725]">Card Appearance</h2>
+
+                {/* bgColor */}
+                <div className="space-y-2">
+                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider flex items-center gap-1"><Palette size={12} /> Card Background Colour</label>
+                    <div className="flex flex-wrap gap-2">
+                        {BG_PRESETS.map(c => (
+                            <button key={c} type="button" onClick={() => setForm(p => ({ ...p, bgColor: c }))}
+                                className={cn('w-7 h-7 rounded-full border-2 transition-all', form.bgColor === c ? 'border-[#53B175] scale-110 shadow' : 'border-gray-200 hover:border-gray-400')}
+                                style={{ backgroundColor: c }} />
+                        ))}
+                        <input type="color" value={form.bgColor} onChange={e => setForm(p => ({ ...p, bgColor: e.target.value }))}
+                            className="w-7 h-7 rounded-full cursor-pointer border-2 border-gray-200" />
+                    </div>
+                    <div className="h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: form.bgColor }}>
+                        <span className="text-[10px] font-bold text-black/25">Card top preview</span>
+                    </div>
+                </div>
+
+                {/* Categories */}
+                <div className="space-y-2">
+                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">Categories <span className="font-normal normal-case text-gray-400">(shown on brand card, up to 12)</span></label>
+                    <div className="flex flex-wrap gap-2 min-h-[40px] p-2 border border-[#EEEEEE] rounded-[10px] bg-[#FAFAFA]">
+                        {form.categories.map(cat => (
+                            <span key={cat} className="flex items-center gap-1 bg-[#e8f5e9] text-[#2e7d46] text-[12px] font-semibold rounded-full px-3 py-1">
+                                {cat}
+                                <button type="button" onClick={() => setForm(p => ({ ...p, categories: p.categories.filter(c => c !== cat) }))} className="hover:text-red-500"><X size={10} /></button>
+                            </span>
+                        ))}
+                    </div>
+                    <div className="flex gap-2">
+                        <input type="text" placeholder="e.g. Dairy, Spices…" value={catInput}
+                            onChange={e => setCatInput(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCategory(); } }}
+                            className="flex-1 border border-[#EEEEEE] rounded-[10px] px-3 py-2 text-[13px] outline-none focus:border-[#53B175]/50 bg-[#FAFAFA] focus:bg-white" />
+                        <button type="button" onClick={addCategory}
+                            className="px-4 py-2 bg-[#53B175] text-white text-[13px] font-bold rounded-[10px] hover:bg-[#3d9e41] transition-colors">Add</button>
+                    </div>
+                </div>
+            </div>
+
+            {error && <p className="text-[13px] text-[#E74C3C] font-bold px-1">{error}</p>}
+            <div className="flex items-center justify-end">
+                <button onClick={handleSave} disabled={saving}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold disabled:opacity-60 hover:bg-[#3d9e41] transition-colors">
+                    {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />}
+                    {saved ? 'Saved!' : 'Save Changes'}
+                </button>
             </div>
 
             {/* Team Members */}

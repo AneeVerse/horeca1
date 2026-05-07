@@ -382,6 +382,13 @@ export default function AdminBrandsPage() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
+                                                    <Link
+                                                        href={`/admin/brands/${brand.id}`}
+                                                        className="flex items-center gap-1 h-[32px] px-3 bg-[#EEF8F1] text-[#299E60] rounded-[8px] text-[12px] font-bold hover:bg-[#299E60] hover:text-white transition-colors"
+                                                        title="Edit Brand"
+                                                    >
+                                                        <Package size={13} /> Edit
+                                                    </Link>
                                                     <button
                                                         onClick={() => viewBrandPortal(brand)}
                                                         className="flex items-center gap-1 h-[32px] px-3 bg-[#F0F4FF] text-[#3B82F6] rounded-[8px] text-[12px] font-bold hover:bg-[#3B82F6] hover:text-white transition-colors"
