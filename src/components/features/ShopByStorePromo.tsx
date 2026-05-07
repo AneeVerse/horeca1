@@ -1,85 +1,46 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { BrandStoreCard } from '@/components/features/brand/BrandStoreCard';
 
-// Google Favicons API (sz=256) — always returns an image for any domain, no auth.
-const gf = (domain: string) =>
-    `https://www.google.com/s2/favicons?sz=256&domain=${domain}`;
-
-const BRANDS: {
+interface ApiBrand {
+    id: string;
     name: string;
     slug: string;
-    logoUrl?: string;
-    productImages: string[];
+    logo: string | null;
+    banner: string | null;
+    tagline: string | null;
     categories: string[];
-    bgColor: string;
-}[] = [
-    {
-        name: 'Amul',
-        slug: 'amul',
-        logoUrl: gf('amul.com'),
-        productImages: [
-            'https://images.unsplash.com/photo-1589985270958-bf087b2d76ee?w=600&q=80',
-        ],
-        categories: ['Butter', 'Cheese', 'Ghee', 'Paneer'],
-        bgColor: '#fff8e1',
-    },
-    {
-        name: 'Kissan',
-        slug: 'kissan',
-        logoUrl: gf('kissan.in'),
-        productImages: [
-            'https://images.unsplash.com/photo-1597475681053-bfdfa8d28f5f?w=600&q=80',
-        ],
-        categories: ['Jams', 'Ketchup', 'Sauces', 'Squashes'],
-        bgColor: '#fde8e8',
-    },
-    {
-        name: 'Britannia',
-        slug: 'britannia',
-        logoUrl: gf('britanniaindustries.com'),
-        productImages: [
-            'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=600&q=80',
-        ],
-        categories: ['Biscuits', 'Bread', 'Cheese', 'Cake'],
-        bgColor: '#fdf6e3',
-    },
-    {
-        name: 'Veeba',
-        slug: 'veeba',
-        logoUrl: gf('veeba.in'),
-        productImages: [
-            'https://images.unsplash.com/photo-1559054663-e8d23213f55c?w=600&q=80',
-        ],
-        categories: ['Mayonnaise', 'Dressings', 'Sauces', 'Dips'],
-        bgColor: '#e8f5e9',
-    },
-    {
-        name: 'Tata Sampann',
-        slug: 'tata-sampann',
-        logoUrl: gf('tataconsumer.com'),
-        productImages: [
-            'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80',
-        ],
-        categories: ['Spices', 'Pulses', 'Atta', 'Salt'],
-        bgColor: '#fce4ec',
-    },
-    {
-        name: 'Maggi',
-        slug: 'maggi',
-        logoUrl: gf('nestle.com'),
-        productImages: [
-            'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=600&q=80',
-        ],
-        categories: ['Noodles', 'Ketchup', 'Soups', 'Sauces'],
-        bgColor: '#fff3e0',
-    },
-];
+    bgColor: string | null;
+    showcaseImages: string[];
+}
 
 export function ShopByStorePromo() {
+    const [brands, setBrands] = useState<ApiBrand[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetch('/api/v1/brands?limit=12')
+            .then(r => r.json())
+            .then(d => setBrands(d.data?.brands ?? []))
+            .catch(() => setBrands([]))
+            .finally(() => setLoading(false));
+    }, []);
+
+    // Hide section entirely if no approved brands — better than showing a fake list.
+    if (!loading && brands.length === 0) return null;
+
+    const cards = brands.map(b => ({
+        name: b.name,
+        slug: b.slug,
+        logoUrl: b.logo ?? undefined,
+        productImages: b.showcaseImages.length > 0 ? [b.showcaseImages[0]] : [],
+        categories: b.categories,
+        bgColor: b.bgColor ?? '#f0faf4',
+    }));
+
     return (
         <section className="w-full py-8 md:py-12">
             <div className="max-w-[var(--container-max)] mx-auto">
@@ -96,21 +57,31 @@ export function ShopByStorePromo() {
                     </Link>
                 </div>
 
-                {/* Mobile: horizontal scroll */}
-                <div className="md:hidden flex gap-3 overflow-x-auto pb-3 px-4 scrollbar-none snap-x snap-mandatory">
-                    {BRANDS.map((brand) => (
-                        <div key={brand.slug} className="snap-start shrink-0 w-[140px]">
-                            <BrandStoreCard {...brand} />
+                {loading ? (
+                    <div className="flex gap-3 px-4 md:px-[var(--container-padding)]">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="w-[140px] md:w-full h-[260px] bg-gray-100 rounded-[24px] animate-pulse shrink-0" />
+                        ))}
+                    </div>
+                ) : (
+                    <>
+                        {/* Mobile: horizontal scroll */}
+                        <div className="md:hidden flex gap-3 overflow-x-auto pb-3 px-4 scrollbar-none snap-x snap-mandatory">
+                            {cards.map((brand) => (
+                                <div key={brand.slug} className="snap-start shrink-0 w-[140px]">
+                                    <BrandStoreCard {...brand} />
+                                </div>
+                            ))}
                         </div>
-                    ))}
-                </div>
 
-                {/* Desktop: 6-column grid — portrait cards */}
-                <div className="hidden md:grid md:grid-cols-4 lg:grid-cols-6 gap-4 px-[var(--container-padding)]">
-                    {BRANDS.map((brand) => (
-                        <BrandStoreCard key={brand.slug} {...brand} />
-                    ))}
-                </div>
+                        {/* Desktop: 6-column grid — portrait cards */}
+                        <div className="hidden md:grid md:grid-cols-4 lg:grid-cols-6 gap-4 px-[var(--container-padding)]">
+                            {cards.map((brand) => (
+                                <BrandStoreCard key={brand.slug} {...brand} />
+                            ))}
+                        </div>
+                    </>
+                )}
             </div>
         </section>
     );

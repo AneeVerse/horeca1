@@ -3,15 +3,37 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, MapPin, Store, ArrowLeft, Search, X, AlertCircle } from 'lucide-react';
+import { ChevronLeft, MapPin, Store, ArrowLeft, Search, X, AlertCircle, Plus, Minus, ShoppingCart, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAddress } from '@/context/AddressContext';
+import { useCart } from '@/context/CartContext';
+import type { VendorProduct } from '@/types';
+
+interface BrandDistributor {
+    vendorId: string;
+    vendorName: string;
+    price: number;
+    basePrice: number;
+    taxPercent: number;
+    inStock: boolean;
+    stock: number;
+    distributorProductId: string;
+    distributorProductName: string;
+    packSize: string;
+    unit: string;
+    imageUrl: string | null;
+    priceSlabs: Array<{ minQty: number; maxQty: number | null; price: number }>;
+    servicesPincode?: boolean;
+}
 
 interface BrandProduct {
     id: string;
     name: string;
     image: string;
     category: string;
+    packSize?: string;
+    distributors: BrandDistributor[];
 }
 
 interface BrandVendor {
@@ -26,6 +48,7 @@ interface BrandVendor {
 
 interface BrandStoreData {
     id: string;
+    slug: string;
     name: string;
     bannerImage: string;
     tagline: string;
@@ -93,12 +116,15 @@ export function BrandStore({ brandId }: BrandStoreProps) {
     const router = useRouter();
     const { selectedAddress } = useAddress();
     const pincode = selectedAddress?.pincode;
+    const { addToCart, groups } = useCart();
     const [activeTab, setActiveTab] = useState<ActiveTab>('items');
     const [selectedProduct, setSelectedProduct] = useState<BrandProduct | null>(null);
     const [brand, setBrand] = useState<BrandStoreData | null>(null);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [showAllVendors, setShowAllVendors] = useState(false);
+    const [vendorPickerProduct, setVendorPickerProduct] = useState<BrandProduct | null>(null);
+    const [adding, setAdding] = useState<string | null>(null); // distributorProductId currently being added
 
     // Always fetch from the API — no client-side mock data anymore.
     // Pass pincode so the API can flag servicesPincode per vendor + return coverage stats.
@@ -114,15 +140,18 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                     const d = json.data;
                     setBrand({
                         id: d.id,
+                        slug: d.slug,
                         name: d.name,
                         bannerImage: d.banner ?? '',
                         tagline: d.tagline ?? '',
                         coverage: d.coverage ?? undefined,
-                        products: d.products.map((p: { id: string; name: string; image?: string; category: string }) => ({
+                        products: d.products.map((p: { id: string; name: string; image?: string; category: string; packSize?: string; distributors?: BrandDistributor[] }) => ({
                             id: p.id,
                             name: p.name,
                             image: p.image ?? '',
                             category: p.category,
+                            packSize: p.packSize ?? '',
+                            distributors: p.distributors ?? [],
                         })),
                         vendors: d.vendors.map((v: { id: string; name: string; logo?: string; pincodes?: string[]; productIds: string[]; prices: Record<string, string>; servicesPincode?: boolean }) => ({
                             id: v.id,
@@ -149,6 +178,65 @@ export function BrandStore({ brandId }: BrandStoreProps) {
             (p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
         );
     }, [brand, searchQuery]);
+
+    // Pick the cheapest in-stock serviceable distributor for a brand product.
+    // If none serviceable, falls back to cheapest in-stock regardless of pincode (so the
+    // user can still add and a "doesn't deliver to your pincode" guard kicks in at cart).
+    const pickBestDistributor = (product: BrandProduct): BrandDistributor | null => {
+        const inStock = product.distributors.filter(d => d.inStock);
+        if (inStock.length === 0) return null;
+        const serviceable = inStock.filter(d => d.servicesPincode !== false);
+        const pool = serviceable.length > 0 ? serviceable : inStock;
+        return pool.slice().sort((a, b) => a.price - b.price)[0];
+    };
+
+    const addBrandProductToCart = (product: BrandProduct, dist: BrandDistributor) => {
+        // Construct minimal VendorProduct shape needed by CartContext.addToCart
+        const vp: VendorProduct = {
+            id: dist.distributorProductId,
+            name: dist.distributorProductName,
+            // displayName = brand canonical (so cart sticky bar / product card UIs show brand wording).
+            // The cart page itself ignores displayName per Phase 1 decision (transactional integrity).
+            displayName: product.name,
+            brandName: brand?.name,
+            brandSlug: brand?.slug,
+            description: '',
+            price: dist.basePrice * (1 + dist.taxPercent / 100),
+            images: dist.imageUrl ? [dist.imageUrl] : (product.image ? [product.image] : []),
+            category: product.category,
+            packSize: dist.packSize || product.packSize || '',
+            unit: dist.unit || '',
+            stock: dist.stock,
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            vendorId: dist.vendorId,
+            vendorName: dist.vendorName,
+            taxPercent: dist.taxPercent,
+            bulkPrices: dist.priceSlabs.map(s => ({ minQty: s.minQty, price: s.price })),
+            creditBadge: false,
+            minOrderQuantity: dist.priceSlabs[0]?.minQty ?? 1,
+        };
+
+        setAdding(dist.distributorProductId);
+        try {
+            addToCart(vp, vp.minOrderQuantity);
+            toast.success(`Added ${product.name} from ${dist.vendorName}`);
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Failed to add');
+        } finally {
+            setTimeout(() => setAdding(null), 600);
+        }
+    };
+
+    // Resolve current cart qty for a given distributor product (so card shows +/- stepper after add)
+    const cartQtyFor = (distributorProductId: string): number => {
+        for (const g of groups) {
+            const item = g.items.find(i => i.productId === distributorProductId);
+            if (item) return item.quantity;
+        }
+        return 0;
+    };
 
     if (loading) {
         return (
@@ -395,30 +483,97 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                         )}
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
-                        {filteredProducts.map((product) => (
-                            <button
-                                key={product.id}
-                                onClick={() => handleProductClick(product)}
-                                className="text-left flex flex-col bg-white rounded-[18px] border border-gray-100 overflow-hidden hover:border-[#53B175]/40 hover:shadow-md active:scale-[0.97] transition-all duration-200"
-                            >
-                                <div className="w-full aspect-square bg-gray-50 overflow-hidden">
-                                    <img
-                                        src={product.image}
-                                        alt={product.name}
-                                        className="w-full h-full object-contain p-3"
-                                        onError={(e) => { (e.currentTarget as HTMLImageElement).src = fallbackSvg(100); }}
-                                    />
+                        {filteredProducts.map((product) => {
+                            const best = pickBestDistributor(product);
+                            const distCount = product.distributors.filter(d => d.inStock).length;
+                            const cartQty = best ? cartQtyFor(best.distributorProductId) : 0;
+                            const isAdding = best ? adding === best.distributorProductId : false;
+                            const noDistributors = product.distributors.length === 0;
+                            const allOOS = !noDistributors && product.distributors.every(d => !d.inStock);
+                            const noServiceable = pincode && !showAllVendors && best && best.servicesPincode === false;
+
+                            return (
+                                <div
+                                    key={product.id}
+                                    className="flex flex-col bg-white rounded-[18px] border border-gray-100 overflow-hidden hover:border-[#53B175]/40 hover:shadow-md transition-all duration-200"
+                                >
+                                    <button
+                                        onClick={() => handleProductClick(product)}
+                                        className="text-left"
+                                    >
+                                        <div className="w-full aspect-square bg-gray-50 overflow-hidden">
+                                            <img
+                                                src={product.image}
+                                                alt={product.name}
+                                                className="w-full h-full object-contain p-3"
+                                                onError={(e) => { (e.currentTarget as HTMLImageElement).src = fallbackSvg(100); }}
+                                            />
+                                        </div>
+                                        <div className="px-3 pt-2.5">
+                                            <p className="text-[12px] font-black text-[#181725] line-clamp-2 leading-tight">
+                                                {product.name}
+                                            </p>
+                                            <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tight">
+                                                {product.packSize || product.category}
+                                            </p>
+                                        </div>
+                                    </button>
+
+                                    {/* ADD area */}
+                                    <div className="px-3 pb-3 pt-2 mt-auto space-y-1.5">
+                                        {best ? (
+                                            <>
+                                                <div className="flex items-baseline justify-between gap-1">
+                                                    <span className="text-[14px] font-[1000] text-[#181725]">₹{best.price}</span>
+                                                    {distCount > 1 && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setVendorPickerProduct(product); }}
+                                                            className="text-[10px] font-bold text-[#53B175] hover:underline"
+                                                        >
+                                                            {distCount} distributors
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {cartQty > 0 ? (
+                                                    <div className="flex items-center justify-between gap-1 bg-[#EEF8F1] rounded-lg px-2 py-1">
+                                                        <span className="text-[11px] font-bold text-[#53B175]">In cart: {cartQty}</span>
+                                                        <Link href="/cart" className="text-[10px] font-bold text-[#53B175] hover:underline flex items-center gap-0.5">
+                                                            <ShoppingCart size={11} /> View
+                                                        </Link>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); addBrandProductToCart(product, best); }}
+                                                        disabled={isAdding}
+                                                        className={cn(
+                                                            'w-full py-1.5 rounded-lg text-[12px] font-bold transition-all flex items-center justify-center gap-1',
+                                                            noServiceable
+                                                                ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                                                : 'bg-[#53B175] text-white hover:bg-[#3d9e5f]',
+                                                            isAdding && 'opacity-60'
+                                                        )}
+                                                    >
+                                                        {isAdding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} strokeWidth={3} />}
+                                                        {isAdding ? 'Adding…' : (noServiceable ? 'Add anyway' : 'Add')}
+                                                    </button>
+                                                )}
+                                                <p className="text-[9px] text-gray-400 font-semibold truncate text-center">
+                                                    From {best.vendorName}
+                                                </p>
+                                            </>
+                                        ) : noDistributors ? (
+                                            <button disabled className="w-full py-1.5 rounded-lg text-[11px] font-bold bg-gray-50 text-gray-400 cursor-not-allowed">
+                                                No distributors yet
+                                            </button>
+                                        ) : allOOS ? (
+                                            <button disabled className="w-full py-1.5 rounded-lg text-[11px] font-bold bg-red-50 text-red-500 cursor-not-allowed">
+                                                Out of stock
+                                            </button>
+                                        ) : null}
+                                    </div>
                                 </div>
-                                <div className="px-3 py-2.5">
-                                    <p className="text-[12px] font-black text-[#181725] line-clamp-2 leading-tight">
-                                        {product.name}
-                                    </p>
-                                    <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tight">
-                                        {product.category}
-                                    </p>
-                                </div>
-                            </button>
-                        ))}
+                            );
+                        })}
                     </div>
                     </>
                 )}
@@ -504,6 +659,53 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                     </div>
                 )}
             </div>
+
+            {/* Vendor picker modal — pick a distributor to ADD from */}
+            {vendorPickerProduct && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setVendorPickerProduct(null)}>
+                    <div className="bg-white rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-[15px] font-bold text-[#181725]">{vendorPickerProduct.name}</h3>
+                                <p className="text-[12px] text-gray-500 mt-0.5">Pick a distributor to order from</p>
+                            </div>
+                            <button onClick={() => setVendorPickerProduct(null)} className="p-2 hover:bg-gray-100 rounded-xl"><X size={18} /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+                            {vendorPickerProduct.distributors
+                                .slice()
+                                .sort((a, b) => Number(b.servicesPincode !== false) - Number(a.servicesPincode !== false) || a.price - b.price)
+                                .map((dist) => {
+                                    const isAdding = adding === dist.distributorProductId;
+                                    return (
+                                        <div key={dist.distributorProductId} className="p-4 flex items-center gap-3">
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-[13px] font-bold text-[#181725] truncate">{dist.vendorName}</p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-[16px] font-[1000] text-[#53B175]">₹{dist.price}</span>
+                                                    {!dist.inStock && <span className="text-[10px] font-bold text-red-500">Out of stock</span>}
+                                                    {pincode && dist.servicesPincode === false && <span className="text-[10px] font-bold text-amber-600">Doesn&rsquo;t deliver to {pincode}</span>}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => { addBrandProductToCart(vendorPickerProduct, dist); setVendorPickerProduct(null); }}
+                                                disabled={!dist.inStock || isAdding}
+                                                className={cn(
+                                                    'px-3 py-1.5 rounded-lg text-[12px] font-bold flex items-center gap-1 transition-colors shrink-0',
+                                                    dist.inStock ? 'bg-[#53B175] text-white hover:bg-[#3d9e5f]' : 'bg-gray-100 text-gray-400 cursor-not-allowed',
+                                                    isAdding && 'opacity-60'
+                                                )}
+                                            >
+                                                {isAdding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} strokeWidth={3} />}
+                                                Add
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

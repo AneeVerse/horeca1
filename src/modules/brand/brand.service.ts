@@ -123,7 +123,10 @@ export class BrandService {
                     basePrice: true,
                     taxPercent: true,
                     imageUrl: true,
+                    packSize: true,
+                    unit: true,
                     inventory: { select: { qtyAvailable: true } },
+                    priceSlabs: { orderBy: { minQty: 'asc' }, select: { minQty: true, maxQty: true, price: true } },
                     vendor: {
                       select: {
                         id: true,
@@ -183,9 +186,22 @@ export class BrandService {
 
         return {
           vendorId: v.id,
+          vendorName: v.businessName,
           price: Math.round(priceWithTax * 100) / 100,
+          basePrice: Number(m.distributorProduct.basePrice),
+          taxPercent: Number(m.distributorProduct.taxPercent),
           inStock: (m.distributorProduct.inventory?.qtyAvailable ?? 0) > 0,
+          stock: m.distributorProduct.inventory?.qtyAvailable ?? 0,
           distributorProductId: m.distributorProduct.id,
+          distributorProductName: m.distributorProduct.name,
+          packSize: m.distributorProduct.packSize ?? '',
+          unit: m.distributorProduct.unit ?? '',
+          imageUrl: m.distributorProduct.imageUrl,
+          priceSlabs: m.distributorProduct.priceSlabs.map(s => ({
+            minQty: Number(s.minQty),
+            maxQty: s.maxQty != null ? Number(s.maxQty) : null,
+            price: Number(s.price),
+          })),
           servicesPincode,
         };
       }).filter(Boolean);

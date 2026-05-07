@@ -2,27 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Store } from 'lucide-react';
 import { BrandStoreCard } from '@/components/features/brand/BrandStoreCard';
-
-const gf = (domain: string) =>
-    `https://www.google.com/s2/favicons?sz=256&domain=${domain}`;
-
-// Seed fallback shown while DB brands load (or if none approved yet)
-const SEED_BRANDS = [
-    { name: 'Amul', slug: 'amul', logoUrl: gf('amul.com'), productImages: ['https://images.unsplash.com/photo-1589985270958-bf087b2d76ee?w=600&q=80'], categories: ['Butter', 'Cheese', 'Ghee', 'Paneer'], bgColor: '#fff8e1' },
-    { name: 'Kissan', slug: 'kissan', logoUrl: gf('kissan.in'), productImages: ['https://images.unsplash.com/photo-1597475681053-bfdfa8d28f5f?w=600&q=80'], categories: ['Jams', 'Ketchup', 'Sauces', 'Squashes'], bgColor: '#fde8e8' },
-    { name: 'Britannia', slug: 'britannia', logoUrl: gf('britanniaindustries.com'), productImages: ['https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=600&q=80'], categories: ['Biscuits', 'Bread', 'Cheese', 'Cake'], bgColor: '#fdf6e3' },
-    { name: 'Veeba', slug: 'veeba', logoUrl: gf('veeba.in'), productImages: ['https://images.unsplash.com/photo-1559054663-e8d23213f55c?w=600&q=80'], categories: ['Mayonnaise', 'Dressings', 'Sauces', 'Dips'], bgColor: '#e8f5e9' },
-    { name: 'Tata Sampann', slug: 'tata-sampann', logoUrl: gf('tataconsumer.com'), productImages: ['https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80'], categories: ['Spices', 'Pulses', 'Atta', 'Salt'], bgColor: '#fce4ec' },
-    { name: 'Maggi', slug: 'maggi', logoUrl: gf('nestle.com'), productImages: ['https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=600&q=80'], categories: ['Noodles', 'Ketchup', 'Soups', 'Sauces'], bgColor: '#fff3e0' },
-    { name: 'MDH', slug: 'mdh', logoUrl: gf('mdhspices.com'), productImages: ['https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=600&q=80'], categories: ['Spices', 'Masala', 'Blends', 'Herbs'], bgColor: '#fff3e0' },
-    { name: 'Dabur', slug: 'dabur', logoUrl: gf('dabur.com'), productImages: ['https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=600&q=80'], categories: ['Honey', 'Juices', 'Syrups', 'Health'], bgColor: '#e8f5e9' },
-    { name: 'Haldirams', slug: 'haldirams', logoUrl: gf('haldirams.com'), productImages: ['https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=600&q=80'], categories: ['Namkeen', 'Sweets', 'Ready-to-eat', 'Snacks'], bgColor: '#fff8e1' },
-    { name: 'ITC Foods', slug: 'itc-foods', logoUrl: gf('itcportal.com'), productImages: ['https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600&q=80'], categories: ['Aashirvaad', 'Sunfeast', 'Bingo', 'Yippee'], bgColor: '#fde8e8' },
-    { name: 'Nestle', slug: 'nestle', logoUrl: gf('nestle.com'), productImages: ['https://images.unsplash.com/photo-1606312619070-d48b4c652a52?w=600&q=80'], categories: ['Dairy', 'Beverages', 'Chocolates', 'Baby Food'], bgColor: '#fdf6e3' },
-    { name: 'Mother Dairy', slug: 'mother-dairy', logoUrl: gf('motherdairy.com'), productImages: ['https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=600&q=80'], categories: ['Milk', 'Paneer', 'Dahi', 'Ice Cream'], bgColor: '#e3f2fd' },
-];
 
 interface ApiBrand {
     id: string;
@@ -37,9 +18,18 @@ interface ApiBrand {
     productCount: number;
 }
 
+interface Card {
+    name: string;
+    slug: string;
+    logoUrl?: string;
+    productImages: string[];
+    categories: string[];
+    bgColor: string;
+}
+
 export default function BrandsPage() {
     const router = useRouter();
-    const [brands, setBrands] = useState(SEED_BRANDS);
+    const [brands, setBrands] = useState<Card[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -47,19 +37,16 @@ export default function BrandsPage() {
             .then(r => r.json())
             .then(d => {
                 const apiBrands: ApiBrand[] = d.data?.brands ?? [];
-                if (apiBrands.length > 0) {
-                    setBrands(apiBrands.map(b => ({
-                        name: b.name,
-                        slug: b.slug,
-                        logoUrl: b.logo ?? '',
-                        productImages: b.showcaseImages.length > 0 ? [b.showcaseImages[0]] : [],
-                        categories: b.categories,
-                        bgColor: b.bgColor ?? '#f0faf4',
-                    })));
-                }
-                // if API returns 0 approved brands, keep seed fallback
+                setBrands(apiBrands.map(b => ({
+                    name: b.name,
+                    slug: b.slug,
+                    logoUrl: b.logo ?? undefined,
+                    productImages: b.showcaseImages.length > 0 ? [b.showcaseImages[0]] : [],
+                    categories: b.categories,
+                    bgColor: b.bgColor ?? '#f0faf4',
+                })));
             })
-            .catch(() => {})
+            .catch(() => setBrands([]))
             .finally(() => setLoading(false));
     }, []);
 
@@ -87,6 +74,16 @@ export default function BrandsPage() {
                 {loading ? (
                     <div className="flex items-center justify-center py-32">
                         <div className="w-10 h-10 border-[3px] border-[#53B175]/10 border-t-[#53B175] rounded-full animate-spin" />
+                    </div>
+                ) : brands.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-32 text-center">
+                        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                            <Store size={32} className="text-gray-300" />
+                        </div>
+                        <h3 className="text-[18px] font-black text-[#181725] mb-1">No brands yet</h3>
+                        <p className="text-gray-400 text-[14px] max-w-md">
+                            Brand stores will appear here once approved brands list their canonical product catalogs. Check back soon.
+                        </p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 min-[500px]:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
