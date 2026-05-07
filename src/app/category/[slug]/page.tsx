@@ -7,10 +7,9 @@ import { ArrowLeft, Search, Star, Clock, ShoppingBag, ChevronDown } from 'lucide
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { dal } from '@/lib/dal';
-import type { Category, VendorProduct } from '@/types';
+import type { Category } from '@/types';
 import { VENDOR_COVERS } from '@/components/features/homepage/VendorCardShared';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
-import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
 import { useAddress } from '@/context/AddressContext';
 
 interface VendorSummary {
@@ -32,7 +31,6 @@ function CategoryVendorsContent() {
     const [category, setCategory] = useState<Category | null>(null);
     const [allCategories, setAllCategories] = useState<Category[]>([]);
     const [vendors, setVendors] = useState<VendorSummary[]>([]);
-    const [topProducts, setTopProducts] = useState<VendorProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const [sortBy, setSortBy] = useState<'relevance' | 'rating' | 'mov_low' | 'mov_high'>('relevance');
     const [servicingIds, setServicingIds] = useState<Set<string> | null>(null);
@@ -45,13 +43,9 @@ function CategoryVendorsContent() {
 
         Promise.resolve()
             .then(() => setLoading(true))
-            .then(() => Promise.all([
-                dal.categories.list(),
-                dal.search.query(slug.replace(/-/g, ' '), {}),
-            ]))
-            .then(async ([cats, searchRes]) => {
+            .then(() => dal.categories.list())
+            .then(async (cats) => {
                 setAllCategories(cats);
-                setTopProducts(searchRes.products.slice(0, 5));
                 const found = cats.find(c =>
                     c.slug === slug ||
                     c.slug.toLowerCase() === slug.toLowerCase() ||
@@ -63,7 +57,7 @@ function CategoryVendorsContent() {
                     setVendors(vendorList as VendorSummary[]);
                 }
             })
-            .catch(() => { setCategory(null); setVendors([]); setTopProducts([]); })
+            .catch(() => { setCategory(null); setVendors([]); })
             .finally(() => setLoading(false));
     }, [slug]);
 
@@ -212,21 +206,6 @@ function CategoryVendorsContent() {
                         </Link>
                     ))}
                 </div>
-
-                {/* ── QUICK ACCESS PRODUCTS (top 6) ── */}
-                {topProducts.length > 0 && (
-                    <div className="mb-8">
-                        <div className="flex items-center justify-between mb-3">
-                            <h2 className="text-[16px] font-black text-[#181725]">Quick Access</h2>
-                            <span className="text-[12px] text-gray-400 font-bold">Tap a vendor below to see full catalog</span>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                            {topProducts.map(p => (
-                                <VendorProductCard key={p.id} product={p} />
-                            ))}
-                        </div>
-                    </div>
-                )}
 
                 {/* ── SORT BAR ── */}
                 {vendors.length > 0 && (
