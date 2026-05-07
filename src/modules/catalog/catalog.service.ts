@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
+import { runMappingForVendorProduct } from '@/modules/brand/brand-mapper';
 
 export class CatalogService {
   async getVendorProducts(
@@ -27,6 +28,18 @@ export class CatalogService {
         inventory: { select: { qtyAvailable: true, qtyReserved: true } },
         category: { select: { id: true, name: true, slug: true } },
         vendor: { select: { id: true, businessName: true, logoUrl: true } },
+        brandMappings: {
+          where: { status: { in: ['verified', 'auto_mapped'] } },
+          select: {
+            brandMasterProduct: {
+              select: {
+                name: true,
+                brand: { select: { name: true, slug: true } },
+              },
+            },
+          },
+          take: 1,
+        },
       },
     });
 
@@ -142,9 +155,16 @@ export class CatalogService {
       }
     }
 
-    return prisma.product.create({
+    const created = await prisma.product.create({
       data: { ...productData, vendorId, basePrice: productData.basePrice, approvalStatus },
     });
+
+    // Fire-and-forget: score against brand catalogs if approved
+    if (approvalStatus === 'approved') {
+      runMappingForVendorProduct(created.id).catch(() => {});
+    }
+
+    return created;
   }
 
   async updateProduct(productId: string, vendorId: string, data: Record<string, unknown>) {
@@ -183,6 +203,8 @@ export class CatalogService {
         approvedBy: adminUserId,
       });
     }
+    // Fire-and-forget: score against brand catalogs once approved
+    runMappingForVendorProduct(product.id).catch(() => {});
     return product;
   }
 

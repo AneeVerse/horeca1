@@ -12,6 +12,8 @@ export const AUDIT_ACTIONS = {
   adminTeamInvite: 'admin_team.invite',
   adminTeamRoleChange: 'admin_team.role_change',
   adminTeamRemove: 'admin_team.remove',
+  brandMappingVerified: 'brand_mapping.verified',
+  brandMappingRejected: 'brand_mapping.rejected',
 } as const;
 
 export type AuditAction = typeof AUDIT_ACTIONS[keyof typeof AUDIT_ACTIONS];

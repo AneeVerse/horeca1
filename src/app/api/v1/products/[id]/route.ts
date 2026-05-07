@@ -31,6 +31,18 @@ export async function GET(req: NextRequest) {
         vendor: { select: { id: true, businessName: true, slug: true, logoUrl: true, rating: true, minOrderValue: true } },
         priceSlabs: { orderBy: { minQty: 'asc' }, select: { minQty: true, maxQty: true, price: true } },
         inventory: { select: { qtyAvailable: true } },
+        brandMappings: {
+          where: { status: { in: ['verified', 'auto_mapped'] } },
+          select: {
+            brandMasterProduct: {
+              select: {
+                name: true,
+                brand: { select: { name: true, slug: true } },
+              },
+            },
+          },
+          take: 1,
+        },
       },
     });
 

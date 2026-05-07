@@ -40,7 +40,10 @@ export interface VendorSummary {
 
 export interface Product {
     id: string;
-    name: string;
+    name: string;                // raw distributor product name (used in cart, orders, invoices)
+    displayName?: string;        // brand-canonical name when mapped, else equals name (used in discovery)
+    brandName?: string;          // brand name when mapped (e.g. "Amul")
+    brandSlug?: string;          // brand slug for /brand/[slug] link
     description: string;
     price: number;
     originalPrice?: number;

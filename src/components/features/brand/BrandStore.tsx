@@ -3,8 +3,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, MapPin, Store, ArrowLeft, Search, X } from 'lucide-react';
+import { ChevronLeft, MapPin, Store, ArrowLeft, Search, X, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAddress } from '@/context/AddressContext';
 
 interface BrandProduct {
     id: string;
@@ -20,6 +21,7 @@ interface BrandVendor {
     location: string;
     productIds: string[];
     prices: Record<string, string>;
+    servicesPincode?: boolean;
 }
 
 interface BrandStoreData {
@@ -29,6 +31,7 @@ interface BrandStoreData {
     tagline: string;
     products: BrandProduct[];
     vendors: BrandVendor[];
+    coverage?: { pincode: string | null; servicedVendorCount: number; totalVendorCount: number };
 }
 
 interface BrandStoreProps {
@@ -88,46 +91,54 @@ function TabBar({
 
 export function BrandStore({ brandId }: BrandStoreProps) {
     const router = useRouter();
+    const { selectedAddress } = useAddress();
+    const pincode = selectedAddress?.pincode;
     const [activeTab, setActiveTab] = useState<ActiveTab>('items');
     const [selectedProduct, setSelectedProduct] = useState<BrandProduct | null>(null);
     const [brand, setBrand] = useState<BrandStoreData | null>(null);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [showAllVendors, setShowAllVendors] = useState(false);
 
-    // Always fetch from the API — no client-side mock data anymore
+    // Always fetch from the API — no client-side mock data anymore.
+    // Pass pincode so the API can flag servicesPincode per vendor + return coverage stats.
     useEffect(() => {
         Promise.resolve().then(() => setLoading(true));
-        fetch(`/api/v1/brands/${brandId}`)
+        const url = pincode && !showAllVendors
+            ? `/api/v1/brands/${brandId}?pincode=${encodeURIComponent(pincode)}`
+            : `/api/v1/brands/${brandId}`;
+        fetch(url)
             .then(r => r.json())
             .then(json => {
                 if (json.success && json.data) {
                     const d = json.data;
-                    // Shape API response → BrandStoreData
                     setBrand({
                         id: d.id,
                         name: d.name,
                         bannerImage: d.banner ?? '',
                         tagline: d.tagline ?? '',
+                        coverage: d.coverage ?? undefined,
                         products: d.products.map((p: { id: string; name: string; image?: string; category: string }) => ({
                             id: p.id,
                             name: p.name,
                             image: p.image ?? '',
                             category: p.category,
                         })),
-                        vendors: d.vendors.map((v: { id: string; name: string; logo?: string; pincodes?: string[]; productIds: string[]; prices: Record<string, string> }) => ({
+                        vendors: d.vendors.map((v: { id: string; name: string; logo?: string; pincodes?: string[]; productIds: string[]; prices: Record<string, string>; servicesPincode?: boolean }) => ({
                             id: v.id,
                             name: v.name,
                             logo: v.logo ?? '',
                             location: v.pincodes?.[0] ?? 'India',
                             productIds: v.productIds,
                             prices: v.prices,
+                            servicesPincode: v.servicesPincode,
                         })),
                     });
                 }
             })
             .catch(() => {/* stay null, show not-found */})
             .finally(() => setLoading(false));
-    }, [brandId]);
+    }, [brandId, pincode, showAllVendors]);
 
     // Must be before early returns (hook rules)
     const filteredProducts = useMemo(() => {
@@ -311,6 +322,58 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                 TAB CONTENT
             ══════════════════════════════════════════ */}
             <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-6">
+
+                {/* Pincode coverage banner */}
+                {pincode && brand.coverage && !showAllVendors && (
+                    brand.coverage.servicedVendorCount === 0 ? (
+                        <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
+                            <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                                <p className="text-[13px] font-bold text-amber-900">
+                                    No distributors in {pincode} yet
+                                </p>
+                                <p className="text-[12px] text-amber-700 mt-0.5">
+                                    Browse {brand.name}&rsquo;s catalog below — we&rsquo;ll let you know when a distributor in your pincode stocks these products.
+                                </p>
+                                {brand.coverage.totalVendorCount > 0 && (
+                                    <button
+                                        onClick={() => setShowAllVendors(true)}
+                                        className="mt-2 text-[12px] font-bold text-amber-900 underline hover:text-amber-700"
+                                    >
+                                        Show all {brand.coverage.totalVendorCount} distributors anyway
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="mb-5 px-4 py-2.5 bg-[#EEF8F1] border border-[#53B175]/20 rounded-2xl flex items-center gap-2">
+                            <span className="text-[12px] text-[#2e7d46] font-semibold">
+                                Showing {brand.coverage.servicedVendorCount} distributor{brand.coverage.servicedVendorCount !== 1 ? 's' : ''} delivering to {pincode}
+                            </span>
+                            {brand.coverage.totalVendorCount > brand.coverage.servicedVendorCount && (
+                                <button
+                                    onClick={() => setShowAllVendors(true)}
+                                    className="ml-auto text-[12px] font-bold text-[#53B175] hover:underline"
+                                >
+                                    Show all {brand.coverage.totalVendorCount}
+                                </button>
+                            )}
+                        </div>
+                    )
+                )}
+                {showAllVendors && pincode && (
+                    <div className="mb-5 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl flex items-center justify-between gap-2">
+                        <span className="text-[12px] text-gray-600 font-semibold">
+                            Showing all distributors (some may not deliver to {pincode})
+                        </span>
+                        <button
+                            onClick={() => setShowAllVendors(false)}
+                            className="text-[12px] font-bold text-[#53B175] hover:underline"
+                        >
+                            Filter to my pincode
+                        </button>
+                    </div>
+                )}
 
                 {/* ALL ITEMS TAB */}
                 {activeTab === 'items' && (

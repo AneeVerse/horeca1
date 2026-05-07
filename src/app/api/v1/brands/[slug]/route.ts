@@ -9,12 +9,13 @@ import { errorResponse } from '@/middleware/errorHandler';
 const brandService = new BrandService();
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
     const { slug } = await params;
-    const result = await brandService.getStoreBySlug(slug);
+    const pincode = req.nextUrl.searchParams.get('pincode')?.trim() || undefined;
+    const result = await brandService.getStoreBySlug(slug, { pincode });
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
     return errorResponse(error);

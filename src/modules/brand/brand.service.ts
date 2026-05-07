@@ -100,8 +100,11 @@ export class BrandService {
   }
 
   // ── Public: brand store page data ─────────────────────────
-  // Returns canonical products + which distributors have them (verified/auto mappings)
-  async getStoreBySlug(slug: string) {
+  // Returns canonical products + which distributors have them (verified/auto mappings).
+  // When `pincode` is passed, distributors that don't service that pincode are still
+  // returned but flagged via `coverage` so the UI can show an empty-state message.
+  async getStoreBySlug(slug: string, opts?: { pincode?: string }) {
+    const pincode = opts?.pincode;
     const brand = await prisma.brand.findUnique({
       where: { slug, isActive: true, approvalStatus: 'approved' },
       include: {
@@ -149,6 +152,7 @@ export class BrandService {
       id: string; name: string; slug: string; logo: string | null;
       pincodes: string[]; productIds: string[];
       prices: Record<string, number>;
+      servicesPincode: boolean;
     }>();
 
     const products = brand.masterProducts.map(mp => {
@@ -158,6 +162,8 @@ export class BrandService {
 
         const priceWithTax = Number(m.distributorProduct.basePrice) *
           (1 + Number(m.distributorProduct.taxPercent) / 100);
+        const vendorPincodes = v.serviceAreas.map(sa => sa.pincode);
+        const servicesPincode = pincode ? vendorPincodes.includes(pincode) : true;
 
         if (!vendorMap.has(v.id)) {
           vendorMap.set(v.id, {
@@ -165,9 +171,10 @@ export class BrandService {
             name: v.businessName,
             slug: v.slug,
             logo: v.logoUrl,
-            pincodes: v.serviceAreas.map(sa => sa.pincode),
+            pincodes: vendorPincodes,
             productIds: [],
             prices: {},
+            servicesPincode,
           });
         }
         const vendor = vendorMap.get(v.id)!;
@@ -179,6 +186,7 @@ export class BrandService {
           price: Math.round(priceWithTax * 100) / 100,
           inStock: (m.distributorProduct.inventory?.qtyAvailable ?? 0) > 0,
           distributorProductId: m.distributorProduct.id,
+          servicesPincode,
         };
       }).filter(Boolean);
 
@@ -193,6 +201,9 @@ export class BrandService {
       };
     });
 
+    const allVendors = [...vendorMap.values()];
+    const servicedVendors = pincode ? allVendors.filter(v => v.servicesPincode) : allVendors;
+
     return {
       id: brand.id,
       name: brand.name,
@@ -202,7 +213,12 @@ export class BrandService {
       tagline: brand.tagline,
       description: brand.description,
       products,
-      vendors: [...vendorMap.values()],
+      vendors: allVendors,
+      coverage: {
+        pincode: pincode ?? null,
+        servicedVendorCount: servicedVendors.length,
+        totalVendorCount: allVendors.length,
+      },
     };
   }
 

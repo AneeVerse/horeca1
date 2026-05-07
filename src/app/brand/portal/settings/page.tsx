@@ -179,6 +179,15 @@ export default function BrandSettingsPage() {
         }
     };
 
+    // Hooks must run on every render — do not put after early return below.
+    const [catInput, setCatInput] = useState('');
+    const logoRef = useRef<HTMLInputElement>(null);
+    const bannerRef = useRef<HTMLInputElement>(null);
+    const showcaseRef = useRef<HTMLInputElement>(null);
+    const [uploadingLogo, setUploadingLogo] = useState(false);
+    const [uploadingBanner, setUploadingBanner] = useState(false);
+    const [uploadingShowcase, setUploadingShowcase] = useState(false);
+
     if (loading) {
         return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="w-8 h-8 animate-spin text-[#53B175]" /></div>;
     }
@@ -193,14 +202,6 @@ export default function BrandSettingsPage() {
         if (!json.success) throw new Error(json.error?.message || 'Upload failed');
         return json.data.url as string;
     };
-
-    const [catInput, setCatInput] = useState('');
-    const logoRef = useRef<HTMLInputElement>(null);
-    const bannerRef = useRef<HTMLInputElement>(null);
-    const showcaseRef = useRef<HTMLInputElement>(null);
-    const [uploadingLogo, setUploadingLogo] = useState(false);
-    const [uploadingBanner, setUploadingBanner] = useState(false);
-    const [uploadingShowcase, setUploadingShowcase] = useState(false);
 
     const handleLogoFile = async (file: File) => {
         setUploadingLogo(true);

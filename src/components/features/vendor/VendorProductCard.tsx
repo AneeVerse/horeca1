@@ -185,9 +185,18 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                     "text-[14px] md:text-[14px] font-[900] leading-[1.3] line-clamp-2 h-[2.6em]",
                     isOutOfStock ? "text-gray-400" : "text-[#181725]"
                 )}>
-                    {product.name}
+                    {product.displayName ?? product.name}
                 </h3>
                 <div className="flex items-center gap-2 flex-wrap">
+                    {product.brandSlug && product.brandName && (
+                        <Link
+                            href={`/brand/${product.brandSlug}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[10px] font-bold uppercase tracking-widest text-[#53B175] hover:underline shrink-0"
+                        >
+                            by {product.brandName}
+                        </Link>
+                    )}
                     <p className="text-[11px] md:text-[11px] text-gray-400 font-extrabold uppercase tracking-widest truncate">
                         {product.packSize}
                     </p>

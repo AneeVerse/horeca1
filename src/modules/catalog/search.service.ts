@@ -23,6 +23,18 @@ const PRODUCT_INCLUDE = {
   priceSlabs: { orderBy: { sortOrder: 'asc' as const } },
   inventory: { select: { qtyAvailable: true } },
   category: { select: { id: true, name: true, slug: true } },
+  brandMappings: {
+    where: { status: { in: ['verified' as const, 'auto_mapped' as const] } },
+    select: {
+      brandMasterProduct: {
+        select: {
+          name: true,
+          brand: { select: { name: true, slug: true } },
+        },
+      },
+    },
+    take: 1,
+  },
 } satisfies Prisma.ProductInclude;
 
 export class SearchService {
@@ -110,10 +122,37 @@ export class SearchService {
       if (p.category) categoryMap.set(p.category.id, p.category);
     }
 
+    // 4th block: Brands matching the query (name, slug, or category tag)
+    const brands = await prisma.brand.findMany({
+      where: {
+        isActive: true,
+        approvalStatus: 'approved',
+        OR: [
+          { name: { contains: query, mode: 'insensitive' } },
+          { slug: { contains: query, mode: 'insensitive' } },
+          { categories: { has: query } },
+        ],
+      },
+      take: 5,
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        logoUrl: true,
+        bannerUrl: true,
+        tagline: true,
+        categories: true,
+        bgColor: true,
+        showcaseImages: true,
+      },
+    });
+
     return {
       products,
       vendors: Array.from(vendorMap.values()),
       categories: Array.from(categoryMap.values()),
+      brands,
       pagination: {
         next_cursor: hasMore ? products[products.length - 1]?.id : null,
         has_more: hasMore,

@@ -180,3 +180,83 @@ export async function runMappingForBrand(brandId: string): Promise<void> {
     await runMappingForProduct(mp.id);
   }
 }
+
+// ── Run mapping for ONE distributor product (inverse direction) ─
+// Triggered when a vendor adds/updates a product — score it against
+// all approved brand master catalogs and create mappings for hits ≥0.70.
+export async function runMappingForVendorProduct(distributorProductId: string): Promise<void> {
+  const distributorProduct = await prisma.product.findUnique({
+    where: { id: distributorProductId },
+    select: { id: true, name: true, brand: true, isActive: true, approvalStatus: true },
+  });
+  if (!distributorProduct || !distributorProduct.isActive || distributorProduct.approvalStatus !== 'approved') {
+    return;
+  }
+
+  // Pre-filter brand master products: brand name appears in distributor name/brand field
+  const distNameLower = distributorProduct.name.toLowerCase();
+  const distBrandLower = (distributorProduct.brand ?? '').toLowerCase();
+  const masterProducts = await prisma.brandMasterProduct.findMany({
+    where: {
+      isActive: true,
+      brand: { isActive: true, approvalStatus: 'approved' },
+    },
+    include: { brand: true },
+  });
+
+  for (const mp of masterProducts) {
+    const brandNameLower = mp.brand.name.toLowerCase();
+    // Quick filter: only score if distributor name OR brand field mentions the brand
+    if (!distNameLower.includes(brandNameLower) && !distBrandLower.includes(brandNameLower)) {
+      continue;
+    }
+
+    const existing = await prisma.brandProductMapping.findUnique({
+      where: {
+        brandMasterProductId_distributorProductId: {
+          brandMasterProductId: mp.id,
+          distributorProductId: distributorProduct.id,
+        },
+      },
+    });
+    if (existing && existing.status !== 'rejected') continue;
+
+    const confidence = scoreMatch(mp.name, mp.brand.name, distributorProduct.name, distributorProduct.brand);
+    if (confidence < 0.70) continue;
+
+    const status: 'auto_mapped' | 'pending_review' =
+      confidence >= 0.90 ? 'auto_mapped' : 'pending_review';
+
+    await prisma.brandProductMapping.upsert({
+      where: {
+        brandMasterProductId_distributorProductId: {
+          brandMasterProductId: mp.id,
+          distributorProductId: distributorProduct.id,
+        },
+      },
+      create: {
+        brandId: mp.brandId,
+        brandMasterProductId: mp.id,
+        distributorProductId: distributorProduct.id,
+        confidenceScore: confidence,
+        status,
+        matchedBy: 'rule_based',
+      },
+      update: {
+        confidenceScore: confidence,
+        status,
+        matchedBy: 'rule_based',
+        updatedAt: new Date(),
+      },
+    });
+
+    emitEvent('BrandProductMapped', {
+      mappingId: mp.id,
+      brandId: mp.brandId,
+      brandMasterProductId: mp.id,
+      distributorProductId: distributorProduct.id,
+      confidenceScore: confidence,
+      status,
+    });
+  }
+}

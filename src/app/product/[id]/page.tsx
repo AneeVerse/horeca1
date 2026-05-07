@@ -47,6 +47,7 @@ interface ApiProduct {
     vendor: { id: string; businessName: string; slug: string; logoUrl: string | null; rating: number; minOrderValue: number } | null;
     priceSlabs: { minQty: number; maxQty: number | null; price: number }[];
     inventory: { qtyAvailable: number } | null;
+    brandMappings?: { brandMasterProduct: { name: string; brand: { name: string; slug: string } } }[];
 }
 
 export default function ProductDetailPage() {
@@ -70,7 +71,11 @@ export default function ProductDetailPage() {
     }, [id]);
 
     // Derived display values
-    const productName = apiProduct?.name || '';
+    const rawProductName = apiProduct?.name || '';
+    const brandMapping = apiProduct?.brandMappings?.[0]?.brandMasterProduct;
+    const productName = brandMapping?.name || rawProductName; // brand canonical name on PDP if mapped
+    const brandName = brandMapping?.brand?.name as string | undefined;
+    const brandSlug = brandMapping?.brand?.slug as string | undefined;
     const vendorName = apiProduct?.vendor?.businessName || '';
     const productPrice = apiProduct?.priceSlabs?.[0]?.price ?? apiProduct?.basePrice ?? 0;
     const productImage = apiProduct?.imageUrl || apiProduct?.images?.[0] || '/images/product/product-img3.png';
@@ -259,7 +264,14 @@ export default function ProductDetailPage() {
                     <div className="pt-8">
                         <span className="inline-block px-2 py-1 rounded-[6px] bg-[#EAF6EF] text-[#53B175] text-[11px] font-bold mb-3 uppercase tracking-wider">{product.category}</span>
                         <div className="flex items-start justify-between gap-4 mb-1">
-                            <h1 className="text-[24px] font-extrabold text-[#181725] leading-tight flex-1 tracking-tight">{product.name}</h1>
+                            <div className="flex-1">
+                                <h1 className="text-[24px] font-extrabold text-[#181725] leading-tight tracking-tight">{product.name}</h1>
+                                {brandSlug && brandName && (
+                                    <Link href={`/brand/${brandSlug}`} className="inline-block mt-1 text-[12px] font-bold text-[#53B175] hover:underline">
+                                        by {brandName}
+                                    </Link>
+                                )}
+                            </div>
                             <div className="flex items-center gap-2 pt-1.5">
                                 <button onClick={() => toggleWishlist(vendorProductForContext)} className="text-[#181725] active:scale-90 transition-transform">
                                     <Heart size={21} className={cn("transition-colors", isLiked ? "text-red-500 fill-red-500" : "text-[#181725]")} />

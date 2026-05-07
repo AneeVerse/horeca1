@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Package, Plus, Pencil, Trash2, Loader2, X, Check, GitMerge } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Image from 'next/image';
+import { Package, Plus, Pencil, Trash2, Loader2, X, Check, GitMerge, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { toast } from 'sonner';
 
 interface MasterProduct {
     id: string;
@@ -39,6 +41,8 @@ export default function BrandProductsPage() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [form, setForm] = useState<ProductFormData>(EMPTY_FORM);
     const [formError, setFormError] = useState<string | null>(null);
+    const [uploadingImage, setUploadingImage] = useState(false);
+    const imageInputRef = useRef<HTMLInputElement>(null);
 
     const fetchProducts = useCallback(async () => {
         setLoading(true);
@@ -227,13 +231,68 @@ export default function BrandProductsPage() {
                             </button>
                         </div>
                         <div className="p-6 space-y-4">
+                            {/* Image upload field */}
+                            <div>
+                                <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">Product Image</label>
+                                <div className="flex items-center gap-3">
+                                    <div
+                                        onClick={() => imageInputRef.current?.click()}
+                                        className="w-[80px] h-[80px] rounded-xl border-2 border-dashed border-gray-200 hover:border-[#53B175] transition-colors cursor-pointer flex items-center justify-center overflow-hidden bg-gray-50 shrink-0 relative"
+                                    >
+                                        {uploadingImage ? <Loader2 size={20} className="animate-spin text-[#53B175]" /> :
+                                            form.imageUrl ? <Image src={form.imageUrl} alt="" fill sizes="80px" className="object-cover" /> :
+                                            <Upload size={20} className="text-gray-400" />}
+                                    </div>
+                                    <div className="flex-1 space-y-1">
+                                        <button type="button" onClick={() => imageInputRef.current?.click()}
+                                            className="text-[13px] font-bold text-[#53B175] hover:underline">Upload file</button>
+                                        <input
+                                            type="url"
+                                            value={form.imageUrl}
+                                            onChange={e => setForm(prev => ({ ...prev, imageUrl: e.target.value }))}
+                                            placeholder="Or paste image URL…"
+                                            className="w-full border border-[#EEEEEE] rounded-[8px] px-3 py-2 text-[12px] focus:outline-none focus:border-[#53B175]/50 bg-[#FAFAFA]"
+                                        />
+                                    </div>
+                                    {form.imageUrl && (
+                                        <button type="button" onClick={() => setForm(p => ({ ...p, imageUrl: '' }))}
+                                            className="text-gray-400 hover:text-red-500"><X size={16} /></button>
+                                    )}
+                                </div>
+                                <input
+                                    ref={imageInputRef}
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    className="hidden"
+                                    onChange={async e => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        setUploadingImage(true);
+                                        try {
+                                            const fd = new FormData();
+                                            fd.append('file', file);
+                                            fd.append('folder', 'brands');
+                                            const res = await fetch('/api/v1/upload', { method: 'POST', body: fd });
+                                            const json = await res.json();
+                                            if (!json.success) throw new Error(json.error?.message || 'Upload failed');
+                                            setForm(prev => ({ ...prev, imageUrl: json.data.url }));
+                                            toast.success('Image uploaded');
+                                        } catch (err: unknown) {
+                                            toast.error(err instanceof Error ? err.message : 'Upload failed');
+                                        } finally {
+                                            setUploadingImage(false);
+                                            if (e.target) e.target.value = '';
+                                        }
+                                    }}
+                                />
+                            </div>
+
                             {[
                                 { key: 'name', label: 'Product Name *', placeholder: 'e.g. Tomato Ketchup 1kg' },
                                 { key: 'packSize', label: 'Pack Size', placeholder: 'e.g. 1 kg, 500 ml' },
                                 { key: 'unit', label: 'Unit', placeholder: 'e.g. kg, ml, pack' },
                                 { key: 'category', label: 'Category', placeholder: 'e.g. Condiments, Spices' },
                                 { key: 'sku', label: 'SKU (optional)', placeholder: 'Your internal product code' },
-                                { key: 'imageUrl', label: 'Image URL (optional)', placeholder: 'https://...' },
                             ].map(field => (
                                 <div key={field.key}>
                                     <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">{field.label}</label>

@@ -111,9 +111,24 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
     ? mrp
     : (promoPrice != null && promoPrice < basePrice ? basePrice : undefined);
 
+  // Brand mapping → discovery-surface name override.
+  // When a verified/auto-mapped BrandProductMapping is attached, the brand's canonical name
+  // becomes the displayName. Cart and order history paths intentionally render `name` (not displayName).
+  const rawName = (p.name as string) || '';
+  const brandMappings = p.brandMappings as Array<Record<string, unknown>> | undefined;
+  const activeMapping = brandMappings?.[0];
+  const masterProduct = activeMapping?.brandMasterProduct as Record<string, unknown> | undefined;
+  const masterBrand = masterProduct?.brand as Record<string, unknown> | undefined;
+  const displayName = (masterProduct?.name as string) || rawName;
+  const brandName = (masterBrand?.name as string) || undefined;
+  const brandSlug = (masterBrand?.slug as string) || undefined;
+
   return {
     id: p.id as string,
-    name: (p.name as string) || '',
+    name: rawName,
+    displayName,
+    brandName,
+    brandSlug,
     description: (p.description as string) || '',
     price: effectivePrice,
     originalPrice: strikePrice,
@@ -224,6 +239,12 @@ export const dal = {
         products: Record<string, unknown>[];
         vendors: Record<string, unknown>[];
         categories: Record<string, unknown>[];
+        brands?: Array<{
+          id: string; name: string; slug: string;
+          logoUrl: string | null; bannerUrl: string | null;
+          tagline: string | null; categories: string[];
+          bgColor: string | null; showcaseImages: string[];
+        }>;
         pagination: unknown;
       }>(`/api/v1/search?${params}`);
 
@@ -231,6 +252,7 @@ export const dal = {
         products: data.products.map((p) => toVendorProduct(p)),
         vendors: data.vendors.map(toVendorSummary),
         categories: data.categories.map(toCategory),
+        brands: data.brands ?? [],
         pagination: data.pagination,
       };
     },

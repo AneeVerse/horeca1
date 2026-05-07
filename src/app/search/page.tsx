@@ -9,14 +9,27 @@ import { dal } from '@/lib/dal';
 import type { VendorProduct, VendorSummary, Category } from '@/types';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
+import { BrandStoreCard } from '@/components/features/brand/BrandStoreCard';
 import { useAddress } from '@/context/AddressContext';
 import { cn } from '@/lib/utils';
+
+interface SearchBrand {
+    id: string;
+    name: string;
+    slug: string;
+    logoUrl: string | null;
+    bannerUrl: string | null;
+    tagline: string | null;
+    categories: string[];
+    bgColor: string | null;
+    showcaseImages: string[];
+}
 
 function SearchPageContent() {
     const searchParams = useSearchParams();
     const initialQuery = searchParams.get('q') || '';
     const [query, setQuery] = useState(initialQuery);
-    const [results, setResults] = useState<{ products: VendorProduct[]; vendors: VendorSummary[]; categories: Category[] }>({ products: [], vendors: [], categories: [] });
+    const [results, setResults] = useState<{ products: VendorProduct[]; vendors: VendorSummary[]; categories: Category[]; brands: SearchBrand[] }>({ products: [], vendors: [], categories: [], brands: [] });
     const [tab, setTab] = useState<'all' | 'vendors' | 'products'>('all');
     const [sort, setSort] = useState<'relevance' | 'price_asc' | 'price_desc'>('relevance');
     const [servicingIds, setServicingIds] = useState<Set<string> | null>(null);
@@ -42,7 +55,7 @@ function SearchPageContent() {
 
     useEffect(() => {
         if (!query.trim()) {
-            Promise.resolve().then(() => setResults({ products: [], vendors: [], categories: [] }));
+            Promise.resolve().then(() => setResults({ products: [], vendors: [], categories: [], brands: [] }));
             return;
         }
 
@@ -54,11 +67,12 @@ function SearchPageContent() {
                     products: data.products,
                     vendors: data.vendors,
                     categories: data.categories,
+                    brands: data.brands as SearchBrand[],
                 });
             }
         }).catch(() => {
             if (!cancelled) {
-                setResults({ products: [], vendors: [], categories: [] });
+                setResults({ products: [], vendors: [], categories: [], brands: [] });
             }
         });
 
@@ -77,7 +91,7 @@ function SearchPageContent() {
         return list;
     }, [results.products, servicingIds, sort]);
 
-    const hasResults = displayProducts.length > 0 || displayVendors.length > 0 || results.categories.length > 0;
+    const hasResults = displayProducts.length > 0 || displayVendors.length > 0 || results.categories.length > 0 || results.brands.length > 0;
     const showVendors = tab === 'all' || tab === 'vendors';
     const showProducts = tab === 'all' || tab === 'products';
 
@@ -162,6 +176,26 @@ function SearchPageContent() {
                                 Filtered to vendors delivering to pincode {pincode}
                             </p>
                         )}
+                        {/* == BRANDS BLOCK == */}
+                        {tab === 'all' && results.brands.length > 0 && (
+                            <section>
+                                <h2 className="text-[15px] font-bold text-[#181725] mb-3">Brands</h2>
+                                <div className="grid grid-cols-2 min-[500px]:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                                    {results.brands.map((b) => (
+                                        <BrandStoreCard
+                                            key={b.id}
+                                            name={b.name}
+                                            slug={b.slug}
+                                            logoUrl={b.logoUrl ?? undefined}
+                                            productImages={b.showcaseImages.length > 0 ? [b.showcaseImages[0]] : []}
+                                            categories={b.categories}
+                                            bgColor={b.bgColor ?? '#f0faf4'}
+                                        />
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
                         {/* == VENDORS BLOCK (Primary Path — shown first per V2.2) == */}
                         {showVendors && displayVendors.length > 0 && (
                             <section>
