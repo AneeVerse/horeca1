@@ -25,7 +25,10 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
         name: string;
         vendor: { id: string; businessName: string; logoUrl?: string | null };
         inventory?: { qtyAvailable: number };
+        imageUrl?: string | null;
         images?: string[];
+        packSize?: string | null;
+        basePrice?: number;
     }>>([]);
     const [alternatesLoading, setAlternatesLoading] = useState(false);
 
@@ -47,7 +50,10 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                 name: a.name as string,
                 vendor: a.vendor as { id: string; businessName: string; logoUrl?: string | null },
                 inventory: a.inventory as { qtyAvailable: number } | undefined,
+                imageUrl: (a.imageUrl as string | null | undefined) ?? null,
                 images: a.images as string[] | undefined,
+                packSize: (a.packSize as string | null | undefined) ?? null,
+                basePrice: a.basePrice != null ? Number(a.basePrice) : undefined,
             })));
         } catch {
             setAlternateVendors([]);
@@ -350,27 +356,46 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                         </div>
                     ) : (
                         <div className="flex flex-col gap-3">
-                            {alternateVendors.map((alt) => (
-                                <a key={alt.id} href={`/vendor/${alt.vendor.id}`}
-                                    className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 hover:border-[#53B175]/30 hover:bg-[#f7fbf8] transition-all group"
-                                    onClick={(e) => e.stopPropagation()}>
-                                    <div className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center shrink-0 overflow-hidden">
-                                        {alt.images?.[0] ? (
-                                            <Image src={alt.images[0]} alt={alt.name} width={48} height={48} className="object-cover w-full h-full" />
-                                        ) : (
-                                            <Package size={20} className="text-gray-300" strokeWidth={2} />
-                                        )}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-[14px] font-black text-[#181725] truncate">{alt.name}</p>
-                                        <p className="text-[12px] font-bold text-[#53B175]">
-                                            {alt.vendor.businessName}
-                                            {alt.inventory && <span className="text-gray-400 ml-1">· {alt.inventory.qtyAvailable} in stock</span>}
-                                        </p>
-                                    </div>
-                                    <Navigation size={16} className="text-gray-300 group-hover:text-[#53B175] shrink-0 transition-colors -rotate-45" strokeWidth={2.5} />
-                                </a>
-                            ))}
+                            {alternateVendors.map((alt) => {
+                                // Resolve image with fallbacks: explicit images[] → imageUrl singular → vendor logo → none
+                                const altImg = alt.images?.[0] || alt.imageUrl || alt.vendor.logoUrl || null;
+                                return (
+                                    <a key={alt.id} href={`/vendor/${alt.vendor.id}`}
+                                        className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 hover:border-[#53B175]/30 hover:bg-[#f7fbf8] transition-all group"
+                                        onClick={(e) => e.stopPropagation()}>
+                                        <div className="w-14 h-14 rounded-xl bg-gray-50 flex items-center justify-center shrink-0 overflow-hidden relative">
+                                            {altImg ? (
+                                                <Image src={altImg} alt={alt.name} fill sizes="56px" className="object-cover" />
+                                            ) : (
+                                                <Package size={20} className="text-gray-300" strokeWidth={2} />
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-[14px] font-black text-[#181725] truncate">{alt.name}</p>
+                                            <p className="text-[12px] font-bold text-[#53B175] truncate">
+                                                {alt.vendor.businessName}
+                                            </p>
+                                            <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap mt-0.5">
+                                                {alt.packSize && (
+                                                    <span className="text-[11px] font-semibold text-gray-500">{alt.packSize}</span>
+                                                )}
+                                                {alt.basePrice != null && (
+                                                    <span className="text-[11px] font-bold text-[#181725]">₹{alt.basePrice}</span>
+                                                )}
+                                                {alt.inventory && (
+                                                    <span className={cn(
+                                                        'text-[10px] font-bold',
+                                                        alt.inventory.qtyAvailable > 0 ? 'text-green-600' : 'text-red-500'
+                                                    )}>
+                                                        {alt.inventory.qtyAvailable > 0 ? `${alt.inventory.qtyAvailable} in stock` : 'Out of stock'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <Navigation size={16} className="text-gray-300 group-hover:text-[#53B175] shrink-0 transition-colors -rotate-45" strokeWidth={2.5} />
+                                    </a>
+                                );
+                            })}
                         </div>
                     )}
                     <button onClick={() => setShowAlternates(false)}
