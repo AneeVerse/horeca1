@@ -601,7 +601,7 @@ export class BrandService {
   }
 
   // ── Admin: approve or reject brand ────────────────────────
-  async adminApproveBrand(brandId: string, action: 'approved' | 'rejected', adminId: string) {
+  async adminApproveBrand(brandId: string, action: 'approved' | 'rejected', adminId: string, _reviewNote?: string) {
     const brand = await prisma.brand.findUnique({ where: { id: brandId } });
     if (!brand) throw Errors.notFound('Brand not found');
 
@@ -615,6 +615,9 @@ export class BrandService {
       // Kick off initial auto-mapping
       runMappingForBrand(brandId).catch(console.error);
     }
+    // Note: rejection reviewNote is accepted but not yet persisted to Brand row —
+    // schema has no rejection_note column. Stored in audit log via the API caller
+    // for now; add a column if rejection reasons need to be displayed back.
 
     return updated;
   }

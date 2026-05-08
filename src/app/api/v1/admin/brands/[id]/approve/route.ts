@@ -10,13 +10,16 @@ import type { AuthContext } from '@/middleware/auth';
 import { requireAdminPerm } from '@/lib/teamPermissions';
 
 const brandService = new BrandService();
-const schema = z.object({ action: z.enum(['approved', 'rejected']) });
+const schema = z.object({
+  action: z.enum(['approved', 'rejected']),
+  reviewNote: z.string().max(1000).optional(),
+});
 
 export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
   requireAdminPerm(ctx.adminTeamRole, 'settings:write');
   const id = req.nextUrl.pathname.split('/').at(-2)!;
   const body = await req.json();
-  const { action } = schema.parse(body);
-  const brand = await brandService.adminApproveBrand(id, action, ctx.userId);
+  const { action, reviewNote } = schema.parse(body);
+  const brand = await brandService.adminApproveBrand(id, action, ctx.userId, reviewNote);
   return NextResponse.json({ success: true, data: brand });
 });

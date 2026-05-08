@@ -164,13 +164,15 @@ export default function AdminBrandsPage() {
             const res = await fetch(`/api/v1/admin/brands/${brand.id}/approve`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'approve' }),
+                body: JSON.stringify({ action: 'approved' }),
             });
-            if ((await res.json()).success) {
-                setBrands(prev => prev.map(b => b.id === brand.id ? { ...b, approvalStatus: 'approved' } : b));
-            }
-        } catch { /* silent */ }
-        finally { setActionLoading(null); }
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Approval failed');
+            setBrands(prev => prev.map(b => b.id === brand.id ? { ...b, approvalStatus: 'approved' } : b));
+            toast.success(`${brand.name} approved`);
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Approval failed');
+        } finally { setActionLoading(null); }
     };
 
     const handleRejectBrand = async (id: string, note: string) => {
@@ -179,13 +181,15 @@ export default function AdminBrandsPage() {
             const res = await fetch(`/api/v1/admin/brands/${id}/approve`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'reject', reviewNote: note }),
+                body: JSON.stringify({ action: 'rejected', reviewNote: note || undefined }),
             });
-            if ((await res.json()).success) {
-                setBrands(prev => prev.map(b => b.id === id ? { ...b, approvalStatus: 'rejected' } : b));
-            }
-        } catch { /* silent */ }
-        finally { setActionLoading(null); setRejectTarget(null); setRejectNote(''); }
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Rejection failed');
+            setBrands(prev => prev.map(b => b.id === id ? { ...b, approvalStatus: 'rejected' } : b));
+            toast.success('Brand rejected');
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Rejection failed');
+        } finally { setActionLoading(null); setRejectTarget(null); setRejectNote(''); }
     };
 
     // ── Mapping actions ──
