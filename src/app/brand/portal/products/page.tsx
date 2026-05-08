@@ -6,6 +6,7 @@ import { Package, Plus, Pencil, Trash2, Loader2, X, Check, GitMerge, Upload } fr
 import { cn } from '@/lib/utils';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { toast } from 'sonner';
+import { CategorySinglePicker } from '@/components/features/brand/CategorySinglePicker';
 
 interface MasterProduct {
     id: string;
@@ -14,6 +15,8 @@ interface MasterProduct {
     unit: string | null;
     imageUrl: string | null;
     category: string | null;
+    categoryId: string | null;
+    categoryRel?: { id: string; name: string } | null;
     sku: string | null;
     isActive: boolean;
     createdAt: string;
@@ -24,13 +27,14 @@ interface ProductFormData {
     name: string;
     packSize: string;
     unit: string;
-    category: string;
+    categoryId: string | null;
+    categoryName: string | null;
     imageUrl: string;
     sku: string;
     description: string;
 }
 
-const EMPTY_FORM: ProductFormData = { name: '', packSize: '', unit: '', category: '', imageUrl: '', sku: '', description: '' };
+const EMPTY_FORM: ProductFormData = { name: '', packSize: '', unit: '', categoryId: null, categoryName: null, imageUrl: '', sku: '', description: '' };
 
 export default function BrandProductsPage() {
     const confirm = useConfirm();
@@ -59,7 +63,16 @@ export default function BrandProductsPage() {
     const openAdd = () => { setEditingId(null); setForm(EMPTY_FORM); setFormError(null); setShowForm(true); };
     const openEdit = (p: MasterProduct) => {
         setEditingId(p.id);
-        setForm({ name: p.name, packSize: p.packSize ?? '', unit: p.unit ?? '', category: p.category ?? '', imageUrl: p.imageUrl ?? '', sku: p.sku ?? '', description: '' });
+        setForm({
+            name: p.name,
+            packSize: p.packSize ?? '',
+            unit: p.unit ?? '',
+            categoryId: p.categoryId ?? null,
+            categoryName: p.categoryRel?.name ?? p.category ?? null,
+            imageUrl: p.imageUrl ?? '',
+            sku: p.sku ?? '',
+            description: '',
+        });
         setFormError(null);
         setShowForm(true);
     };
@@ -73,6 +86,7 @@ export default function BrandProductsPage() {
                 name: form.name.trim(),
                 ...(form.packSize && { packSize: form.packSize }),
                 ...(form.unit && { unit: form.unit }),
+                ...(form.categoryId && { categoryId: form.categoryId }),
                 ...(form.imageUrl && { imageUrl: form.imageUrl }),
                 ...(form.sku && { sku: form.sku }),
                 ...(form.description && { description: form.description }),
@@ -288,23 +302,41 @@ export default function BrandProductsPage() {
                             </div>
 
                             {[
-                                { key: 'name', label: 'Product Name *', placeholder: 'e.g. Tomato Ketchup 1kg' },
-                                { key: 'packSize', label: 'Pack Size', placeholder: 'e.g. 1 kg, 500 ml' },
-                                { key: 'unit', label: 'Unit', placeholder: 'e.g. kg, ml, pack' },
-                                { key: 'category', label: 'Category', placeholder: 'e.g. Condiments, Spices' },
-                                { key: 'sku', label: 'SKU (optional)', placeholder: 'Your internal product code' },
+                                { key: 'name' as const, label: 'Product Name *', placeholder: 'e.g. Tomato Ketchup 1kg' },
+                                { key: 'packSize' as const, label: 'Pack Size', placeholder: 'e.g. 1 kg, 500 ml' },
+                                { key: 'unit' as const, label: 'Unit', placeholder: 'e.g. kg, ml, pack' },
                             ].map(field => (
                                 <div key={field.key}>
                                     <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">{field.label}</label>
                                     <input
                                         type="text"
-                                        value={form[field.key as keyof ProductFormData]}
+                                        value={form[field.key]}
                                         onChange={e => setForm(prev => ({ ...prev, [field.key]: e.target.value }))}
                                         placeholder={field.placeholder}
                                         className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-2.5 text-[14px] font-medium outline-none focus:border-[#53B175]/50 focus:bg-white bg-[#FAFAFA]"
                                     />
                                 </div>
                             ))}
+
+                            {/* Category — searchable dropdown of admin categories + request-new */}
+                            <CategorySinglePicker
+                                label="Category"
+                                helper="Pick from existing categories or request a new one — admin reviews."
+                                valueId={form.categoryId}
+                                valueName={form.categoryName}
+                                onChange={(next) => setForm(prev => ({ ...prev, categoryId: next.id, categoryName: next.name }))}
+                            />
+
+                            <div>
+                                <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">SKU (optional)</label>
+                                <input
+                                    type="text"
+                                    value={form.sku}
+                                    onChange={e => setForm(prev => ({ ...prev, sku: e.target.value }))}
+                                    placeholder="Your internal product code"
+                                    className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-2.5 text-[14px] font-medium outline-none focus:border-[#53B175]/50 focus:bg-white bg-[#FAFAFA]"
+                                />
+                            </div>
                             {formError && (
                                 <p className="text-[13px] text-[#E74C3C] font-bold">{formError}</p>
                             )}
