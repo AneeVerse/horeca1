@@ -15,7 +15,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
   requireAdminPerm(ctx.adminTeamRole, 'settings:write');
   const id = req.nextUrl.pathname.split('/').at(-1)!;
   const body = await req.json();
-  const { status, reviewNote } = reviewMappingSchema.parse(body);
-  const mapping = await brandService.adminReviewMapping(id, status, ctx.userId, reviewNote);
+  const { status, reviewNote, brandMasterProductId } = reviewMappingSchema.parse(body);
+  const mapping = await brandService.adminReviewMapping(id, status, ctx.userId, reviewNote, brandMasterProductId);
   return NextResponse.json({ success: true, data: mapping });
 });

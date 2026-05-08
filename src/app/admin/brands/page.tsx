@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-    Check, X, Search, Clock, CheckCircle, Loader2, ClipboardList, Store,
+    Check, X, Search, Clock, CheckCircle, Loader2, ClipboardList, Store, Pencil, ArrowRight,
     GitMerge, MessageSquare, Package, ExternalLink, LayoutDashboard, Plus, Eye, EyeOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -76,6 +76,10 @@ export default function AdminBrandsPage() {
     const [mappings, setMappings] = useState<PendingMapping[]>([]);
     const [rejectTarget, setRejectTarget] = useState<{ type: 'brand' | 'mapping'; id: string; name: string } | null>(null);
     const [rejectNote, setRejectNote] = useState('');
+    const [editTarget, setEditTarget] = useState<PendingMapping | null>(null);
+    const [editPickerCats, setEditPickerCats] = useState<Array<{ id: string; name: string; packSize: string | null; imageUrl: string | null; sku: string | null }>>([]);
+    const [editPickerLoading, setEditPickerLoading] = useState(false);
+    const [editPickerQuery, setEditPickerQuery] = useState('');
 
     // Create brand modal
     const [showCreate, setShowCreate] = useState(false);
@@ -202,6 +206,44 @@ export default function AdminBrandsPage() {
             }
         } catch { /* silent */ }
         finally { setActionLoading(null); setRejectTarget(null); setRejectNote(''); }
+    };
+
+    // ── Edit mapping (re-target to a different brand master product) ──
+    const openEditMapping = async (mapping: PendingMapping) => {
+        setEditTarget(mapping);
+        setEditPickerQuery('');
+        setEditPickerLoading(true);
+        try {
+            const res = await fetch(`/api/v1/brand-master-products?limit=200`);
+            const json = await res.json();
+            const products: Array<{ id: string; name: string; packSize: string | null; imageUrl: string | null; sku: string | null; brand: { id: string } }> = json.data?.products ?? [];
+            // Filter to the same brand as the auto-suggested master product
+            const sameBrand = products.filter(p => p.brand.id === mapping.brandMasterProduct.brand.id);
+            setEditPickerCats(sameBrand.map(p => ({ id: p.id, name: p.name, packSize: p.packSize, imageUrl: p.imageUrl, sku: p.sku })));
+        } catch { setEditPickerCats([]); }
+        finally { setEditPickerLoading(false); }
+    };
+
+    const submitEditMapping = async (newMasterProductId: string) => {
+        if (!editTarget) return;
+        if (newMasterProductId === editTarget.brandMasterProduct.id) {
+            // Same product — just verify normally
+            await handleVerifyMapping(editTarget);
+            setEditTarget(null);
+            return;
+        }
+        setActionLoading(editTarget.id);
+        try {
+            const res = await fetch(`/api/v1/admin/brands/mappings/${editTarget.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'verified', brandMasterProductId: newMasterProductId }),
+            });
+            if ((await res.json()).success) {
+                setMappings(prev => prev.filter(m => m.id !== editTarget.id));
+            }
+        } catch { /* silent */ }
+        finally { setActionLoading(null); setEditTarget(null); }
     };
 
     // ── Filter ──
@@ -470,6 +512,11 @@ export default function AdminBrandsPage() {
                                                     className="flex items-center gap-1 h-[32px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
                                                     {actionLoading === mapping.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Verify
                                                 </button>
+                                                <button onClick={() => openEditMapping(mapping)} disabled={!!actionLoading}
+                                                    className="flex items-center gap-1 h-[32px] px-3 bg-[#F0F4FF] text-[#3B82F6] rounded-[8px] text-[12px] font-bold hover:bg-[#3B82F6] hover:text-white transition-colors disabled:opacity-50"
+                                                    title="Re-target to a different brand product">
+                                                    <Pencil size={13} /> Edit
+                                                </button>
                                                 <button onClick={() => setRejectTarget({ type: 'mapping', id: mapping.id, name: mapping.brandMasterProduct.name })}
                                                     className="flex items-center gap-1 h-[32px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold">
                                                     <X size={13} /> Reject
@@ -613,6 +660,105 @@ export default function AdminBrandsPage() {
                                 disabled={!!actionLoading}
                                 className="h-[40px] px-5 bg-[#E74C3C] text-white rounded-[10px] text-[13px] font-bold disabled:opacity-50 flex items-center gap-1.5">
                                 {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />} Reject
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Mapping Modal — re-target the auto-mapper's pick to the right brand product */}
+            {editTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditTarget(null)}>
+                    <div className="bg-white rounded-[16px] w-full max-w-[640px] max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="p-5 border-b border-[#EEEEEE] flex items-start justify-between">
+                            <div>
+                                <h3 className="text-[16px] font-bold text-[#181725] flex items-center gap-2">
+                                    <Pencil size={16} className="text-[#3B82F6]" /> Edit Mapping
+                                </h3>
+                                <p className="text-[12px] text-gray-500 mt-1">
+                                    Auto-mapper picked &ldquo;<strong>{editTarget.brandMasterProduct.name}</strong>&rdquo; for distributor product
+                                    &ldquo;<strong>{editTarget.distributorProduct.name}</strong>&rdquo; ({editTarget.distributorProduct.vendor.businessName}).
+                                    Pick the correct brand product below — or close to keep this and click Verify on the row.
+                                </p>
+                            </div>
+                            <button onClick={() => setEditTarget(null)} className="p-1.5 hover:bg-gray-100 rounded-lg shrink-0">
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        <div className="p-4 border-b border-[#EEEEEE]">
+                            <div className="relative">
+                                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    type="text"
+                                    autoFocus
+                                    value={editPickerQuery}
+                                    onChange={e => setEditPickerQuery(e.target.value)}
+                                    placeholder={`Search ${editTarget.brandMasterProduct.brand.name} catalog…`}
+                                    className="w-full pl-9 pr-3 py-2.5 border border-[#EEEEEE] rounded-[10px] text-[13px] outline-none focus:border-[#53B175]/50"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="overflow-y-auto flex-1">
+                            {editPickerLoading ? (
+                                <div className="flex items-center justify-center py-12"><Loader2 size={20} className="animate-spin text-[#53B175]" /></div>
+                            ) : (
+                                (() => {
+                                    const lc = editPickerQuery.toLowerCase().trim();
+                                    const filtered = lc
+                                        ? editPickerCats.filter(c => c.name.toLowerCase().includes(lc) || (c.sku ?? '').toLowerCase().includes(lc))
+                                        : editPickerCats;
+                                    if (filtered.length === 0) return (
+                                        <p className="text-center py-10 text-[13px] text-gray-400 italic">No brand products match.</p>
+                                    );
+                                    return (
+                                        <div className="divide-y divide-[#F5F5F5]">
+                                            {filtered.map(p => {
+                                                const isCurrent = p.id === editTarget.brandMasterProduct.id;
+                                                return (
+                                                    <button
+                                                        key={p.id}
+                                                        onClick={() => submitEditMapping(p.id)}
+                                                        disabled={!!actionLoading}
+                                                        className={cn(
+                                                            'w-full p-3 flex items-center gap-3 hover:bg-[#FAFAFA] text-left transition-colors disabled:opacity-50',
+                                                            isCurrent && 'bg-[#EEF8F1]'
+                                                        )}
+                                                    >
+                                                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-50 shrink-0 relative">
+                                                            {p.imageUrl ? (
+                                                                /* eslint-disable-next-line @next/next/no-img-element */
+                                                                <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-gray-300" /></div>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-[13px] font-bold text-[#181725] truncate">{p.name}</p>
+                                                            <p className="text-[11px] text-gray-400">{p.packSize ?? '—'}{p.sku ? ` · SKU ${p.sku}` : ''}</p>
+                                                        </div>
+                                                        {isCurrent ? (
+                                                            <span className="text-[10px] font-bold text-[#53B175] uppercase tracking-wider px-2 py-1 bg-[#EEF8F1] rounded">
+                                                                Auto-pick
+                                                            </span>
+                                                        ) : (
+                                                            <ArrowRight size={14} className="text-gray-300" />
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })()
+                            )}
+                        </div>
+
+                        <div className="p-4 border-t border-[#EEEEEE] flex items-center justify-between">
+                            <p className="text-[11px] text-gray-400">Picking a row verifies the mapping with the new product.</p>
+                            <button onClick={() => setEditTarget(null)}
+                                className="h-[36px] px-4 bg-gray-100 rounded-[10px] text-[12px] font-bold text-[#7C7C7C] hover:bg-gray-200">
+                                Cancel
                             </button>
                         </div>
                     </div>

@@ -645,18 +645,73 @@ export class BrandService {
     action: 'verified' | 'rejected',
     reviewedBy: string,
     reviewNote?: string,
+    /**
+     * Optional re-target. If admin picks a DIFFERENT BrandMasterProduct than the
+     * auto-mapper guessed, we move the mapping over by deleting the original row
+     * and upserting onto the new (brandMasterProductId, distributorProductId)
+     * unique pair as verified+manually_verified+1.0 confidence.
+     */
+    brandMasterProductId?: string,
   ) {
     const mapping = await prisma.brandProductMapping.findUnique({ where: { id: mappingId } });
     if (!mapping) throw Errors.notFound('Mapping not found');
 
-    return prisma.brandProductMapping.update({
-      where: { id: mappingId },
-      data: {
-        status: action,
-        matchedBy: 'manually_verified',
-        reviewedBy,
-        reviewNote,
-      },
+    // Simple path: no re-target — just update in place.
+    if (!brandMasterProductId || brandMasterProductId === mapping.brandMasterProductId) {
+      return prisma.brandProductMapping.update({
+        where: { id: mappingId },
+        data: {
+          status: action,
+          matchedBy: 'manually_verified',
+          confidenceScore: action === 'verified' ? 1.0 : mapping.confidenceScore,
+          reviewedBy,
+          reviewNote,
+        },
+      });
+    }
+
+    // Re-target only makes sense when verifying. Reject + re-target is nonsense.
+    if (action !== 'verified') {
+      throw Errors.badRequest('Re-target only allowed when verifying');
+    }
+
+    // Confirm the new master product exists, get its brandId for the FK.
+    const newMaster = await prisma.brandMasterProduct.findUnique({
+      where: { id: brandMasterProductId },
+      select: { id: true, brandId: true, isActive: true },
+    });
+    if (!newMaster || !newMaster.isActive) throw Errors.notFound('Target brand master product not found');
+
+    // Move the mapping atomically — delete the original, upsert the new
+    // (brandMasterProductId, distributorProductId) pair.
+    return prisma.$transaction(async (tx) => {
+      await tx.brandProductMapping.delete({ where: { id: mappingId } });
+      return tx.brandProductMapping.upsert({
+        where: {
+          brandMasterProductId_distributorProductId: {
+            brandMasterProductId,
+            distributorProductId: mapping.distributorProductId,
+          },
+        },
+        create: {
+          brandId: newMaster.brandId,
+          brandMasterProductId,
+          distributorProductId: mapping.distributorProductId,
+          status: 'verified',
+          matchedBy: 'manually_verified',
+          confidenceScore: 1.0,
+          reviewedBy,
+          reviewNote,
+        },
+        update: {
+          status: 'verified',
+          matchedBy: 'manually_verified',
+          confidenceScore: 1.0,
+          reviewedBy,
+          reviewNote,
+          updatedAt: new Date(),
+        },
+      });
     });
   }
 }

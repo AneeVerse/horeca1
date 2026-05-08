@@ -35,6 +35,9 @@ export const listBrandsSchema = z.object({
 export const reviewMappingSchema = z.object({
   status: z.enum(['verified', 'rejected']),
   reviewNote: z.string().optional(),
+  // Optional: re-target the mapping to a different BrandMasterProduct.
+  // When set, status must be 'verified' (admin is correcting the auto-mapper's pick).
+  brandMasterProductId: z.string().uuid().optional(),
 });
 
 export const runAutoMapSchema = z.object({
