@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft, MapPin, Store, ArrowLeft, Search, X, AlertCircle, Plus, Minus, ShoppingCart, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatPackSize } from '@/lib/utils';
+import { parseImageMeta, getDisplayStyle } from '@/lib/imageMeta';
 import { useAddress } from '@/context/AddressContext';
 import { useCart } from '@/context/CartContext';
 import type { VendorProduct } from '@/types';
@@ -318,9 +319,10 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                         <div className="flex-shrink-0 w-[38%] max-w-[120px]">
                             <div className="w-full aspect-square rounded-[14px] overflow-hidden bg-white border border-white/60 shadow-sm">
                                 <img
-                                    src={brand.bannerImage}
+                                    src={parseImageMeta(brand.bannerImage).src}
                                     alt={brand.name}
                                     className="w-full h-full object-cover"
+                                    style={getDisplayStyle(parseImageMeta(brand.bannerImage).meta)}
                                     onError={(e) => { (e.currentTarget as HTMLImageElement).style.background = '#f5f5f5'; }}
                                 />
                             </div>

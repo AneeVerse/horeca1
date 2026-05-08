@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { parseImageMeta, getDisplayStyle } from '@/lib/imageMeta';
 
 interface BrandStoreCardProps {
     name: string;
@@ -24,7 +25,11 @@ export function BrandStoreCard({
     bgColor = '#fce4ec',
     className,
 }: BrandStoreCardProps) {
-    const img = productImages[0];
+    const rawImg = productImages[0];
+    const { src: img, meta: imgMeta } = parseImageMeta(rawImg);
+    const imgStyle = getDisplayStyle(imgMeta);
+    const { src: logoSrc, meta: logoMeta } = parseImageMeta(logoUrl);
+    const logoStyle = getDisplayStyle(logoMeta);
 
     return (
         <Link
@@ -49,6 +54,7 @@ export function BrandStoreCard({
                         fill
                         sizes="240px"
                         className="object-cover"
+                        style={imgStyle}
                     />
                 ) : (
                     <div className="absolute inset-0 flex items-center justify-center">
@@ -60,13 +66,14 @@ export function BrandStoreCard({
             {/* ── LOGO bubble — overlaps colour/white boundary ── */}
             <div className="absolute left-1/2 -translate-x-1/2 z-10 top-[78px] md:top-[124px]">
                 <div className="w-[64px] h-[64px] rounded-full border-4 border-white shadow-[0_4px_16px_rgba(0,0,0,0.14)] overflow-hidden bg-white flex items-center justify-center">
-                    {logoUrl ? (
+                    {logoSrc ? (
                         <Image
-                            src={logoUrl}
+                            src={logoSrc}
                             alt={name}
                             width={56}
                             height={56}
                             className="object-contain w-full h-full"
+                            style={logoStyle}
                         />
                     ) : (
                         <span className="text-[22px] font-black text-gray-300 select-none">{name[0]}</span>

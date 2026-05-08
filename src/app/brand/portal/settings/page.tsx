@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { toast } from 'sonner';
 import { CategoryMultiPicker } from '@/components/features/brand/CategoryMultiPicker';
+import { ImagePreview } from '@/components/ui/ImagePreview';
 
 interface BrandProfile {
     id: string;
@@ -267,8 +268,10 @@ export default function BrandSettingsPage() {
             </div>
 
             {/* Images */}
-            <div className="bg-white rounded-[20px] border border-[#EEEEEE] p-6 space-y-5">
-                <h2 className="text-[15px] font-bold text-[#181725]">Images</h2>
+            <div className="bg-white rounded-[20px] border border-[#EEEEEE] p-6">
+                <h2 className="text-[15px] font-bold text-[#181725] mb-5">Images</h2>
+                <div className="grid lg:grid-cols-[1fr_240px] gap-6">
+                    <div className="space-y-5 min-w-0">
 
                 {/* Logo */}
                 <div className="space-y-2">
@@ -338,6 +341,16 @@ export default function BrandSettingsPage() {
                             }
                             e.target.value = '';
                         }} />
+                </div>
+                    </div>
+
+                    {/* Live preview column — shows exactly how each image renders on the live site */}
+                    <div className="bg-[#FAFAFA] border border-[#EEEEEE] rounded-2xl p-4 space-y-5 self-start lg:sticky lg:top-6">
+                        <p className="text-[12px] font-bold text-gray-700 uppercase tracking-wider">Live preview</p>
+                        <ImagePreview src={form.logoUrl} variant="brand-logo" />
+                        <ImagePreview src={form.bannerUrl} variant="brand-banner" />
+                        <ImagePreview src={form.showcaseImages[0] ?? null} variant="brand-card-top" />
+                    </div>
                 </div>
             </div>
 

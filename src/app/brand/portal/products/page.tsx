@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { toast } from 'sonner';
 import { CategorySinglePicker } from '@/components/features/brand/CategorySinglePicker';
+import { ImagePreview } from '@/components/ui/ImagePreview';
 
 interface MasterProduct {
     id: string;
@@ -273,6 +274,14 @@ export default function BrandProductsPage() {
                                             className="text-gray-400 hover:text-red-500"><X size={16} /></button>
                                     )}
                                 </div>
+                                {form.imageUrl && (
+                                    <div className="mt-3 flex items-start gap-3 p-3 bg-[#FAFAFA] border border-[#EEEEEE] rounded-xl">
+                                        <ImagePreview src={form.imageUrl} variant="product-square" />
+                                        <p className="text-[11px] text-gray-500 leading-snug">
+                                            This is how the product card will look on the brand store, vendor catalog, and search results.
+                                        </p>
+                                    </div>
+                                )}
                                 <input
                                     ref={imageInputRef}
                                     type="file"
