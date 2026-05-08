@@ -225,19 +225,20 @@ export default function AdminBrandsPage() {
         finally { setEditPickerLoading(false); }
     };
 
-    const runAiBackfill = async () => {
+    const runAiMapping = async () => {
         if (aiBackfilling) return;
-        if (!confirm('Re-embed all approved brand and distributor products with the configured AI provider? This may take a minute.')) return;
+        if (!confirm('Re-run brand mapping for all approved brands using the configured AI provider? This may take a minute.')) return;
         setAiBackfilling(true);
         try {
-            const res = await fetch('/api/v1/admin/brands/embed-backfill', { method: 'POST' });
+            const res = await fetch('/api/v1/admin/brands/run-mapping', { method: 'POST' });
             const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Backfill failed');
+            if (!json.success) throw new Error(json.error?.message || 'Mapping run failed');
             const d = json.data;
-            const msg = `Embedded with ${d.provider}: ${d.masters.embedded}/${d.masters.needed} brand SKUs, ${d.products.embedded}/${d.products.needed} products. ${(d.masters.failed + d.products.failed) > 0 ? `${d.masters.failed + d.products.failed} failed.` : ''}`;
-            alert(msg);
+            const deltaText = d.delta > 0 ? `+${d.delta} new mappings` : d.delta < 0 ? `${d.delta} mappings (some lost)` : 'no new mappings';
+            alert(`Mapping complete with ${d.ai}.\nProcessed ${d.brandsProcessed} brands${d.brandsFailed ? ` (${d.brandsFailed} failed)` : ''}.\n${deltaText}.`);
+            window.location.reload();
         } catch (e: unknown) {
-            alert(e instanceof Error ? e.message : 'Backfill failed');
+            alert(e instanceof Error ? e.message : 'Mapping run failed');
         } finally {
             setAiBackfilling(false);
         }
@@ -386,13 +387,13 @@ export default function AdminBrandsPage() {
                         )}
                         {sectionTab === 'Mappings' && (
                             <button
-                                onClick={runAiBackfill}
+                                onClick={runAiMapping}
                                 disabled={aiBackfilling}
                                 className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-[#7C3AED] to-[#3B82F6] text-white rounded-[10px] text-[12px] font-bold hover:shadow-md disabled:opacity-60 transition-all"
-                                title="Re-embed all products with the configured AI provider, then re-run mapping"
+                                title="Re-run brand mapping for all approved brands using the configured AI provider"
                             >
                                 {aiBackfilling ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                                {aiBackfilling ? 'Embedding…' : 'Re-embed with AI'}
+                                {aiBackfilling ? 'Running AI…' : 'Run AI Mapping'}
                             </button>
                         )}
                         <div className="relative">

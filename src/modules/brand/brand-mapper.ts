@@ -14,6 +14,7 @@ import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/events/emitter';
 import type { MatchMethod } from '@prisma/client';
 import { embed, cosineSimilarity, getEmbeddingProvider } from '@/lib/embeddings';
+import { getMappingAI, judgeBatch } from '@/lib/mapping-ai';
 
 // ── Text normalisation ───────────────────────────────────────
 const NOISE_WORDS = new Set([
@@ -220,8 +221,14 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
     for (const p of ranked) candidateMap.set(p.id, p);
   }
 
+  // Step 1: rule-score every candidate up front (fast, sync)
+  type Scored = {
+    candidate: typeof candidateMap extends Map<string, infer V> ? V : never;
+    score: number;
+    existingStatus: string | null;
+  };
+  const scored: Scored[] = [];
   for (const candidate of candidateMap.values()) {
-    // Skip already-mapped (verified/auto)
     const existing = await prisma.brandProductMapping.findUnique({
       where: {
         brandMasterProductId_distributorProductId: {
@@ -229,45 +236,81 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
           distributorProductId: candidate.id,
         },
       },
+      select: { status: true },
     });
     if (existing && existing.status !== 'rejected') continue;
 
-    const result = scoreMatch(
+    const r = scoreMatch(
       masterProduct.name,
       masterProduct.brand.name,
       candidate.name,
       candidate.brand,
-      {
-        brandEmbedding: masterProduct.embedding,
-        distributorEmbedding: candidate.embedding,
-      },
+      { brandEmbedding: masterProduct.embedding, distributorEmbedding: candidate.embedding },
     );
+    scored.push({ candidate, score: r.score, existingStatus: existing?.status ?? null });
+  }
 
-    if (result.score < 0.70) continue; // below threshold — skip
+  // Step 2: AI-judge the UNCERTAIN zone (0.55..0.95) in parallel — fast.
+  // Below 0.55 = clearly not a match; above 0.95 = clearly a match. Skip both to save calls.
+  const aiAvailable = !!getMappingAI();
+  let aiResults = new Map<string, { match: boolean; confidence: number; reason: string } | null>();
+  if (aiAvailable) {
+    const uncertain = scored.filter(s => s.score >= 0.55 && s.score <= 0.95);
+    if (uncertain.length > 0) {
+      const brandText = `${masterProduct.brand.name} ${masterProduct.name}${masterProduct.packSize ? ' ' + masterProduct.packSize : ''}${masterProduct.unit ? ' ' + masterProduct.unit : ''}`.trim();
+      aiResults = await judgeBatch(
+        uncertain.map(s => ({
+          key: s.candidate.id,
+          brandProduct: brandText,
+          distributorProduct: `${s.candidate.brand ?? ''} ${s.candidate.name}`.trim(),
+        })),
+        { concurrency: 8 },
+      );
+    }
+  }
 
-    const status: 'auto_mapped' | 'pending_review' =
-      result.score >= 0.90 ? 'auto_mapped' : 'pending_review';
+  // Step 3: persist final mappings using rule + AI blend.
+  for (const s of scored) {
+    const aiVerdict = aiResults.get(s.candidate.id);
+    let finalScore = s.score;
+
+    if (aiVerdict) {
+      // Blend: rule 40% + AI 60% when AI says match. AI confidence dominates because the LLM
+      // actually reads the names; rules only count tokens.
+      if (aiVerdict.match) {
+        finalScore = Math.min(1, s.score * 0.4 + aiVerdict.confidence * 0.6);
+      } else {
+        // AI says not a match — penalise heavily but keep some rule signal in case the LLM is wrong.
+        finalScore = s.score * 0.3 * (1 - aiVerdict.confidence);
+      }
+    }
+
+    if (finalScore < 0.70) continue; // below threshold — skip
+
+    const status: 'auto_mapped' | 'pending_review' = finalScore >= 0.90 ? 'auto_mapped' : 'pending_review';
     const matchedBy: MatchMethod = 'rule_based';
 
     await prisma.brandProductMapping.upsert({
       where: {
         brandMasterProductId_distributorProductId: {
           brandMasterProductId,
-          distributorProductId: candidate.id,
+          distributorProductId: s.candidate.id,
         },
       },
       create: {
         brandId: masterProduct.brandId,
         brandMasterProductId,
-        distributorProductId: candidate.id,
-        confidenceScore: result.score,
+        distributorProductId: s.candidate.id,
+        confidenceScore: finalScore,
         status,
         matchedBy,
+        reviewNote: aiVerdict?.reason ? `AI: ${aiVerdict.reason}` : null,
       },
       update: {
-        confidenceScore: result.score,
+        confidenceScore: finalScore,
         status,
         matchedBy,
+        reviewNote: aiVerdict?.reason ? `AI: ${aiVerdict.reason}` : null,
         updatedAt: new Date(),
       },
     });
@@ -276,8 +319,8 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
       mappingId: brandMasterProductId,
       brandId: masterProduct.brandId,
       brandMasterProductId,
-      distributorProductId: candidate.id,
-      confidenceScore: result.score,
+      distributorProductId: s.candidate.id,
+      confidenceScore: finalScore,
       status,
     });
   }
@@ -319,11 +362,13 @@ export async function runMappingForVendorProduct(distributorProductId: string): 
 
   const haveDistEmbedding = distributorProduct.embedding && distributorProduct.embedding.length > 0;
 
+  // Step 1: collect rule-scored candidates that pass pre-filter
+  type ScoredM = { mp: (typeof masterProducts)[number]; score: number };
+  const scored: ScoredM[] = [];
   for (const mp of masterProducts) {
     const brandNameLower = mp.brand.name.toLowerCase();
     const mentionsBrand = distNameLower.includes(brandNameLower) || distBrandLower.includes(brandNameLower);
 
-    // Pre-filter: text-mention OR semantic similarity ≥0.55 (only when both sides have embeddings).
     let semanticPasses = false;
     if (!mentionsBrand && haveDistEmbedding && mp.embedding && mp.embedding.length > 0
         && mp.embeddingModel === distributorProduct.embeddingModel) {
@@ -339,53 +384,77 @@ export async function runMappingForVendorProduct(distributorProductId: string): 
           distributorProductId: distributorProduct.id,
         },
       },
+      select: { status: true },
     });
     if (existing && existing.status !== 'rejected') continue;
 
-    const result = scoreMatch(
-      mp.name,
-      mp.brand.name,
-      distributorProduct.name,
-      distributorProduct.brand,
-      {
-        brandEmbedding: mp.embedding,
-        distributorEmbedding: distributorProduct.embedding,
-      },
-    );
-    if (result.score < 0.70) continue;
+    const r = scoreMatch(mp.name, mp.brand.name, distributorProduct.name, distributorProduct.brand,
+      { brandEmbedding: mp.embedding, distributorEmbedding: distributorProduct.embedding });
+    scored.push({ mp, score: r.score });
+  }
 
-    const status: 'auto_mapped' | 'pending_review' =
-      result.score >= 0.90 ? 'auto_mapped' : 'pending_review';
+  // Step 2: AI-judge uncertain pairs in parallel
+  const aiAvailable = !!getMappingAI();
+  let aiResults = new Map<string, { match: boolean; confidence: number; reason: string } | null>();
+  if (aiAvailable) {
+    const uncertain = scored.filter(s => s.score >= 0.55 && s.score <= 0.95);
+    if (uncertain.length > 0) {
+      const distText = `${distributorProduct.brand ?? ''} ${distributorProduct.name}`.trim();
+      aiResults = await judgeBatch(
+        uncertain.map(s => ({
+          key: s.mp.id,
+          brandProduct: `${s.mp.brand.name} ${s.mp.name}${s.mp.packSize ? ' ' + s.mp.packSize : ''}${s.mp.unit ? ' ' + s.mp.unit : ''}`.trim(),
+          distributorProduct: distText,
+        })),
+        { concurrency: 8 },
+      );
+    }
+  }
+
+  // Step 3: persist with rule + AI blend
+  for (const s of scored) {
+    const aiVerdict = aiResults.get(s.mp.id);
+    let finalScore = s.score;
+    if (aiVerdict) {
+      finalScore = aiVerdict.match
+        ? Math.min(1, s.score * 0.4 + aiVerdict.confidence * 0.6)
+        : s.score * 0.3 * (1 - aiVerdict.confidence);
+    }
+    if (finalScore < 0.70) continue;
+
+    const status: 'auto_mapped' | 'pending_review' = finalScore >= 0.90 ? 'auto_mapped' : 'pending_review';
 
     await prisma.brandProductMapping.upsert({
       where: {
         brandMasterProductId_distributorProductId: {
-          brandMasterProductId: mp.id,
+          brandMasterProductId: s.mp.id,
           distributorProductId: distributorProduct.id,
         },
       },
       create: {
-        brandId: mp.brandId,
-        brandMasterProductId: mp.id,
+        brandId: s.mp.brandId,
+        brandMasterProductId: s.mp.id,
         distributorProductId: distributorProduct.id,
-        confidenceScore: result.score,
+        confidenceScore: finalScore,
         status,
         matchedBy: 'rule_based',
+        reviewNote: aiVerdict?.reason ? `AI: ${aiVerdict.reason}` : null,
       },
       update: {
-        confidenceScore: result.score,
+        confidenceScore: finalScore,
         status,
         matchedBy: 'rule_based',
+        reviewNote: aiVerdict?.reason ? `AI: ${aiVerdict.reason}` : null,
         updatedAt: new Date(),
       },
     });
 
     emitEvent('BrandProductMapped', {
-      mappingId: mp.id,
-      brandId: mp.brandId,
-      brandMasterProductId: mp.id,
+      mappingId: s.mp.id,
+      brandId: s.mp.brandId,
+      brandMasterProductId: s.mp.id,
       distributorProductId: distributorProduct.id,
-      confidenceScore: result.score,
+      confidenceScore: finalScore,
       status,
     });
   }
