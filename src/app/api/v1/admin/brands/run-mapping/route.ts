@@ -23,9 +23,18 @@ export const POST = adminOnly(async (_req: NextRequest, ctx: AuthContext) => {
       select: { id: true, name: true },
     });
 
-    const before = await prisma.brandProductMapping.count({
-      where: { status: { in: ['auto_mapped', 'verified', 'pending_review'] } },
-    });
+    // Snapshot status counts before to report what AI changed
+    const snapshot = async () => {
+      const rows = await prisma.brandProductMapping.groupBy({
+        by: ['status'],
+        _count: { _all: true },
+        where: { status: { in: ['auto_mapped', 'verified', 'pending_review', 'rejected'] } },
+      });
+      const out: Record<string, number> = { auto_mapped: 0, verified: 0, pending_review: 0, rejected: 0 };
+      for (const r of rows) out[r.status] = r._count._all;
+      return out;
+    };
+    const before = await snapshot();
 
     let processed = 0;
     let errors = 0;
@@ -39,9 +48,9 @@ export const POST = adminOnly(async (_req: NextRequest, ctx: AuthContext) => {
       }
     }
 
-    const after = await prisma.brandProductMapping.count({
-      where: { status: { in: ['auto_mapped', 'verified', 'pending_review'] } },
-    });
+    const after = await snapshot();
+    const totalBefore = before.auto_mapped + before.verified + before.pending_review;
+    const totalAfter = after.auto_mapped + after.verified + after.pending_review;
 
     return NextResponse.json({
       success: true,
@@ -49,9 +58,11 @@ export const POST = adminOnly(async (_req: NextRequest, ctx: AuthContext) => {
         ai: aiName,
         brandsProcessed: processed,
         brandsFailed: errors,
-        mappingsBefore: before,
-        mappingsAfter: after,
-        delta: after - before,
+        before,
+        after,
+        delta: totalAfter - totalBefore,
+        promoted: Math.max(0, after.auto_mapped - before.auto_mapped),
+        newPending: Math.max(0, after.pending_review - before.pending_review),
       },
     });
   } catch (error) {

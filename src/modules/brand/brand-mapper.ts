@@ -238,7 +238,9 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
       },
       select: { status: true },
     });
-    if (existing && existing.status !== 'rejected') continue;
+    // Skip live mappings (admin-curated) and rejected (admin said no).
+    // Re-evaluate pending_review so AI can promote/demote them.
+    if (existing && (existing.status === 'auto_mapped' || existing.status === 'verified' || existing.status === 'rejected')) continue;
 
     const r = scoreMatch(
       masterProduct.name,
@@ -386,7 +388,9 @@ export async function runMappingForVendorProduct(distributorProductId: string): 
       },
       select: { status: true },
     });
-    if (existing && existing.status !== 'rejected') continue;
+    // Skip live mappings (admin-curated) and rejected (admin said no).
+    // Re-evaluate pending_review so AI can promote/demote them.
+    if (existing && (existing.status === 'auto_mapped' || existing.status === 'verified' || existing.status === 'rejected')) continue;
 
     const r = scoreMatch(mp.name, mp.brand.name, distributorProduct.name, distributorProduct.brand,
       { brandEmbedding: mp.embedding, distributorEmbedding: distributorProduct.embedding });

@@ -234,8 +234,16 @@ export default function AdminBrandsPage() {
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Mapping run failed');
             const d = json.data;
-            const deltaText = d.delta > 0 ? `+${d.delta} new mappings` : d.delta < 0 ? `${d.delta} mappings (some lost)` : 'no new mappings';
-            alert(`Mapping complete with ${d.ai}.\nProcessed ${d.brandsProcessed} brands${d.brandsFailed ? ` (${d.brandsFailed} failed)` : ''}.\n${deltaText}.`);
+            const lines = [
+                `Mapping complete with ${d.ai}.`,
+                `Processed ${d.brandsProcessed} brands${d.brandsFailed ? ` (${d.brandsFailed} failed)` : ''}.`,
+                ``,
+                `Auto-mapped: ${d.before.auto_mapped} → ${d.after.auto_mapped}${d.promoted > 0 ? ` (+${d.promoted} promoted)` : ''}`,
+                `Pending review: ${d.before.pending_review} → ${d.after.pending_review}`,
+                `Verified: ${d.before.verified} → ${d.after.verified}`,
+                `Rejected: ${d.before.rejected} → ${d.after.rejected}`,
+            ];
+            alert(lines.join('\n'));
             window.location.reload();
         } catch (e: unknown) {
             alert(e instanceof Error ? e.message : 'Mapping run failed');
