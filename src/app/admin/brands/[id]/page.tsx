@@ -3,14 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
-import { ChevronLeft, Upload, X, Plus, Loader2, Check, Palette } from 'lucide-react';
+import { ChevronLeft, Upload, X, Loader2, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-
-const BG_PRESETS = [
-    '#fff8e1', '#fde8e8', '#fdf6e3', '#e8f5e9', '#fce4ec',
-    '#fff3e0', '#e3f2fd', '#f3e5f5', '#e8eaf6', '#e0f2f1',
-];
+import { CategoryMultiPicker } from '@/components/features/brand/CategoryMultiPicker';
 
 interface Brand {
     id: string;
@@ -119,18 +115,20 @@ function ImageUploadField({
     );
 }
 
-function ShowcaseImagesField({
-    images,
+/** Single image upload — used for "Card Banner Image" (replaces older showcase-images grid).
+ *  Stores into Brand.showcaseImages as a 1-element array (schema kept for backward compat).
+ */
+function SingleBannerImageField({
+    value,
     onChange,
 }: {
-    images: string[];
-    onChange: (imgs: string[]) => void;
+    value: string | null;
+    onChange: (url: string | null) => void;
 }) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
 
     const handleFile = async (file: File) => {
-        if (images.length >= 5) { toast.error('Max 5 showcase images'); return; }
         setUploading(true);
         try {
             const fd = new FormData();
@@ -139,8 +137,8 @@ function ShowcaseImagesField({
             const res = await fetch('/api/v1/upload', { method: 'POST', body: fd });
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Upload failed');
-            onChange([...images, json.data.url]);
-            toast.success('Image added');
+            onChange(json.data.url);
+            toast.success('Image uploaded');
         } catch (e: unknown) {
             toast.error(e instanceof Error ? e.message : 'Upload failed');
         } finally {
@@ -150,74 +148,43 @@ function ShowcaseImagesField({
 
     return (
         <div className="space-y-2">
-            <label className="text-[13px] font-semibold text-gray-700">Showcase Images <span className="text-gray-400 font-normal">(up to 5 — first one shows on card)</span></label>
-            <div className="flex flex-wrap gap-3">
-                {images.map((img, i) => (
-                    <div key={i} className="relative w-[100px] h-[80px] rounded-xl overflow-hidden border border-gray-200">
-                        <Image src={img} alt="" fill className="object-cover" sizes="100px" />
+            <label className="text-[13px] font-semibold text-gray-700">
+                Card Banner Image <span className="text-gray-400 font-normal">(shows on the brand card top section)</span>
+            </label>
+            <div
+                onClick={() => inputRef.current?.click()}
+                className={cn(
+                    'relative border-2 border-dashed border-gray-200 rounded-2xl overflow-hidden cursor-pointer hover:border-[#53B175] transition-colors',
+                    value ? 'h-[160px]' : 'h-[120px] flex items-center justify-center bg-gray-50'
+                )}
+            >
+                {value ? (
+                    <>
+                        <Image src={value} alt="Card banner" fill className="object-cover" sizes="400px" />
                         <button
                             type="button"
-                            onClick={() => onChange(images.filter((_, j) => j !== i))}
-                            className="absolute top-1 right-1 w-5 h-5 bg-white/90 rounded-full flex items-center justify-center shadow"
+                            onClick={(e) => { e.stopPropagation(); onChange(null); }}
+                            className="absolute top-2 right-2 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:bg-red-50"
                         >
-                            <X size={10} className="text-gray-600" />
+                            <X size={14} className="text-gray-600" />
                         </button>
+                    </>
+                ) : (
+                    <div className="flex flex-col items-center gap-2 text-gray-400">
+                        {uploading ? <Loader2 size={24} className="animate-spin text-[#53B175]" /> : <Upload size={24} />}
+                        <span className="text-[12px] font-medium">{uploading ? 'Uploading…' : 'Click to upload card banner'}</span>
                     </div>
-                ))}
-                {images.length < 5 && (
-                    <button
-                        type="button"
-                        onClick={() => inputRef.current?.click()}
-                        className="w-[100px] h-[80px] rounded-xl border-2 border-dashed border-gray-200 hover:border-[#53B175] transition-colors flex flex-col items-center justify-center gap-1 text-gray-400 hover:text-[#53B175]"
-                    >
-                        {uploading ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-                        <span className="text-[10px] font-medium">{uploading ? 'Uploading…' : 'Add image'}</span>
-                    </button>
                 )}
             </div>
             <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-        </div>
-    );
-}
-
-function CategoriesField({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
-    const [input, setInput] = useState('');
-
-    const add = () => {
-        const trimmed = input.trim();
-        if (!trimmed || value.includes(trimmed) || value.length >= 12) return;
-        onChange([...value, trimmed]);
-        setInput('');
-    };
-
-    return (
-        <div className="space-y-2">
-            <label className="text-[13px] font-semibold text-gray-700">Categories <span className="text-gray-400 font-normal">(up to 12, shown on card)</span></label>
-            <div className="flex flex-wrap gap-2 min-h-[40px] p-2 border border-gray-200 rounded-xl bg-gray-50">
-                {value.map((cat) => (
-                    <span key={cat} className="flex items-center gap-1 bg-[#e8f5e9] text-[#2e7d46] text-[12px] font-semibold rounded-full px-3 py-1">
-                        {cat}
-                        <button type="button" onClick={() => onChange(value.filter(c => c !== cat))} className="hover:text-red-500 transition-colors">
-                            <X size={11} />
-                        </button>
-                    </span>
-                ))}
-            </div>
-            <div className="flex gap-2">
-                <input
-                    type="text"
-                    placeholder="Type a category and press Enter…"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
-                    className="flex-1 text-[13px] border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#53B175]/30"
-                />
-                <button type="button" onClick={add}
-                    className="px-4 py-2 bg-[#53B175] text-white text-[13px] font-bold rounded-xl hover:bg-[#3d9e5f] transition-colors">
-                    Add
-                </button>
-            </div>
+            <input
+                type="url"
+                placeholder="Or paste URL…"
+                value={value ?? ''}
+                onChange={(e) => onChange(e.target.value || null)}
+                className="w-full text-[12px] border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#53B175]/30 placeholder:text-gray-300"
+            />
         </div>
     );
 }
@@ -393,52 +360,19 @@ export default function AdminBrandEditPage() {
                             aspectHint="Wide banner (1200×400 px recommended)"
                         />
                     </div>
-                    <ShowcaseImagesField
-                        images={form.showcaseImages}
-                        onChange={(imgs) => setForm(p => ({ ...p, showcaseImages: imgs }))}
+                    <SingleBannerImageField
+                        value={form.showcaseImages[0] ?? null}
+                        onChange={(url) => setForm(p => ({ ...p, showcaseImages: url ? [url] : [] }))}
                     />
                 </div>
 
-                {/* Card appearance */}
-                <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-5">
-                    <h2 className="text-[15px] font-bold text-[#181725]">Card Appearance</h2>
-
-                    {/* bgColor picker */}
-                    <div className="space-y-2">
-                        <label className="text-[13px] font-semibold text-gray-700 flex items-center gap-1.5">
-                            <Palette size={14} className="text-[#53B175]" />
-                            Card Background Colour
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                            {BG_PRESETS.map(c => (
-                                <button
-                                    key={c}
-                                    type="button"
-                                    onClick={() => setForm(p => ({ ...p, bgColor: c }))}
-                                    className={cn(
-                                        'w-8 h-8 rounded-full border-2 transition-all',
-                                        form.bgColor === c ? 'border-[#53B175] scale-110 shadow-md' : 'border-gray-200 hover:border-gray-400'
-                                    )}
-                                    style={{ backgroundColor: c }}
-                                />
-                            ))}
-                            <input
-                                type="color"
-                                value={form.bgColor}
-                                onChange={(e) => setForm(p => ({ ...p, bgColor: e.target.value }))}
-                                className="w-8 h-8 rounded-full cursor-pointer border-2 border-gray-200"
-                                title="Custom colour"
-                            />
-                        </div>
-                        {/* Live preview strip */}
-                        <div className="h-10 rounded-xl mt-1 flex items-center justify-center" style={{ backgroundColor: form.bgColor }}>
-                            <span className="text-[11px] font-bold text-black/30">Card top preview</span>
-                        </div>
-                    </div>
-
-                    <CategoriesField
+                {/* Categories */}
+                <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                    <CategoryMultiPicker
                         value={form.categories}
                         onChange={(cats) => setForm(p => ({ ...p, categories: cats }))}
+                        endpoint="/api/v1/admin/categories"
+                        helper="Pick from existing categories. New ones added here are auto-approved (admin)."
                     />
                 </div>
             </div>

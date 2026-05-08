@@ -1,0 +1,28 @@
+feat(brand-store): single Card Banner Image, drop Card Appearance, category dropdown picker
+
+Per UX feedback, three changes to the admin brand edit + brand portal settings pages:
+
+1. Showcase Images grid (max 5) collapsed into a single "Card Banner Image" upload.
+   Schema unchanged (Brand.showcaseImages still String[]) — only the first
+   element is used and rendered. Existing data with multiple images keeps
+   working; only the first shows on the brand card.
+
+2. Card Appearance section removed from both pages. bgColor still in schema
+   (kept in form payload for backward compat) but no UI — brands now just
+   get the green theme default.
+
+3. Categories: free-text "type and Enter" input replaced with
+   CategoryMultiPicker — searchable dropdown of existing admin-managed
+   categories (loaded from /api/v1/categories). When a brand needs a
+   category that does not exist, they type it in the search and tap
+   "Request" — submitted to admin via new endpoint
+   POST /api/v1/brand/categories/suggest (mirrors vendor suggest flow,
+   creates Category with status=pending so admin reviews at /admin/categories).
+   Admin context on /admin/brands/[id] uses /api/v1/admin/categories
+   (auto-approved create).
+
+New files:
+- src/components/features/brand/CategoryMultiPicker.tsx — reusable picker
+- src/app/api/v1/brand/categories/suggest/route.ts — brand-side suggest endpoint
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

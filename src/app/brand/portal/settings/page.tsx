@@ -2,12 +2,11 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
-import { Loader2, Check, Save, Users, Plus, Trash2, Crown, Shield, Edit3, Eye, Upload, X, Palette } from 'lucide-react';
+import { Loader2, Check, Save, Users, Plus, Trash2, Crown, Shield, Edit3, Eye, Upload, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { toast } from 'sonner';
-
-const BG_PRESETS = ['#fff8e1','#fde8e8','#fdf6e3','#e8f5e9','#fce4ec','#fff3e0','#e3f2fd','#f3e5f5','#e8eaf6','#e0f2f1'];
+import { CategoryMultiPicker } from '@/components/features/brand/CategoryMultiPicker';
 
 interface BrandProfile {
     id: string;
@@ -180,7 +179,6 @@ export default function BrandSettingsPage() {
     };
 
     // Hooks must run on every render — do not put after early return below.
-    const [catInput, setCatInput] = useState('');
     const logoRef = useRef<HTMLInputElement>(null);
     const bannerRef = useRef<HTMLInputElement>(null);
     const showcaseRef = useRef<HTMLInputElement>(null);
@@ -223,13 +221,6 @@ export default function BrandSettingsPage() {
         try { const url = await uploadImage(file); setForm(p => ({ ...p, showcaseImages: [...p.showcaseImages, url] })); toast.success('Image added'); }
         catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Upload failed'); }
         finally { setUploadingShowcase(false); }
-    };
-
-    const addCategory = () => {
-        const t = catInput.trim();
-        if (!t || form.categories.includes(t) || form.categories.length >= 12) return;
-        setForm(p => ({ ...p, categories: [...p.categories, t] }));
-        setCatInput('');
     };
 
     return (
@@ -323,72 +314,41 @@ export default function BrandSettingsPage() {
                         className="w-full border border-[#EEEEEE] rounded-[8px] px-3 py-2 text-[12px] focus:outline-none focus:border-[#53B175]/50 bg-[#FAFAFA]" />
                 </div>
 
-                {/* Showcase images */}
+                {/* Card Banner Image — single image shown on the brand card */}
                 <div className="space-y-2">
-                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">Showcase Images <span className="font-normal normal-case text-gray-400">(first shows on brand card, max 5)</span></label>
-                    <div className="flex flex-wrap gap-3">
-                        {form.showcaseImages.map((img, i) => (
-                            <div key={i} className="relative w-[90px] h-[70px] rounded-xl overflow-hidden border border-gray-200">
-                                <Image src={img} alt="" fill className="object-cover" sizes="90px" />
-                                <button type="button" onClick={() => setForm(p => ({ ...p, showcaseImages: p.showcaseImages.filter((_, j) => j !== i) }))}
-                                    className="absolute top-1 right-1 w-5 h-5 bg-white/90 rounded-full flex items-center justify-center shadow">
-                                    <X size={10} className="text-gray-600" /></button>
-                            </div>
-                        ))}
-                        {form.showcaseImages.length < 5 && (
-                            <button type="button" onClick={() => showcaseRef.current?.click()}
-                                className="w-[90px] h-[70px] rounded-xl border-2 border-dashed border-gray-200 hover:border-[#53B175] transition-colors flex flex-col items-center justify-center gap-1 text-gray-400 hover:text-[#53B175]">
-                                {uploadingShowcase ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                                <span className="text-[10px] font-medium">{uploadingShowcase ? 'Uploading…' : 'Add'}</span>
-                            </button>
-                        )}
+                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">Card Banner Image <span className="font-normal normal-case text-gray-400">(shows on brand card top section)</span></label>
+                    <div onClick={() => showcaseRef.current?.click()}
+                        className={cn('relative border-2 border-dashed border-gray-200 hover:border-[#53B175] transition-colors cursor-pointer rounded-xl overflow-hidden',
+                            form.showcaseImages[0] ? 'h-[120px]' : 'h-[80px] flex items-center justify-center bg-gray-50')}>
+                        {uploadingShowcase ? <Loader2 size={20} className="animate-spin text-[#53B175]" /> :
+                            form.showcaseImages[0] ? <>
+                                <Image src={form.showcaseImages[0]} alt="card banner" fill className="object-cover" sizes="700px" />
+                                <button type="button" onClick={e => { e.stopPropagation(); setForm(p => ({ ...p, showcaseImages: [] })); }}
+                                    className="absolute top-2 right-2 w-6 h-6 bg-white/90 rounded-full flex items-center justify-center shadow"><X size={12} /></button>
+                            </> :
+                            <div className="flex items-center gap-2 text-gray-400"><Upload size={18} /><span className="text-[13px] font-medium">Click to upload card banner</span></div>}
                     </div>
                     <input ref={showcaseRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
-                        onChange={e => { const f = e.target.files?.[0]; if (f) handleShowcaseFile(f); e.target.value = ''; }} />
+                        onChange={e => {
+                            const f = e.target.files?.[0];
+                            if (f) {
+                                // Replace any existing — single image only
+                                setForm(p => ({ ...p, showcaseImages: [] }));
+                                handleShowcaseFile(f);
+                            }
+                            e.target.value = '';
+                        }} />
                 </div>
             </div>
 
-            {/* Card appearance */}
-            <div className="bg-white rounded-[20px] border border-[#EEEEEE] p-6 space-y-5">
-                <h2 className="text-[15px] font-bold text-[#181725]">Card Appearance</h2>
-
-                {/* bgColor */}
-                <div className="space-y-2">
-                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider flex items-center gap-1"><Palette size={12} /> Card Background Colour</label>
-                    <div className="flex flex-wrap gap-2">
-                        {BG_PRESETS.map(c => (
-                            <button key={c} type="button" onClick={() => setForm(p => ({ ...p, bgColor: c }))}
-                                className={cn('w-7 h-7 rounded-full border-2 transition-all', form.bgColor === c ? 'border-[#53B175] scale-110 shadow' : 'border-gray-200 hover:border-gray-400')}
-                                style={{ backgroundColor: c }} />
-                        ))}
-                        <input type="color" value={form.bgColor} onChange={e => setForm(p => ({ ...p, bgColor: e.target.value }))}
-                            className="w-7 h-7 rounded-full cursor-pointer border-2 border-gray-200" />
-                    </div>
-                    <div className="h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: form.bgColor }}>
-                        <span className="text-[10px] font-bold text-black/25">Card top preview</span>
-                    </div>
-                </div>
-
-                {/* Categories */}
-                <div className="space-y-2">
-                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">Categories <span className="font-normal normal-case text-gray-400">(shown on brand card, up to 12)</span></label>
-                    <div className="flex flex-wrap gap-2 min-h-[40px] p-2 border border-[#EEEEEE] rounded-[10px] bg-[#FAFAFA]">
-                        {form.categories.map(cat => (
-                            <span key={cat} className="flex items-center gap-1 bg-[#e8f5e9] text-[#2e7d46] text-[12px] font-semibold rounded-full px-3 py-1">
-                                {cat}
-                                <button type="button" onClick={() => setForm(p => ({ ...p, categories: p.categories.filter(c => c !== cat) }))} className="hover:text-red-500"><X size={10} /></button>
-                            </span>
-                        ))}
-                    </div>
-                    <div className="flex gap-2">
-                        <input type="text" placeholder="e.g. Dairy, Spices…" value={catInput}
-                            onChange={e => setCatInput(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCategory(); } }}
-                            className="flex-1 border border-[#EEEEEE] rounded-[10px] px-3 py-2 text-[13px] outline-none focus:border-[#53B175]/50 bg-[#FAFAFA] focus:bg-white" />
-                        <button type="button" onClick={addCategory}
-                            className="px-4 py-2 bg-[#53B175] text-white text-[13px] font-bold rounded-[10px] hover:bg-[#3d9e41] transition-colors">Add</button>
-                    </div>
-                </div>
+            {/* Categories */}
+            <div className="bg-white rounded-[20px] border border-[#EEEEEE] p-6">
+                <CategoryMultiPicker
+                    value={form.categories}
+                    onChange={(cats) => setForm(p => ({ ...p, categories: cats }))}
+                    endpoint="/api/v1/brand/categories/suggest"
+                    helper="Pick from existing categories. To request a new one, type it and tap 'Request' — admin reviews before it goes live."
+                />
             </div>
 
             {error && <p className="text-[13px] text-[#E74C3C] font-bold px-1">{error}</p>}
