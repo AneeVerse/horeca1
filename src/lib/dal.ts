@@ -123,6 +123,24 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
   const brandName = (masterBrand?.name as string) || undefined;
   const brandSlug = (masterBrand?.slug as string) || undefined;
 
+  // packSize and unit are stored separately in the DB (e.g. packSize='500', unit='ml').
+  // For display, combine them: '500 ml'. If packSize already contains the unit
+  // (e.g. legacy data like '500ml'), leave it as-is to avoid '500ml ml'.
+  const rawPackSize = ((p.packSize as string) || '').trim();
+  const rawUnit = ((p.unit as string) || '').trim();
+  let packSizeDisplay: string;
+  if (!rawPackSize && !rawUnit) {
+    packSizeDisplay = '1 unit';
+  } else if (!rawUnit) {
+    packSizeDisplay = rawPackSize;
+  } else if (!rawPackSize) {
+    packSizeDisplay = rawUnit;
+  } else if (rawPackSize.toLowerCase().includes(rawUnit.toLowerCase())) {
+    packSizeDisplay = rawPackSize;
+  } else {
+    packSizeDisplay = `${rawPackSize} ${rawUnit}`;
+  }
+
   return {
     id: p.id as string,
     name: rawName,
@@ -134,8 +152,8 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
     originalPrice: strikePrice,
     images: p.imageUrl ? [p.imageUrl as string] : [],
     category: (p.categoryName as string) || (p.category as Record<string, unknown>)?.name as string || '',
-    packSize: (p.packSize as string) || '1 unit',
-    unit: (p.unit as string) || 'unit',
+    packSize: packSizeDisplay,
+    unit: rawUnit || 'unit',
     stock: inventory ? Number((inventory as Record<string, unknown>).qtyAvailable) || 0 : 0,
     isActive: (p.isActive as boolean) ?? true,
     createdAt: new Date(p.createdAt as string),

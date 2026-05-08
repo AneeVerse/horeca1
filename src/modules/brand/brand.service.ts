@@ -212,6 +212,7 @@ export class BrandService {
         description: mp.description,
         image: mp.imageUrl,
         packSize: mp.packSize,
+        unit: mp.unit,
         category: mp.categoryRel?.name ?? (mp as Record<string, unknown>).category as string | undefined ?? 'General',
         distributors,
       };

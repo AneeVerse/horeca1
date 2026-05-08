@@ -10,6 +10,22 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Combine `packSize` (e.g. "500") and `unit` (e.g. "ml") for display: "500 ml".
+ * - If packSize already contains the unit (legacy "500ml" data), returns as-is.
+ * - If only one is present, returns it alone.
+ * - If both are empty, returns empty string (caller decides fallback).
+ */
+export function formatPackSize(packSize?: string | null, unit?: string | null): string {
+    const ps = (packSize ?? '').trim();
+    const u = (unit ?? '').trim();
+    if (!ps && !u) return '';
+    if (!u) return ps;
+    if (!ps) return u;
+    if (ps.toLowerCase().includes(u.toLowerCase())) return ps;
+    return `${ps} ${u}`;
+}
+
+/**
  * Format price for display in INR (Indian Rupee).
  */
 export function formatPrice(price: number, currency: string = 'INR'): string {

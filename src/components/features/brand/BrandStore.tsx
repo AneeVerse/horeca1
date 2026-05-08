@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, MapPin, Store, ArrowLeft, Search, X, AlertCircle, Plus, Minus, ShoppingCart, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+import { cn, formatPackSize } from '@/lib/utils';
 import { useAddress } from '@/context/AddressContext';
 import { useCart } from '@/context/CartContext';
 import type { VendorProduct } from '@/types';
@@ -33,6 +33,7 @@ interface BrandProduct {
     image: string;
     category: string;
     packSize?: string;
+    unit?: string;
     distributors: BrandDistributor[];
 }
 
@@ -145,12 +146,13 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                         bannerImage: d.banner ?? '',
                         tagline: d.tagline ?? '',
                         coverage: d.coverage ?? undefined,
-                        products: d.products.map((p: { id: string; name: string; image?: string; category: string; packSize?: string; distributors?: BrandDistributor[] }) => ({
+                        products: d.products.map((p: { id: string; name: string; image?: string; category: string; packSize?: string; unit?: string; distributors?: BrandDistributor[] }) => ({
                             id: p.id,
                             name: p.name,
                             image: p.image ?? '',
                             category: p.category,
                             packSize: p.packSize ?? '',
+                            unit: p.unit ?? '',
                             distributors: p.distributors ?? [],
                         })),
                         vendors: d.vendors.map((v: { id: string; name: string; logo?: string; pincodes?: string[]; productIds: string[]; prices: Record<string, string>; servicesPincode?: boolean }) => ({
@@ -514,7 +516,7 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                                                 {product.name}
                                             </p>
                                             <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tight">
-                                                {product.packSize || product.category}
+                                                {formatPackSize(product.packSize, product.unit) || product.category}
                                             </p>
                                         </div>
                                     </button>

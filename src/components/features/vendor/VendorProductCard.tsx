@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
-import { cn } from '@/lib/utils';
+import { cn, formatPackSize } from '@/lib/utils';
 import type { VendorProduct } from '@/types';
 import { useCart } from '@/context/CartContext';
 
@@ -28,6 +28,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
         imageUrl?: string | null;
         images?: string[];
         packSize?: string | null;
+        unit?: string | null;
         basePrice?: number;
     }>>([]);
     const [alternatesLoading, setAlternatesLoading] = useState(false);
@@ -53,6 +54,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                 imageUrl: (a.imageUrl as string | null | undefined) ?? null,
                 images: a.images as string[] | undefined,
                 packSize: (a.packSize as string | null | undefined) ?? null,
+                unit: (a.unit as string | null | undefined) ?? null,
                 basePrice: a.basePrice != null ? Number(a.basePrice) : undefined,
             })));
         } catch {
@@ -376,8 +378,8 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                                                 {alt.vendor.businessName}
                                             </p>
                                             <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap mt-0.5">
-                                                {alt.packSize && (
-                                                    <span className="text-[11px] font-semibold text-gray-500">{alt.packSize}</span>
+                                                {(alt.packSize || alt.unit) && (
+                                                    <span className="text-[11px] font-semibold text-gray-500">{formatPackSize(alt.packSize, alt.unit)}</span>
                                                 )}
                                                 {alt.basePrice != null && (
                                                     <span className="text-[11px] font-bold text-[#181725]">₹{alt.basePrice}</span>
