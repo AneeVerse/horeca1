@@ -270,6 +270,14 @@ export default function AdminBrandsPage() {
                 ))}
             </div>
 
+            {/* Quick links */}
+            <div className="flex items-center gap-2 flex-wrap">
+                <Link href="/admin/brand-distributor-invites"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-200 rounded-[12px] text-[12px] font-bold text-[#7C7C7C] hover:border-[#53B175]/40 hover:text-[#53B175] transition-colors">
+                    <MessageSquare size={13} /> Distributor Invites
+                </Link>
+            </div>
+
             {/* Section Tabs */}
             <div className="flex items-center gap-2 bg-[#F8F9FB] p-1.5 rounded-[16px] w-fit">
                 {([

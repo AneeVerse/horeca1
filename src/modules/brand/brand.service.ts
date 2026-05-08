@@ -238,6 +238,175 @@ export class BrandService {
     };
   }
 
+  // ── Brand: analytics dashboard ────────────────────────────
+  // Aggregates the brand's reach and order activity by joining the brand's
+  // BrandProductMappings → distributorProductIds → OrderItem rows.
+  async getAnalytics(brandId: string) {
+    // 1) Mapped distributor products + serviced pincodes
+    const mappings = await prisma.brandProductMapping.findMany({
+      where: { brandId, status: { in: ['verified', 'auto_mapped'] } },
+      select: {
+        distributorProductId: true,
+        brandMasterProduct: { select: { id: true, name: true, imageUrl: true, packSize: true } },
+        distributorProduct: {
+          select: {
+            vendorId: true,
+            vendor: {
+              select: {
+                id: true,
+                businessName: true,
+                logoUrl: true,
+                serviceAreas: { where: { isActive: true }, select: { pincode: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const distributorProductIds = mappings.map(m => m.distributorProductId);
+    const distributorIds = new Set(mappings.map(m => m.distributorProduct.vendorId).filter((v): v is string => v != null));
+    const pincodes = new Set<string>();
+    for (const m of mappings) {
+      for (const sa of m.distributorProduct.vendor?.serviceAreas ?? []) pincodes.add(sa.pincode);
+    }
+
+    const masterProductCount = await prisma.brandMasterProduct.count({
+      where: { brandId, isActive: true },
+    });
+
+    // 2) Orders containing brand-mapped products (last 6 months for trend, last 30d for headline)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const orderItems = distributorProductIds.length > 0
+      ? await prisma.orderItem.findMany({
+          where: {
+            productId: { in: distributorProductIds },
+            order: { createdAt: { gte: sixMonthsAgo }, status: { not: 'cancelled' } },
+          },
+          select: {
+            productId: true,
+            quantity: true,
+            totalPrice: true,
+            order: { select: { id: true, createdAt: true, vendorId: true } },
+          },
+        })
+      : [];
+
+    // 3) Headline stats (last 30d)
+    let last30dOrders = 0;
+    let last30dRevenue = 0;
+    const last30dOrderIds = new Set<string>();
+    for (const it of orderItems) {
+      if (it.order.createdAt >= thirtyDaysAgo) {
+        last30dOrderIds.add(it.order.id);
+        last30dRevenue += Number(it.totalPrice);
+      }
+    }
+    last30dOrders = last30dOrderIds.size;
+
+    // 4) Top 5 master products by qty + revenue (all-time within 6mo window)
+    const productIdToMaster = new Map<string, { id: string; name: string; imageUrl: string | null; packSize: string | null }>();
+    for (const m of mappings) {
+      productIdToMaster.set(m.distributorProductId, m.brandMasterProduct);
+    }
+    type AccRow = { id: string; name: string; imageUrl: string | null; packSize: string | null; qty: number; revenue: number };
+    const masterAcc = new Map<string, AccRow>();
+    for (const it of orderItems) {
+      const master = productIdToMaster.get(it.productId);
+      if (!master) continue;
+      const existing = masterAcc.get(master.id) ?? {
+        id: master.id, name: master.name, imageUrl: master.imageUrl, packSize: master.packSize,
+        qty: 0, revenue: 0,
+      };
+      existing.qty += it.quantity;
+      existing.revenue += Number(it.totalPrice);
+      masterAcc.set(master.id, existing);
+    }
+    const topProducts = [...masterAcc.values()]
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+
+    // 5) Top distributors by revenue
+    type VendorRow = { id: string; name: string; logoUrl: string | null; orderCount: number; revenue: number };
+    const vendorAcc = new Map<string, VendorRow>();
+    const vendorOrderIds = new Map<string, Set<string>>();
+    const vendorIdToInfo = new Map<string, { name: string; logoUrl: string | null }>();
+    for (const m of mappings) {
+      if (m.distributorProduct.vendor && m.distributorProduct.vendorId) {
+        vendorIdToInfo.set(m.distributorProduct.vendorId, {
+          name: m.distributorProduct.vendor.businessName,
+          logoUrl: m.distributorProduct.vendor.logoUrl,
+        });
+      }
+    }
+    for (const it of orderItems) {
+      const vendorId = it.order.vendorId;
+      const info = vendorIdToInfo.get(vendorId);
+      if (!info) continue;
+      const existing = vendorAcc.get(vendorId) ?? {
+        id: vendorId, name: info.name, logoUrl: info.logoUrl, orderCount: 0, revenue: 0,
+      };
+      existing.revenue += Number(it.totalPrice);
+      vendorAcc.set(vendorId, existing);
+      const orderSet = vendorOrderIds.get(vendorId) ?? new Set<string>();
+      orderSet.add(it.order.id);
+      vendorOrderIds.set(vendorId, orderSet);
+    }
+    for (const [id, row] of vendorAcc) {
+      row.orderCount = vendorOrderIds.get(id)?.size ?? 0;
+    }
+    const topDistributors = [...vendorAcc.values()]
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+
+    // 6) Monthly trend (last 6 months)
+    const monthBuckets: Record<string, { month: string; orders: Set<string>; revenue: number }> = {};
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthBuckets[key] = { month: key, orders: new Set(), revenue: 0 };
+    }
+    for (const it of orderItems) {
+      const d = it.order.createdAt;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (monthBuckets[key]) {
+        monthBuckets[key].orders.add(it.order.id);
+        monthBuckets[key].revenue += Number(it.totalPrice);
+      }
+    }
+    const monthlyTrend = Object.values(monthBuckets).map(b => ({
+      month: b.month,
+      orders: b.orders.size,
+      revenue: Math.round(b.revenue * 100) / 100,
+    }));
+
+    return {
+      headline: {
+        masterProductCount,
+        mappedDistributorProductCount: distributorProductIds.length,
+        distributorCount: distributorIds.size,
+        servicedPincodeCount: pincodes.size,
+        last30dOrders,
+        last30dRevenue: Math.round(last30dRevenue * 100) / 100,
+      },
+      topProducts: topProducts.map(p => ({
+        ...p,
+        revenue: Math.round(p.revenue * 100) / 100,
+      })),
+      topDistributors: topDistributors.map(v => ({
+        ...v,
+        revenue: Math.round(v.revenue * 100) / 100,
+      })),
+      monthlyTrend,
+      pincodes: [...pincodes].sort(),
+    };
+  }
+
   // ── Brand: create profile ──────────────────────────────────
   async createBrand(input: CreateBrandInput) {
     const existing = await prisma.brand.findFirst({

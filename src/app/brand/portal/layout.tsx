@@ -9,6 +9,8 @@ import {
     Package,
     GitMerge,
     Settings,
+    BarChart3,
+    Users,
     Bell,
     Menu,
     ChevronLeft,
@@ -26,6 +28,8 @@ const SIDEBAR_LINKS = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/brand/portal' },
     { name: 'My Products', icon: Package, href: '/brand/portal/products' },
     { name: 'Distributor Map', icon: GitMerge, href: '/brand/portal/mappings' },
+    { name: 'Distributors', icon: Users, href: '/brand/portal/distributors' },
+    { name: 'Analytics', icon: BarChart3, href: '/brand/portal/analytics' },
     { name: 'Settings', icon: Settings, href: '/brand/portal/settings' },
 ];
 

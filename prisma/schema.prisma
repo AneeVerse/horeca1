@@ -738,10 +738,45 @@ model Brand {
   masterProducts  BrandMasterProduct[]
   productMappings BrandProductMapping[]
   teamMembers     BrandTeamMember[]
+  distributorInvites BrandDistributorInvite[]
 
   @@index([slug])
   @@index([approvalStatus])
   @@map("brands")
+}
+
+// Brand-submitted distributor leads — Phase 2.
+// Brand owners fill a form to introduce a candidate distributor; admin team
+// reviews and onboards manually. Once onboarded, link `vendorId` for traceability.
+model BrandDistributorInvite {
+  id            String                       @id @default(uuid()) @db.Uuid
+  brandId       String                       @map("brand_id") @db.Uuid
+  contactName   String                       @map("contact_name") @db.VarChar(255)
+  email         String                       @db.VarChar(255)
+  phone         String?                      @db.VarChar(30)
+  businessName  String                       @map("business_name") @db.VarChar(255)
+  city          String?                      @db.VarChar(100)
+  pincode       String?                      @db.VarChar(10)
+  notes         String?                      @db.Text
+  status        BrandDistributorInviteStatus @default(pending)
+  vendorId      String?                      @map("vendor_id") @db.Uuid // populated once admin onboards
+  reviewedBy    String?                      @map("reviewed_by") @db.Uuid
+  reviewNote    String?                      @map("review_note") @db.Text
+  createdAt     DateTime                     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime                     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@index([brandId])
+  @@index([status])
+  @@map("brand_distributor_invites")
+}
+
+enum BrandDistributorInviteStatus {
+  pending
+  contacted
+  onboarded
+  declined
 }
 
 // Brand's canonical product catalog (the truth layer — no pricing)

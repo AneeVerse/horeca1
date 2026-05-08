@@ -168,6 +168,13 @@ export interface BrandProductMappedPayload {
   status: string;
 }
 
+export interface BrandDistributorInviteCreatedPayload {
+  inviteId: string;
+  brandId: string;
+  businessName: string;
+  email: string;
+}
+
 // Event map: event name → payload type
 export interface EventMap {
   OrderCreated: OrderCreatedPayload;
@@ -194,6 +201,7 @@ export interface EventMap {
   BrandApproved: BrandApprovedPayload;
   BrandProductCreated: BrandProductCreatedPayload;
   BrandProductMapped: BrandProductMappedPayload;
+  BrandDistributorInviteCreated: BrandDistributorInviteCreatedPayload;
 }
 
 export type EventName = keyof EventMap;
