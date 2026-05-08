@@ -221,6 +221,21 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
     for (const p of ranked) candidateMap.set(p.id, p);
   }
 
+  // Always re-evaluate existing pending_review mappings, even if their distributor
+  // product wouldn't pass the brand-name pre-filter. They were flagged once for a
+  // reason — let the AI judge make the call.
+  const pendingExisting = await prisma.brandProductMapping.findMany({
+    where: { brandMasterProductId, status: 'pending_review' },
+    select: {
+      distributorProduct: {
+        select: { id: true, name: true, brand: true, vendorId: true, embedding: true },
+      },
+    },
+  });
+  for (const row of pendingExisting) {
+    if (row.distributorProduct) candidateMap.set(row.distributorProduct.id, row.distributorProduct);
+  }
+
   // Step 1: rule-score every candidate up front (fast, sync)
   type Scored = {
     candidate: typeof candidateMap extends Map<string, infer V> ? V : never;
@@ -254,14 +269,18 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
 
   // Step 2: AI-judge the UNCERTAIN zone (0.55..0.95) in parallel — fast.
   // Below 0.55 = clearly not a match; above 0.95 = clearly a match. Skip both to save calls.
+  // BUT: existing pending_review rows ALWAYS get judged — they were flagged once,
+  // we owe them a real verdict (promote, confirm, or clean up the false positive).
   const aiAvailable = !!getMappingAI();
   let aiResults = new Map<string, { match: boolean; confidence: number; reason: string } | null>();
   if (aiAvailable) {
-    const uncertain = scored.filter(s => s.score >= 0.55 && s.score <= 0.95);
-    if (uncertain.length > 0) {
+    const toJudge = scored.filter(s =>
+      s.existingStatus === 'pending_review' || (s.score >= 0.55 && s.score <= 0.95)
+    );
+    if (toJudge.length > 0) {
       const brandText = `${masterProduct.brand.name} ${masterProduct.name}${masterProduct.packSize ? ' ' + masterProduct.packSize : ''}${masterProduct.unit ? ' ' + masterProduct.unit : ''}`.trim();
       aiResults = await judgeBatch(
-        uncertain.map(s => ({
+        toJudge.map(s => ({
           key: s.candidate.id,
           brandProduct: brandText,
           distributorProduct: `${s.candidate.brand ?? ''} ${s.candidate.name}`.trim(),
@@ -277,17 +296,27 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
     let finalScore = s.score;
 
     if (aiVerdict) {
-      // Blend: rule 40% + AI 60% when AI says match. AI confidence dominates because the LLM
-      // actually reads the names; rules only count tokens.
       if (aiVerdict.match) {
         finalScore = Math.min(1, s.score * 0.4 + aiVerdict.confidence * 0.6);
       } else {
-        // AI says not a match — penalise heavily but keep some rule signal in case the LLM is wrong.
         finalScore = s.score * 0.3 * (1 - aiVerdict.confidence);
       }
     }
 
-    if (finalScore < 0.70) continue; // below threshold — skip
+    if (finalScore < 0.70) {
+      // Clean up stale pending_review when re-evaluation drops the score below threshold —
+      // typically when AI says "not a match" with high confidence on an old false-positive.
+      if (s.existingStatus === 'pending_review' && aiVerdict && !aiVerdict.match && aiVerdict.confidence >= 0.7) {
+        await prisma.brandProductMapping.deleteMany({
+          where: {
+            brandMasterProductId,
+            distributorProductId: s.candidate.id,
+            status: 'pending_review',
+          },
+        });
+      }
+      continue;
+    }
 
     const status: 'auto_mapped' | 'pending_review' = finalScore >= 0.90 ? 'auto_mapped' : 'pending_review';
     const matchedBy: MatchMethod = 'rule_based';

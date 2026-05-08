@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
+import { toast } from 'sonner';
 
 interface Brand {
     id: string;
@@ -81,6 +82,15 @@ export default function AdminBrandsPage() {
     const [editPickerLoading, setEditPickerLoading] = useState(false);
     const [editPickerQuery, setEditPickerQuery] = useState('');
     const [aiBackfilling, setAiBackfilling] = useState(false);
+    const [aiResult, setAiResult] = useState<null | {
+        ai: string;
+        brandsProcessed: number;
+        brandsFailed: number;
+        before: { auto_mapped: number; verified: number; pending_review: number; rejected: number };
+        after: { auto_mapped: number; verified: number; pending_review: number; rejected: number };
+        promoted: number;
+        delta: number;
+    }>(null);
 
     // Create brand modal
     const [showCreate, setShowCreate] = useState(false);
@@ -227,26 +237,20 @@ export default function AdminBrandsPage() {
 
     const runAiMapping = async () => {
         if (aiBackfilling) return;
-        if (!confirm('Re-run brand mapping for all approved brands using the configured AI provider? This may take a minute.')) return;
         setAiBackfilling(true);
+        const t = toast.loading('Running AI mapping…');
         try {
             const res = await fetch('/api/v1/admin/brands/run-mapping', { method: 'POST' });
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Mapping run failed');
-            const d = json.data;
-            const lines = [
-                `Mapping complete with ${d.ai}.`,
-                `Processed ${d.brandsProcessed} brands${d.brandsFailed ? ` (${d.brandsFailed} failed)` : ''}.`,
-                ``,
-                `Auto-mapped: ${d.before.auto_mapped} → ${d.after.auto_mapped}${d.promoted > 0 ? ` (+${d.promoted} promoted)` : ''}`,
-                `Pending review: ${d.before.pending_review} → ${d.after.pending_review}`,
-                `Verified: ${d.before.verified} → ${d.after.verified}`,
-                `Rejected: ${d.before.rejected} → ${d.after.rejected}`,
-            ];
-            alert(lines.join('\n'));
-            window.location.reload();
+            toast.dismiss(t);
+            setAiResult(json.data);
+            // Refresh the mappings list so the UI reflects the new state, but keep the result modal open.
+            const mappingsRes = await fetch('/api/v1/admin/brands/mappings?limit=50').then(r => r.json()).catch(() => null);
+            if (mappingsRes?.success) setMappings(mappingsRes.data ?? []);
         } catch (e: unknown) {
-            alert(e instanceof Error ? e.message : 'Mapping run failed');
+            toast.dismiss(t);
+            toast.error(e instanceof Error ? e.message : 'Mapping run failed');
         } finally {
             setAiBackfilling(false);
         }
@@ -699,6 +703,81 @@ export default function AdminBrandsPage() {
                                 disabled={!!actionLoading}
                                 className="h-[40px] px-5 bg-[#E74C3C] text-white rounded-[10px] text-[13px] font-bold disabled:opacity-50 flex items-center gap-1.5">
                                 {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />} Reject
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* AI Mapping Result Modal */}
+            {aiResult && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAiResult(null)}>
+                    <div className="bg-white rounded-2xl w-full max-w-[440px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="p-5 border-b border-gray-100 flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#3B82F6] flex items-center justify-center">
+                                <Sparkles size={16} className="text-white" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-[15px] font-bold text-[#181725]">AI Mapping Complete</h3>
+                                <p className="text-[11px] text-gray-500 truncate">{aiResult.ai}</p>
+                            </div>
+                            <button onClick={() => setAiResult(null)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-3">
+                            <div className="flex items-center justify-between text-[13px]">
+                                <span className="text-gray-500">Brands processed</span>
+                                <span className="font-bold text-[#181725]">
+                                    {aiResult.brandsProcessed}
+                                    {aiResult.brandsFailed > 0 && <span className="text-red-500 ml-1">({aiResult.brandsFailed} failed)</span>}
+                                </span>
+                            </div>
+                            <div className="border-t border-gray-100 pt-3 space-y-2">
+                                {[
+                                    { label: 'Auto-mapped', key: 'auto_mapped', color: '#53B175', bg: '#EEF8F1' },
+                                    { label: 'Pending review', key: 'pending_review', color: '#D97706', bg: '#FFF7E6' },
+                                    { label: 'Verified', key: 'verified', color: '#2563EB', bg: '#EFF6FF' },
+                                    { label: 'Rejected', key: 'rejected', color: '#DC2626', bg: '#FEF2F2' },
+                                ].map(row => {
+                                    const before = aiResult.before[row.key as keyof typeof aiResult.before];
+                                    const after = aiResult.after[row.key as keyof typeof aiResult.after];
+                                    const change = after - before;
+                                    return (
+                                        <div key={row.key} className="flex items-center justify-between">
+                                            <span className="text-[12px] font-bold uppercase tracking-wider" style={{ color: row.color }}>{row.label}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[12px] text-gray-400">{before}</span>
+                                                <span className="text-[10px] text-gray-300">→</span>
+                                                <span className="text-[14px] font-[900]" style={{ color: row.color }}>{after}</span>
+                                                {change !== 0 && (
+                                                    <span className={cn(
+                                                        "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                                                        change > 0 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
+                                                    )}>
+                                                        {change > 0 ? `+${change}` : change}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            {aiResult.promoted > 0 && (
+                                <div className="bg-[#EEF8F1] border border-[#53B175]/20 rounded-lg p-3 text-[12px]">
+                                    <strong className="text-[#2e7d46]">{aiResult.promoted}</strong> mapping{aiResult.promoted !== 1 ? 's' : ''} promoted from pending to auto-mapped by AI.
+                                </div>
+                            )}
+                            {aiResult.delta === 0 && aiResult.promoted === 0 && (
+                                <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-[12px] text-gray-500">
+                                    AI evaluated all candidates — no changes needed.
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-gray-100 flex justify-end">
+                            <button onClick={() => setAiResult(null)}
+                                className="px-4 py-2 bg-[#53B175] text-white rounded-lg text-[13px] font-bold hover:bg-[#3d9e5f]">
+                                Done
                             </button>
                         </div>
                     </div>
