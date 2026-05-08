@@ -25,15 +25,21 @@ interface ErrorResponse {
 }
 
 export function errorResponse(error: unknown): NextResponse<ErrorResponse> {
-  // Zod validation error
+  // Zod validation error — surface the FIRST failing field so the user knows what to fix
+  // instead of a generic "Invalid input". Full per-field details still in details.fields.
   if (error instanceof ZodError) {
+    const flat = error.flatten().fieldErrors as Record<string, string[] | undefined>;
+    const firstField = Object.entries(flat).find(([, msgs]) => Array.isArray(msgs) && msgs.length > 0);
+    const message = firstField
+      ? `${firstField[0]}: ${firstField[1]?.[0] ?? 'invalid'}`
+      : 'Invalid input';
     return NextResponse.json(
       {
         success: false as const,
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'Invalid input',
-          details: { fields: error.flatten().fieldErrors },
+          message,
+          details: { fields: flat },
         },
       },
       { status: 400 }

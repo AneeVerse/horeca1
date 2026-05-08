@@ -10,16 +10,19 @@ import { requireAdminPerm } from '@/lib/teamPermissions';
 import { errorResponse } from '@/middleware/errorHandler';
 import type { AuthContext } from '@/middleware/auth';
 
+// Lenient — admin should be able to save partial/legacy data.
+// Empty strings → null (frontend already does this). URLs not strictly validated
+// because some legacy records have bare domains like "amul.com".
 const patchSchema = z.object({
   name: z.string().min(2).max(255).optional(),
-  description: z.string().optional(),
-  logoUrl: z.string().url().nullable().optional(),
-  bannerUrl: z.string().url().nullable().optional(),
-  website: z.string().url().nullable().optional(),
+  description: z.string().max(5000).nullable().optional(),
+  logoUrl: z.string().max(1024).nullable().optional(),
+  bannerUrl: z.string().max(1024).nullable().optional(),
+  website: z.string().max(512).nullable().optional(),
   tagline: z.string().max(512).nullable().optional(),
   categories: z.array(z.string().max(80)).max(12).optional(),
   bgColor: z.string().max(20).nullable().optional(),
-  showcaseImages: z.array(z.string().url()).max(5).optional(),
+  showcaseImages: z.array(z.string().max(1024)).max(5).optional(),
   isActive: z.boolean().optional(),
 });
 
