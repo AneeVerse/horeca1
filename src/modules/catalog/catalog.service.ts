@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
-import { runMappingForVendorProduct } from '@/modules/brand/brand-mapper';
+import { runMappingForVendorProduct, embedDistributorProduct } from '@/modules/brand/brand-mapper';
 
 export class CatalogService {
   async getVendorProducts(
@@ -159,9 +159,11 @@ export class CatalogService {
       data: { ...productData, vendorId, basePrice: productData.basePrice, approvalStatus },
     });
 
-    // Fire-and-forget: score against brand catalogs if approved
+    // Fire-and-forget: embed first, THEN run brand mapping so the AI signal is available.
     if (approvalStatus === 'approved') {
-      runMappingForVendorProduct(created.id).catch(() => {});
+      embedDistributorProduct(created.id)
+        .catch(() => {})
+        .finally(() => runMappingForVendorProduct(created.id).catch(() => {}));
     }
 
     return created;
@@ -203,8 +205,10 @@ export class CatalogService {
         approvedBy: adminUserId,
       });
     }
-    // Fire-and-forget: score against brand catalogs once approved
-    runMappingForVendorProduct(product.id).catch(() => {});
+    // Fire-and-forget: embed then run brand mapping once approved.
+    embedDistributorProduct(product.id)
+      .catch(() => {})
+      .finally(() => runMappingForVendorProduct(product.id).catch(() => {}));
     return product;
   }
 

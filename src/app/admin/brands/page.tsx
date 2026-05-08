@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-    Check, X, Search, Clock, CheckCircle, Loader2, ClipboardList, Store, Pencil, ArrowRight,
+    Check, X, Search, Clock, CheckCircle, Loader2, ClipboardList, Store, Pencil, ArrowRight, Sparkles,
     GitMerge, MessageSquare, Package, ExternalLink, LayoutDashboard, Plus, Eye, EyeOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -80,6 +80,7 @@ export default function AdminBrandsPage() {
     const [editPickerCats, setEditPickerCats] = useState<Array<{ id: string; name: string; packSize: string | null; imageUrl: string | null; sku: string | null }>>([]);
     const [editPickerLoading, setEditPickerLoading] = useState(false);
     const [editPickerQuery, setEditPickerQuery] = useState('');
+    const [aiBackfilling, setAiBackfilling] = useState(false);
 
     // Create brand modal
     const [showCreate, setShowCreate] = useState(false);
@@ -224,6 +225,24 @@ export default function AdminBrandsPage() {
         finally { setEditPickerLoading(false); }
     };
 
+    const runAiBackfill = async () => {
+        if (aiBackfilling) return;
+        if (!confirm('Re-embed all approved brand and distributor products with the configured AI provider? This may take a minute.')) return;
+        setAiBackfilling(true);
+        try {
+            const res = await fetch('/api/v1/admin/brands/embed-backfill', { method: 'POST' });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Backfill failed');
+            const d = json.data;
+            const msg = `Embedded with ${d.provider}: ${d.masters.embedded}/${d.masters.needed} brand SKUs, ${d.products.embedded}/${d.products.needed} products. ${(d.masters.failed + d.products.failed) > 0 ? `${d.masters.failed + d.products.failed} failed.` : ''}`;
+            alert(msg);
+        } catch (e: unknown) {
+            alert(e instanceof Error ? e.message : 'Backfill failed');
+        } finally {
+            setAiBackfilling(false);
+        }
+    };
+
     const submitEditMapping = async (newMasterProductId: string) => {
         if (!editTarget) return;
         if (newMasterProductId === editTarget.brandMasterProduct.id) {
@@ -364,6 +383,17 @@ export default function AdminBrandsPage() {
                                     </button>
                                 ))}
                             </div>
+                        )}
+                        {sectionTab === 'Mappings' && (
+                            <button
+                                onClick={runAiBackfill}
+                                disabled={aiBackfilling}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-[#7C3AED] to-[#3B82F6] text-white rounded-[10px] text-[12px] font-bold hover:shadow-md disabled:opacity-60 transition-all"
+                                title="Re-embed all products with the configured AI provider, then re-run mapping"
+                            >
+                                {aiBackfilling ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                                {aiBackfilling ? 'Embedding…' : 'Re-embed with AI'}
+                            </button>
                         )}
                         <div className="relative">
                             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={15} />

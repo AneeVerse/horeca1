@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/events/emitter';
 import { Errors } from '@/middleware/errorHandler';
-import { runMappingForProduct, runMappingForBrand } from './brand-mapper';
+import { runMappingForProduct, runMappingForBrand, embedBrandMasterProduct } from './brand-mapper';
 function slugify(str: string): string {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
@@ -500,8 +500,10 @@ export class BrandService {
       productName: product.name,
     });
 
-    // Kick off auto-mapping in background (non-blocking)
-    runMappingForProduct(product.id).catch(console.error);
+    // Embed first so the AI signal is available, then auto-map. Non-blocking.
+    embedBrandMasterProduct(product.id)
+      .catch(console.error)
+      .finally(() => runMappingForProduct(product.id).catch(console.error));
 
     return product;
   }
@@ -519,8 +521,12 @@ export class BrandService {
       data: input,
     });
 
-    // Re-run mapping if name changed
-    if (input.name) runMappingForProduct(productId).catch(console.error);
+    // Re-embed + re-map when name (or other text-affecting fields) changed.
+    if (input.name || input.packSize !== undefined || input.unit !== undefined || input.categoryId !== undefined) {
+      embedBrandMasterProduct(productId)
+        .catch(console.error)
+        .finally(() => runMappingForProduct(productId).catch(console.error));
+    }
 
     return updated;
   }

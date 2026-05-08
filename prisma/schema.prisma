@@ -292,6 +292,11 @@ model Product {
   approvalNote    String?        @map("approval_note") @db.Text
   approvedBy      String?        @map("approved_by") @db.Uuid
   approvedAt      DateTime?      @map("approved_at") @db.Timestamptz
+  // Embedding for AI-assisted brand mapping (Phase 3). Empty array = not yet embedded.
+  // embeddingModel records which provider+model produced the vector so we know when to re-embed.
+  embedding       Float[]        @default([]) @map("embedding")
+  embeddingModel  String?        @map("embedding_model") @db.VarChar(80)
+  embeddingUpdatedAt DateTime?   @map("embedding_updated_at") @db.Timestamptz
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -794,6 +799,10 @@ model BrandMasterProduct {
   category    String? @db.VarChar(100)          // display category label
   isActive    Boolean @default(true) @map("is_active")
   sortOrder   Int     @default(0) @map("sort_order")
+  // Embedding for AI-assisted brand mapping (Phase 3).
+  embedding          Float[]   @default([]) @map("embedding")
+  embeddingModel     String?   @map("embedding_model") @db.VarChar(80)
+  embeddingUpdatedAt DateTime? @map("embedding_updated_at") @db.Timestamptz
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 

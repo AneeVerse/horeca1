@@ -13,6 +13,7 @@
 import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/events/emitter';
 import type { MatchMethod } from '@prisma/client';
+import { embed, cosineSimilarity, getEmbeddingProvider } from '@/lib/embeddings';
 
 // ── Text normalisation ───────────────────────────────────────
 const NOISE_WORDS = new Set([
@@ -55,49 +56,134 @@ function extractPackSize(text: string): string | null {
 }
 
 // ── Score a single distributor product against brand product ─
+//
+// Phase 1 (rules-based) signals weights:
+//   1. Brand-name token in product/brand field   +0.35
+//   2. Jaccard token similarity on full name     up to +0.40
+//   3. Pack size exact match                     +0.15
+//   4. Distributor brand-field exact match       +0.10
+//
+// Phase 3 adds an OPTIONAL semantic-similarity signal:
+//   5. Cosine similarity between embeddings     up to +0.30 (if both embeddings present)
+//
+// When the AI signal contributes, the rule-based portion is scaled to 0.70 so
+// the final score still tops out at 1.0 while letting embeddings catch typos,
+// abbreviations and Hindi/English variants the rules miss
+// ("Knr Ketchup 1kg" ≈ "Knorr Ketchup 1kg").
+//
+// If embeddings aren't available (provider down, not yet computed), we fall
+// back to pure rule-based — no behavior change vs Phase 1.
 export function scoreMatch(
   brandProductName: string,
   brandName: string,
   distributorProductName: string,
   distributorBrandField: string | null,
-): number {
+  opts?: { brandEmbedding?: number[] | null; distributorEmbedding?: number[] | null },
+): { score: number; usedAI: boolean; aiSimilarity: number | null } {
   const normBrand   = normalise(brandProductName);
   const normDist    = normalise(distributorProductName);
   const normBrandId = normalise(brandName);
 
-  let score = 0;
+  let ruleScore = 0;
 
   // 1. Brand name appears in distributor product (strong signal — 0.35)
   if (normDist.includes(normBrandId) || normalise(distributorBrandField ?? '').includes(normBrandId)) {
-    score += 0.35;
+    ruleScore += 0.35;
   }
 
   // 2. Jaccard token similarity on full product name (0–0.40)
-  score += jaccardSimilarity(normBrand, normDist) * 0.40;
+  ruleScore += jaccardSimilarity(normBrand, normDist) * 0.40;
 
   // 3. Pack size match (0.15)
   const psA = extractPackSize(normBrand);
   const psB = extractPackSize(normDist);
-  if (psA && psB && psA === psB) score += 0.15;
+  if (psA && psB && psA === psB) ruleScore += 0.15;
 
   // 4. Distributor brand field exact match (0.10 bonus)
   if (distributorBrandField && normalise(distributorBrandField) === normBrandId) {
-    score += 0.10;
+    ruleScore += 0.10;
   }
 
-  return Math.min(score, 1);
+  ruleScore = Math.min(ruleScore, 1);
+
+  const brandEmb = opts?.brandEmbedding;
+  const distEmb = opts?.distributorEmbedding;
+  const haveBothEmbeddings = brandEmb && distEmb && brandEmb.length > 0 && distEmb.length > 0 && brandEmb.length === distEmb.length;
+
+  if (!haveBothEmbeddings) {
+    return { score: ruleScore, usedAI: false, aiSimilarity: null };
+  }
+
+  // Embeddings available — blend signals.
+  const sim = cosineSimilarity(brandEmb!, distEmb!); // -1..1, mostly 0..1 for related products
+  const aiSimilarity = Math.max(0, sim);             // clamp negative noise to 0
+  const blended = ruleScore * 0.70 + aiSimilarity * 0.30;
+  return { score: Math.min(blended, 1), usedAI: true, aiSimilarity };
+}
+
+/** Build the canonical text we embed for a product (used by both sides). */
+function buildEmbeddingText(name: string, brand?: string | null, packSize?: string | null, unit?: string | null, category?: string | null): string {
+  const parts = [
+    brand?.trim(),
+    name?.trim(),
+    [packSize?.trim(), unit?.trim()].filter(Boolean).join(' '),
+    category?.trim(),
+  ].filter(Boolean);
+  return parts.join(' ');
+}
+
+/** Embed and persist the embedding for ONE BrandMasterProduct. Fire-and-forget safe. */
+export async function embedBrandMasterProduct(brandMasterProductId: string): Promise<void> {
+  const mp = await prisma.brandMasterProduct.findUnique({
+    where: { id: brandMasterProductId },
+    include: { brand: { select: { name: true } }, categoryRel: { select: { name: true } } },
+  });
+  if (!mp) return;
+  const text = buildEmbeddingText(mp.name, mp.brand?.name, mp.packSize, mp.unit, mp.categoryRel?.name ?? mp.category);
+  const vector = await embed(text);
+  if (!vector) return; // provider failed — leave existing embedding untouched
+  let modelTag = 'unknown';
+  try { modelTag = getEmbeddingProvider().name; } catch { /* env not set */ }
+  await prisma.brandMasterProduct.update({
+    where: { id: brandMasterProductId },
+    data: { embedding: vector, embeddingModel: modelTag, embeddingUpdatedAt: new Date() },
+  });
+}
+
+/** Embed and persist the embedding for ONE distributor Product. Fire-and-forget safe. */
+export async function embedDistributorProduct(productId: string): Promise<void> {
+  const p = await prisma.product.findUnique({
+    where: { id: productId },
+    include: { category: { select: { name: true } } },
+  });
+  if (!p) return;
+  const text = buildEmbeddingText(p.name, p.brand, p.packSize, p.unit, p.category?.name);
+  const vector = await embed(text);
+  if (!vector) return;
+  let modelTag = 'unknown';
+  try { modelTag = getEmbeddingProvider().name; } catch { /* env not set */ }
+  await prisma.product.update({
+    where: { id: productId },
+    data: { embedding: vector, embeddingModel: modelTag, embeddingUpdatedAt: new Date() },
+  });
 }
 
 // ── Run mapping for one BrandMasterProduct ───────────────────
+//
+// AI hybrid pre-filter: when the brand master has an embedding, we first
+// fetch ALL approved distributor products with their embeddings and rank by
+// cosine similarity. Then we run the full scoreMatch on the top candidates
+// + anyone the brand-name pre-filter would have caught (so we don't miss
+// products with the brand name in the title but no embedding yet).
 export async function runMappingForProduct(brandMasterProductId: string): Promise<void> {
   const masterProduct = await prisma.brandMasterProduct.findUniqueOrThrow({
     where: { id: brandMasterProductId },
     include: { brand: true },
   });
 
-  // Find distributor products that mention this brand name (fast pre-filter)
   const brandNameLower = masterProduct.brand.name.toLowerCase();
-  const candidates = await prisma.product.findMany({
+  // Brand-name pre-filter (deterministic — always runs).
+  const ruleCandidates = await prisma.product.findMany({
     where: {
       isActive: true,
       approvalStatus: 'approved',
@@ -107,10 +193,34 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
         { tags:  { has: brandNameLower } },
       ],
     },
-    select: { id: true, name: true, brand: true, vendorId: true },
+    select: { id: true, name: true, brand: true, vendorId: true, embedding: true },
   });
 
-  for (const candidate of candidates) {
+  // Semantic pre-filter (if brand master has an embedding): top-50 products
+  // by cosine similarity, even if their text doesn't mention the brand name.
+  // This is what catches "Knr Ketchup" vs "Knorr Ketchup" type cases.
+  const candidateMap = new Map<string, { id: string; name: string; brand: string | null; vendorId: string | null; embedding: number[] }>();
+  for (const c of ruleCandidates) candidateMap.set(c.id, c);
+
+  if (masterProduct.embedding && masterProduct.embedding.length > 0) {
+    const aiPool = await prisma.product.findMany({
+      where: {
+        isActive: true,
+        approvalStatus: 'approved',
+        embeddingModel: { equals: masterProduct.embeddingModel ?? undefined }, // only same model produces comparable vectors
+      },
+      select: { id: true, name: true, brand: true, vendorId: true, embedding: true },
+    });
+    const ranked = aiPool
+      .map(p => ({ p, sim: cosineSimilarity(masterProduct.embedding, p.embedding) }))
+      .filter(r => r.sim > 0.55) // only keep semantically plausible
+      .sort((a, b) => b.sim - a.sim)
+      .slice(0, 50)
+      .map(r => r.p);
+    for (const p of ranked) candidateMap.set(p.id, p);
+  }
+
+  for (const candidate of candidateMap.values()) {
     // Skip already-mapped (verified/auto)
     const existing = await prisma.brandProductMapping.findUnique({
       where: {
@@ -122,17 +232,21 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
     });
     if (existing && existing.status !== 'rejected') continue;
 
-    const confidence = scoreMatch(
+    const result = scoreMatch(
       masterProduct.name,
       masterProduct.brand.name,
       candidate.name,
       candidate.brand,
+      {
+        brandEmbedding: masterProduct.embedding,
+        distributorEmbedding: candidate.embedding,
+      },
     );
 
-    if (confidence < 0.70) continue; // below threshold — skip
+    if (result.score < 0.70) continue; // below threshold — skip
 
     const status: 'auto_mapped' | 'pending_review' =
-      confidence >= 0.90 ? 'auto_mapped' : 'pending_review';
+      result.score >= 0.90 ? 'auto_mapped' : 'pending_review';
     const matchedBy: MatchMethod = 'rule_based';
 
     await prisma.brandProductMapping.upsert({
@@ -146,12 +260,12 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
         brandId: masterProduct.brandId,
         brandMasterProductId,
         distributorProductId: candidate.id,
-        confidenceScore: confidence,
+        confidenceScore: result.score,
         status,
         matchedBy,
       },
       update: {
-        confidenceScore: confidence,
+        confidenceScore: result.score,
         status,
         matchedBy,
         updatedAt: new Date(),
@@ -163,7 +277,7 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
       brandId: masterProduct.brandId,
       brandMasterProductId,
       distributorProductId: candidate.id,
-      confidenceScore: confidence,
+      confidenceScore: result.score,
       status,
     });
   }
@@ -187,13 +301,12 @@ export async function runMappingForBrand(brandId: string): Promise<void> {
 export async function runMappingForVendorProduct(distributorProductId: string): Promise<void> {
   const distributorProduct = await prisma.product.findUnique({
     where: { id: distributorProductId },
-    select: { id: true, name: true, brand: true, isActive: true, approvalStatus: true },
+    select: { id: true, name: true, brand: true, isActive: true, approvalStatus: true, embedding: true, embeddingModel: true },
   });
   if (!distributorProduct || !distributorProduct.isActive || distributorProduct.approvalStatus !== 'approved') {
     return;
   }
 
-  // Pre-filter brand master products: brand name appears in distributor name/brand field
   const distNameLower = distributorProduct.name.toLowerCase();
   const distBrandLower = (distributorProduct.brand ?? '').toLowerCase();
   const masterProducts = await prisma.brandMasterProduct.findMany({
@@ -204,12 +317,20 @@ export async function runMappingForVendorProduct(distributorProductId: string): 
     include: { brand: true },
   });
 
+  const haveDistEmbedding = distributorProduct.embedding && distributorProduct.embedding.length > 0;
+
   for (const mp of masterProducts) {
     const brandNameLower = mp.brand.name.toLowerCase();
-    // Quick filter: only score if distributor name OR brand field mentions the brand
-    if (!distNameLower.includes(brandNameLower) && !distBrandLower.includes(brandNameLower)) {
-      continue;
+    const mentionsBrand = distNameLower.includes(brandNameLower) || distBrandLower.includes(brandNameLower);
+
+    // Pre-filter: text-mention OR semantic similarity ≥0.55 (only when both sides have embeddings).
+    let semanticPasses = false;
+    if (!mentionsBrand && haveDistEmbedding && mp.embedding && mp.embedding.length > 0
+        && mp.embeddingModel === distributorProduct.embeddingModel) {
+      const sim = cosineSimilarity(distributorProduct.embedding, mp.embedding);
+      semanticPasses = sim > 0.55;
     }
+    if (!mentionsBrand && !semanticPasses) continue;
 
     const existing = await prisma.brandProductMapping.findUnique({
       where: {
@@ -221,11 +342,20 @@ export async function runMappingForVendorProduct(distributorProductId: string): 
     });
     if (existing && existing.status !== 'rejected') continue;
 
-    const confidence = scoreMatch(mp.name, mp.brand.name, distributorProduct.name, distributorProduct.brand);
-    if (confidence < 0.70) continue;
+    const result = scoreMatch(
+      mp.name,
+      mp.brand.name,
+      distributorProduct.name,
+      distributorProduct.brand,
+      {
+        brandEmbedding: mp.embedding,
+        distributorEmbedding: distributorProduct.embedding,
+      },
+    );
+    if (result.score < 0.70) continue;
 
     const status: 'auto_mapped' | 'pending_review' =
-      confidence >= 0.90 ? 'auto_mapped' : 'pending_review';
+      result.score >= 0.90 ? 'auto_mapped' : 'pending_review';
 
     await prisma.brandProductMapping.upsert({
       where: {
@@ -238,12 +368,12 @@ export async function runMappingForVendorProduct(distributorProductId: string): 
         brandId: mp.brandId,
         brandMasterProductId: mp.id,
         distributorProductId: distributorProduct.id,
-        confidenceScore: confidence,
+        confidenceScore: result.score,
         status,
         matchedBy: 'rule_based',
       },
       update: {
-        confidenceScore: confidence,
+        confidenceScore: result.score,
         status,
         matchedBy: 'rule_based',
         updatedAt: new Date(),
@@ -255,7 +385,7 @@ export async function runMappingForVendorProduct(distributorProductId: string): 
       brandId: mp.brandId,
       brandMasterProductId: mp.id,
       distributorProductId: distributorProduct.id,
-      confidenceScore: confidence,
+      confidenceScore: result.score,
       status,
     });
   }
