@@ -22,9 +22,11 @@ interface VendorCardProps {
     index: number;
     /** When true, card takes full width of its grid cell. When false, uses fixed width for horizontal scroll. */
     fluid?: boolean;
+    /** Eager-load the cover (first row above the fold). Cards beyond ~the first row should stay lazy. */
+    priority?: boolean;
 }
 
-export function VendorCard({ vendor, index, fluid = false }: VendorCardProps) {
+export function VendorCard({ vendor, index, fluid = false, priority = false }: VendorCardProps) {
     // Prefer the vendor's uploaded card image (from /vendor/settings → bannerUrl).
     // Fall back to the cycling default covers for vendors that haven't uploaded one yet.
     const cover = vendor.coverImage || VENDOR_COVERS[index % VENDOR_COVERS.length];
@@ -45,7 +47,15 @@ export function VendorCard({ vendor, index, fluid = false }: VendorCardProps) {
             {/* 📱 MOBILE VIEW: Horizontal List Style */}
             <div className="min-[500px]:hidden flex flex-row w-full h-full items-center">
                 <div className="relative w-28 h-28 overflow-hidden shrink-0">
-                    <Image src={cover} alt={vendor.name} fill className="object-cover" />
+                    <Image
+                        src={cover}
+                        alt={vendor.name}
+                        fill
+                        sizes="112px"
+                        className="object-cover"
+                        loading={priority ? 'eager' : 'lazy'}
+                        priority={priority}
+                    />
                 </div>
                 <div className="flex-1 p-3 flex flex-col justify-between h-28 min-w-0">
                     <div className="space-y-0.5 min-w-0">
@@ -84,7 +94,12 @@ export function VendorCard({ vendor, index, fluid = false }: VendorCardProps) {
                         src={cover}
                         alt={vendor.name}
                         fill
+                        sizes={fluid
+                            ? "(max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
+                            : "(max-width: 768px) 260px, 300px"}
                         className="object-cover group-hover:scale-105 transition-transform duration-700"
+                        loading={priority ? 'eager' : 'lazy'}
+                        priority={priority}
                     />
                 </div>
 

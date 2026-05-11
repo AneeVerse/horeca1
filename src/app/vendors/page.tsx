@@ -47,7 +47,7 @@ export default function VendorsPage() {
                 ) : (
                     <div className="grid grid-cols-1 min-[500px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                         {allVendors.map((vendor, index) => (
-                            <VendorCard key={vendor.id} vendor={vendor} index={index} fluid />
+                            <VendorCard key={vendor.id} vendor={vendor} index={index} fluid priority={index < 5} />
                         ))}
                     </div>
                 )}
