@@ -299,7 +299,7 @@ export function Navbar() {
                             {/* Deliver to Location — right of search */}
                             <button
                                 onClick={() => setIsLocationOverlayOpen(true)}
-                                className="flex items-center gap-2.5 px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 hover:bg-gray-100 hover:border-gray-300 transition-all cursor-pointer shrink-0 w-[165px]"
+                                className="flex items-center gap-2.5 px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 hover:bg-gray-100 hover:border-gray-300 transition-all cursor-pointer shrink-0 w-[195px]"
                             >
                                 <MapPin size={15} className="text-[#53B175] shrink-0" />
                                 <div className="flex flex-col items-start min-w-0 flex-1">

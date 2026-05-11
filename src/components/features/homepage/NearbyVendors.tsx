@@ -21,7 +21,9 @@ const VENDOR_COVERS = [
 
 
 function VendorCard({ vendor, index }: { vendor: Vendor; index: number }) {
-    const cover = VENDOR_COVERS[index % VENDOR_COVERS.length];
+    // Prefer the vendor's uploaded card image (from /vendor/settings → bannerUrl).
+    // Falls back to the cycling defaults for vendors that haven't uploaded one.
+    const cover = vendor.coverImage || VENDOR_COVERS[index % VENDOR_COVERS.length];
     const categoryPills = vendor.categories.slice(0, 4);
     const addressLine = vendor.address ? `${vendor.address.city}${vendor.address.state ? ', ' + vendor.address.state : ''}` : null;
 

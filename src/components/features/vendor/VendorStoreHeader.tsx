@@ -10,6 +10,7 @@ import { useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import type { Vendor } from '@/types';
 import { VENDOR_COVERS } from '@/components/features/homepage/VendorCardShared';
+import { parseImageMeta, getDisplayStyle } from '@/lib/imageMeta';
 
 interface VendorStoreHeaderProps {
     vendor: Vendor;
@@ -22,6 +23,13 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
     const { data: session } = useSession();
     const coverIndex = Math.abs(vendor.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % VENDOR_COVERS.length;
     const coverImage = vendor.coverImage || VENDOR_COVERS[coverIndex];
+    // The detail page hero box renders the vendor's LOGO, not their card cover.
+    // Falls back to the cover image if no logo was uploaded.
+    const heroImage = vendor.logo || coverImage;
+    // Apply the saved focal point + zoom so a wide logo is cropped to the part
+    // the vendor chose in the Adjust modal — same behavior as the brand-logo
+    // live preview circle (object-cover that fills the frame).
+    const heroImageStyle = getDisplayStyle(parseImageMeta(heroImage).meta);
     
     const handleShare = async () => {
         const shareData = {
@@ -78,10 +86,11 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
                         <div className="flex-shrink-0 w-[38%] max-w-[120px] relative">
                             <div className="w-full aspect-square rounded-[14px] overflow-hidden bg-white border border-white/60 shadow-sm relative">
                                 <Image
-                                    src={coverImage}
+                                    src={heroImage}
                                     alt={vendor.name}
                                     fill
-                                    className="object-cover"
+                                    className="object-contain p-2"
+                                    style={heroImageStyle}
                                     priority
                                 />
                             </div>
@@ -164,10 +173,10 @@ export function VendorStoreHeader({ vendor, activeTab, onTabChange }: VendorStor
 
                     {/* Content */}
                     <div className="flex items-center w-full relative z-10">
-                        {/* Vendor cover thumbnail */}
+                        {/* Vendor logo */}
                         <div className="flex-shrink-0 mr-4 md:mr-8 lg:mr-12">
-                            <div className="relative w-[110px] h-[110px] md:w-[140px] md:h-[140px] lg:w-[170px] lg:h-[170px] rounded-[20px] md:rounded-[24px] bg-white/10 border-2 border-white/30 overflow-hidden shadow-2xl">
-                                <Image src={coverImage} alt={vendor.name} fill className="object-cover" priority />
+                            <div className="relative w-[110px] h-[110px] md:w-[140px] md:h-[140px] lg:w-[170px] lg:h-[170px] rounded-[20px] md:rounded-[24px] bg-white border-2 border-white/30 overflow-hidden shadow-2xl">
+                                <Image src={heroImage} alt={vendor.name} fill className="object-contain p-2" style={heroImageStyle} priority />
                             </div>
                         </div>
 

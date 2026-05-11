@@ -25,7 +25,9 @@ interface VendorCardProps {
 }
 
 export function VendorCard({ vendor, index, fluid = false }: VendorCardProps) {
-    const cover = VENDOR_COVERS[index % VENDOR_COVERS.length];
+    // Prefer the vendor's uploaded card image (from /vendor/settings → bannerUrl).
+    // Fall back to the cycling default covers for vendors that haven't uploaded one yet.
+    const cover = vendor.coverImage || VENDOR_COVERS[index % VENDOR_COVERS.length];
     const cuisineLabel = vendor.categories.slice(0, 2).join(' • ');
     const categoryPills = vendor.categories.slice(0, 4);
     const cityLine = vendor.address

@@ -35,6 +35,7 @@ export class VendorService {
         businessName: true,
         slug: true,
         logoUrl: true,
+        bannerUrl: true,
         rating: true,
         minOrderValue: true,
         creditEnabled: true,

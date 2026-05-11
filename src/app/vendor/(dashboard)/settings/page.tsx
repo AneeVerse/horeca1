@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil, Users, Crown, Shield, Eye, Edit3, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ImageUpload } from '@/components/ui/ImageUpload';
+import { ImageUploadField } from '@/components/ui/ImageUploadField';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { toast } from 'sonner';
 
@@ -512,15 +512,23 @@ export default function VendorSettingsPage() {
                             className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#299E60]/40 resize-none"
                         />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Store Logo</label>
-                            <ImageUpload value={logoUrl} onChange={(url) => setLogoUrl(url)} folder="vendors" label="Upload Logo" />
-                        </div>
-                        <div>
-                            <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Store Cover / Banner</label>
-                            <ImageUpload value={bannerUrl} onChange={(url) => setBannerUrl(url)} folder="vendors" label="Upload Cover Image" />
-                        </div>
+                    <div className="space-y-5">
+                        <ImageUploadField
+                            label="Store Logo"
+                            aspectHint="Square — shown on the vendor detail page (200×200 recommended)"
+                            value={logoUrl || null}
+                            onChange={(url) => setLogoUrl(url ?? '')}
+                            folder="vendors"
+                            variant="brand-logo"
+                        />
+                        <ImageUploadField
+                            label="Store Card Image"
+                            aspectHint="Shows on the vendor card (280×160 recommended)"
+                            value={bannerUrl || null}
+                            onChange={(url) => setBannerUrl(url ?? '')}
+                            folder="vendors"
+                            variant="vendor-cover"
+                        />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
