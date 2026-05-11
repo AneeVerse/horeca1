@@ -11,6 +11,54 @@ import { useAddress } from '@/context/AddressContext';
 import { useCart } from '@/context/CartContext';
 import type { VendorProduct } from '@/types';
 
+// Avatar that renders a clean logo if available, else a colored initial-letter tile.
+// Used for vendor cards on the brand storefront where many vendors won't have logos uploaded yet.
+const AVATAR_PALETTE = [
+    { bg: '#FFEDD5', fg: '#C2410C' }, // orange
+    { bg: '#DCFCE7', fg: '#15803D' }, // green
+    { bg: '#DBEAFE', fg: '#1D4ED8' }, // blue
+    { bg: '#FCE7F3', fg: '#BE185D' }, // pink
+    { bg: '#F3E8FF', fg: '#7E22CE' }, // purple
+    { bg: '#FEF3C7', fg: '#A16207' }, // amber
+    { bg: '#CCFBF1', fg: '#0F766E' }, // teal
+];
+
+function paletteFor(name: string) {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
+
+function VendorAvatar({ name, logo, size = 64, rounded = '16px', fit = 'cover' }: { name: string; logo?: string | null; size?: number; rounded?: string; fit?: 'cover' | 'contain' }) {
+    const [errored, setErrored] = React.useState(false);
+    const showLogo = logo && !errored;
+    const palette = paletteFor(name || '?');
+    const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+    return (
+        <div
+            className="flex items-center justify-center overflow-hidden shrink-0 border border-gray-100 shadow-sm"
+            style={{ width: size, height: size, borderRadius: rounded, backgroundColor: showLogo ? '#fff' : palette.bg }}
+        >
+            {showLogo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                    src={logo!}
+                    alt={name}
+                    className={cn("w-full h-full", fit === 'cover' ? 'object-cover' : 'object-contain p-1.5')}
+                    onError={() => setErrored(true)}
+                />
+            ) : (
+                <span
+                    className="font-extrabold leading-none select-none"
+                    style={{ color: palette.fg, fontSize: Math.round(size * 0.42) }}
+                >
+                    {initial}
+                </span>
+            )}
+        </div>
+    );
+}
+
 interface BrandDistributor {
     vendorId: string;
     vendorName: string;
@@ -506,7 +554,7 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                             </button>
                         )}
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
                         {filteredProducts.map((product) => {
                             const best = pickBestDistributor(product);
                             const distCount = product.distributors.filter(d => d.inStock).length;
@@ -644,14 +692,7 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                                         href={`/vendor/${vendor.id}`}
                                         className="flex items-center gap-4 p-5 bg-white rounded-[20px] border border-gray-100 hover:border-[#53B175]/30 hover:shadow-lg hover:shadow-gray-100 transition-all duration-200 group"
                                     >
-                                        <div className="w-16 h-16 rounded-[16px] bg-gray-50 border border-gray-100 overflow-hidden shrink-0">
-                                            <img
-                                                src={vendor.logo}
-                                                alt={vendor.name}
-                                                className="w-full h-full object-contain p-2"
-                                                onError={(e) => { (e.currentTarget as HTMLImageElement).src = fallbackSvg(64); }}
-                                            />
-                                        </div>
+                                        <VendorAvatar name={vendor.name} logo={vendor.logo} size={80} rounded="18px" fit="cover" />
                                         <div className="flex-1 min-w-0">
                                             <p className="text-[16px] font-black text-[#181725] group-hover:text-[#53B175] transition-colors truncate">
                                                 {vendor.name}

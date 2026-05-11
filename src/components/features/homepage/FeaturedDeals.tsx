@@ -78,11 +78,11 @@ export function FeaturedDeals() {
                 ? Array.from({ length: 5 }).map((_, i) => (
                     <div
                       key={i}
-                      className="h-[260px] w-[180px] shrink-0 rounded-2xl bg-gray-100 animate-pulse"
+                      className="h-[320px] w-[220px] shrink-0 rounded-2xl bg-gray-100 animate-pulse"
                     />
                   ))
                 : products.map((p) => (
-                    <div key={p.id} className="w-[180px] md:w-[200px] shrink-0">
+                    <div key={p.id} className="w-[220px] md:w-[240px] shrink-0">
                       <VendorProductCard product={p} />
                     </div>
                   ))}

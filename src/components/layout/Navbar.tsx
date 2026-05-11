@@ -217,41 +217,31 @@ export function Navbar() {
                         </div>
                     </div>
 
-                    {/* Row 2: Search Bar */}
-                    {!pathname?.startsWith('/vendor/') &&
-                        !pathname?.startsWith('/order-lists') &&
-                        !pathname?.startsWith('/category/') &&
-                        !pathname?.startsWith('/product/') &&
-                        !pathname?.startsWith('/brand/') &&
-                        pathname !== '/orders' &&
-                        pathname !== '/wishlist' &&
-                        pathname !== '/cart' &&
-                        pathname !== '/profile' && (
-                            <div className="px-1">
-                                <div
-                                    className={cn(
-                                        "flex items-center gap-3 px-4 py-3 bg-[#F7F7F7] border rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all duration-300",
-                                        isNavSearchFocused ? "border-[#53B175] bg-white ring-1 ring-[#53B175]/10" : "border-gray-100"
-                                    )}
-                                >
-                                    <Search size={20} className={cn("transition-colors", isNavSearchFocused ? "text-[#53B175]" : "text-gray-400")} />
-                                    <input
-                                        type="text"
-                                        placeholder="search for product or brand, store..."
-                                        className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 font-medium"
-                                        onFocus={() => setIsNavSearchFocused(true)}
-                                        onBlur={() => setIsNavSearchFocused(false)}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            if (val.length > 0) {
-                                                openSearch('items', val);
-                                                e.target.value = '';
-                                            }
-                                        }}
-                                    />
-                                </div>
-                            </div>
-                        )}
+                    {/* Row 2: Search Bar — always visible (universal escape hatch) */}
+                    <div className="px-1">
+                        <div
+                            className={cn(
+                                "flex items-center gap-3 px-4 py-3 bg-[#F7F7F7] border rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all duration-300",
+                                isNavSearchFocused ? "border-[#53B175] bg-white ring-1 ring-[#53B175]/10" : "border-gray-100"
+                            )}
+                        >
+                            <Search size={20} className={cn("transition-colors", isNavSearchFocused ? "text-[#53B175]" : "text-gray-400")} />
+                            <input
+                                type="text"
+                                placeholder="search for product or brand, store..."
+                                className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400 font-medium"
+                                onFocus={() => setIsNavSearchFocused(true)}
+                                onBlur={() => setIsNavSearchFocused(false)}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val.length > 0) {
+                                        openSearch('items', val);
+                                        e.target.value = '';
+                                    }
+                                }}
+                            />
+                        </div>
+                    </div>
                 </div>
             </header>
 
@@ -269,32 +259,29 @@ export function Navbar() {
                                 <Image src="/Horeca1.png" alt="Horeca1" width={100} height={26} className="h-[26px] w-auto object-contain" priority />
                             </Link>
 
-                            {/* Search Bar — flex-1, fills available space */}
-                            {!pathname?.startsWith('/vendor/') && (
-                                <div className="flex flex-1 items-center min-w-0">
-                                    <div className="flex items-center gap-2 pl-5 pr-2 py-2.5 bg-gray-50 border-2 border-gray-100 rounded-full w-full focus-within:border-primary/50 focus-within:bg-white transition-all duration-300 shadow-sm">
-                                        <Search size={17} className="text-gray-400 shrink-0" />
-                                        <input
-                                            type="text"
-                                            value={navSearchQuery}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                setNavSearchQuery(val);
-                                                if (val.trim()) openSearch('items', val);
-                                            }}
-                                            placeholder="Search for a product or brand..."
-                                            className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-gray-400 min-w-0"
-                                        />
-                                        <button
-                                            onClick={() => { if (navSearchQuery.trim()) openSearch('items', navSearchQuery); }}
-                                            className="bg-primary hover:bg-primary-dark px-5 py-2 rounded-full text-white font-bold text-[13px] transition-all shadow-sm cursor-pointer shrink-0"
-                                        >
-                                            Search
-                                        </button>
-                                    </div>
+                            {/* Search Bar — flex-1, fills available space. Always visible. */}
+                            <div className="flex flex-1 items-center min-w-0">
+                                <div className="flex items-center gap-2 pl-5 pr-2 py-2.5 bg-gray-50 border-2 border-gray-100 rounded-full w-full focus-within:border-primary/50 focus-within:bg-white transition-all duration-300 shadow-sm">
+                                    <Search size={17} className="text-gray-400 shrink-0" />
+                                    <input
+                                        type="text"
+                                        value={navSearchQuery}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setNavSearchQuery(val);
+                                            if (val.trim()) openSearch('items', val);
+                                        }}
+                                        placeholder="Search for a product or brand..."
+                                        className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-gray-400 min-w-0"
+                                    />
+                                    <button
+                                        onClick={() => { if (navSearchQuery.trim()) openSearch('items', navSearchQuery); }}
+                                        className="bg-primary hover:bg-primary-dark px-5 py-2 rounded-full text-white font-bold text-[13px] transition-all shadow-sm cursor-pointer shrink-0"
+                                    >
+                                        Search
+                                    </button>
                                 </div>
-                            )}
-                            {pathname?.startsWith('/vendor/') && <div className="flex-1" />}
+                            </div>
 
                             {/* Deliver to Location — right of search */}
                             <button

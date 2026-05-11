@@ -125,8 +125,8 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
         <Link
             href={isOutOfStock ? '#' : `/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`}
             className={cn(
-                "bg-white rounded-[24px] md:rounded-[20px] border border-gray-200 overflow-hidden transition-all duration-700 group p-4 min-[340px]:p-5 md:p-3.5 relative flex flex-col gap-3 md:gap-2 h-full",
-                isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_20px_50px_rgba(0,0,0,0.06)] hover:-translate-y-2 hover:border-[#53B175]/20"
+                "bg-white rounded-[22px] border border-gray-100 overflow-hidden transition-all duration-500 group p-4 md:p-5 relative flex flex-col gap-3 h-full",
+                isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_18px_45px_-12px_rgba(83,177,117,0.18)] hover:-translate-y-1 hover:border-[#53B175]/30"
             )}
             onClick={(e) => {
                 if (isOutOfStock) {
@@ -138,51 +138,51 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
             {/* Share Button Only */}
             <div className="absolute top-4 right-4 z-10">
                 <button
-                    className="p-2 rounded-xl backdrop-blur-md bg-white/70 border border-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.05)] hover:bg-[#53B175]/10 hover:text-[#53B175] transition-all"
+                    className="p-2 rounded-full backdrop-blur-md bg-white/80 border border-white/60 shadow-[0_4px_12px_rgba(0,0,0,0.06)] hover:bg-[#53B175]/10 hover:text-[#53B175] transition-all"
                     onClick={handleShare}
                 >
-                    <Share2 size={15} className="text-gray-400" strokeWidth={2.5} />
+                    <Share2 size={14} className="text-gray-500" strokeWidth={2} />
                 </button>
             </div>
 
             {/* ── IMAGE SECTION ── */}
-            <div className="relative aspect-square overflow-hidden rounded-2xl bg-gray-50/50 flex items-center justify-center">
+            <div className="relative aspect-square overflow-hidden rounded-2xl bg-gradient-to-br from-[#F7FBF8] via-white to-[#F0F7F2] flex items-center justify-center">
                 <div className="relative w-[85%] h-[85%]">
                     <Image
                         src={product.images[0] || '/images/recom-product/product-img10.png'}
                         alt={product.name}
                         fill
-                        sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 280px"
+                        sizes="(max-width: 640px) 45vw, (max-width: 1024px) 33vw, 320px"
                         className={cn(
-                            "object-contain transition-transform duration-700 ease-out p-1",
+                            "object-contain transition-transform duration-500 ease-out p-1 group-hover:scale-[1.04]",
                             isOutOfStock ? "grayscale" : ""
                         )}
                     />
                 </div>
                 <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
                     {isOutOfStock ? (
-                        <span className="bg-gray-800 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-wider">
-                            OUT
+                        <span className="bg-gray-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                            Out
                         </span>
                     ) : (
                         <>
                             {product.isDeal && (
-                                <span className="bg-[#FF4D4D] text-white text-[9px] font-black px-2 py-1 rounded-lg shadow-lg shadow-red-500/10 tracking-wider">
-                                    DEAL
+                                <span className="bg-gradient-to-r from-[#FF4D4D] to-[#FF6B6B] text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md shadow-red-500/20 tracking-wide">
+                                    Deal
                                 </span>
                             )}
                             {product.frequentlyOrdered && (
-                                <span className="bg-[#FBC02D] text-white text-[9px] font-black px-2 py-1 rounded-lg shadow-lg shadow-yellow-500/10 tracking-wider">
-                                    TOP
+                                <span className="bg-gradient-to-r from-[#FBC02D] to-[#FFD54F] text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md shadow-yellow-500/20 tracking-wide">
+                                    Top
                                 </span>
                             )}
                         </>
                     )}
                 </div>
                 {product.creditBadge && !isOutOfStock && (
-                    <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1 bg-[#F3E5F5]/80 backdrop-blur-md text-[#7B1FA2] px-2 py-1 rounded-lg border border-purple-100/50">
-                        <CreditCard size={10} strokeWidth={2.5} />
-                        <span className="text-[9px] font-black uppercase tracking-tight">Credit</span>
+                    <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1 bg-white/90 backdrop-blur-md text-[#7B1FA2] px-2.5 py-1 rounded-full border border-purple-100 shadow-sm">
+                        <CreditCard size={11} strokeWidth={2.5} />
+                        <span className="text-[10px] font-bold uppercase tracking-wide">Credit</span>
                     </div>
                 )}
             </div>
@@ -190,7 +190,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
             {/* ── CONTENT SECTION ── */}
             <div className="flex flex-col gap-1.5">
                 <h3 className={cn(
-                    "text-[14px] md:text-[14px] font-[900] leading-[1.3] line-clamp-2 h-[2.6em]",
+                    "text-[15px] font-bold leading-[1.35] line-clamp-2 h-[2.7em]",
                     isOutOfStock ? "text-gray-400" : "text-[#181725]"
                 )}>
                     {product.displayName ?? product.name}
@@ -200,16 +200,16 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                         <Link
                             href={`/brand/${product.brandSlug}`}
                             onClick={(e) => e.stopPropagation()}
-                            className="text-[10px] font-bold uppercase tracking-widest text-[#53B175] hover:underline shrink-0"
+                            className="text-[11px] font-semibold text-[#53B175] hover:underline shrink-0"
                         >
                             by {product.brandName}
                         </Link>
                     )}
-                    <p className="text-[11px] md:text-[11px] text-gray-400 font-extrabold uppercase tracking-widest truncate">
+                    <p className="text-[12px] text-gray-500 font-medium truncate">
                         {product.packSize}
                     </p>
                     {(product.minOrderQuantity || 1) > 1 && (
-                        <span className="text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-md shrink-0">
+                        <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
                             Min {product.minOrderQuantity}
                         </span>
                     )}
@@ -218,89 +218,127 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
 
             {/* ── BULK TIERS ── */}
             {bulkTiers.length > 0 && (
-                <div className="flex flex-col gap-1.5 mt-1">
-                    {bulkTiers.map((tier, i) => (
-                        <div key={i} className={cn(
-                            "rounded-xl border px-3 py-1.5 flex items-center justify-between gap-2 transition-colors",
-                            isOutOfStock ? "bg-gray-50 border-gray-100" : "bg-[#F7FBF8] border-[#EAF5ED] hover:border-[#53B175]/30"
-                        )}>
-                            <span className={cn(
-                                "text-[11px] font-black tracking-tight",
-                                isOutOfStock ? "text-gray-300" : "text-[#1B5E20]"
+                <div className="flex flex-col gap-1.5 mt-0.5">
+                    {bulkTiers.map((tier, i) => {
+                        const isOpen = !isOutOfStock && openStepperIdx === i;
+                        return (
+                            <div key={i} className={cn(
+                                "rounded-xl border px-2.5 py-1.5 flex items-center gap-1.5 transition-colors h-[40px]",
+                                isOutOfStock ? "bg-gray-50 border-gray-100" : "bg-[#EFF8F2] border-[#D8ECDF] hover:border-[#53B175]/40"
                             )}>
-                                ₹{tier.price} <span className="opacity-60 text-[9px]">({tier.minQty}+ pcs)</span>
-                            </span>
-                            {!isOutOfStock && openStepperIdx !== i && (
-                                <button
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setOpenStepperIdx(i);
-                                        setStepperQty(tier.minQty);
-                                    }}
-                                    className="text-[#53B175] text-[10px] font-black uppercase tracking-widest hover:text-[#2c7a2c] transition-colors"
-                                >
-                                    + Add
-                                </button>
-                            )}
-                            {!isOutOfStock && openStepperIdx === i && (
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                    <button
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            if (stepperQty <= tier.minQty) return;
-                                            setStepperQty(stepperQty - 1);
-                                        }}
-                                        disabled={stepperQty <= tier.minQty}
-                                        className={cn(
-                                            "w-6 h-6 rounded-lg flex items-center justify-center transition-colors",
-                                            stepperQty <= tier.minQty
-                                                ? "text-gray-300 cursor-not-allowed"
-                                                : "text-red-400 hover:bg-red-50"
-                                        )}
-                                    >
-                                        <Minus size={12} strokeWidth={3} />
-                                    </button>
-                                    <span className="text-[12px] font-black text-[#181725] w-6 text-center tabular-nums">
-                                        {stepperQty}
+                                {isOpen ? (
+                                    <span className={cn(
+                                        "text-[12px] font-bold tracking-tight whitespace-nowrap shrink-0",
+                                        isOutOfStock ? "text-gray-300" : "text-[#1B5E20]"
+                                    )}>
+                                        ₹{tier.price}
                                     </span>
+                                ) : (
+                                    <span className={cn(
+                                        "text-[13px] font-bold tracking-tight whitespace-nowrap flex-1 min-w-0",
+                                        isOutOfStock ? "text-gray-300" : "text-[#1B5E20]"
+                                    )}>
+                                        ₹{tier.price} <span className="opacity-70 text-[11px] font-medium">({tier.minQty}+ pcs)</span>
+                                    </span>
+                                )}
+                                {!isOutOfStock && !isOpen && (
                                     <button
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            setStepperQty(stepperQty + 1);
+                                            setOpenStepperIdx(i);
+                                            setStepperQty(tier.minQty);
                                         }}
-                                        className="w-6 h-6 rounded-lg flex items-center justify-center text-[#53B175] hover:bg-green-50 transition-colors"
+                                        className="text-[#53B175] text-[11px] font-bold hover:text-[#2c7a2c] transition-colors shrink-0"
                                     >
-                                        <Plus size={12} strokeWidth={3} />
+                                        + Add
                                     </button>
-                                    <button
-                                        onClick={(e) => {
-                                            handleAdd(e, stepperQty);
-                                            setOpenStepperIdx(null);
-                                        }}
-                                        className="ml-1 px-2.5 py-1 rounded-lg bg-[#53B175] text-white text-[10px] font-black uppercase tracking-wider hover:bg-[#489d67] transition-colors"
-                                    >
-                                        Add
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    ))}
+                                )}
+                                {isOpen && (
+                                    <>
+                                        <button
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                if (stepperQty <= tier.minQty) return;
+                                                setStepperQty(stepperQty - 1);
+                                            }}
+                                            disabled={stepperQty <= tier.minQty}
+                                            className={cn(
+                                                "w-6 h-6 rounded-md flex items-center justify-center transition-colors shrink-0",
+                                                stepperQty <= tier.minQty
+                                                    ? "text-gray-300 cursor-not-allowed"
+                                                    : "text-red-400 hover:bg-red-50 bg-white"
+                                            )}
+                                        >
+                                            <Minus size={12} strokeWidth={2.5} />
+                                        </button>
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
+                                            value={stepperQty}
+                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); (e.target as HTMLInputElement).select(); }}
+                                            onChange={(e) => {
+                                                e.stopPropagation();
+                                                const raw = e.target.value.replace(/[^0-9]/g, '');
+                                                setStepperQty(raw === '' ? 0 : parseInt(raw, 10));
+                                            }}
+                                            onBlur={() => {
+                                                if (stepperQty < tier.minQty) setStepperQty(tier.minQty);
+                                            }}
+                                            onKeyDown={(e) => {
+                                                e.stopPropagation();
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    const finalQty = stepperQty < tier.minQty ? tier.minQty : stepperQty;
+                                                    setStepperQty(finalQty);
+                                                    handleAdd(e as unknown as React.MouseEvent, finalQty);
+                                                    setOpenStepperIdx(null);
+                                                }
+                                            }}
+                                            className="flex-1 min-w-0 w-full h-6 px-1 rounded-md bg-white border border-[#D8ECDF] text-[12px] font-bold text-[#181725] text-center tabular-nums focus:outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/20 transition-all"
+                                        />
+                                        <button
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setStepperQty(Math.max(stepperQty, tier.minQty) + 1);
+                                            }}
+                                            className="w-6 h-6 rounded-md flex items-center justify-center text-[#53B175] hover:bg-green-50 bg-white transition-colors shrink-0"
+                                        >
+                                            <Plus size={12} strokeWidth={2.5} />
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                const finalQty = stepperQty < tier.minQty ? tier.minQty : stepperQty;
+                                                handleAdd(e, finalQty);
+                                                setOpenStepperIdx(null);
+                                            }}
+                                            className="px-2 h-6 rounded-md bg-[#53B175] text-white text-[10px] font-bold hover:bg-[#489d67] transition-colors shrink-0"
+                                        >
+                                            Add
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             )}
 
             {/* ── FOOTER: PRICE + CTA ── */}
-            <div className="mt-auto pt-4 md:pt-3 flex flex-col gap-4 md:gap-2.5">
+            <div className="mt-auto pt-3 flex flex-col gap-3">
                 <div className="flex items-baseline gap-1.5">
                     <span className={cn(
-                        "text-[18px] md:text-[20px] font-[1000] tracking-tighter leading-none",
+                        "text-[22px] md:text-[24px] font-extrabold tracking-tight leading-none",
                         isOutOfStock ? "text-gray-300" : "text-[#181725]"
                     )}>
-                        ₹ {product.price}
+                        ₹{product.price}
                     </span>
-                    <span className="text-[11px] md:text-[12px] font-black text-gray-400 uppercase">/ unit</span>
+                    <span className="text-[12px] font-medium text-gray-500">/ unit</span>
                 </div>
 
                 <button
@@ -312,16 +350,16 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                         }
                     }}
                     className={cn(
-                        "w-full rounded-2xl font-black flex items-center justify-center gap-1 transition-all duration-300 active:scale-95 border uppercase tracking-[0.05em]",
+                        "w-full rounded-2xl font-bold flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-[0.98] border",
                         isOutOfStock
-                            ? "bg-white text-[#53B175] border-[#53B175] hover:bg-[#f7fbf8] cursor-pointer text-[9px] py-2 px-1.5"
-                            : "bg-[#53B175] text-white border-[#53B175] shadow-[0_8px_25px_rgba(83,177,117,0.2)] hover:bg-[#489d67] hover:shadow-[0_12px_30px_rgba(83,177,117,0.3)] text-[11px] py-3 md:py-2.5"
+                            ? "bg-white text-[#53B175] border-[#53B175] hover:bg-[#f7fbf8] cursor-pointer text-[11px] py-2.5 px-2"
+                            : "bg-gradient-to-r from-[#53B175] to-[#4AA56B] text-white border-[#53B175] shadow-[0_8px_22px_-6px_rgba(83,177,117,0.45)] hover:shadow-[0_12px_28px_-6px_rgba(83,177,117,0.55)] text-[13px] py-3"
                     )}
                 >
                     {isOutOfStock ? (
-                        <>Find at another vendor <Navigation size={11} strokeWidth={3} className="shrink-0 -ml-1" /></>
+                        <>Find at another vendor <Navigation size={12} strokeWidth={2.5} className="shrink-0" /></>
                     ) : (
-                        <>Quick Add<ShoppingCart size={13} strokeWidth={3} className="shrink-0" /></>
+                        <>Quick Add <ShoppingCart size={15} strokeWidth={2.5} className="shrink-0" /></>
                     )}
                 </button>
             </div>
