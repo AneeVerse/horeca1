@@ -52,6 +52,10 @@ const nextConfig: NextConfig = {
 
   experimental: {
     optimizePackageImports: ['lucide-react', 'react-icons'],
+    // Restore scroll position on back/forward navigation.
+    // Without this the App Router resets scroll to top on history pop, which makes the
+    // back button feel broken when the user was scrolled deep into a list.
+    scrollRestoration: true,
   },
 };
 

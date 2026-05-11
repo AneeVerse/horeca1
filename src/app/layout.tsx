@@ -13,6 +13,7 @@ import { AuthProvider } from "@/components/providers/AuthProvider";
 import { Toaster } from 'sonner';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 import { VendorApplicationBanner } from '@/components/features/homepage/VendorApplicationBanner';
+import { ScrollRestoration } from '@/components/layout/ScrollRestoration';
 
 const quicksand = Quicksand({
   subsets: ["latin"],
@@ -62,6 +63,7 @@ export default function RootLayout({
             <WishlistProvider>
               <CartProvider>
                 <ConfirmProvider>
+                  <Suspense fallback={null}><ScrollRestoration /></Suspense>
                   <Toaster position="top-center" richColors />
                   <Navbar />
                   <VendorApplicationBanner />
