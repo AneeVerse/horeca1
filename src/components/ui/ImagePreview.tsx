@@ -30,7 +30,7 @@ interface VariantConfig {
 
 const VARIANTS: Record<ImagePreviewVariant, VariantConfig> = {
     'brand-logo':       { label: 'Logo on brand card',     width: 76,  height: 76,  shape: 'circle',       bg: '#fff',     border: true,  fit: 'contain' },
-    'brand-banner':     { label: 'Storefront hero',        width: 320, height: 100, shape: 'rounded',      bg: '#22844f',                  fit: 'cover'   },
+    'brand-banner':     { label: 'Storefront hero (4:1)',  width: 320, height: 80,  shape: 'rounded',      bg: '#22844f',                  fit: 'cover'   },
     'brand-card-top':   { label: 'Brand card top section', width: 220, height: 160, shape: 'rounded-top',  bg: '#f0faf4',                  fit: 'cover'   },
     'product-square':   { label: 'Product card image',     width: 200, height: 200, shape: 'rounded',      bg: '#fff',                     fit: 'contain' },
     'vendor-cover':     { label: 'Vendor card cover',      width: 280, height: 160, shape: 'rounded',      bg: '#fafafa',                  fit: 'cover'   },

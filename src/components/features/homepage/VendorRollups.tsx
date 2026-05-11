@@ -222,6 +222,13 @@ export function TopRatedVendors() {
                     transform-style: preserve-3d;
                     transition: all 0.5s ease-in-out;
                     padding: 14px 16px 16px 16px;
+                    /* Equal-height cards: flex column with min-height + CTA pinned to bottom. */
+                    display: flex;
+                    flex-direction: column;
+                    min-height: 150px;
+                }
+                .tr-cta-wrap {
+                    margin-top: auto; /* pushes the CTA to the bottom regardless of content above */
                 }
                 .tr-title {
                     display: block;
@@ -376,7 +383,9 @@ export function TopRatedVendors() {
                                                 {vendor.minOrderValue > 0 && (
                                                     <p className="tr-cats">MOV ₹{vendor.minOrderValue}</p>
                                                 )}
-                                                <span className="tr-cta">Visit Store →</span>
+                                                <div className="tr-cta-wrap">
+                                                    <span className="tr-cta">Visit Store →</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </Link>

@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, MapPin, Store, ArrowLeft, Search, X, AlertCircle, Plus, Minus, ShoppingCart, Loader2 } from 'lucide-react';
+import { ChevronLeft, MapPin, Store, ArrowLeft, Search, X, AlertCircle, Plus, Minus, ShoppingCart, Loader2, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatPackSize } from '@/lib/utils';
 import { parseImageMeta, getDisplayStyle } from '@/lib/imageMeta';
@@ -53,6 +53,7 @@ interface BrandStoreData {
     slug: string;
     name: string;
     bannerImage: string;
+    logoImage: string;
     tagline: string;
     products: BrandProduct[];
     vendors: BrandVendor[];
@@ -145,6 +146,7 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                         slug: d.slug,
                         name: d.name,
                         bannerImage: d.banner ?? '',
+                        logoImage: d.logo ?? '',
                         tagline: d.tagline ?? '',
                         coverage: d.coverage ?? undefined,
                         products: d.products.map((p: { id: string; name: string; image?: string; category: string; packSize?: string; unit?: string; distributors?: BrandDistributor[] }) => ({
@@ -283,132 +285,150 @@ export function BrandStore({ brandId }: BrandStoreProps) {
         `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}"%3E%3Crect fill="%23f5f5f5" width="${size}" height="${size}"/%3E%3C/svg%3E`;
 
     return (
-        <div className="min-h-screen bg-gray-50/50 pb-24">
+        <div className="min-h-screen bg-[#F6FBF7] pb-24">
 
             {/* ══════════════════════════════════════════
-                MOBILE HEADER — compact light-green hero
-                (matches homepage mobile hero style)
+                BRAND STOREFRONT HERO
+                Full-bleed banner image (the actual product photo / lifestyle shot)
+                with a clean info card overlapping the bottom edge. The brand
+                logo bubble bridges the two — same pattern as Spotify artist /
+                Zomato restaurant pages, polished for B2B feel.
             ══════════════════════════════════════════ */}
-            <div className="block md:hidden px-4 pt-4">
-                <div
-                    className="relative w-full rounded-[20px] overflow-hidden"
-                    style={{ backgroundColor: '#eff9f0' }}
-                >
-                    <button
-                        onClick={() => router.back()}
-                        className="absolute top-3 left-3 z-20 p-2 bg-white/80 backdrop-blur-md rounded-full shadow-sm"
-                        aria-label="Back"
-                    >
-                        <ChevronLeft size={18} strokeWidth={3} className="text-[#181725]" />
-                    </button>
-                    <div className="flex items-center px-5 py-6 pt-10">
-                        <div className="flex-1 pr-2 min-w-0">
-                            <span className="inline-block bg-[#53B175] text-white px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide mb-2">
-                                Brand Store
-                            </span>
-                            <h1 className="text-[20px] font-[900] text-[#0f172a] leading-[1.15] mb-1 line-clamp-2">
-                                {brand.name}
-                            </h1>
-                            <p className="text-[11px] text-gray-500 font-bold leading-[1.4] line-clamp-2 mb-2">
-                                {brand.tagline}
-                            </p>
-                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-wide">
-                                {brand.products.length} products · {brand.vendors.length} distributors
-                            </p>
-                        </div>
-                        <div className="flex-shrink-0 w-[38%] max-w-[120px]">
-                            <div className="w-full aspect-square rounded-[14px] overflow-hidden bg-white border border-white/60 shadow-sm">
-                                <img
-                                    src={parseImageMeta(brand.bannerImage).src}
-                                    alt={brand.name}
-                                    className="w-full h-full object-cover"
-                                    style={getDisplayStyle(parseImageMeta(brand.bannerImage).meta)}
-                                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.background = '#f5f5f5'; }}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Tabs below hero */}
-                <div className="mt-4 px-1">
-                    <TabBar activeTab={activeTab} brand={brand} onTabChange={handleTabChange} />
-                </div>
-            </div>
-
-            {/* ══════════════════════════════════════════
-                DESKTOP HEADER — compact green-gradient hero
-                (matches homepage hero style)
-            ══════════════════════════════════════════ */}
-            <div className="hidden md:block bg-white pb-0">
-                <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] pt-6">
-                    <div className="relative w-full h-[180px] lg:h-[220px] rounded-[32px] md:rounded-[40px] overflow-hidden bg-gradient-to-r from-[#22844f] via-[#299e60] to-[#22c55e] flex items-center px-6 md:px-10 lg:px-20 shadow-lg">
-                        {/* Decorative circles (same as homepage hero) */}
-                        <div className="absolute left-0 top-0 w-full h-full opacity-10 pointer-events-none">
-                            <svg width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="10%" cy="50%" r="150" stroke="white" strokeWidth="2" />
-                                <circle cx="90%" cy="20%" r="80" stroke="white" strokeWidth="2" />
-                            </svg>
-                        </div>
-
-                        {/* Back button */}
-                        <button
-                            onClick={() => router.back()}
-                            className="absolute top-4 left-4 p-2 bg-white/20 backdrop-blur-md rounded-full text-white z-20 hover:bg-white/30 transition"
-                            aria-label="Back"
-                        >
-                            <ChevronLeft size={20} strokeWidth={3} />
-                        </button>
-
-                        {/* Content */}
-                        <div className="flex items-center w-full relative z-10">
-                            {/* Brand image thumbnail */}
-                            <div className="flex-shrink-0 mr-4 md:mr-8 lg:mr-12">
-                                <div className="w-[110px] h-[110px] md:w-[140px] md:h-[140px] lg:w-[170px] lg:h-[170px] rounded-[20px] md:rounded-[24px] bg-white/10 border-2 border-white/30 overflow-hidden shadow-2xl">
+            {(() => {
+                const bannerParsed = parseImageMeta(brand.bannerImage);
+                const bannerStyle = getDisplayStyle(bannerParsed.meta);
+                const logoParsed = parseImageMeta(brand.logoImage || brand.bannerImage);
+                const logoStyle = getDisplayStyle(logoParsed.meta);
+                const hasRealLogo = !!brand.logoImage;
+                return (
+                    <div>
+                        <div className="max-w-[var(--container-max)] mx-auto md:px-[var(--container-padding)] md:pt-6">
+                            {/* ─── Banner image — full-bleed hero ─── */}
+                            <div className="relative w-full h-[200px] sm:h-[260px] md:h-[280px] lg:h-[320px] md:rounded-t-[28px] overflow-hidden bg-gradient-to-br from-[#EEF8F1] to-[#d9efe1] md:border md:border-b-0 md:border-[#53B175]/20">
+                                {bannerParsed.src ? (
+                                    /* eslint-disable-next-line @next/next/no-img-element */
                                     <img
-                                        src={brand.bannerImage}
+                                        src={bannerParsed.src}
                                         alt={brand.name}
                                         className="w-full h-full object-cover"
-                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.background = 'rgba(255,255,255,0.15)'; }}
+                                        style={bannerStyle}
                                     />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                        <Store size={48} className="text-[#53B175]/40" />
+                                    </div>
+                                )}
+                                {/* Brand-color tint at bottom for clean transition into the info card */}
+                                <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/35 via-black/10 to-transparent pointer-events-none" />
+
+                                {/* Back button */}
+                                <button
+                                    onClick={() => router.back()}
+                                    className="absolute top-3 left-3 md:top-4 md:left-4 z-20 p-2 md:p-2.5 bg-white/90 backdrop-blur-md rounded-full shadow-md hover:bg-white transition"
+                                    aria-label="Back"
+                                >
+                                    <ChevronLeft size={18} strokeWidth={3} className="text-[#181725]" />
+                                </button>
+
+                                {/* Brand-store ribbon — green for site theme */}
+                                <div className="absolute top-3 right-3 md:top-4 md:right-4 z-20">
+                                    <span className="inline-flex items-center gap-1.5 bg-[#53B175] text-white text-[10px] md:text-[11px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-md">
+                                        <Store size={11} /> Brand Store
+                                    </span>
                                 </div>
                             </div>
 
-                            {/* Title + tagline + counts */}
-                            <div className="flex-grow flex flex-col items-start justify-center text-white min-w-0">
-                                <span className="bg-white/20 backdrop-blur-sm border border-white/30 text-white text-[10px] md:text-[11px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-2">
-                                    Brand Store
-                                </span>
-                                <h1 className="text-[1.6rem] md:text-[2rem] lg:text-[2.8rem] font-[900] leading-[1.05] tracking-tight drop-shadow-md line-clamp-1">
-                                    {brand.name}
-                                </h1>
-                                <p className="text-[0.8rem] md:text-[0.95rem] lg:text-[1.05rem] font-medium opacity-90 max-w-[500px] mt-1 line-clamp-1">
-                                    {brand.tagline}
-                                </p>
-                                <p className="text-[0.7rem] md:text-[0.78rem] font-bold opacity-80 mt-1.5 uppercase tracking-wider">
-                                    {brand.products.length} products · {brand.vendors.length} distributors
-                                </p>
-                            </div>
+                            {/* ─── Info card — overlaps the banner with a green accent bar ─── */}
+                            <div className="relative px-4 md:px-0 -mt-10 md:-mt-12">
+                                {/* Logo bubble — absolute, breaks out above the card so it isn't clipped by overflow-hidden */}
+                                <div className="absolute z-20 -top-12 md:-top-16 left-9 md:left-8">
+                                    <div className="w-[72px] h-[72px] md:w-[100px] md:h-[100px] rounded-2xl overflow-hidden bg-white border-4 border-white shadow-[0_8px_24px_rgba(0,0,0,0.15)] ring-2 ring-[#53B175]/20 flex items-center justify-center">
+                                        {logoParsed.src ? (
+                                            /* eslint-disable-next-line @next/next/no-img-element */
+                                            <img
+                                                src={logoParsed.src}
+                                                alt={brand.name}
+                                                className={cn('w-full h-full', hasRealLogo ? 'object-contain p-2' : 'object-cover')}
+                                                style={logoStyle}
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#EEF8F1] to-[#d9efe1]">
+                                                <span className="text-[30px] md:text-[42px] font-black text-[#53B175]">{brand.name[0]}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
 
-                            {/* CTA button */}
-                            <div className="flex-shrink-0 ml-4 hidden lg:block">
-                                <button
-                                    onClick={() => handleTabChange('items')}
-                                    className="bg-[#181725] text-white px-7 py-3 rounded-2xl flex items-center gap-2 text-[1rem] font-bold hover:scale-105 transition-all shadow-xl whitespace-nowrap"
-                                >
-                                    Explore Items
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
-                                </button>
+                                <div className="bg-white rounded-2xl md:rounded-b-[28px] md:rounded-t-none border border-[#53B175]/20 md:border-t-0 shadow-[0_10px_30px_rgba(83,177,117,0.12)] overflow-hidden">
+                                    {/* Thin green accent line at top — ties to site theme */}
+                                    <div className="h-1 bg-gradient-to-r from-[#53B175] via-[#22844f] to-[#53B175]" />
+
+                                    {/* Content padded on left to clear the absolute logo */}
+                                    <div className="pl-[110px] md:pl-[150px] pr-5 md:pr-8 py-5 md:py-6">
+                                        <div className="flex items-start gap-4 md:gap-5">
+                                            {/* Name + tagline + meta */}
+                                            <div className="flex-1 min-w-0 pt-1 md:pt-2">
+                                                <h1 className="text-[22px] md:text-[30px] lg:text-[34px] font-[900] text-[#181725] leading-tight tracking-tight truncate">
+                                                    {brand.name}
+                                                </h1>
+                                                {brand.tagline && (
+                                                    <p className="text-[12px] md:text-[14px] text-gray-500 font-medium mt-0.5 line-clamp-2">
+                                                        {brand.tagline}
+                                                    </p>
+                                                )}
+                                                <div className="flex items-center gap-2 md:gap-3 mt-3 flex-wrap">
+                                                    <span className="inline-flex items-center gap-1.5 bg-[#EEF8F1] border border-[#53B175]/20 px-2.5 py-1 rounded-full text-[11px] md:text-[12px] font-bold">
+                                                        <Store size={11} className="text-[#53B175]" />
+                                                        <span className="text-[#181725] font-[900]">{brand.products.length}</span>
+                                                        <span className="text-[#2e7d46]">products</span>
+                                                    </span>
+                                                    <span className="inline-flex items-center gap-1.5 bg-[#EEF8F1] border border-[#53B175]/20 px-2.5 py-1 rounded-full text-[11px] md:text-[12px] font-bold">
+                                                        <MapPin size={11} className="text-[#53B175]" />
+                                                        <span className="text-[#181725] font-[900]">{brand.vendors.length}</span>
+                                                        <span className="text-[#2e7d46]">distributors</span>
+                                                    </span>
+                                                    {pincode && brand.coverage && brand.coverage.servicedVendorCount > 0 && (
+                                                        <span className="inline-flex items-center gap-1.5 bg-[#53B175] text-white px-2.5 py-1 rounded-full text-[11px] md:text-[12px] font-bold">
+                                                            <Check size={11} strokeWidth={3} />
+                                                            <span className="font-[900]">{brand.coverage.servicedVendorCount}</span>
+                                                            <span className="hidden md:inline">in {pincode}</span>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* CTA — site green theme */}
+                                            <div className="hidden md:block shrink-0">
+                                                <button
+                                                    onClick={() => handleTabChange('items')}
+                                                    className="bg-gradient-to-br from-[#53B175] to-[#3d9e5f] text-white px-5 lg:px-7 py-2.5 lg:py-3 rounded-xl flex items-center gap-1.5 text-[13px] lg:text-[14px] font-bold hover:from-[#3d9e5f] hover:to-[#2e7d46] hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_8px_20px_rgba(83,177,117,0.35)]"
+                                                >
+                                                    Explore Items
+                                                    <ChevronLeft size={16} strokeWidth={3} className="rotate-180" />
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Mobile CTA — full width below */}
+                                        <button
+                                            onClick={() => handleTabChange('items')}
+                                            className="md:hidden mt-4 w-full bg-gradient-to-br from-[#53B175] to-[#3d9e5f] text-white py-3 rounded-xl flex items-center justify-center gap-1.5 text-[13px] font-bold active:scale-[0.98] transition-transform shadow-[0_6px_16px_rgba(83,177,117,0.3)]"
+                                        >
+                                            Explore Items
+                                            <ChevronLeft size={14} strokeWidth={3} className="rotate-180" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Tabs */}
+                                <div className="mt-4 md:mt-6">
+                                    <TabBar activeTab={activeTab} brand={brand} onTabChange={handleTabChange} />
+                                </div>
                             </div>
                         </div>
                     </div>
-
-                    {/* Tabs below hero */}
-                    <div className="mt-6">
-                        <TabBar activeTab={activeTab} brand={brand} onTabChange={handleTabChange} />
-                    </div>
-                </div>
-            </div>
+                );
+            })()}
 
             {/* ══════════════════════════════════════════
                 TAB CONTENT

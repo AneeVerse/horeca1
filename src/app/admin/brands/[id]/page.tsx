@@ -310,7 +310,7 @@ export default function AdminBrandEditPage() {
                             value={form.bannerUrl}
                             onChange={(url) => setForm(p => ({ ...p, bannerUrl: url }))}
                             folder="brands"
-                            aspectHint="Wide banner (1200×400 px recommended)"
+                            aspectHint="Wide hero — 1600×400 px recommended (4:1 ratio). Renders at up to 1440×320 on desktop."
                             variant="brand-banner"
                         />
                     </div>

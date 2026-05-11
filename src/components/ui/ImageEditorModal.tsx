@@ -256,7 +256,7 @@ function PreviewWithMeta({
     // matching wrapper here so the live preview reflects the user's adjustments in real time.
     const VARIANT_DIMS: Record<ImagePreviewVariant, { w: number; h: number; shape: string; bg: string; fit: 'cover' | 'contain'; border?: boolean }> = {
         'brand-logo':     { w: 76,  h: 76,  shape: 'rounded-full',     bg: '#fff',     fit: 'contain', border: true },
-        'brand-banner':   { w: 280, h: 90,  shape: 'rounded-2xl',      bg: '#22844f',  fit: 'cover'  },
+        'brand-banner':   { w: 320, h: 80,  shape: 'rounded-2xl',      bg: '#22844f',  fit: 'cover'  },
         'brand-card-top': { w: 220, h: 160, shape: 'rounded-t-2xl',    bg: '#f0faf4',  fit: 'cover'  },
         'product-square': { w: 200, h: 200, shape: 'rounded-2xl',      bg: '#fff',     fit: 'contain' },
         'vendor-cover':   { w: 280, h: 160, shape: 'rounded-2xl',      bg: '#fafafa',  fit: 'cover'  },
