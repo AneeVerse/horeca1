@@ -52,10 +52,11 @@ const nextConfig: NextConfig = {
 
   experimental: {
     optimizePackageImports: ['lucide-react', 'react-icons'],
-    // Restore scroll position on back/forward navigation.
-    // Without this the App Router resets scroll to top on history pop, which makes the
-    // back button feel broken when the user was scrolled deep into a list.
-    scrollRestoration: true,
+    // Note: we don't enable Next.js's experimental scrollRestoration — it fires
+    // BEFORE async-loaded sections (Top Rated, Vendors, etc.) populate, so the
+    // saved scrollY ends up clamped to a shorter document height and lands at
+    // the footer. Custom restoration in src/components/layout/ScrollRestoration.tsx
+    // uses sessionStorage + requestAnimationFrame retry once content settles.
   },
 };
 
