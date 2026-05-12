@@ -786,9 +786,10 @@ enum BrandDistributorInviteStatus {
 
 // Brand's canonical product catalog (the truth layer — no pricing)
 model BrandMasterProduct {
-  id          String  @id @default(uuid()) @db.Uuid
-  brandId     String  @map("brand_id") @db.Uuid
-  categoryId  String? @map("category_id") @db.Uuid
+  id          String   @id @default(uuid()) @db.Uuid
+  brandId     String   @map("brand_id") @db.Uuid
+  categoryId  String?  @map("category_id") @db.Uuid               // primary (legacy single-category display)
+  categoryIds String[] @default([]) @map("category_ids") @db.Uuid  // all categories this product belongs to
   name        String  @db.VarChar(255)          // canonical name e.g. "Kissan Tomato Ketchup 1kg"
   slug        String  @db.VarChar(255)          // url-safe slug derived from name
   description String? @db.Text

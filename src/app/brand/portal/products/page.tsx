@@ -6,7 +6,7 @@ import { Package, Plus, Pencil, Trash2, Loader2, X, Check, GitMerge, Upload } fr
 import { cn } from '@/lib/utils';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { toast } from 'sonner';
-import { CategorySinglePicker } from '@/components/features/brand/CategorySinglePicker';
+import { CategoryMultiPickerById } from '@/components/features/brand/CategoryMultiPickerById';
 import { ImagePreview } from '@/components/ui/ImagePreview';
 
 interface MasterProduct {
@@ -17,6 +17,7 @@ interface MasterProduct {
     imageUrl: string | null;
     category: string | null;
     categoryId: string | null;
+    categoryIds: string[];
     categoryRel?: { id: string; name: string } | null;
     sku: string | null;
     isActive: boolean;
@@ -28,14 +29,13 @@ interface ProductFormData {
     name: string;
     packSize: string;
     unit: string;
-    categoryId: string | null;
-    categoryName: string | null;
+    categoryIds: string[];
     imageUrl: string;
     sku: string;
     description: string;
 }
 
-const EMPTY_FORM: ProductFormData = { name: '', packSize: '', unit: '', categoryId: null, categoryName: null, imageUrl: '', sku: '', description: '' };
+const EMPTY_FORM: ProductFormData = { name: '', packSize: '', unit: '', categoryIds: [], imageUrl: '', sku: '', description: '' };
 
 export default function BrandProductsPage() {
     const confirm = useConfirm();
@@ -64,12 +64,15 @@ export default function BrandProductsPage() {
     const openAdd = () => { setEditingId(null); setForm(EMPTY_FORM); setFormError(null); setShowForm(true); };
     const openEdit = (p: MasterProduct) => {
         setEditingId(p.id);
+        // Prefer multi-category if populated; fall back to single categoryId for old rows
+        const categoryIds = p.categoryIds && p.categoryIds.length > 0
+            ? p.categoryIds
+            : (p.categoryId ? [p.categoryId] : []);
         setForm({
             name: p.name,
             packSize: p.packSize ?? '',
             unit: p.unit ?? '',
-            categoryId: p.categoryId ?? null,
-            categoryName: p.categoryRel?.name ?? p.category ?? null,
+            categoryIds,
             imageUrl: p.imageUrl ?? '',
             sku: p.sku ?? '',
             description: '',
@@ -87,7 +90,7 @@ export default function BrandProductsPage() {
                 name: form.name.trim(),
                 ...(form.packSize && { packSize: form.packSize }),
                 ...(form.unit && { unit: form.unit }),
-                ...(form.categoryId && { categoryId: form.categoryId }),
+                categoryIds: form.categoryIds,
                 ...(form.imageUrl && { imageUrl: form.imageUrl }),
                 ...(form.sku && { sku: form.sku }),
                 ...(form.description && { description: form.description }),
@@ -328,12 +331,11 @@ export default function BrandProductsPage() {
                             ))}
 
                             {/* Category — searchable dropdown of admin categories + request-new */}
-                            <CategorySinglePicker
-                                label="Category"
-                                helper="Pick from existing categories or request a new one — admin reviews."
-                                valueId={form.categoryId}
-                                valueName={form.categoryName}
-                                onChange={(next) => setForm(prev => ({ ...prev, categoryId: next.id, categoryName: next.name }))}
+                            <CategoryMultiPickerById
+                                label="Categories"
+                                helper="Pick one or more categories — first one shows as the primary."
+                                value={form.categoryIds}
+                                onChange={(next) => setForm(prev => ({ ...prev, categoryIds: next }))}
                             />
 
                             <div>

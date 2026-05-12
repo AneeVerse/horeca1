@@ -22,6 +22,7 @@ export const createBrandProductSchema = z.object({
   unit: z.string().max(50).optional(),
   sku: z.string().max(100).optional(),
   categoryId: z.string().uuid().optional(),
+  categoryIds: z.array(z.string().uuid()).max(12).optional(),
   sortOrder: z.number().int().optional(),
 });
 

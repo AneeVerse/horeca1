@@ -1,0 +1,238 @@
+'use client';
+
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { Search, X, Plus, Loader2, Check, Tag } from 'lucide-react';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+
+interface CatRow {
+    id: string;
+    name: string;
+    slug: string;
+    parentId: string | null;
+    children?: CatRow[];
+}
+
+interface FlatCat {
+    id: string;
+    name: string;
+    parentName: string | null;
+}
+
+/** Multi-select category picker that stores **category IDs** (not names).
+ *  Use when the consumer is a UUID FK / UUID[] column.
+ *
+ *  Differs from CategoryMultiPicker (which works in names — used where the
+ *  storage is a String[] of category names, e.g. Brand.categories).
+ *
+ *  Suggest flow: when the user types a category that doesn't exist, calling
+ *  the suggest endpoint creates a pending Category row and adds its ID to
+ *  the selection (so the product can be saved immediately).
+ */
+export function CategoryMultiPickerById({
+    value,
+    onChange,
+    max = 12,
+    endpoint = '/api/v1/brand/categories/suggest',
+    label = 'Categories',
+    helper = 'Pick from existing categories or request a new one — admin reviews.',
+}: {
+    value: string[];
+    onChange: (next: string[]) => void;
+    max?: number;
+    endpoint?: string;
+    label?: string;
+    helper?: string;
+}) {
+    const [allCats, setAllCats] = useState<FlatCat[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const [suggesting, setSuggesting] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/v1/categories')
+            .then(r => r.json())
+            .then(j => {
+                if (cancelled) return;
+                const list: CatRow[] = Array.isArray(j.data) ? j.data : (j.data ?? []);
+                const flat: FlatCat[] = [];
+                const walk = (node: CatRow, parentName: string | null) => {
+                    flat.push({ id: node.id, name: node.name, parentName });
+                    for (const child of node.children ?? []) walk(child, node.name);
+                };
+                for (const root of list) walk(root, null);
+                setAllCats(flat);
+            })
+            .catch(() => setAllCats([]))
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, []);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+        };
+        if (open) document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [open]);
+
+    const byId = useMemo(() => new Map(allCats.map(c => [c.id, c])), [allCats]);
+    const selectedRows = useMemo(
+        () => value.map(id => byId.get(id)).filter((c): c is FlatCat => !!c),
+        [value, byId],
+    );
+
+    const trimmedQuery = query.trim();
+    const lcQuery = trimmedQuery.toLowerCase();
+
+    const filtered = useMemo(() => {
+        return allCats.filter(c =>
+            !value.includes(c.id) &&
+            (!lcQuery || c.name.toLowerCase().includes(lcQuery)),
+        );
+    }, [allCats, value, lcQuery]);
+
+    const exactMatch = useMemo(
+        () => allCats.some(c => c.name.toLowerCase() === lcQuery),
+        [allCats, lcQuery],
+    );
+    const canSuggest = trimmedQuery.length >= 2 && !exactMatch;
+
+    const select = (id: string) => {
+        if (value.includes(id)) return;
+        if (value.length >= max) {
+            toast.error(`Max ${max} categories`);
+            return;
+        }
+        onChange([...value, id]);
+        setQuery('');
+    };
+
+    const remove = (id: string) => {
+        onChange(value.filter(v => v !== id));
+    };
+
+    const submitSuggestion = async () => {
+        if (!canSuggest || suggesting) return;
+        setSuggesting(true);
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: trimmedQuery }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Suggestion failed');
+            const cat = json.data;
+            // Add returned category (may be pending) to selection AND to the local pool
+            setAllCats(prev => prev.some(p => p.id === cat.id) ? prev : [...prev, { id: cat.id, name: cat.name, parentName: null }]);
+            select(cat.id);
+            if (json.alreadyExists) {
+                toast.success(`Picked existing category "${cat.name}"`);
+            } else {
+                toast.success(`Sent "${trimmedQuery}" to admin for review`);
+            }
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Suggestion failed');
+        } finally {
+            setSuggesting(false);
+        }
+    };
+
+    return (
+        <div className="space-y-2" ref={containerRef}>
+            <div>
+                <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">{label}</label>
+                {helper && <p className="text-[11px] text-gray-400 mt-0.5">{helper}</p>}
+            </div>
+
+            {/* Selected chips */}
+            <div className="flex flex-wrap gap-2 min-h-[44px] p-2 border border-gray-200 rounded-xl bg-gray-50">
+                {selectedRows.length === 0 && (
+                    <span className="text-[12px] text-gray-400 italic px-1">No categories selected yet</span>
+                )}
+                {selectedRows.map(c => (
+                    <span key={c.id} className="flex items-center gap-1 bg-[#e8f5e9] text-[#2e7d46] text-[12px] font-semibold rounded-full px-3 py-1">
+                        {c.name}
+                        <button type="button" onClick={() => remove(c.id)} className="hover:text-red-500 transition-colors">
+                            <X size={11} />
+                        </button>
+                    </span>
+                ))}
+            </div>
+
+            <div className="relative">
+                <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                        type="text"
+                        value={query}
+                        onChange={e => { setQuery(e.target.value); setOpen(true); }}
+                        onFocus={() => setOpen(true)}
+                        placeholder={loading ? 'Loading categories…' : 'Search categories or type a new one…'}
+                        disabled={loading || value.length >= max}
+                        className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-[13px] outline-none focus:border-[#53B175]/50 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    />
+                </div>
+
+                {open && !loading && (
+                    <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-[280px] overflow-y-auto">
+                        {filtered.length > 0 && (
+                            <div className="py-1">
+                                <p className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Pick from existing</p>
+                                {filtered.slice(0, 50).map(c => (
+                                    <button
+                                        key={c.id}
+                                        type="button"
+                                        onClick={() => select(c.id)}
+                                        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 text-left transition-colors"
+                                    >
+                                        <Tag size={12} className="text-gray-400 shrink-0" />
+                                        <span className="text-[13px] text-[#181725]">{c.name}</span>
+                                        {c.parentName && (
+                                            <span className="text-[10px] text-gray-400">in {c.parentName}</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {filtered.length === 0 && trimmedQuery.length === 0 && (
+                            <p className="px-3 py-3 text-[12px] text-gray-400 italic">All matching categories already selected.</p>
+                        )}
+
+                        {canSuggest && (
+                            <div className="border-t border-gray-100 p-2">
+                                <button
+                                    type="button"
+                                    onClick={submitSuggestion}
+                                    disabled={suggesting}
+                                    className={cn(
+                                        'w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg transition-colors',
+                                        'bg-[#EEF8F1] hover:bg-[#53B175] hover:text-white text-[#2e7d46]',
+                                        suggesting && 'opacity-60',
+                                    )}
+                                >
+                                    <span className="flex items-center gap-2 text-[12px] font-bold">
+                                        {suggesting ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                                        Request &ldquo;{trimmedQuery}&rdquo; — admin will review
+                                    </span>
+                                    <Check size={12} className="opacity-60" />
+                                </button>
+                            </div>
+                        )}
+
+                        {!canSuggest && trimmedQuery.length > 0 && filtered.length === 0 && (
+                            <p className="px-3 py-3 text-[12px] text-gray-400 italic">Already in your list.</p>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            <p className="text-[11px] text-gray-400">{value.length} / {max} selected</p>
+        </div>
+    );
+}

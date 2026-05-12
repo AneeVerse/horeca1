@@ -40,7 +40,8 @@ interface CreateBrandProductInput {
   packSize?: string;
   unit?: string;
   sku?: string;
-  categoryId?: string;
+  categoryId?: string;        // primary (back-compat); auto-derived from categoryIds[0] when omitted
+  categoryIds?: string[];     // multi-category
   sortOrder?: number;
 }
 
@@ -490,8 +491,26 @@ export class BrandService {
   async createMasterProduct(userId: string, input: CreateBrandProductInput) {
     const brandId = await this.getBrandIdForUser(userId);
 
+    // Resolve primary categoryId: prefer explicit input.categoryId, otherwise
+    // fall back to the first entry in categoryIds[]. Keeps single-category
+    // consumers (brand store page, etc.) working unchanged.
+    const categoryIds = input.categoryIds ?? (input.categoryId ? [input.categoryId] : []);
+    const primaryCategoryId = input.categoryId ?? categoryIds[0] ?? null;
+
     const product = await prisma.brandMasterProduct.create({
-      data: { brandId, slug: slugify(input.name), ...input },
+      data: {
+        brandId,
+        slug: slugify(input.name),
+        name: input.name,
+        description: input.description,
+        imageUrl: input.imageUrl,
+        packSize: input.packSize,
+        unit: input.unit,
+        sku: input.sku,
+        sortOrder: input.sortOrder,
+        categoryId: primaryCategoryId,
+        categoryIds,
+      },
     });
 
     emitEvent('BrandProductCreated', {
@@ -516,13 +535,24 @@ export class BrandService {
     });
     if (!product) throw Errors.notFound('Product not found');
 
+    // Keep categoryId in sync when categoryIds changes (primary = first entry).
+    const data: Record<string, unknown> = { ...input };
+    if (input.categoryIds !== undefined) {
+      data.categoryIds = input.categoryIds;
+      // If caller didn't explicitly set categoryId, derive it from the array.
+      if (input.categoryId === undefined) {
+        data.categoryId = input.categoryIds[0] ?? null;
+      }
+    }
+
     const updated = await prisma.brandMasterProduct.update({
       where: { id: productId },
-      data: input,
+      data,
     });
 
     // Re-embed + re-map when name (or other text-affecting fields) changed.
-    if (input.name || input.packSize !== undefined || input.unit !== undefined || input.categoryId !== undefined) {
+    if (input.name || input.packSize !== undefined || input.unit !== undefined
+        || input.categoryId !== undefined || input.categoryIds !== undefined) {
       embedBrandMasterProduct(productId)
         .catch(console.error)
         .finally(() => runMappingForProduct(productId).catch(console.error));
