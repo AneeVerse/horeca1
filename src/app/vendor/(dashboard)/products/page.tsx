@@ -304,6 +304,8 @@ export default function VendorProductsPage() {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [loadingSuggestions, setLoadingSuggestions] = useState(false);
     const [basedOnProductId, setBasedOnProductId] = useState<string | null>(null);
+    const [basedOnBrandMasterProductId, setBasedOnBrandMasterProductId] = useState<string | null>(null);
+    const [basedOnBrandName, setBasedOnBrandName] = useState<string | null>(null);
     const suggestionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const suggestionsRef = useRef<HTMLDivElement>(null);
 
@@ -393,6 +395,8 @@ export default function VendorProductsPage() {
     const handleNameChange = (name: string) => {
         setForm(prev => ({ ...prev, name, slug: slugify(name) }));
         setBasedOnProductId(null); // Reset if they type again
+        setBasedOnBrandMasterProductId(null);
+        setBasedOnBrandName(null);
 
         // Debounce suggestion fetch (only when adding new product)
         if (!editingProduct) {
@@ -432,6 +436,8 @@ export default function VendorProductsPage() {
         setShowSuggestions(false);
         setSuggestions([]);
         setBrandSuggestions([]);
+        setBasedOnBrandMasterProductId(b.id);
+        setBasedOnBrandName(b.brand.name);
         setForm(prev => ({
             ...prev,
             name: b.name,
@@ -464,6 +470,8 @@ export default function VendorProductsPage() {
         setForm(EMPTY_FORM);
         setFormError('');
         setBasedOnProductId(null);
+        setBasedOnBrandMasterProductId(null);
+        setBasedOnBrandName(null);
         setSuggestions([]);
         setBrandSuggestions([]);
         setShowSuggestions(false);
@@ -652,6 +660,12 @@ export default function VendorProductsPage() {
             // If based on an existing approved product, include for auto-approval
             if (basedOnProductId && !editingProduct) {
                 body.basedOnProductId = basedOnProductId;
+            }
+
+            // If based on a brand canonical product, include so the backend
+            // auto-approves AND creates a verified BrandProductMapping.
+            if (basedOnBrandMasterProductId && !editingProduct) {
+                body.basedOnBrandMasterProductId = basedOnBrandMasterProductId;
             }
 
             // Don't send locked fields for approved products
@@ -1217,6 +1231,26 @@ export default function VendorProductsPage() {
                                                     <button
                                                         type="button"
                                                         onClick={() => setBasedOnProductId(null)}
+                                                        className="text-[#AEAEAE] hover:text-[#E74C3C] transition-colors"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {/* Brand-linked badge */}
+                                            {basedOnBrandMasterProductId && (
+                                                <div className="flex items-center gap-2 mt-1.5">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#EEF0FF] text-[#4F46E5] text-[11px] font-bold rounded-[6px]">
+                                                        <ChevronRight size={12} />
+                                                        Linked to {basedOnBrandName ?? 'brand'} catalog — auto-approves & shows in their Distributor Map
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setBasedOnBrandMasterProductId(null);
+                                                            setBasedOnBrandName(null);
+                                                        }}
                                                         className="text-[#AEAEAE] hover:text-[#E74C3C] transition-colors"
                                                     >
                                                         <X size={14} />

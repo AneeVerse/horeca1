@@ -142,8 +142,9 @@ export class CatalogService {
     minOrderQty?: number;
     creditEligible?: boolean;
     basedOnProductId?: string;
+    basedOnBrandMasterProductId?: string;
   }) {
-    const { basedOnProductId, ...productData } = data;
+    const { basedOnProductId, basedOnBrandMasterProductId, ...productData } = data;
 
     // If based on an existing approved product, auto-approve and lock name/brand/images
     let approvalStatus: 'pending' | 'approved' = 'pending';
@@ -164,12 +165,67 @@ export class CatalogService {
       }
     }
 
+    // If based on a brand canonical product, auto-approve too — the vendor is
+    // explicitly saying "I distribute this branded item", which is a strong
+    // quality signal equivalent to picking an existing approved vendor product.
+    let brandMaster: { id: string; brandId: string; name: string; brandName: string } | null = null;
+    if (basedOnBrandMasterProductId) {
+      const mp = await prisma.brandMasterProduct.findFirst({
+        where: {
+          id: basedOnBrandMasterProductId,
+          isActive: true,
+          brand: { isActive: true, approvalStatus: 'approved' },
+        },
+        select: {
+          id: true,
+          brandId: true,
+          name: true,
+          brand: { select: { name: true } },
+        },
+      });
+      if (mp) {
+        approvalStatus = 'approved';
+        brandMaster = { id: mp.id, brandId: mp.brandId, name: mp.name, brandName: mp.brand.name };
+        // Force brand field to the canonical brand name so the link is unambiguous
+        productData.brand = mp.brand.name;
+      }
+    }
+
     const created = await prisma.product.create({
       data: { ...productData, vendorId, basePrice: productData.basePrice, approvalStatus },
     });
 
+    // When the vendor explicitly picked the brand catalog entry, create a verified
+    // mapping immediately. No need to wait on embedding or the fuzzy auto-mapper —
+    // the user told us the link is right. Idempotent via the unique pair.
+    if (brandMaster) {
+      await prisma.brandProductMapping.upsert({
+        where: {
+          brandMasterProductId_distributorProductId: {
+            brandMasterProductId: brandMaster.id,
+            distributorProductId: created.id,
+          },
+        },
+        create: {
+          brandId: brandMaster.brandId,
+          brandMasterProductId: brandMaster.id,
+          distributorProductId: created.id,
+          status: 'verified',
+          matchedBy: 'manually_verified',
+          confidenceScore: 1.0,
+        },
+        update: {
+          status: 'verified',
+          matchedBy: 'manually_verified',
+          confidenceScore: 1.0,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
     // Fire-and-forget: embed first, THEN run brand mapping so the AI signal is available.
-    if (approvalStatus === 'approved') {
+    // Skip the auto-mapper when we already created a verified mapping above.
+    if (approvalStatus === 'approved' && !brandMaster) {
       embedDistributorProduct(created.id)
         .catch(() => {})
         .finally(() => runMappingForVendorProduct(created.id).catch(() => {}));

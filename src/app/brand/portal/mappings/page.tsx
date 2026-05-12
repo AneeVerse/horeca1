@@ -130,8 +130,13 @@ export default function BrandMappingsPage() {
                             </div>
 
                             {item.mappings.length === 0 ? (
-                                <div className="px-5 py-4 text-[13px] text-[#AEAEAE] font-bold flex items-center gap-2">
-                                    <Store size={14} /> No distributors found yet
+                                <div className="px-5 py-4 text-[13px] text-[#AEAEAE] font-bold flex items-center justify-between gap-2">
+                                    <span className="flex items-center gap-2">
+                                        <Store size={14} /> No distributors found yet
+                                    </span>
+                                    <span className="text-[11px] text-[#AEAEAE] font-medium">
+                                        Click <span className="text-[#53B175] font-bold">Run Auto-Mapping</span> above to scan vendor catalogs
+                                    </span>
                                 </div>
                             ) : (
                                 <div className="divide-y divide-[#F5F5F5]">

@@ -39,6 +39,7 @@ const createProductSchema = z.object({
   imageUrl: z.string().url().optional(),
   creditEligible: z.boolean().optional(),
   basedOnProductId: z.string().uuid().optional(),
+  basedOnBrandMasterProductId: z.string().uuid().optional(),
   priceSlabs: z.array(z.object({
     minQty: z.number().int().min(1),
     maxQty: z.number().int().min(1).optional(),
@@ -99,9 +100,13 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       );
     }
 
-    const { priceSlabs, basedOnProductId, ...productData } = data;
+    const { priceSlabs, basedOnProductId, basedOnBrandMasterProductId, ...productData } = data;
     const catalogService = new CatalogService();
-    const product = await catalogService.createProduct(vendorId, { ...productData, basedOnProductId });
+    const product = await catalogService.createProduct(vendorId, {
+      ...productData,
+      basedOnProductId,
+      basedOnBrandMasterProductId,
+    });
 
     // After product creation, add price slabs if provided
     if (priceSlabs && priceSlabs.length > 0) {
