@@ -270,6 +270,18 @@ interface ProductSuggestion {
     vendor?: { businessName: string } | null;
 }
 
+interface BrandSuggestion {
+    id: string;
+    name: string;
+    description?: string | null;
+    imageUrl?: string | null;
+    packSize?: string | null;
+    unit?: string | null;
+    sku?: string | null;
+    brand: { id: string; name: string; slug: string; logoUrl?: string | null };
+    category?: { id: string; name: string; slug: string } | null;
+}
+
 export default function VendorProductsPage() {
     const [products, setProducts] = useState<VendorProduct[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -287,6 +299,7 @@ export default function VendorProductsPage() {
 
     // Product suggestion state
     const [suggestions, setSuggestions] = useState<ProductSuggestion[]>([]);
+    const [brandSuggestions, setBrandSuggestions] = useState<BrandSuggestion[]>([]);
     const [ownMatches, setOwnMatches] = useState<{ id: string; name: string; approvalStatus: string; isActive: boolean }[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -341,6 +354,7 @@ export default function VendorProductsPage() {
     const fetchSuggestions = useCallback(async (query: string) => {
         if (query.length < 2) {
             setSuggestions([]);
+            setBrandSuggestions([]);
             setOwnMatches([]);
             setShowSuggestions(false);
             return;
@@ -351,21 +365,25 @@ export default function VendorProductsPage() {
             const json = await res.json();
             if (json.success) {
                 const s = json.data.suggestions || [];
+                const bs = json.data.brandSuggestions || [];
                 const own = json.data.ownMatches || [];
                 setSuggestions(s);
+                setBrandSuggestions(bs);
                 setOwnMatches(own);
-                if (s.length > 0 || own.length > 0) {
+                if (s.length > 0 || bs.length > 0 || own.length > 0) {
                     setShowSuggestions(true);
                 } else {
                     setShowSuggestions(false);
                 }
             } else {
                 setSuggestions([]);
+                setBrandSuggestions([]);
                 setOwnMatches([]);
                 setShowSuggestions(false);
             }
         } catch {
             setSuggestions([]);
+            setBrandSuggestions([]);
             setOwnMatches([]);
         } finally {
             setLoadingSuggestions(false);
@@ -391,7 +409,7 @@ export default function VendorProductsPage() {
             ...prev,
             name: s.name,
             slug: slugify(s.name),
-            categoryId: s.category?.id || prev.categoryId,
+            categoryId: s.category?.slug || prev.categoryId,
             basePrice: s.basePrice != null ? String(s.basePrice) : prev.basePrice,
             originalPrice: s.originalPrice != null ? String(s.originalPrice) : '',
             packSize: s.packSize || '',
@@ -407,6 +425,24 @@ export default function VendorProductsPage() {
             taxPercent: s.taxPercent != null ? String(s.taxPercent) : '0',
             minOrderQty: s.minOrderQty != null ? String(s.minOrderQty) : '1',
             creditEligible: !!s.creditEligible,
+        }));
+    };
+
+    const fillFromBrandSuggestion = (b: BrandSuggestion) => {
+        setShowSuggestions(false);
+        setSuggestions([]);
+        setBrandSuggestions([]);
+        setForm(prev => ({
+            ...prev,
+            name: b.name,
+            slug: slugify(b.name),
+            categoryId: b.category?.slug || prev.categoryId,
+            packSize: b.packSize || prev.packSize,
+            unit: b.unit || prev.unit,
+            sku: b.sku || prev.sku,
+            brand: b.brand.name,
+            description: b.description || prev.description,
+            imageUrl: b.imageUrl || prev.imageUrl,
         }));
     };
 
@@ -429,6 +465,7 @@ export default function VendorProductsPage() {
         setFormError('');
         setBasedOnProductId(null);
         setSuggestions([]);
+        setBrandSuggestions([]);
         setShowSuggestions(false);
         setIsPanelOpen(true);
     };
@@ -1053,7 +1090,7 @@ export default function VendorProductsPage() {
                                                     type="text"
                                                     value={form.name}
                                                     onChange={(e) => handleNameChange(e.target.value)}
-                                                    onFocus={() => { if (suggestions.length > 0 && !editingProduct) setShowSuggestions(true); }}
+                                                    onFocus={() => { if ((suggestions.length > 0 || brandSuggestions.length > 0) && !editingProduct) setShowSuggestions(true); }}
                                                     className={cn(inputCls, (editingProduct?.approvalStatus === 'approved' || basedOnProductId) && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
                                                     placeholder="e.g., Premium Basmati Rice"
                                                     disabled={editingProduct?.approvalStatus === 'approved' || !!basedOnProductId}
@@ -1064,7 +1101,7 @@ export default function VendorProductsPage() {
                                             </div>
 
                                             {/* Suggestions dropdown */}
-                                            {showSuggestions && (suggestions.length > 0 || ownMatches.length > 0) && !editingProduct && (
+                                            {showSuggestions && (suggestions.length > 0 || brandSuggestions.length > 0 || ownMatches.length > 0) && !editingProduct && (
                                                 <div className="absolute z-50 w-full mt-1 bg-white border border-[#EEEEEE] rounded-[12px] shadow-lg max-h-[320px] overflow-y-auto">
                                                     {/* Duplicate warning — vendor already has this product */}
                                                     {ownMatches.length > 0 && (
@@ -1089,6 +1126,45 @@ export default function VendorProductsPage() {
                                                                 Creating a duplicate will be blocked. Edit the existing product instead.
                                                             </p>
                                                         </div>
+                                                    )}
+
+                                                    {/* Brand catalog suggestions */}
+                                                    {brandSuggestions.length > 0 && (
+                                                        <>
+                                                            <div className="px-4 py-2 border-b border-[#F5F5F5] bg-[#F8F9FF]">
+                                                                <p className="text-[11px] font-bold text-[#4F46E5] uppercase tracking-wide">
+                                                                    From Brand Catalog — auto-fill & link to brand
+                                                                </p>
+                                                            </div>
+                                                            {brandSuggestions.map(b => (
+                                                                <button
+                                                                    key={`brand-${b.id}`}
+                                                                    type="button"
+                                                                    onClick={() => fillFromBrandSuggestion(b)}
+                                                                    className="w-full text-left px-4 py-3 hover:bg-[#F8FBF9] transition-colors border-b border-[#F5F5F5] last:border-0 flex items-center gap-3"
+                                                                >
+                                                                    {b.imageUrl ? (
+                                                                        // eslint-disable-next-line @next/next/no-img-element
+                                                                        <img src={b.imageUrl} alt="" className="w-[36px] h-[36px] rounded-[8px] object-cover shrink-0 border border-[#EEEEEE]" />
+                                                                    ) : (
+                                                                        <div className="w-[36px] h-[36px] rounded-[8px] bg-[#F5F5F5] flex items-center justify-center shrink-0">
+                                                                            <Package size={16} className="text-[#AEAEAE]" />
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-[13px] font-bold text-[#181725] truncate">{b.name}</p>
+                                                                        <p className="text-[11px] text-[#AEAEAE] font-medium truncate">
+                                                                            <span className="text-[#4F46E5] font-bold">{b.brand.name}</span>
+                                                                            {b.packSize ? ` · ${b.packSize}${b.unit ? ` ${b.unit}` : ''}` : ''}
+                                                                            {b.category?.name ? ` · ${b.category.name}` : ''}
+                                                                        </p>
+                                                                    </div>
+                                                                    <span className="text-[10px] font-bold text-[#4F46E5] bg-[#EEF0FF] px-2 py-1 rounded-[6px] shrink-0">
+                                                                        BRAND
+                                                                    </span>
+                                                                </button>
+                                                            ))}
+                                                        </>
                                                     )}
 
                                                     {/* Catalog suggestions */}

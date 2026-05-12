@@ -238,14 +238,14 @@ export default function BrandProductsPage() {
             {/* Add/Edit Modal */}
             {showForm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowForm(false)}>
-                    <div className="bg-white rounded-[20px] w-full max-w-[500px] shadow-xl" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between p-6 border-b border-[#EEEEEE]">
+                    <div className="bg-white rounded-[20px] w-full max-w-[500px] shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between p-6 border-b border-[#EEEEEE] shrink-0">
                             <h3 className="text-[17px] font-[900] text-[#181725]">{editingId ? 'Edit Product' : 'Add Product'}</h3>
                             <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
                                 <X size={18} />
                             </button>
                         </div>
-                        <div className="p-6 space-y-4">
+                        <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
                             {/* Image upload field */}
                             <div>
                                 <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">Product Image</label>
@@ -350,7 +350,7 @@ export default function BrandProductsPage() {
                                 <p className="text-[13px] text-[#E74C3C] font-bold">{formError}</p>
                             )}
                         </div>
-                        <div className="px-6 pb-6 flex items-center justify-end gap-3">
+                        <div className="px-6 py-4 flex items-center justify-end gap-3 border-t border-[#EEEEEE] shrink-0 bg-white">
                             <button onClick={() => setShowForm(false)}
                                 className="h-[40px] px-5 bg-gray-100 rounded-[10px] text-[13px] font-bold text-[#7C7C7C] hover:bg-gray-200">
                                 Cancel

@@ -1073,7 +1073,7 @@ export default function CategoriesPage() {
                     onClick={closeDeleteModal}
                 >
                     <div
-                        className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-2xl w-full max-w-[440px] mx-4 animate-in fade-in zoom-in-95 duration-200"
+                        className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-2xl w-full max-w-[440px] mx-4 max-h-[calc(100vh-2rem)] overflow-y-auto animate-in fade-in zoom-in-95 duration-200"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="p-8 text-center">
@@ -1123,7 +1123,7 @@ export default function CategoriesPage() {
                     onClick={closeImportModal}
                 >
                     <div
-                        className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-2xl w-full max-w-[500px] mx-4 animate-in fade-in zoom-in-95 duration-200"
+                        className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-2xl w-full max-w-[500px] mx-4 max-h-[calc(100vh-2rem)] overflow-y-auto animate-in fade-in zoom-in-95 duration-200"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Modal header */}

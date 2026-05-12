@@ -593,7 +593,7 @@ export default function AdminBrandsPage() {
             {/* Create Brand Modal */}
             {showCreate && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowCreate(false)}>
-                    <div className="bg-white rounded-[20px] w-full max-w-[520px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-[20px] w-full max-w-[520px] shadow-2xl max-h-[calc(100vh-2rem)] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between px-6 py-5 border-b border-[#EEEEEE]">
                             <div>
                                 <h3 className="text-[18px] font-[900] text-[#181725]">Add Brand</h3>
@@ -681,8 +681,8 @@ export default function AdminBrandsPage() {
 
             {/* Rejection Modal */}
             {rejectTarget && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setRejectTarget(null)}>
-                    <div className="bg-white rounded-[16px] w-full max-w-[440px] p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setRejectTarget(null)}>
+                    <div className="bg-white rounded-[16px] w-full max-w-[440px] p-6 shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-2 mb-4">
                             <MessageSquare size={20} className="text-[#E74C3C]" />
                             <h3 className="text-[16px] font-bold text-[#181725]">Reject: {rejectTarget.name}</h3>
@@ -716,7 +716,7 @@ export default function AdminBrandsPage() {
             {/* AI Mapping Result Modal */}
             {aiResult && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAiResult(null)}>
-                    <div className="bg-white rounded-2xl w-full max-w-[440px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl w-full max-w-[440px] shadow-2xl max-h-[calc(100vh-2rem)] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="p-5 border-b border-gray-100 flex items-center gap-2">
                             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#3B82F6] flex items-center justify-center">
                                 <Sparkles size={16} className="text-white" />

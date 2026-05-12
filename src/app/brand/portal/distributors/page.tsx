@@ -131,7 +131,7 @@ export default function BrandDistributorsPage() {
             {/* Form modal */}
             {showForm && (
                 <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => !submitting && setShowForm(false)}>
-                    <div className="bg-white rounded-2xl w-full max-w-[520px] shadow-2xl" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl w-full max-w-[520px] shadow-2xl max-h-[calc(100vh-2rem)] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between p-5 border-b border-gray-100">
                             <div>
                                 <h3 className="text-[16px] font-bold text-[#181725]">Submit a distributor candidate</h3>

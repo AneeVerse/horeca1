@@ -552,8 +552,8 @@ export default function ApprovalsPage() {
 
             {/* ── Rejection Note Modal ── */}
             {rejectTarget && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setRejectTarget(null)}>
-                    <div className="bg-white rounded-[16px] w-full max-w-[440px] p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setRejectTarget(null)}>
+                    <div className="bg-white rounded-[16px] w-full max-w-[440px] p-6 shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-2 mb-4">
                             <MessageSquare size={20} className="text-[#E74C3C]" />
                             <h3 className="text-[16px] font-bold text-[#181725]">Reject {rejectTarget.name}</h3>

@@ -22,7 +22,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       select: { id: true },
     });
 
-    const [catalogProducts, ownProducts] = await Promise.all([
+    const [catalogProducts, ownProducts, brandMasterProducts] = await Promise.all([
       // Find approved products from the catalog (any vendor)
       prisma.product.findMany({
         where: {
@@ -74,6 +74,30 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
             take: 5,
           })
         : [],
+
+      // Find brand canonical products (BrandMasterProduct) from approved/active brands.
+      // These are catalog entries the brand has registered but no vendor stocks yet —
+      // surfacing them lets the vendor become the first distributor with a verified mapping.
+      prisma.brandMasterProduct.findMany({
+        where: {
+          isActive: true,
+          name: { contains: q, mode: 'insensitive' },
+          brand: { isActive: true, approvalStatus: 'approved' },
+        },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          imageUrl: true,
+          packSize: true,
+          unit: true,
+          sku: true,
+          brand: { select: { id: true, name: true, slug: true, logoUrl: true } },
+          categoryRel: { select: { id: true, name: true, slug: true } },
+        },
+        take: 8,
+        orderBy: { name: 'asc' },
+      }),
     ]);
 
     return NextResponse.json({
@@ -81,6 +105,17 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       data: {
         suggestions: catalogProducts,
         ownMatches: ownProducts,
+        brandSuggestions: brandMasterProducts.map(bp => ({
+          id: bp.id,
+          name: bp.name,
+          description: bp.description,
+          imageUrl: bp.imageUrl,
+          packSize: bp.packSize,
+          unit: bp.unit,
+          sku: bp.sku,
+          brand: bp.brand,
+          category: bp.categoryRel,
+        })),
       },
     });
   } catch (error) {

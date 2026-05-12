@@ -340,7 +340,7 @@ export default function OrderHistoryPage() {
             {/* ── RATING MODAL ── */}
             {ratingModal && (
                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-                    <div className="bg-white rounded-[28px] w-full max-w-sm p-6 shadow-2xl">
+                    <div className="bg-white rounded-[28px] w-full max-w-sm p-6 shadow-2xl max-h-[calc(100vh-2rem)] overflow-y-auto">
                         <div className="flex items-center justify-between mb-5">
                             <h3 className="text-[18px] font-black text-[#181725]">Rate Your Order</h3>
                             <button onClick={() => setRatingModal(null)}
