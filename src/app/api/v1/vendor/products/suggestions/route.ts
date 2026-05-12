@@ -28,6 +28,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         where: {
           approvalStatus: 'approved',
           isActive: true,
+          slug: { not: { startsWith: '_deleted_' } },
           name: { contains: q, mode: 'insensitive' },
           // Exclude this vendor's own products from suggestions
           ...(vendor ? { vendorId: { not: vendor.id } } : {}),
@@ -64,6 +65,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
             where: {
               vendorId: vendor.id,
               name: { contains: q, mode: 'insensitive' },
+              slug: { not: { startsWith: '_deleted_' } },
             },
             select: {
               id: true,

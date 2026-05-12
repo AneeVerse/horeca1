@@ -3,6 +3,12 @@ import { Errors } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
 import { runMappingForVendorProduct, embedDistributorProduct } from '@/modules/brand/brand-mapper';
 
+// Tombstone prefix used when a product can't be hard-deleted (has order/cart/list refs)
+// and we instead rename its slug to free the [vendorId, slug] unique constraint so the
+// vendor can re-add a product with the same name. Rows with this prefix are hidden from
+// listings, suggestions, and duplicate-name checks.
+export const TOMBSTONE_PREFIX = '_deleted_';
+
 export class CatalogService {
   async getVendorProducts(
     vendorId: string,
@@ -10,7 +16,10 @@ export class CatalogService {
   ) {
     const { categoryId, search, cursor, limit = 20, includeInactive } = options;
 
-    const where: Record<string, unknown> = { vendorId };
+    const where: Record<string, unknown> = {
+      vendorId,
+      slug: { not: { startsWith: TOMBSTONE_PREFIX } },
+    };
     if (!includeInactive) {
       where.isActive = true;
       where.approvalStatus = 'approved';
@@ -184,6 +193,39 @@ export class CatalogService {
     }
 
     return prisma.product.update({ where: { id: productId }, data });
+  }
+
+  // Hard-delete the product. If FK references block deletion (existing order/cart/list
+  // items that don't cascade), fall back to tombstoning: rename slug so the [vendorId,slug]
+  // unique constraint frees up and the vendor can re-add a product with the same name.
+  // Returns { hardDeleted: true } when fully gone, or { hardDeleted: false } when tombstoned.
+  async deleteProduct(productId: string, vendorId?: string): Promise<{ hardDeleted: boolean }> {
+    const product = await prisma.product.findFirst({
+      where: { id: productId, ...(vendorId ? { vendorId } : {}) },
+      select: { id: true, slug: true, name: true, vendorId: true },
+    });
+    if (!product) throw Errors.notFound('Product');
+
+    try {
+      await prisma.product.delete({ where: { id: productId } });
+      return { hardDeleted: true };
+    } catch (e) {
+      // Prisma FK-violation: P2003 (referenced rows exist with no cascade).
+      // Sole expected blockers are order_items, cart_items, quick_order_list_items.
+      const code = (e as { code?: string })?.code;
+      if (code !== 'P2003') throw e;
+
+      const ts = Date.now();
+      await prisma.product.update({
+        where: { id: productId },
+        data: {
+          slug: `${TOMBSTONE_PREFIX}${ts}_${product.slug}`.slice(0, 255),
+          name: `[Deleted] ${product.name}`.slice(0, 255),
+          isActive: false,
+        },
+      });
+      return { hardDeleted: false };
+    }
   }
 
   async approveProduct(productId: string, adminUserId: string, note?: string) {

@@ -111,7 +111,9 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   }
 });
 
-// DELETE — soft-delete by setting isActive = false
+// DELETE — hard-delete the product (or tombstone if it has order/cart history).
+// Either way, the [vendorId, slug] unique constraint frees up so the same name
+// can be re-added immediately.
 export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
   try {
     const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
@@ -120,9 +122,9 @@ export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
     const productId = extractId(req);
 
     const catalogService = new CatalogService();
-    await catalogService.updateProduct(productId, vendorId, { isActive: false });
+    const result = await catalogService.deleteProduct(productId, vendorId);
 
-    return NextResponse.json({ success: true, data: { id: productId, isActive: false } });
+    return NextResponse.json({ success: true, data: { id: productId, ...result } });
   } catch (error) {
     return errorResponse(error);
   }

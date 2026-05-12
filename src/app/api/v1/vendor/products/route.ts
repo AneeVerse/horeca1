@@ -83,11 +83,13 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     const body = await req.json();
     const data = createProductSchema.parse(body);
 
-    // Prevent duplicate: check if this vendor already has a product with the same name
+    // Prevent duplicate: check if this vendor already has a product with the same name.
+    // Tombstoned rows (slug prefixed with _deleted_) are ignored so re-adding works after delete.
     const existing = await prisma.product.findFirst({
       where: {
         vendorId,
         name: { equals: data.name, mode: 'insensitive' },
+        slug: { not: { startsWith: '_deleted_' } },
       },
       select: { id: true, name: true, approvalStatus: true },
     });

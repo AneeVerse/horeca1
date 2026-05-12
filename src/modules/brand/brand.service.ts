@@ -531,12 +531,18 @@ export class BrandService {
     return updated;
   }
 
-  // ── Brand: delete master product (soft) ───────────────────
+  // ── Brand: delete master product (hard, with mapping cleanup) ─────────
+  // BrandProductMapping cascades on brandMasterProductId, so this fully removes
+  // the row and any mappings. Vendor-side Product rows are not touched.
   async deleteMasterProduct(userId: string, productId: string) {
     const brandId = await this.getBrandIdForUser(userId);
-    const product = await prisma.brandMasterProduct.findFirst({ where: { id: productId, brandId } });
+    const product = await prisma.brandMasterProduct.findFirst({
+      where: { id: productId, brandId },
+      select: { id: true },
+    });
     if (!product) throw Errors.notFound('Product not found');
-    return prisma.brandMasterProduct.update({ where: { id: productId }, data: { isActive: false } });
+    await prisma.brandMasterProduct.delete({ where: { id: productId } });
+    return { id: productId, deleted: true };
   }
 
   // ── Brand: get product-level coverage (for portal mappings page) ──────

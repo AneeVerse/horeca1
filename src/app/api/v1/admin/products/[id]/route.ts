@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requireAdminPerm } from '@/lib/teamPermissions';
+import { CatalogService } from '@/modules/catalog/catalog.service';
 
 // Helper: extract the [id] segment from the URL
 function extractId(req: NextRequest): string {
@@ -153,24 +154,17 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   }
 });
 
-// DELETE — soft-delete (set isActive: false)
+// DELETE — hard-delete (or tombstone if order/cart/list refs block it).
+// Tombstone renames the slug so the [vendorId, slug] unique constraint frees up.
 export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
   try {
     requireAdminPerm(ctx.adminTeamRole, 'products:write');
     const id = extractId(req);
 
-    const existing = await prisma.product.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-    if (!existing) throw Errors.notFound('Product');
+    const catalogService = new CatalogService();
+    const result = await catalogService.deleteProduct(id);
 
-    await prisma.product.update({
-      where: { id },
-      data: { isActive: false },
-    });
-
-    return NextResponse.json({ success: true, data: { id, isActive: false } });
+    return NextResponse.json({ success: true, data: { id, ...result } });
   } catch (error) {
     return errorResponse(error);
   }
