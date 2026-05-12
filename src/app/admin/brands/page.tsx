@@ -3,12 +3,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Check, X, Search, Clock, CheckCircle, Loader2, ClipboardList, Store, Pencil, ArrowRight, Sparkles,
-    GitMerge, MessageSquare, Package, ExternalLink, LayoutDashboard, Plus, Eye, EyeOff,
+    GitMerge, MessageSquare, Package, ExternalLink, LayoutDashboard, Plus, Eye, EyeOff, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { toast } from 'sonner';
 
 interface Brand {
@@ -66,6 +67,7 @@ interface CreateBrandForm {
 export default function AdminBrandsPage() {
     const router = useRouter();
     const perms = useAdminPermissions();
+    const confirm = useConfirm();
     const [sectionTab, setSectionTab] = useState<SectionTab>('Brands');
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
@@ -190,6 +192,26 @@ export default function AdminBrandsPage() {
         } catch (e: unknown) {
             toast.error(e instanceof Error ? e.message : 'Rejection failed');
         } finally { setActionLoading(null); setRejectTarget(null); setRejectNote(''); }
+    };
+
+    const handleDeleteBrand = async (brand: Brand) => {
+        const ok = await confirm({
+            title: `Delete ${brand.name}?`,
+            message: 'This permanently removes the brand along with all its catalog products, distributor mappings, team members, and distributor invites. Cannot be undone.',
+            confirmText: 'Delete brand',
+            tone: 'danger',
+        });
+        if (!ok) return;
+        setActionLoading(brand.id);
+        try {
+            const res = await fetch(`/api/v1/admin/brands/${brand.id}`, { method: 'DELETE' });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Delete failed');
+            setBrands(prev => prev.filter(b => b.id !== brand.id));
+            toast.success(`${brand.name} deleted`);
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Delete failed');
+        } finally { setActionLoading(null); }
     };
 
     // ── Mapping actions ──
@@ -506,6 +528,13 @@ export default function AdminBrandsPage() {
                                                             <X size={13} /> Reject
                                                         </button>
                                                     )}
+                                                    <button
+                                                        onClick={() => handleDeleteBrand(brand)}
+                                                        disabled={actionLoading === brand.id}
+                                                        title="Delete brand permanently"
+                                                        className="flex items-center justify-center h-[32px] w-[32px] bg-[#FEF2F2] text-[#E74C3C] rounded-[8px] hover:bg-[#E74C3C] hover:text-white transition-colors disabled:opacity-50">
+                                                        {actionLoading === brand.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>

@@ -1,5 +1,6 @@
 // GET  /api/v1/admin/brands/[id] — Get brand detail
 // PATCH /api/v1/admin/brands/[id] — Admin edits brand profile (logo, banner, categories, bgColor, showcaseImages, etc.)
+// DELETE /api/v1/admin/brands/[id] — Permanently delete a brand (cascades master products, mappings, team, invites)
 // REQUIRES: role=admin
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -7,7 +8,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { requireAdminPerm } from '@/lib/teamPermissions';
-import { errorResponse } from '@/middleware/errorHandler';
+import { errorResponse, Errors } from '@/middleware/errorHandler';
 import type { AuthContext } from '@/middleware/auth';
 
 // Lenient — admin should be able to save partial/legacy data.
@@ -62,6 +63,22 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
       },
     });
     return NextResponse.json({ success: true, data: updated });
+  } catch (error) {
+    return errorResponse(error);
+  }
+});
+
+// Hard delete. BrandMasterProduct, BrandProductMapping, BrandTeamMember, and
+// BrandDistributorInvite all cascade on brandId — one delete wipes the lot.
+// The owning User row is untouched (FK is non-cascading from User side).
+export const DELETE = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
+  try {
+    requireAdminPerm(ctx.adminTeamRole, 'settings:write');
+    const id = req.nextUrl.pathname.split('/').at(-1)!;
+    const existing = await prisma.brand.findUnique({ where: { id }, select: { id: true } });
+    if (!existing) throw Errors.notFound('Brand');
+    await prisma.brand.delete({ where: { id } });
+    return NextResponse.json({ success: true, data: { id, deleted: true } });
   } catch (error) {
     return errorResponse(error);
   }
