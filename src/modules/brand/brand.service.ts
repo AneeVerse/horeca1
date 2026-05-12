@@ -588,10 +588,26 @@ export class BrandService {
   }
 
   // ── Brand: trigger manual re-mapping ──────────────────────
+  // Awaits the mapper so the API response reflects final state — the frontend
+  // re-fetches coverage immediately after, and "Run Auto-Mapping" needs to
+  // feel synchronous to the brand. Returns before/after counts so we can also
+  // surface what changed in the UI later if needed.
   async triggerMapping(userId: string) {
     const brandId = await this.getBrandIdForUser(userId);
-    runMappingForBrand(brandId).catch(console.error);
-    return { message: 'Auto-mapping started in background' };
+    const before = await prisma.brandProductMapping.count({ where: { brandId } });
+    try {
+      await runMappingForBrand(brandId);
+    } catch (err) {
+      console.error('runMappingForBrand failed', err);
+      throw err;
+    }
+    const after = await prisma.brandProductMapping.count({ where: { brandId } });
+    return {
+      message: after > before ? `Mapped ${after - before} new distributor product(s)` : 'No new matches found',
+      before,
+      after,
+      newMappings: after - before,
+    };
   }
 
   // ── Admin: list all brands ─────────────────────────────────
