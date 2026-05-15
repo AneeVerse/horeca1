@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CreditCard, Share2, ShoppingCart, Plus, Minus, Navigation, X, Loader2, Package } from 'lucide-react';
+import { CreditCard, Share2, ShoppingCart, Plus, Minus, Navigation, X, Loader2, Package, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { toast } from 'sonner';
@@ -15,7 +15,7 @@ interface VendorProductCardProps {
 }
 
 export const VendorProductCard = React.memo(function VendorProductCard({ product }: VendorProductCardProps) {
-    const { addToCart, groups, updateQuantity } = useCart();
+    const { addToCart, groups, updateQuantity, removeFromCart } = useCart();
     const { status: sessionStatus } = useSession();
 
     // ── OOS Alternate Vendors state ──
@@ -87,6 +87,35 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
             description: `Quantity: ${currentQty + qty} ${product.packSize || ''}`,
             duration: 2000,
         });
+    };
+
+    const handleDecrement = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const minQty = product.minOrderQuantity || 1;
+        if (currentQty <= minQty) {
+            removeFromCart(product.id);
+        } else {
+            updateQuantity(product.id, currentQty - 1);
+        }
+    };
+
+    const handleRemove = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        removeFromCart(product.id);
+    };
+
+    const handleQtyInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+        e.stopPropagation();
+        const raw = e.target.value.replace(/[^0-9]/g, '');
+        if (raw === '') return;
+        const parsed = parseInt(raw, 10);
+        if (parsed === 0) {
+            removeFromCart(product.id);
+        } else {
+            updateQuantity(product.id, parsed);
+        }
     };
 
     const bulkTiers = (product.bulkPrices ?? []).slice(0, 3);
@@ -341,27 +370,64 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                     <span className="text-[12px] font-medium text-gray-500">/ unit</span>
                 </div>
 
-                <button
-                    onClick={(e) => {
-                        if (isOutOfStock) {
-                            fetchAlternates(e);
-                        } else {
-                            handleAdd(e, 1);
-                        }
-                    }}
-                    className={cn(
-                        "w-full rounded-2xl font-bold flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-[0.98] border",
-                        isOutOfStock
-                            ? "bg-white text-[#53B175] border-[#53B175] hover:bg-[#f7fbf8] cursor-pointer text-[11px] py-2.5 px-2"
-                            : "bg-gradient-to-r from-[#53B175] to-[#4AA56B] text-white border-[#53B175] shadow-[0_8px_22px_-6px_rgba(83,177,117,0.45)] hover:shadow-[0_12px_28px_-6px_rgba(83,177,117,0.55)] text-[13px] py-3"
-                    )}
-                >
-                    {isOutOfStock ? (
-                        <>Find at another vendor <Navigation size={12} strokeWidth={2.5} className="shrink-0" /></>
-                    ) : (
-                        <>Quick Add <ShoppingCart size={15} strokeWidth={2.5} className="shrink-0" /></>
-                    )}
-                </button>
+                {isOutOfStock ? (
+                    <button
+                        onClick={fetchAlternates}
+                        className="w-full rounded-2xl font-bold flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-[0.98] border bg-white text-[#53B175] border-[#53B175] hover:bg-[#f7fbf8] cursor-pointer text-[11px] py-2.5 px-2"
+                    >
+                        Find at another vendor <Navigation size={12} strokeWidth={2.5} className="shrink-0" />
+                    </button>
+                ) : currentQty === 0 ? (
+                    <button
+                        onClick={(e) => handleAdd(e, 1)}
+                        className="w-full rounded-2xl font-bold flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-[0.98] border bg-gradient-to-r from-[#53B175] to-[#4AA56B] text-white border-[#53B175] shadow-[0_8px_22px_-6px_rgba(83,177,117,0.45)] hover:shadow-[0_12px_28px_-6px_rgba(83,177,117,0.55)] text-[13px] py-3"
+                    >
+                        <ShoppingCart size={15} strokeWidth={2.5} className="shrink-0" /> ADD TO CART
+                    </button>
+                ) : (
+                    <div className="w-full flex items-stretch gap-2 h-[44px]">
+                        {/* Main stepper pill */}
+                        <div className="flex-1 rounded-2xl bg-[#53B175] flex items-stretch overflow-hidden shadow-[0_8px_22px_-6px_rgba(83,177,117,0.35)]">
+                            <button
+                                onClick={handleDecrement}
+                                aria-label={currentQty === 1 ? 'Remove from cart' : 'Decrease quantity'}
+                                className="w-12 flex items-center justify-center text-white hover:bg-[#489d67] active:scale-95 transition-all shrink-0"
+                            >
+                                {currentQty === 1 ? (
+                                    <Trash2 size={16} strokeWidth={2.5} />
+                                ) : (
+                                    <Minus size={18} strokeWidth={3} />
+                                )}
+                            </button>
+                            <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={currentQty}
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); (e.target as HTMLInputElement).select(); }}
+                                onChange={handleQtyInput}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                className="flex-1 min-w-0 bg-white text-center text-[15px] font-extrabold text-[#181725] tabular-nums focus:outline-none focus:bg-[#f7fbf8] transition-colors my-[3px]"
+                            />
+                            <button
+                                onClick={(e) => handleAdd(e, 1)}
+                                aria-label="Increase quantity"
+                                className="w-12 flex items-center justify-center text-white hover:bg-[#489d67] active:scale-95 transition-all shrink-0"
+                            >
+                                <Plus size={18} strokeWidth={3} />
+                            </button>
+                        </div>
+
+                        {/* Separate remove button — matches DMart reference */}
+                        <button
+                            onClick={handleRemove}
+                            aria-label="Remove from cart"
+                            className="w-11 rounded-2xl border border-gray-200 bg-white text-gray-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 active:scale-95 transition-all shrink-0 flex items-center justify-center"
+                        >
+                            <X size={16} strokeWidth={2.5} />
+                        </button>
+                    </div>
+                )}
             </div>
         </Link>
 
