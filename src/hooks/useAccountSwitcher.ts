@@ -138,6 +138,12 @@ export function useAccountSwitcher() {
       // No linked accounts — full sign out
       clearCart();
       clearWishlist();
+      // Clear user-scoped caches so the next user on this browser doesn't inherit them
+      try {
+        localStorage.removeItem('horeca_order_lists_all');
+        localStorage.removeItem('horeca_orders');
+        localStorage.removeItem('horeca_recently_viewed');
+      } catch { /* ignore */ }
       await signOut({ callbackUrl: '/' });
     },
     [accounts, switchAccount, clearCart, clearWishlist]

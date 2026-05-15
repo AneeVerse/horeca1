@@ -97,6 +97,12 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
 
     const handleLogout = async () => {
         await signOut({ redirect: false });
+        // Clear user-scoped caches so the next user on this browser doesn't inherit them
+        try {
+            localStorage.removeItem('horeca_order_lists_all');
+            localStorage.removeItem('horeca_orders');
+            localStorage.removeItem('horeca_recently_viewed');
+        } catch { /* ignore quota / privacy-mode errors */ }
         toast.success('Logged out successfully');
         onClose();
         window.location.href = '/';

@@ -17,7 +17,8 @@ export default function OrderListsPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const vendorFilterId = searchParams.get('vendorId');
-    const { data: session } = useSession();
+    const { data: session, status: sessionStatus } = useSession();
+    const isLoggedIn = sessionStatus === 'authenticated';
     const { totalItems, addToCart } = useCart();
     const { wishlist } = useWishlist();
     const [allLists, setAllLists] = React.useState<OrderList[]>([]);
@@ -51,8 +52,15 @@ export default function OrderListsPage() {
             });
     }, []);
 
-    // Initial load: Priority to merged storage, fallback to DAL
+    // Initial load: only for authenticated users. Order lists are tied to a user
+    // profile (QuickOrderList.userId), so guest users have nothing to load — and
+    // localStorage from a prior session must not leak across logout.
     React.useEffect(() => {
+        if (!isLoggedIn) {
+            setAllLists([]);
+            return;
+        }
+
         const savedAll = localStorage.getItem('horeca_order_lists_all');
         if (savedAll) {
             try {
@@ -84,7 +92,7 @@ export default function OrderListsPage() {
             .catch(() => {
                 setAllLists([]);
             });
-    }, []);
+    }, [isLoggedIn]);
 
     const handleCreateList = (data: { name: string; items: { productId: string; quantity: number; vendorId: string }[] }) => {
         // Derive unique vendors from the items
@@ -188,6 +196,29 @@ export default function OrderListsPage() {
         if (!vendorFilterId) return null;
         return vendorsList.find(v => v.id === vendorFilterId)?.name ?? null;
     }, [vendorFilterId, vendorsList]);
+
+    // Guest users cannot have order lists — lists are tied to User.id
+    if (sessionStatus === 'unauthenticated') {
+        return (
+            <div className="min-h-screen bg-gray-50/50 flex flex-col items-center justify-center px-6 text-center">
+                <div className="w-16 h-16 rounded-full bg-[#53B175]/10 flex items-center justify-center mb-5">
+                    <ClipboardList size={28} className="text-[#53B175]" strokeWidth={2.5} />
+                </div>
+                <h1 className="text-[22px] md:text-[26px] font-[900] text-[#181725] tracking-tight mb-2">
+                    Log in to see your order lists
+                </h1>
+                <p className="text-[14px] text-gray-500 max-w-[360px] mb-6">
+                    Order lists are saved to your account so you can reorder the same items in one click. Please log in to continue.
+                </p>
+                <Link
+                    href="/"
+                    className="px-6 py-3 rounded-2xl bg-[#53B175] text-white font-black text-[14px] shadow-md hover:bg-[#469E66] transition-colors"
+                >
+                    Back to home
+                </Link>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50/50 pb-24">
