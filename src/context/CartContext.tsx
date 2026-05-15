@@ -279,29 +279,37 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
     }, [isLoggedIn]);
 
+    // Side effects (API calls) must run OUTSIDE setCart's updater function —
+    // React 19 strict mode invokes the updater twice, which would fire the
+    // DELETE/PATCH twice and the second call would 404/P2025.
     const removeFromCart = useCallback((productId: string) => {
-        setCart(prev => {
-            const item = prev.find(i => i.productId === productId);
-            if (isLoggedIn && item?.cartItemId) {
-                dal.cart.removeItem(item.cartItemId).catch(() => {});
-            }
-            return prev.filter(i => i.productId !== productId);
-        });
-    }, [isLoggedIn]);
+        const item = cart.find(i => i.productId === productId);
+        if (isLoggedIn && item?.cartItemId) {
+            dal.cart.removeItem(item.cartItemId).catch(() => {});
+        }
+        setCart(prev => prev.filter(i => i.productId !== productId));
+    }, [isLoggedIn, cart]);
 
     const updateQuantity = useCallback((productId: string, quantity: number) => {
         if (quantity <= 0) {
             removeFromCart(productId);
             return;
         }
-        setCart(prev => {
-            const item = prev.find(i => i.productId === productId);
-            if (!item) return prev;
 
-            // Enforce minOrderQuantity — silently block; UI must show the toast
-            const minQty = item.product?.minOrderQuantity || 1;
-            if (quantity < minQty) return prev;
+        const item = cart.find(i => i.productId === productId);
+        if (!item) return;
 
+        // Enforce minOrderQuantity — silently block; UI must show the toast
+        const minQty = item.product?.minOrderQuantity || 1;
+        if (quantity < minQty) return;
+
+        // Sync with server cart (server also recalculates slab price)
+        if (isLoggedIn && item.cartItemId) {
+            dal.cart.updateItem(item.cartItemId, quantity).catch(() => {});
+        }
+
+        setCart(prev => prev.map(i => {
+            if (i.productId !== productId) return i;
             // ── LIVE TIER PRICE RECALCULATION ──────────────────────────────
             // Use the immutable basePriceGross (set at first add) to find the
             // correct tier price for the new quantity.
@@ -309,23 +317,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             //   qty=9  → below tier1 (minQty:10) → basePriceGross (₹100)
             //   qty=10 → tier1 matches            → tier1.price    (₹90)
             //   qty=50 → tier2 also matches        → tier2.price    (₹80)
-            const basePriceGross = item.basePriceGross || item.product?.price || 0;
-            const newGrossPrice = getEffectiveGrossPrice(basePriceGross, item.product?.bulkPrices || [], quantity);
-            const tax = item.product?.taxPercent || 0;
+            const basePriceGross = i.basePriceGross || i.product?.price || 0;
+            const newGrossPrice = getEffectiveGrossPrice(basePriceGross, i.product?.bulkPrices || [], quantity);
+            const tax = i.product?.taxPercent || 0;
             const newTaxableRate = tax > 0 ? newGrossPrice / (1 + tax / 100) : newGrossPrice;
-
-            // Sync with server cart (server also recalculates slab price)
-            if (isLoggedIn && item.cartItemId) {
-                dal.cart.updateItem(item.cartItemId, quantity).catch(() => {});
-            }
-
-            return prev.map(i => i.productId === productId ? {
+            return {
                 ...i,
                 quantity,
                 product: { ...i.product, price: newGrossPrice, taxableRate: newTaxableRate },
-            } : i);
-        });
-    }, [isLoggedIn, removeFromCart]);
+            };
+        }));
+    }, [isLoggedIn, cart, removeFromCart]);
 
     const clearCart = useCallback(() => {
         if (isLoggedIn) {
