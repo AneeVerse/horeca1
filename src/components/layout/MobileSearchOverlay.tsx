@@ -5,20 +5,20 @@ import Link from 'next/link';
 import { ArrowLeft, Search, X, Star, Heart, ShoppingCart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { dal } from '@/lib/dal';
-import type { Vendor, VendorProduct, VendorSummary } from '@/types';
+import type { Vendor, VendorProduct, VendorSummary, Category } from '@/types';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
 
 interface MobileSearchOverlayProps {
     isOpen: boolean;
     onClose: () => void;
+    /** @deprecated tabs were removed in favor of 3 stacked sections (Categories/Products/Vendors). Kept for API compat. */
     initialTab?: 'items' | 'vendors' | 'stores';
     initialQuery?: string;
 }
 
-export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', initialQuery = '' }: MobileSearchOverlayProps) {
+export function MobileSearchOverlay({ isOpen, onClose, initialQuery = '' }: MobileSearchOverlayProps) {
     const [searchQuery, setSearchQuery] = useState(initialQuery);
-    const [activeTab, setActiveTab] = useState<'items' | 'vendors'>(initialTab as 'items' | 'vendors');
     const prevOpenRef = React.useRef(false);
     const { wishlist } = useWishlist();
     const { totalItems } = useCart();
@@ -26,6 +26,8 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
     const [vendors, setVendors] = useState<Vendor[]>([]);
     // Vendors returned by the search API — these are vendors that actually carry the searched product
     const [searchResultVendors, setSearchResultVendors] = useState<VendorSummary[]>([]);
+    // Categories matching the search query (derived from matched products on the server)
+    const [searchResultCategories, setSearchResultCategories] = useState<Category[]>([]);
 
     useEffect(() => {
         dal.vendors.list().then((res) => setVendors(res.vendors)).catch(console.error);
@@ -35,10 +37,9 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
     React.useEffect(() => {
         if (isOpen && !prevOpenRef.current) {
             setSearchQuery(initialQuery);
-            setActiveTab(initialTab === 'stores' ? 'vendors' : initialTab);
         }
         prevOpenRef.current = isOpen;
-    }, [isOpen, initialQuery, initialTab]);
+    }, [isOpen, initialQuery]);
 
     // Search products from API when user types
     const [filteredItems, setFilteredItems] = useState<VendorProduct[]>([]);
@@ -48,6 +49,7 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
             queueMicrotask(() => {
                 setFilteredItems([]);
                 setSearchResultVendors([]);
+                setSearchResultCategories([]);
             });
             return;
         }
@@ -56,7 +58,12 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                 setFilteredItems(res.products);
                 // Use API-returned vendors (vendors that carry the searched product)
                 setSearchResultVendors(res.vendors);
-            }).catch(() => { setFilteredItems([]); setSearchResultVendors([]); });
+                setSearchResultCategories(res.categories);
+            }).catch(() => {
+                setFilteredItems([]);
+                setSearchResultVendors([]);
+                setSearchResultCategories([]);
+            });
         }, 300); // debounce 300ms
         return () => clearTimeout(timeout);
     }, [searchQuery]);
@@ -163,180 +170,164 @@ export function MobileSearchOverlay({ isOpen, onClose, initialTab = 'vendors', i
                     </div>
                 </div>
 
-                {/* Tabs */}
-                <div className="flex items-center gap-8 border-b border-[#EEEEEE]">
-                    <button
-                        onClick={() => setActiveTab('items')}
-                        className={cn(
-                            "flex items-center gap-2 pb-3.5 px-1 transition-all relative cursor-pointer",
-                            activeTab === 'items' ? "text-[#53B175]" : "text-[#181725]"
-                        )}
-                    >
-                        <span className="text-[17px] font-semibold">Items</span>
-                        <span className="bg-[#E5E7EB] text-[#181725] text-[11px] px-2 py-0.5 rounded-full font-bold">
-                            {filteredItems.length}
-                        </span>
-                        {activeTab === 'items' && (
-                            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#53B175] rounded-t-full" />
-                        )}
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('vendors')}
-                        className={cn(
-                            "flex items-center gap-2 pb-3.5 px-1 transition-all relative cursor-pointer",
-                            activeTab === 'vendors' ? "text-[#53B175]" : "text-[#181725]"
-                        )}
-                    >
-                        <span className="text-[17px] font-semibold">Vendors</span>
-                        <span className={cn(
-                            "text-[11px] px-2 py-0.5 rounded-full font-bold",
-                            activeTab === 'vendors' ? "bg-[#53B175] text-white" : "bg-[#E5E7EB] text-[#181725]"
-                        )}>
-                            {displayVendors.length}
-                        </span>
-                        {activeTab === 'vendors' && (
-                            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#53B175] rounded-t-full" />
-                        )}
-                    </button>
-                </div>
+                {/* Result summary chips — counts only, no tabs */}
+                {searchQuery.trim() && (
+                    <div className="flex items-center gap-4 pb-3.5 text-[13px] font-semibold text-gray-500">
+                        <span>{searchResultCategories.length} categor{searchResultCategories.length === 1 ? 'y' : 'ies'}</span>
+                        <span className="w-1 h-1 rounded-full bg-gray-300" />
+                        <span>{filteredItems.length} product{filteredItems.length === 1 ? '' : 's'}</span>
+                        <span className="w-1 h-1 rounded-full bg-gray-300" />
+                        <span>{displayVendors.length} vendor{displayVendors.length === 1 ? '' : 's'}</span>
+                    </div>
+                )}
             </div>
 
-            {/* Results Section */}
+            {/* Results Section — 3 stacked blocks per UI/UX Notes #5 (Search-Based Journey):
+                Category → Products → Vendors. No tabs — all visible at once. */}
             <div className="flex-1 overflow-y-auto p-4 md:p-12 space-y-3 md:space-y-6">
-                {activeTab === 'items' && (
-                    <>
-                        {filteredItems.length > 0 && (
-                            <>
-                                {/* Search in Category Card */}
-                                <button
-                                    onClick={() => {
-                                        setSearchQuery(filteredItems[0].category);
-                                        setActiveTab('vendors');
-                                    }}
-                                    className="bg-white rounded-[16px] p-4 flex items-center gap-4 shadow-sm border border-gray-50 text-left w-full active:scale-[0.98] transition-all"
-                                >
-                                    <div className="w-[58px] h-[58px] border border-[#EEEEEE] rounded-full flex items-center justify-center p-2.5 overflow-hidden">
-                                        <img src={filteredItems[0].images[0]} alt="suggestion" className="w-full h-full object-contain" />
-                                    </div>
-                                    <div className="text-[16px] font-medium text-[#181725]">
-                                        See vendors for <span className="text-[#53B175] font-bold">{filteredItems[0].category}</span>
-                                    </div>
-                                </button>
+                {(() => {
+                    const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                    const q = searchQuery.toLowerCase().trim();
+                    const hasQuery = !!q;
 
-                                {/* Products Section */}
-                                <div className="bg-white rounded-[16px] p-5 shadow-sm border border-gray-50">
-                                    <h2 className="text-[16px] font-bold text-[#181725] mb-4">Products</h2>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {filteredItems.map((item) => (
-                                            <button
-                                                key={item.id}
-                                                onClick={() => {
-                                                    setSearchQuery(item.name);
-                                                    setActiveTab('vendors');
-                                                }}
-                                                className="flex items-center gap-4 p-4 border border-[#EEEEEE] rounded-[20px] active:scale-[0.98] transition-all hover:border-[#53B175]/30 hover:bg-gray-50/50 group w-full text-left cursor-pointer"
-                                            >
-                                                <div className="w-[50px] h-[60px] flex items-center justify-center p-1 shrink-0 overflow-hidden bg-white rounded-lg">
-                                                    <img src={item.images[0]} alt={item.name} className="max-w-full max-h-full object-contain group-hover:scale-110 transition-transform" />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <div className="text-[15px] font-bold text-[#181725] leading-tight group-hover:text-[#53B175] transition-colors line-clamp-1">
-                                                        {item.name}
-                                                    </div>
-                                                    <div className="text-[12px] text-gray-400 mt-1 font-medium">
-                                                        {item.category}
-                                                    </div>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </>
-                        )}
+                    // Vendor link target — clicking a vendor always lands on the unified
+                    // Vendor Store (/vendor/[id]). If the search term matches a category the
+                    // vendor sells, deep-link via ?cat=<slug> so the sub-category sidebar
+                    // opens pre-selected. The Vendor Store is the single canonical buying
+                    // surface per UI/UX Notes V2.2 ("vendor-first marketplace").
+                    const buildVendorTarget = (vendor: VendorSummary) => {
+                        const catMatch = vendor.categories.find(c => slugify(c) === slugify(q));
+                        if (catMatch) return `/vendor/${vendor.id}?cat=${slugify(catMatch)}`;
+                        return `/vendor/${vendor.id}`;
+                    };
 
-                        {searchQuery && filteredItems.length === 0 && (
-                            <div className="flex flex-col items-center justify-center py-12 text-center px-6">
-                                <div className="bg-gray-100 p-4 rounded-full mb-4">
-                                    <Search size={32} className="text-gray-400" />
-                                </div>
-                                <p className="text-[#181725] font-bold text-lg">No items found</p>
-                                <p className="text-gray-400 text-sm mt-1">Try searching for something else like &quot;Banana&quot; or &quot;Ketchup&quot;</p>
+                    const renderVendorCard = (vendor: VendorSummary) => (
+                        <Link
+                            key={vendor.id}
+                            href={buildVendorTarget(vendor)}
+                            onClick={onClose}
+                            className="flex items-center gap-4 p-5 md:p-6 bg-white rounded-[24px] border border-[#EEEEEE] active:scale-[0.98] transition-all hover:border-[#53B175]/30 hover:shadow-lg hover:shadow-gray-100 group"
+                        >
+                            <div className="w-[60px] h-[60px] md:w-[70px] md:h-[70px] min-w-[60px] md:min-w-[70px] rounded-[18px] border border-[#F2F2F2] flex items-center justify-center p-2.5 bg-white overflow-hidden relative shadow-sm">
+                                <img src={vendor.logo} alt={vendor.name} className="max-w-full max-h-full object-contain group-hover:scale-110 transition-transform" />
                             </div>
-                        )}
-                    </>
-                )}
+                            <div className="flex-1 min-w-0">
+                                <h3 className="text-[16px] md:text-[18px] font-bold text-[#181725] leading-tight mb-1 group-hover:text-[#53B175] transition-colors">{vendor.name}</h3>
+                                <p className="text-[13px] md:text-[14px] text-[#7C7C7C] font-medium truncate">{vendor.categories.join(', ')}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 bg-[#53B175] text-white px-3 py-1.5 rounded-full shrink-0 shadow-sm shadow-green-100">
+                                <Star size={14} className="fill-white text-white" />
+                                <span className="text-[14px] font-bold">{vendor.rating}</span>
+                            </div>
+                        </Link>
+                    );
 
-                {activeTab === 'vendors' && (
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6 w-full">
-                        {displayVendors.length > 0 ? (
-                            displayVendors.map((vendor) => {
-                                const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-                                const q = searchQuery.toLowerCase().trim();
+                    // === Browse mode: no query → show all vendors ===
+                    if (!hasQuery) {
+                        return (
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6 w-full">
+                                {displayVendors.map(renderVendorCard)}
+                            </div>
+                        );
+                    }
 
-                                // 1. Check for exact category match (works when vendor has categories loaded)
-                                const catMatch = vendor.categories.find(c => slugify(c) === slugify(q));
+                    // === Search mode: 3 sections ===
+                    const hasAny = searchResultCategories.length > 0 || filteredItems.length > 0 || displayVendors.length > 0;
 
-                                // 2. For product searches: find the category of the first matching product for
-                                //    this vendor so we can open the left-sidebar category page pre-selected
-                                const vendorProducts = q ? filteredItems.filter(p => p.vendorId === vendor.id) : [];
-                                const productCategory = vendorProducts[0]?.category;
-                                const productCategorySlug = productCategory ? slugify(productCategory) : 'all';
-
-                                // 3. Target URL:
-                                //    - Category name match  → category page with that category selected (left sidebar layout)
-                                //    - Product search hit   → category page with product's category pre-selected
-                                //    - Browse with no query → vendor storefront (full header + tabs)
-                                const vendorTarget = catMatch
-                                    ? `/category/${vendor.id}/${slugify(catMatch)}`
-                                    : q ? `/category/${vendor.id}/${productCategorySlug}`
-                                    : `/vendor/${vendor.id}`;
-
-                                return (
-                                    <Link
-                                        key={vendor.id}
-                                        href={vendorTarget}
-                                        onClick={onClose}
-                                        className="flex items-center gap-4 p-5 md:p-6 bg-white rounded-[24px] border border-[#EEEEEE] active:scale-[0.98] transition-all hover:border-[#53B175]/30 hover:shadow-lg hover:shadow-gray-100 group"
-                                    >
-                                        {/* Vendor Logo */}
-                                        <div className="w-[60px] h-[60px] md:w-[70px] md:h-[70px] min-w-[60px] md:min-w-[70px] rounded-[18px] border border-[#F2F2F2] flex items-center justify-center p-2.5 bg-white overflow-hidden relative shadow-sm">
-                                            <img
-                                                src={vendor.logo}
-                                                alt={vendor.name}
-                                                className="max-w-full max-h-full object-contain group-hover:scale-110 transition-transform"
-                                            />
-                                        </div>
-
-                                        {/* Vendor Info */}
-                                        <div className="flex-1 min-w-0">
-                                            <h3 className="text-[16px] md:text-[18px] font-bold text-[#181725] leading-tight mb-1 group-hover:text-[#53B175] transition-colors">
-                                                {vendor.name}
-                                            </h3>
-                                            <p className="text-[13px] md:text-[14px] text-[#7C7C7C] font-medium truncate">
-                                                {vendor.categories.join(', ')}
-                                            </p>
-                                        </div>
-
-                                        {/* Rating Badge */}
-                                        <div className="flex items-center gap-1.5 bg-[#53B175] text-white px-3 py-1.5 rounded-full shrink-0 shadow-sm shadow-green-100">
-                                            <Star size={14} className="fill-white text-white" />
-                                            <span className="text-[14px] font-bold">{vendor.rating}</span>
-                                        </div>
-                                    </Link>
-                                );
-                            })
-                        ) : (
+                    if (!hasAny) {
+                        return (
                             <div className="flex flex-col items-center justify-center py-20 text-center px-6">
                                 <div className="bg-gray-100 p-6 rounded-3xl mb-4">
                                     <Search size={40} className="text-gray-400" />
                                 </div>
-                                <p className="text-[#181725] font-bold text-xl">No vendors matching &quot;{searchQuery}&quot;</p>
-                                <p className="text-gray-400 text-[15px] mt-2">Try searching for a different category or store name</p>
+                                <p className="text-[#181725] font-bold text-xl">No results for &ldquo;{searchQuery}&rdquo;</p>
+                                <p className="text-gray-400 text-[15px] mt-2">Try a different keyword or check the spelling</p>
                             </div>
-                        )}
-                    </div>
-                )}
-                </div>
+                        );
+                    }
+
+                    return (
+                        <>
+                            {/* === BLOCK 1: CATEGORIES === */}
+                            {searchResultCategories.length > 0 && (
+                                <section className="bg-white rounded-[16px] p-5 shadow-sm border border-gray-50">
+                                    <h2 className="text-[16px] font-bold text-[#181725] mb-4">Categories</h2>
+                                    <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
+                                        {searchResultCategories.map((cat) => (
+                                            <Link
+                                                key={cat.id}
+                                                href={`/category/${cat.slug}`}
+                                                onClick={onClose}
+                                                className="flex flex-col items-center gap-2 min-w-[90px] p-3 border border-[#EEEEEE] rounded-[16px] hover:border-[#53B175]/30 hover:bg-gray-50/50 transition-all active:scale-[0.97] group"
+                                            >
+                                                <div className="w-[56px] h-[56px] rounded-full bg-[#F7FBF8] flex items-center justify-center overflow-hidden border border-[#EEEEEE]">
+                                                    <img src={cat.image || '/images/category/vegitable.png'} alt={cat.name} className="w-[70%] h-[70%] object-contain" />
+                                                </div>
+                                                <span className="text-[12px] font-bold text-[#181725] text-center leading-tight line-clamp-2 group-hover:text-[#53B175] transition-colors">
+                                                    {cat.name}
+                                                </span>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
+
+                            {/* === BLOCK 2: PRODUCTS === */}
+                            {filteredItems.length > 0 && (
+                                <section className="bg-white rounded-[16px] p-5 shadow-sm border border-gray-50">
+                                    <h2 className="text-[16px] font-bold text-[#181725] mb-4">Products</h2>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {filteredItems.slice(0, 6).map((item) => (
+                                            // Per UI/UX Notes #5: Search-based journey always ends at a Vendor Store.
+                                            // Clicking a product opens its vendor's store with the product name
+                                            // pre-filled in the in-store search, so user lands at "Select Vendor →
+                                            // Vendor → Add Items" — never on a standalone product page.
+                                            <Link
+                                                key={item.id}
+                                                href={`/vendor/${item.vendorId}?q=${encodeURIComponent(item.name)}`}
+                                                onClick={onClose}
+                                                className="flex items-center gap-4 p-4 border border-[#EEEEEE] rounded-[20px] active:scale-[0.98] transition-all hover:border-[#53B175]/30 hover:bg-gray-50/50 group w-full text-left"
+                                            >
+                                                <div className="w-[50px] h-[60px] flex items-center justify-center p-1 shrink-0 overflow-hidden bg-white rounded-lg">
+                                                    <img src={item.images[0]} alt={item.name} className="max-w-full max-h-full object-contain group-hover:scale-110 transition-transform" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-[15px] font-bold text-[#181725] leading-tight group-hover:text-[#53B175] transition-colors line-clamp-1">
+                                                        {item.name}
+                                                    </div>
+                                                    <div className="text-[12px] text-gray-400 mt-1 font-medium truncate flex items-center gap-1">
+                                                        <span className="text-[#53B175]">from</span>
+                                                        <span className="truncate">{item.vendorName || item.category}</span>
+                                                    </div>
+                                                </div>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                    {filteredItems.length > 6 && (
+                                        <Link
+                                            href={`/search?q=${encodeURIComponent(searchQuery)}`}
+                                            onClick={onClose}
+                                            className="mt-4 block text-center text-[13px] font-bold text-[#53B175] hover:underline"
+                                        >
+                                            View all {filteredItems.length} products →
+                                        </Link>
+                                    )}
+                                </section>
+                            )}
+
+                            {/* === BLOCK 3: VENDORS === */}
+                            {displayVendors.length > 0 && (
+                                <section className="bg-white rounded-[16px] p-5 shadow-sm border border-gray-50">
+                                    <h2 className="text-[16px] font-bold text-[#181725] mb-4">Vendors</h2>
+                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
+                                        {displayVendors.slice(0, 6).map(renderVendorCard)}
+                                    </div>
+                                </section>
+                            )}
+                        </>
+                    );
+                })()}
+            </div>
             </div>
         </div>
     );
