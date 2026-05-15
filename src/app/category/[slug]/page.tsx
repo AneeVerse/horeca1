@@ -263,7 +263,7 @@ function CategoryVendorsContent() {
                             return (
                                 <Link
                                     key={vendor.id}
-                                    href={`/category/${vendor.slug}/${slug}`}
+                                    href={`/vendor/${vendor.slug}?cat=${slug}`}
                                     className="bg-white rounded-[16px] border border-gray-100 overflow-hidden shadow-sm hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300 group"
                                 >
                                     <div className="relative w-full h-[110px] md:h-[130px] overflow-hidden">

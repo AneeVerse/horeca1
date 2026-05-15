@@ -204,8 +204,10 @@ function SearchPageContent() {
                                     {displayVendors.map((vendor) => {
                                         const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
                                         const categoryMatch = vendor.categories.find(c => slugify(c) === slugify(query));
-                                        const vendorPath = categoryMatch 
-                                            ? `/category/${vendor.slug}/${slugify(categoryMatch)}`
+                                        // Unified Vendor Store URL: ?cat=<slug> deep-links into the
+                                        // sub-category sidebar (no separate /category/<vendor>/<cat> page).
+                                        const vendorPath = categoryMatch
+                                            ? `/vendor/${vendor.id}?cat=${slugify(categoryMatch)}`
                                             : `/vendor/${vendor.id}`;
                                             
                                         return (

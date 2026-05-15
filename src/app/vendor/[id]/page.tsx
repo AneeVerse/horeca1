@@ -12,7 +12,8 @@ import { dal } from '@/lib/dal';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
 import type { Vendor, VendorProduct } from '@/types';
-import { Package, Star, CheckCircle, Clock } from 'lucide-react';
+import { Package, Star, CheckCircle, Clock, Sparkles } from 'lucide-react';
+import Image from 'next/image';
 
 interface VendorOrder {
     id?: string;
@@ -34,7 +35,10 @@ export default function VendorStorePage() {
     const [vendor, setVendor] = useState<Vendor | null>(null);
     const [products, setProducts] = useState<VendorProduct[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('all');
+    // Pre-fill active tab from ?cat= param (deep-link from search overlay / category page).
+    // ?cat=mayo-sauces → activeTab='cat:Mayo & Sauces' once products load (slug → name match below).
+    const initialCatSlug = searchParams?.get('cat') || '';
+    const [activeTab, setActiveTab] = useState(initialCatSlug ? `cat:${initialCatSlug}` : 'all');
     // Pre-fill search from ?q= param (e.g. navigating from search overlay with a specific product)
     const [searchQuery, setSearchQuery] = useState(() => searchParams?.get('q') || '');
     const [prevOrders, setPrevOrders] = useState<VendorOrder[]>([]);
@@ -131,6 +135,32 @@ export default function VendorStorePage() {
             .finally(() => setReviewsLoading(false));
     }, [activeTab, vendorId, reviewsData]);
 
+    // Convert ?cat=<slug> to the matching category NAME once products load.
+    // activeTab stores the actual category name (used by the filter below), but URLs use slugs.
+    useEffect(() => {
+        if (!initialCatSlug || products.length === 0) return;
+        if (!activeTab.startsWith('cat:')) return;
+        const current = activeTab.slice(4);
+        // If activeTab is already a real category name (not the raw slug), nothing to do.
+        if (products.some(p => p.category === current)) return;
+        const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+        const matched = products.find(p => slugify(p.category) === slugify(initialCatSlug));
+        if (matched) setActiveTab(`cat:${matched.category}`);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [products, initialCatSlug]);
+
+    // Unique categories the vendor actually sells (with product counts) — used by the sidebar.
+    const vendorCategories = useMemo(() => {
+        const map = new Map<string, { name: string; count: number; image?: string }>();
+        for (const p of products) {
+            if (!p.category) continue;
+            const existing = map.get(p.category);
+            if (existing) existing.count += 1;
+            else map.set(p.category, { name: p.category, count: 1, image: p.images?.[0] });
+        }
+        return Array.from(map.values()).sort((a, b) => b.count - a.count);
+    }, [products]);
+
     const filteredProducts = useMemo(() => {
         let result = products;
 
@@ -196,15 +226,19 @@ export default function VendorStorePage() {
                 onTabChange={setActiveTab}
             />
 
-            {/* ── DYNAMIC CATEGORY SHOWCASE & NAVIGATION (Only shown in shop views) ── */}
+            {/* ── DYNAMIC CATEGORY SHOWCASE (mobile only — horizontal scroll) & NAVIGATION ── */}
+            {/* Desktop uses the left sidebar inside the main content area for sub-category nav,
+                per UI/UX Notes: "Vendor Catalog Navigation: Categories >> Sub-Categories (Like Hyperpure 1-column grid)" */}
             {activeTab !== 'ratings' && activeTab !== 'about' && activeTab !== 'orders' && (
                 <>
-                    <CategoryShowcase
-                        filterByProducts={products}
-                        onCategoryClick={(cat) => setActiveTab(activeTab === `cat:${cat}` ? 'all' : `cat:${cat}`)}
-                        activeCategory={activeTab}
-                        title=""
-                    />
+                    <div className="lg:hidden">
+                        <CategoryShowcase
+                            filterByProducts={products}
+                            onCategoryClick={(cat) => setActiveTab(activeTab === `cat:${cat}` ? 'all' : `cat:${cat}`)}
+                            activeCategory={activeTab}
+                            title=""
+                        />
+                    </div>
                     <VendorCatalogNav
                         activeTab={activeTab}
                         onTabChange={setActiveTab}
@@ -257,21 +291,91 @@ export default function VendorStorePage() {
                         )}
                     </div>
                 ) : activeTab === 'all' || activeTab === 'deals' || activeTab === 'frequent' || activeTab === 'prev-ordered' || activeTab.startsWith('cat:') ? (
-                    filteredProducts.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
-                            {filteredProducts.map((product) => (
-                                <VendorProductCard key={product.id} product={product} />
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center py-24 text-center">
-                            <div className="p-6 bg-gray-50 rounded-full mb-4">
-                                <Package className="text-gray-300" size={48} strokeWidth={1.5} />
+                    <div className="flex gap-6 items-start">
+                        {/* ── DESKTOP SUB-CATEGORY SIDEBAR (Hyperpure 1-column grid per UI/UX Notes) ── */}
+                        <aside className="hidden lg:block w-[260px] shrink-0 sticky top-24">
+                            <div className="bg-white rounded-2xl border border-gray-100 p-3 shadow-sm">
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab('all')}
+                                    className={cn(
+                                        "flex items-center justify-between w-full px-3 py-2.5 rounded-xl transition-all group text-left",
+                                        activeTab === 'all' ? "bg-[#53B175]/10" : "hover:bg-gray-50"
+                                    )}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={cn(
+                                            "w-9 h-9 rounded-lg flex items-center justify-center transition-all",
+                                            activeTab === 'all' ? "bg-white border border-[#53B175]/20 shadow-sm" : "bg-gray-50"
+                                        )}>
+                                            <Sparkles size={16} className={activeTab === 'all' ? 'text-[#53B175]' : 'text-gray-400'} strokeWidth={2.5} />
+                                        </div>
+                                        <span className={cn(
+                                            "text-[13px] font-bold",
+                                            activeTab === 'all' ? "text-[#53B175]" : "text-[#181725]"
+                                        )}>
+                                            All Products
+                                        </span>
+                                    </div>
+                                    <span className="text-[11px] font-bold text-gray-400">{products.length}</span>
+                                </button>
+
+                                {vendorCategories.map((cat) => {
+                                    const isActive = activeTab === `cat:${cat.name}`;
+                                    return (
+                                        <button
+                                            key={cat.name}
+                                            type="button"
+                                            onClick={() => setActiveTab(`cat:${cat.name}`)}
+                                            className={cn(
+                                                "flex items-center justify-between w-full px-3 py-2.5 rounded-xl transition-all group text-left mt-1",
+                                                isActive ? "bg-[#53B175]/10" : "hover:bg-gray-50"
+                                            )}
+                                        >
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className={cn(
+                                                    "w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden relative transition-all shrink-0",
+                                                    isActive ? "bg-white border border-[#53B175]/20 shadow-sm" : "bg-gray-50"
+                                                )}>
+                                                    {cat.image ? (
+                                                        <Image src={cat.image} alt={cat.name} width={28} height={28} className="object-contain" />
+                                                    ) : (
+                                                        <Package size={14} className="text-gray-300" />
+                                                    )}
+                                                </div>
+                                                <span className={cn(
+                                                    "text-[13px] font-bold truncate",
+                                                    isActive ? "text-[#53B175]" : "text-[#181725]"
+                                                )}>
+                                                    {cat.name}
+                                                </span>
+                                            </div>
+                                            <span className="text-[11px] font-bold text-gray-400 shrink-0 ml-2">{cat.count}</span>
+                                        </button>
+                                    );
+                                })}
                             </div>
-                            <h3 className="text-[20px] font-black text-[#181725]">No items found</h3>
-                            <p className="text-gray-400 font-bold mt-1">Try adjusting your search or filters</p>
+                        </aside>
+
+                        {/* ── PRODUCT GRID (right column on desktop, full width on mobile) ── */}
+                        <div className="flex-1 min-w-0">
+                            {filteredProducts.length > 0 ? (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
+                                    {filteredProducts.map((product) => (
+                                        <VendorProductCard key={product.id} product={product} />
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-24 text-center">
+                                    <div className="p-6 bg-gray-50 rounded-full mb-4">
+                                        <Package className="text-gray-300" size={48} strokeWidth={1.5} />
+                                    </div>
+                                    <h3 className="text-[20px] font-black text-[#181725]">No items found</h3>
+                                    <p className="text-gray-400 font-bold mt-1">Try adjusting your search or filters</p>
+                                </div>
+                            )}
                         </div>
-                    )
+                    </div>
                 ) : activeTab === 'ratings' ? (
                     <div className="max-w-4xl mx-auto space-y-8">
                         {reviewsLoading ? (
