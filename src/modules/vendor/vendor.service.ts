@@ -67,9 +67,14 @@ export class VendorService {
   }
 
   async getById(id: string) {
-    // Accept either UUID or slug so frontend links work regardless of format
+    // Accept either UUID or slug so frontend links work regardless of format.
+    // We cannot use `OR: [{ id }, { slug: id }]` because Postgres validates the
+    // UUID column type strictly — passing a slug like "daily-fresh-foods" against
+    // `id = $1` throws P2007 before Prisma can short-circuit to the slug branch.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const where = UUID_RE.test(id) ? { id } : { slug: id };
     const vendor = await prisma.vendor.findFirst({
-      where: { OR: [{ id }, { slug: id }] },
+      where,
       include: {
         serviceAreas: { where: { isActive: true }, select: { pincode: true } },
         deliverySlots: { where: { isActive: true } },

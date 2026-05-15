@@ -23,8 +23,17 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: vendorId } = await params;
+    const { id: vendorIdOrSlug } = await params;
     const days = Math.min(Math.max(Number(req.nextUrl.searchParams.get('days')) || 3, 1), 14);
+
+    // Resolve slug → id so this works with both /vendor/<uuid> and /vendor/<slug> URLs
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let vendorId = vendorIdOrSlug;
+    if (!UUID_RE.test(vendorIdOrSlug)) {
+      const v = await prisma.vendor.findFirst({ where: { slug: vendorIdOrSlug }, select: { id: true } });
+      if (!v) return NextResponse.json({ success: true, data: { vendorId: vendorIdOrSlug, days: [] } });
+      vendorId = v.id;
+    }
 
     const slots = await prisma.deliverySlot.findMany({
       where: { vendorId, isActive: true },

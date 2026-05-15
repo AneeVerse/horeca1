@@ -14,15 +14,21 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const segments = url.pathname.split('/');
     // /api/v1/vendors/{id}/reviews → id is at index [5]
-    const vendorId = segments[5];
+    const vendorIdOrSlug = segments[5];
     const cursor = url.searchParams.get('cursor') || undefined;
     const limit = Math.min(Number(url.searchParams.get('limit') || PAGE_SIZE), 50);
 
-    const vendor = await prisma.vendor.findUnique({
-      where: { id: vendorId },
+    // Accept either UUID or slug (Vendor Store URLs use slugs).
+    // Postgres rejects non-UUID strings on the id column even inside OR — so
+    // pick the right where clause up-front based on the input shape.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const lookupWhere = UUID_RE.test(vendorIdOrSlug) ? { id: vendorIdOrSlug } : { slug: vendorIdOrSlug };
+    const vendor = await prisma.vendor.findFirst({
+      where: lookupWhere,
       select: { id: true, rating: true },
     });
     if (!vendor) throw Errors.notFound('Vendor');
+    const vendorId = vendor.id;
 
     // Paginated reviews
     const reviews = await prisma.review.findMany({

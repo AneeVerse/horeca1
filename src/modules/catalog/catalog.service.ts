@@ -11,10 +11,24 @@ export const TOMBSTONE_PREFIX = '_deleted_';
 
 export class CatalogService {
   async getVendorProducts(
-    vendorId: string,
+    vendorIdOrSlug: string,
     options: { categoryId?: string; search?: string; cursor?: string; limit?: number; includeInactive?: boolean }
   ) {
     const { categoryId, search, cursor, limit = 20, includeInactive } = options;
+
+    // Accept either UUID or slug (matches VendorService.getById behaviour).
+    // Postgres throws P2007 ("invalid input syntax for type uuid") if a non-UUID
+    // string is used directly in a `where: { vendorId }` filter on the products table.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let vendorId = vendorIdOrSlug;
+    if (!UUID_RE.test(vendorIdOrSlug)) {
+      const v = await prisma.vendor.findFirst({
+        where: { slug: vendorIdOrSlug },
+        select: { id: true },
+      });
+      if (!v) throw Errors.notFound('Vendor');
+      vendorId = v.id;
+    }
 
     const where: Record<string, unknown> = {
       vendorId,
