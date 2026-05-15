@@ -702,9 +702,10 @@ export default function CartPage() {
                                         >
                                             {selectedVendors.has(shipment.id) && <Check size={15} strokeWidth={3.5} />}
                                         </button>
-                                        <Link
-                                            href={`/cart/shipment/${shipment.id}`}
-                                            className="flex items-center gap-3 hover:opacity-80 transition-opacity flex-1 min-w-0"
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleVendor(shipment.id)}
+                                            className="flex items-center gap-3 hover:opacity-80 transition-opacity flex-1 min-w-0 text-left"
                                         >
                                             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                                                 <Store size={18} className="text-primary" />
@@ -713,15 +714,8 @@ export default function CartPage() {
                                                 <h3 className="text-[17px] font-bold text-[#181725]">{shipment.vendor}</h3>
                                                 <p className="text-[13px] text-gray-400 font-medium">{getShipmentItemCount(shipment.items)} items · ₹{getShipmentTotal(shipment.items).toFixed(0)}</p>
                                             </div>
-                                        </Link>
+                                        </button>
                                         <div className="flex items-center gap-3 shrink-0">
-                                            <Link
-                                                href={`/cart/shipment/${shipment.id}`}
-                                                className="flex items-center gap-1 text-[13px] font-bold text-primary hover:text-primary/80 transition-colors"
-                                            >
-                                                Details
-                                                <ChevronRight size={14} strokeWidth={3} />
-                                            </Link>
                                             <button
                                                 onClick={() => handleClearVendor(shipment.id, shipment.vendor)}
                                                 className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors"
@@ -892,10 +886,14 @@ export default function CartPage() {
                                             {groups.map(g => {
                                                 const sel = selectedVendors.has(g.vendorId);
                                                 return (
-                                                    <div
+                                                    <button
                                                         key={g.vendorId}
+                                                        type="button"
+                                                        onClick={() => toggleVendorSelection(g.vendorId)}
+                                                        aria-pressed={sel}
+                                                        aria-label={sel ? `Skip ${g.vendorName} at checkout` : `Pay for ${g.vendorName} at checkout`}
                                                         className={cn(
-                                                            "rounded-xl border px-3 py-2.5 transition-all",
+                                                            "w-full text-left rounded-xl border px-3 py-2.5 transition-all cursor-pointer hover:border-[#53B175]/40 active:scale-[0.99]",
                                                             sel ? "bg-[#53B175]/5 border-[#53B175]/20" : "bg-gray-50 border-gray-100"
                                                         )}
                                                     >
@@ -924,7 +922,7 @@ export default function CartPage() {
                                                                 <span>GST ₹{g.totalGST.toFixed(2)}</span>
                                                             </div>
                                                         )}
-                                                    </div>
+                                                    </button>
                                                 );
                                             })}
                                         </div>
