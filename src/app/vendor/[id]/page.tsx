@@ -12,7 +12,7 @@ import { dal } from '@/lib/dal';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
 import type { Vendor, VendorProduct } from '@/types';
-import { Package, Star, CheckCircle, Clock, Sparkles } from 'lucide-react';
+import { Package, Star, CheckCircle, Clock, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 
 interface VendorOrder {
@@ -149,17 +149,64 @@ export default function VendorStorePage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [products, initialCatSlug]);
 
-    // Unique categories the vendor actually sells (with product counts) — used by the sidebar.
-    const vendorCategories = useMemo(() => {
-        const map = new Map<string, { name: string; count: number; image?: string }>();
+    // Hierarchical category tree the vendor actually sells.
+    // Spec: "Vendor Catalog Navigation: Categories >> Sub-Categories (Like Hyperpure 1-column grid)"
+    //
+    // Builds: [ { id, name, count, image, children: [{ id, name, count, image }, ...] }, ... ]
+    // - A product directly in a top-level Category becomes a top-level entry
+    // - A product in a Sub-Category is rolled up under its parent Category
+    // - count at each level is the # of products at THAT level (parent count includes children)
+    interface SidebarNode { id: string; name: string; count: number; image?: string; children: Array<{ id: string; name: string; count: number; image?: string }>; }
+    const vendorCategoryTree = useMemo<SidebarNode[]>(() => {
+        const parents = new Map<string, SidebarNode>();
+
         for (const p of products) {
-            if (!p.category) continue;
-            const existing = map.get(p.category);
-            if (existing) existing.count += 1;
-            else map.set(p.category, { name: p.category, count: 1, image: p.images?.[0] });
+            const catId = p.categoryId;
+            const catName = p.category;
+            if (!catId || !catName) continue;
+
+            if (p.categoryParentId && p.categoryParentName) {
+                // Product is in a Sub-Category → roll up under its parent
+                let parent = parents.get(p.categoryParentId);
+                if (!parent) {
+                    parent = { id: p.categoryParentId, name: p.categoryParentName, count: 0, children: [] };
+                    parents.set(p.categoryParentId, parent);
+                }
+                let child = parent.children.find(c => c.id === catId);
+                if (!child) {
+                    child = { id: catId, name: catName, count: 0, image: p.images?.[0] };
+                    parent.children.push(child);
+                }
+                child.count += 1;
+                parent.count += 1;
+            } else {
+                // Product is in a top-level Category
+                let parent = parents.get(catId);
+                if (!parent) {
+                    parent = { id: catId, name: catName, count: 0, image: p.images?.[0], children: [] };
+                    parents.set(catId, parent);
+                }
+                parent.count += 1;
+            }
         }
-        return Array.from(map.values()).sort((a, b) => b.count - a.count);
+
+        // Sort parents by total count desc; sort children by count desc within each parent
+        const list = Array.from(parents.values()).sort((a, b) => b.count - a.count);
+        list.forEach(p => p.children.sort((a, b) => b.count - a.count));
+        return list;
     }, [products]);
+
+    // Sidebar expand/collapse state. Parent of the current active sub-category opens by default.
+    const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
+    useEffect(() => {
+        if (!activeTab.startsWith('cat:')) return;
+        const activeName = activeTab.slice(4);
+        // If active is a sub-category, expand its parent
+        const parentOfActive = vendorCategoryTree.find(p => p.children.some(c => c.name === activeName));
+        if (parentOfActive) {
+            setExpandedCats(prev => prev[parentOfActive.id] ? prev : { ...prev, [parentOfActive.id]: true });
+        }
+    }, [activeTab, vendorCategoryTree]);
 
     const filteredProducts = useMemo(() => {
         let result = products;
@@ -173,7 +220,15 @@ export default function VendorStorePage() {
             result = prevOrderedProducts;
         } else if (activeTab.startsWith('cat:')) {
             const category = activeTab.replace('cat:', '');
-            result = result.filter(p => p.category === category || p.subcategory === category);
+            // Match products in this category directly, OR — if a top-level Category is
+            // selected — any of its sub-categories. This is what makes the Hyperpure-style
+            // parent click show ALL items in Dairy (Milk + Cheese + Butter), not just
+            // products whose primary categoryId equals Dairy itself.
+            result = result.filter(p =>
+                p.category === category ||
+                p.subcategory === category ||
+                p.categoryParentName === category
+            );
         }
 
         // Filter by search
@@ -320,38 +375,79 @@ export default function VendorStorePage() {
                                     <span className="text-[11px] font-bold text-gray-400">{products.length}</span>
                                 </button>
 
-                                {vendorCategories.map((cat) => {
-                                    const isActive = activeTab === `cat:${cat.name}`;
+                                {vendorCategoryTree.map((parent) => {
+                                    const isParentActive = activeTab === `cat:${parent.name}`;
+                                    const hasChildren = parent.children.length > 0;
+                                    const isOpen = expandedCats[parent.id] ?? isParentActive;
                                     return (
-                                        <button
-                                            key={cat.name}
-                                            type="button"
-                                            onClick={() => setActiveTab(`cat:${cat.name}`)}
-                                            className={cn(
-                                                "flex items-center justify-between w-full px-3 py-2.5 rounded-xl transition-all group text-left mt-1",
-                                                isActive ? "bg-[#53B175]/10" : "hover:bg-gray-50"
-                                            )}
-                                        >
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div className={cn(
-                                                    "w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden relative transition-all shrink-0",
-                                                    isActive ? "bg-white border border-[#53B175]/20 shadow-sm" : "bg-gray-50"
-                                                )}>
-                                                    {cat.image ? (
-                                                        <Image src={cat.image} alt={cat.name} width={28} height={28} className="object-contain" />
-                                                    ) : (
-                                                        <Package size={14} className="text-gray-300" />
-                                                    )}
-                                                </div>
-                                                <span className={cn(
-                                                    "text-[13px] font-bold truncate",
-                                                    isActive ? "text-[#53B175]" : "text-[#181725]"
-                                                )}>
-                                                    {cat.name}
-                                                </span>
+                                        <div key={parent.id} className="mt-1">
+                                            <div className={cn(
+                                                "flex items-center w-full rounded-xl transition-all",
+                                                isParentActive ? "bg-[#53B175]/10" : "hover:bg-gray-50"
+                                            )}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setActiveTab(`cat:${parent.name}`)}
+                                                    className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2.5 text-left"
+                                                >
+                                                    <div className={cn(
+                                                        "w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden relative transition-all shrink-0",
+                                                        isParentActive ? "bg-white border border-[#53B175]/20 shadow-sm" : "bg-gray-50"
+                                                    )}>
+                                                        {parent.image ? (
+                                                            <Image src={parent.image} alt={parent.name} width={28} height={28} className="object-contain" />
+                                                        ) : (
+                                                            <Package size={14} className="text-gray-300" />
+                                                        )}
+                                                    </div>
+                                                    <span className={cn(
+                                                        "text-[13px] font-bold truncate",
+                                                        isParentActive ? "text-[#53B175]" : "text-[#181725]"
+                                                    )}>
+                                                        {parent.name}
+                                                    </span>
+                                                </button>
+                                                <span className="text-[11px] font-bold text-gray-400 shrink-0 mr-1">{parent.count}</span>
+                                                {hasChildren && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setExpandedCats(prev => ({ ...prev, [parent.id]: !isOpen }))}
+                                                        aria-label={isOpen ? 'Collapse sub-categories' : 'Expand sub-categories'}
+                                                        className="w-7 h-7 mr-1 flex items-center justify-center text-gray-400 hover:text-[#53B175] rounded-md hover:bg-white transition-all"
+                                                    >
+                                                        {isOpen ? <ChevronDown size={14} strokeWidth={2.5} /> : <ChevronRight size={14} strokeWidth={2.5} />}
+                                                    </button>
+                                                )}
                                             </div>
-                                            <span className="text-[11px] font-bold text-gray-400 shrink-0 ml-2">{cat.count}</span>
-                                        </button>
+
+                                            {/* Sub-categories — Hyperpure 1-column nested grid */}
+                                            {hasChildren && isOpen && (
+                                                <div className="ml-5 mt-1 border-l border-gray-100 pl-2 space-y-0.5">
+                                                    {parent.children.map((child) => {
+                                                        const isChildActive = activeTab === `cat:${child.name}`;
+                                                        return (
+                                                            <button
+                                                                key={child.id}
+                                                                type="button"
+                                                                onClick={() => setActiveTab(`cat:${child.name}`)}
+                                                                className={cn(
+                                                                    "flex items-center justify-between w-full px-3 py-2 rounded-lg transition-all text-left",
+                                                                    isChildActive ? "bg-[#53B175]/10" : "hover:bg-gray-50"
+                                                                )}
+                                                            >
+                                                                <span className={cn(
+                                                                    "text-[12px] font-semibold truncate",
+                                                                    isChildActive ? "text-[#53B175]" : "text-gray-600"
+                                                                )}>
+                                                                    {child.name}
+                                                                </span>
+                                                                <span className="text-[10px] font-bold text-gray-400 shrink-0 ml-2">{child.count}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
                                     );
                                 })}
                             </div>

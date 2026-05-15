@@ -63,6 +63,8 @@ export interface VendorProduct extends Product {
     vendorName: string;
     vendorLogo?: string;
     categoryId?: string;         // DB category UUID — used for reliable category-page filtering
+    categoryParentId?: string;   // Parent category UUID — if set, this product's category is a sub-category
+    categoryParentName?: string; // Parent category display name — for Hyperpure-style hierarchical sidebar
     bulkPrices: BulkPriceTier[];
     creditBadge: boolean;
     minOrderQuantity: number;    // min qty the customer must add (from DB minOrderQty)

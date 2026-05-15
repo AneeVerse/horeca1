@@ -49,7 +49,17 @@ export class CatalogService {
       include: {
         priceSlabs: { orderBy: { sortOrder: 'asc' } },
         inventory: { select: { qtyAvailable: true, qtyReserved: true } },
-        category: { select: { id: true, name: true, slug: true } },
+        // parent + parentId let the Vendor Store sidebar render the Hyperpure-style
+        // hierarchical "Categories >> Sub-Categories" navigation per UI/UX Notes.
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            parentId: true,
+            parent: { select: { id: true, name: true, slug: true } },
+          },
+        },
         vendor: { select: { id: true, businessName: true, logoUrl: true } },
         brandMappings: {
           where: { status: { in: ['verified', 'auto_mapped'] } },

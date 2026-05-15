@@ -162,6 +162,8 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
     vendorName: (vendor.businessName as string) || '',
     vendorLogo: (vendor.logoUrl as string) || '',
     categoryId: (p.categoryId as string) || ((p.category as Record<string, unknown>)?.id as string) || undefined,
+    categoryParentId: ((p.category as Record<string, unknown>)?.parentId as string) || undefined,
+    categoryParentName: (((p.category as Record<string, unknown>)?.parent as Record<string, unknown>)?.name as string) || undefined,
     bulkPrices: priceSlabs.map((s): BulkPriceTier => ({
       minQty: Number(s.minQty),
       price: Number(s.price),
