@@ -48,6 +48,8 @@ interface Category {
     id: string;
     name: string;
     slug: string;
+    parentId?: string | null; // null = top-level Category; set = Sub-Category (rendered with leading "— ")
+    children?: Category[];    // nested sub-categories returned by /api/v1/categories
 }
 
 interface BrandOption {
@@ -332,7 +334,22 @@ export default function VendorProductsPage() {
         fetchProducts();
         fetch('/api/v1/categories')
             .then(r => r.json())
-            .then(json => { if (json.success) setCategories(json.data); })
+            .then(json => {
+                if (!json.success) return;
+                // /api/v1/categories only returns top-level rows but nests each parent's
+                // children inline. Flatten into one ordered list so the dropdown can show
+                // sub-categories (Cheese, Milk under Dairy etc) — otherwise the vendor
+                // can never tag a product with a sub-category.
+                type CatRow = Category & { children?: Category[] };
+                const flat: Category[] = [];
+                for (const parent of (json.data as CatRow[])) {
+                    flat.push(parent);
+                    if (Array.isArray(parent.children)) {
+                        for (const child of parent.children) flat.push(child);
+                    }
+                }
+                setCategories(flat);
+            })
             .catch(console.error);
         fetch('/api/v1/brands?limit=100')
             .then(r => r.json())
@@ -1329,7 +1346,9 @@ export default function VendorProductsPage() {
                                                 >
                                                     <option value="">Select category</option>
                                                     {categories.map(c => (
-                                                        <option key={c.id} value={c.slug}>{c.name}</option>
+                                                        <option key={c.id} value={c.slug}>
+                                                            {c.parentId ? `— ${c.name}` : c.name}
+                                                        </option>
                                                     ))}
                                                 </select>
                                                 <ChevronRight size={16} className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-[#AEAEAE] pointer-events-none" />

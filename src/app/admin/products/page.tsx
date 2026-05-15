@@ -66,6 +66,7 @@ interface Vendor {
 interface Category {
     id: string;
     name: string;
+    parentId?: string | null; // null = top-level, set = sub-category (rendered with leading "— ")
 }
 
 interface BrandOption {
@@ -714,7 +715,9 @@ export default function ProductsPage() {
                     >
                         <option value="">All Categories</option>
                         {categories.map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
+                            <option key={c.id} value={c.id}>
+                                {c.parentId ? `— ${c.name}` : c.name}
+                            </option>
                         ))}
                     </select>
                 </div>
