@@ -369,9 +369,9 @@ export const dal = {
       return apiFetch(`/api/v1/lists/${id}`);
     },
 
-    /** Create new list */
-    async create(name: string, vendorId: string, items?: Array<{ productId: string; defaultQty: number }>) {
-      return apiFetch('/api/v1/lists', {
+    /** Create new list. Items may carry their own vendorId (multi-vendor lists). */
+    async create(name: string, vendorId: string, items?: Array<{ productId: string; defaultQty: number; vendorId?: string }>) {
+      return apiFetch<{ id: string }>('/api/v1/lists', {
         method: 'POST',
         body: JSON.stringify({ name, vendorId, items }),
       });

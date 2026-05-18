@@ -36,7 +36,7 @@ export class ListService {
     return list;
   }
 
-  async create(userId: string, data: { name: string; vendorId: string; items?: Array<{ productId: string; defaultQty: number }> }) {
+  async create(userId: string, data: { name: string; vendorId: string; items?: Array<{ productId: string; defaultQty: number; vendorId?: string }> }) {
     const list = await prisma.quickOrderList.create({
       data: {
         userId,
@@ -47,7 +47,7 @@ export class ListService {
               items: {
                 create: data.items.map((item, i) => ({
                   productId: item.productId,
-                  vendorId: data.vendorId,
+                  vendorId: item.vendorId ?? data.vendorId,
                   defaultQty: item.defaultQty,
                   sortOrder: i,
                 })),

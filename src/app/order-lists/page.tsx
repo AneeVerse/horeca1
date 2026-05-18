@@ -55,46 +55,56 @@ export default function OrderListsPage() {
     // Initial load: only for authenticated users. Order lists are tied to a user
     // profile (QuickOrderList.userId), so guest users have nothing to load — and
     // localStorage from a prior session must not leak across logout.
+    // The DB is the source of truth — always fetch fresh so deletes that happened
+    // on another device (or via the API directly) don't get resurrected from a
+    // stale localStorage cache.
     React.useEffect(() => {
         if (!isLoggedIn) {
             setAllLists([]);
             return;
         }
 
-        const savedAll = localStorage.getItem('horeca_order_lists_all');
-        if (savedAll) {
-            try {
-                const parsed: Array<Record<string, unknown>> = JSON.parse(savedAll);
-                setAllLists(parsed.map((l) => ({
-                    ...l,
-                    createdAt: new Date(l.createdAt as string),
-                    updatedAt: new Date(l.updatedAt as string),
-                    lastUsed: l.lastUsed ? new Date(l.lastUsed as string) : undefined
-                } as OrderList)));
-                return;
-            } catch (e) {
-                console.error('Failed to parse all lists', e);
-            }
-        }
-
-        // Fetch from DAL if no localStorage data
         dal.lists.getAll()
             .then(lists => {
                 const parsed = (lists as Array<Record<string, unknown>>).map((l) => ({
                     ...l,
                     createdAt: new Date(l.createdAt as string),
                     updatedAt: new Date(l.updatedAt as string),
-                    lastUsed: l.lastUsed ? new Date(l.lastUsed as string) : undefined
+                    lastUsed: l.lastUsed ? new Date(l.lastUsed as string) : undefined,
                 } as OrderList));
-                setAllLists(parsed);
-                localStorage.setItem('horeca_order_lists_all', JSON.stringify(parsed));
+
+                // Preserve any locally-created lists (custom-<timestamp> ids) that
+                // haven't been persisted to the DB yet, so the create flow keeps working.
+                let merged: OrderList[] = parsed;
+                const savedAll = localStorage.getItem('horeca_order_lists_all');
+                if (savedAll) {
+                    try {
+                        const cached: Array<Record<string, unknown>> = JSON.parse(savedAll);
+                        const dbIds = new Set(parsed.map(l => l.id));
+                        const localOnly = cached
+                            .filter(l => typeof l.id === 'string' && (l.id as string).startsWith('custom-') && !dbIds.has(l.id as string))
+                            .map(l => ({
+                                ...l,
+                                createdAt: new Date(l.createdAt as string),
+                                updatedAt: new Date(l.updatedAt as string),
+                                lastUsed: l.lastUsed ? new Date(l.lastUsed as string) : undefined,
+                            } as OrderList));
+                        merged = [...parsed, ...localOnly];
+                    } catch (e) {
+                        console.error('Failed to parse all lists', e);
+                    }
+                }
+
+                setAllLists(merged);
+                localStorage.setItem('horeca_order_lists_all', JSON.stringify(merged));
+                window.dispatchEvent(new Event('storage'));
             })
             .catch(() => {
                 setAllLists([]);
             });
     }, [isLoggedIn]);
 
-    const handleCreateList = (data: { name: string; items: { productId: string; quantity: number; vendorId: string }[] }) => {
+    const handleCreateList = async (data: { name: string; items: { productId: string; quantity: number; vendorId: string }[] }) => {
         // Derive unique vendors from the items
         const vendorIds = [...new Set(data.items.map(i => i.vendorId))];
         const vendors = vendorIds
@@ -123,40 +133,68 @@ export default function OrderListsPage() {
             })
             .filter((item): item is NonNullable<typeof item> => item !== null);
 
+        // Items payload for the API — carries each item's true vendorId so a
+        // multi-vendor list keeps each item attached to the correct vendor.
+        const apiItems = data.items.map(i => ({
+            productId: i.productId,
+            defaultQty: i.quantity,
+            vendorId: i.vendorId,
+        }));
+
         let updated: OrderList[];
 
         if (editingList) {
-            const updatedList: OrderList = {
-                ...editingList,
-                name: data.name,
-                vendorId: primaryVendor.id,
-                vendorName,
-                vendorLogo: primaryVendor.logo,
-                items: mappedItems,
-                updatedAt: new Date()
-            };
-            updated = allLists.map(l => l.id === editingList.id ? updatedList : l);
-            toast.success(`List "${data.name}" updated!`);
+            // The list API has no PATCH endpoint — delete the old row and recreate
+            // so the edit survives logout. Local-only drafts (custom-<ts>) just
+            // get replaced in localStorage.
+            try {
+                if (!editingList.id.startsWith('custom-')) {
+                    await dal.lists.delete(editingList.id);
+                }
+                const created = await dal.lists.create(data.name, primaryVendor.id, apiItems);
+                const updatedList: OrderList = {
+                    ...editingList,
+                    id: created.id,
+                    name: data.name,
+                    vendorId: primaryVendor.id,
+                    vendorName,
+                    vendorLogo: primaryVendor.logo,
+                    items: mappedItems,
+                    updatedAt: new Date(),
+                };
+                updated = allLists.map(l => l.id === editingList.id ? updatedList : l);
+                toast.success(`List "${data.name}" updated!`);
+            } catch {
+                toast.error('Failed to update order list');
+                return;
+            }
             setEditingList(null);
         } else {
-            const newList: OrderList = {
-                id: `custom-${Date.now()}`,
-                name: data.name,
-                userId: session?.user?.id || '',
-                vendorId: primaryVendor.id,
-                vendorName,
-                vendorLogo: primaryVendor.logo,
-                items: mappedItems,
-                createdAt: new Date(),
-                updatedAt: new Date()
-                // lastUsed intentionally undefined for new lists
-            };
-            updated = [...allLists, newList];
-            toast.success(`List "${data.name}" created!`);
+            try {
+                const created = await dal.lists.create(data.name, primaryVendor.id, apiItems);
+                const newList: OrderList = {
+                    id: created.id,
+                    name: data.name,
+                    userId: session?.user?.id || '',
+                    vendorId: primaryVendor.id,
+                    vendorName,
+                    vendorLogo: primaryVendor.logo,
+                    items: mappedItems,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    // lastUsed intentionally undefined for new lists
+                };
+                updated = [...allLists, newList];
+                toast.success(`List "${data.name}" created!`);
+            } catch {
+                toast.error('Failed to create order list');
+                return;
+            }
         }
 
         setAllLists(updated);
         localStorage.setItem('horeca_order_lists_all', JSON.stringify(updated));
+        window.dispatchEvent(new Event('storage'));
     };
 
     const handleDeleteList = (id: string, e: React.MouseEvent) => {
@@ -165,9 +203,28 @@ export default function OrderListsPage() {
         setListToDelete(id);
     };
 
-    const confirmDelete = () => {
+    const confirmDelete = async () => {
         if (!listToDelete) return;
-        const updated = allLists.filter(l => l.id !== listToDelete);
+        const idToDelete = listToDelete;
+        // Locally-created lists (CreateListOverlay path) get a "custom-<timestamp>" id
+        // and were never persisted to the DB — skip the API call for those.
+        const isLocalOnly = idToDelete.startsWith('custom-');
+
+        if (!isLocalOnly) {
+            try {
+                await dal.lists.delete(idToDelete);
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : '';
+                // A 404 means the row is already gone in the DB — treat as success and
+                // fall through to local cleanup. Anything else is a real failure.
+                if (!/not found/i.test(msg)) {
+                    toast.error('Failed to delete order list');
+                    return;
+                }
+            }
+        }
+
+        const updated = allLists.filter(l => l.id !== idToDelete);
         setAllLists(updated);
         localStorage.setItem('horeca_order_lists_all', JSON.stringify(updated));
         // Trigger storage event for same-tab reactivity in ContinueOrdering component

@@ -247,12 +247,14 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
                     </div>
                 </div>
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                {/* Content — top padding lives on each step's content (or its sticky header)
+                    so a sticky child can pin flush to the scroll-container border without a gap
+                    where products would otherwise scroll through. */}
+                <div className="flex-1 overflow-y-auto px-6 pb-6">
 
                     {/* ── STEP 1: Choose Vendor ── */}
                     {step === 'vendor' && (
-                        <div className="space-y-5">
+                        <div className="space-y-5 pt-6">
                             {/* List name input */}
                             <div className="space-y-2">
                                 <label className="text-[12px] font-bold text-gray-400 uppercase tracking-wider ml-1">List Name</label>
@@ -358,63 +360,69 @@ export function CreateListOverlay({ isOpen, onClose, onSave, initialData }: Crea
 
                     {/* ── STEP 2: Add Items ── */}
                     {step === 'items' && (
-                        <div className="flex flex-col space-y-4">
+                        <div className="flex flex-col">
 
-                            {/* Active vendor pill */}
-                            {activeVendor && (
-                                <div className="flex items-center justify-between bg-[#53B175]/10 p-3 rounded-2xl border border-[#53B175]/20">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <div className="w-8 h-8 rounded-lg border border-gray-100 p-1 bg-white overflow-hidden shrink-0">
-                                            <img src={activeVendor.logo} alt="" className="w-full h-full object-contain" />
-                                        </div>
-                                        <div className="text-left min-w-0">
-                                            <div className="text-[13px] font-bold text-[#53B175] truncate">{activeVendor.name}</div>
-                                            <div className="text-[10px] text-[#53B175]/70 font-medium">
-                                                {itemsPerVendor[activeVendor.id]
-                                                    ? `${itemsPerVendor[activeVendor.id]} item${itemsPerVendor[activeVendor.id] !== 1 ? 's' : ''} added`
-                                                    : 'No items added yet'}
+                            {/* Sticky header: vendor switcher + summary + search stay pinned while
+                                the product list scrolls underneath. -mx-6/px-6 lets the white background
+                                span the scroll container's horizontal padding so nothing peeks through. */}
+                            <div className="sticky top-0 z-10 -mx-6 px-6 pt-6 pb-3 bg-white space-y-4">
+
+                                {/* Active vendor pill */}
+                                {activeVendor && (
+                                    <div className="flex items-center justify-between bg-[#53B175]/10 p-3 rounded-2xl border border-[#53B175]/20">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="w-8 h-8 rounded-lg border border-gray-100 p-1 bg-white overflow-hidden shrink-0">
+                                                <img src={activeVendor.logo} alt="" className="w-full h-full object-contain" />
+                                            </div>
+                                            <div className="text-left min-w-0">
+                                                <div className="text-[13px] font-bold text-[#53B175] truncate">{activeVendor.name}</div>
+                                                <div className="text-[10px] text-[#53B175]/70 font-medium">
+                                                    {itemsPerVendor[activeVendor.id]
+                                                        ? `${itemsPerVendor[activeVendor.id]} item${itemsPerVendor[activeVendor.id] !== 1 ? 's' : ''} added`
+                                                        : 'No items added yet'}
+                                                </div>
                                             </div>
                                         </div>
+                                        <button
+                                            onClick={() => { setStep('vendor'); setSearchQuery(''); }}
+                                            className="text-[11px] font-bold text-[#53B175] underline shrink-0 ml-2"
+                                        >
+                                            Change
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={() => { setStep('vendor'); setSearchQuery(''); }}
-                                        className="text-[11px] font-bold text-[#53B175] underline shrink-0 ml-2"
-                                    >
-                                        Change
-                                    </button>
-                                </div>
-                            )}
+                                )}
 
-                            {/* Summary pill */}
-                            {totalItemCount > 0 && (
-                                <div className="flex items-center gap-2 bg-[#181725]/5 px-4 py-2.5 rounded-xl">
-                                    <Store size={14} className="text-[#181725]/60 shrink-0" />
-                                    <span className="text-[12px] font-bold text-[#181725]">
-                                        {totalItemCount} item{totalItemCount !== 1 ? 's' : ''} added
-                                    </span>
-                                    <span className="text-gray-400 text-[11px]">
-                                        from {vendorCount} vendor{vendorCount !== 1 ? 's' : ''}
-                                    </span>
-                                </div>
-                            )}
+                                {/* Summary pill */}
+                                {totalItemCount > 0 && (
+                                    <div className="flex items-center gap-2 bg-[#181725]/5 px-4 py-2.5 rounded-xl">
+                                        <Store size={14} className="text-[#181725]/60 shrink-0" />
+                                        <span className="text-[12px] font-bold text-[#181725]">
+                                            {totalItemCount} item{totalItemCount !== 1 ? 's' : ''} added
+                                        </span>
+                                        <span className="text-gray-400 text-[11px]">
+                                            from {vendorCount} vendor{vendorCount !== 1 ? 's' : ''}
+                                        </span>
+                                    </div>
+                                )}
 
-                            {/* Add Items label above search */}
-                            <div className="space-y-2">
-                                <label className="text-[12px] font-bold text-gray-400 uppercase tracking-wider ml-1">Add Items</label>
-                                <div className="relative">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                    <input
-                                        type="text"
-                                        placeholder={`Search in ${activeVendor?.name || 'vendor'}...`}
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="w-full bg-[#F7F8FA] border border-transparent rounded-full pl-12 pr-4 py-3 text-[14px] font-medium text-[#181725] focus:bg-white focus:border-[#53B175]/20 outline-none transition-all"
-                                    />
+                                {/* Add Items label + search */}
+                                <div className="space-y-2">
+                                    <label className="text-[12px] font-bold text-gray-400 uppercase tracking-wider ml-1 block">Add Items</label>
+                                    <div className="relative">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                        <input
+                                            type="text"
+                                            placeholder={`Search in ${activeVendor?.name || 'vendor'}...`}
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            className="w-full bg-[#F7F8FA] border border-transparent rounded-full pl-12 pr-4 py-3 text-[14px] font-medium text-[#181725] focus:bg-white focus:border-[#53B175]/20 outline-none transition-all"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
                             {/* Product list for active vendor */}
-                            <div className="space-y-3">
+                            <div className="space-y-3 mt-4">
                                 {vendorProducts.length > 0 ? (
                                     vendorProducts.map(product => {
                                         const qty = selectedItems[product.id] || 0;

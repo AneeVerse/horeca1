@@ -8,6 +8,9 @@ export const createListSchema = z.object({
       z.object({
         productId: z.string().uuid(),
         defaultQty: z.number().int().positive(),
+        // Optional — falls back to the list's vendorId. Lets a multi-vendor list
+        // store items from different vendors in a single create call.
+        vendorId: z.string().uuid().optional(),
       })
     )
     .optional(),
