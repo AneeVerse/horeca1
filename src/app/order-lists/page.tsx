@@ -12,6 +12,7 @@ import { useWishlist } from '@/context/WishlistContext';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
 import { CreateListOverlay } from '@/components/features/order-lists/CreateListOverlay';
+import { AuthScreen } from '@/components/auth/AuthScreen';
 
 export default function OrderListsPage() {
     const router = useRouter();
@@ -25,6 +26,7 @@ export default function OrderListsPage() {
     const [isCreateOverlayOpen, setIsCreateOverlayOpen] = React.useState(false);
     const [editingList, setEditingList] = React.useState<OrderList | null>(null);
     const [listToDelete, setListToDelete] = React.useState<string | null>(null);
+    const [isLoginOpen, setIsLoginOpen] = React.useState(false);
     const [vendorsList, setVendorsList] = React.useState<Vendor[]>([]);
     const [vendorProductsMap, setVendorProductsMap] = React.useState<Record<string, VendorProduct[]>>({});
 
@@ -260,12 +262,25 @@ export default function OrderListsPage() {
                 <p className="text-[14px] text-gray-500 max-w-[360px] mb-6">
                     Order lists are saved to your account so you can reorder the same items in one click. Please log in to continue.
                 </p>
-                <Link
-                    href="/"
-                    className="px-6 py-3 rounded-2xl bg-[#53B175] text-white font-black text-[14px] shadow-md hover:bg-[#469E66] transition-colors"
-                >
-                    Back to home
-                </Link>
+                <div className="flex items-center gap-3">
+                    <Link
+                        href="/"
+                        className="px-6 py-3 rounded-2xl bg-white border border-gray-200 text-[#181725] font-black text-[14px] hover:bg-gray-50 transition-colors"
+                    >
+                        Back to home
+                    </Link>
+                    <button
+                        onClick={() => setIsLoginOpen(true)}
+                        className="px-6 py-3 rounded-2xl bg-[#53B175] text-white font-black text-[14px] shadow-md hover:bg-[#469E66] transition-colors cursor-pointer"
+                    >
+                        Log in
+                    </button>
+                </div>
+                <AuthScreen
+                    isOpen={isLoginOpen}
+                    onClose={() => setIsLoginOpen(false)}
+                    onLoginSuccess={() => setIsLoginOpen(false)}
+                />
             </div>
         );
     }

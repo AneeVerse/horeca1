@@ -98,6 +98,9 @@ export default function CartPage() {
         if (ok) removeFromCart(itemId);
     };
     const [expandedVendors, setExpandedVendors] = useState<Record<string, boolean>>({});
+    // Per-item draft string for the editable qty input — lets the user clear and
+    // retype without the value snapping back to current pcs on each keystroke.
+    const [qtyDraft, setQtyDraft] = useState<Record<string, string>>({});
     const [paymentMethod, setPaymentMethod] = useState('razorpay');
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
     const [orderError, setOrderError] = useState<string | null>(null);
@@ -797,8 +800,41 @@ export default function CartPage() {
                                                         >
                                                             <Minus size={16} strokeWidth={2.5} />
                                                         </button>
-                                                        <div className="w-10 h-10 flex items-center justify-center border-x border-gray-200">
-                                                            <span className="text-[15px] font-bold text-[#181725]">{item.pcs}</span>
+                                                        <div className="w-12 h-10 border-x border-gray-200">
+                                                            <input
+                                                                type="text"
+                                                                inputMode="numeric"
+                                                                value={qtyDraft[item.id] ?? String(item.pcs)}
+                                                                onFocus={(e) => {
+                                                                    setQtyDraft(prev => ({ ...prev, [item.id]: String(item.pcs) }));
+                                                                    e.target.select();
+                                                                }}
+                                                                onChange={(e) => {
+                                                                    const digitsOnly = e.target.value.replace(/\D/g, '');
+                                                                    setQtyDraft(prev => ({ ...prev, [item.id]: digitsOnly }));
+                                                                }}
+                                                                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                                                onBlur={() => {
+                                                                    const raw = qtyDraft[item.id];
+                                                                    setQtyDraft(prev => {
+                                                                        const next = { ...prev };
+                                                                        delete next[item.id];
+                                                                        return next;
+                                                                    });
+                                                                    if (raw === undefined) return;
+                                                                    const parsed = parseInt(raw, 10);
+                                                                    const minQty = item.minQty || 1;
+                                                                    if (!Number.isFinite(parsed) || parsed < minQty) {
+                                                                        if (raw !== '' && parsed < minQty) {
+                                                                            toast.error(`Minimum order is ${minQty} unit${minQty > 1 ? 's' : ''}`, { duration: 2000 });
+                                                                        }
+                                                                        return;
+                                                                    }
+                                                                    if (parsed !== item.pcs) updateQuantity(item.id, parsed);
+                                                                }}
+                                                                className="w-full h-full text-center text-[15px] font-bold text-[#181725] bg-transparent outline-none focus:bg-green-50/40"
+                                                                aria-label={`Quantity for ${item.name}`}
+                                                            />
                                                         </div>
                                                         <button
                                                             onClick={() => updateQuantity(item.id, item.pcs + 1)}
@@ -816,10 +852,10 @@ export default function CartPage() {
                                                     {/* Remove item */}
                                                     <button
                                                         onClick={() => handleRemoveItem(item.id, item.name)}
-                                                        className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                                                        className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
                                                         title="Remove from cart"
                                                     >
-                                                        <X size={16} strokeWidth={2.5} />
+                                                        <Trash2 size={17} strokeWidth={2.2} />
                                                     </button>
                                                 </div>
                                             ))}
