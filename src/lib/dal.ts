@@ -10,7 +10,7 @@
 //   Client components: useEffect(() => { dal.vendors.list().then(setVendors) }, []);
 // ============================================================
 
-import type { Vendor, VendorProduct, BulkPriceTier, Category, VendorSummary } from '@/types';
+import type { Vendor, VendorProduct, BulkPriceTier, Category, VendorSummary, OrderList, OrderListItem } from '@/types';
 
 // Base URL for API calls — works both server-side and client-side
 function getBaseUrl() {
@@ -172,6 +172,32 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
     minOrderQuantity: priceSlabs.length > 0 ? Number(priceSlabs[0].minQty) : 1,
     frequentlyOrdered: false,
     isDeal: strikePrice !== undefined && strikePrice > effectivePrice,
+  };
+}
+
+function toOrderList(l: Record<string, unknown>): OrderList {
+  const vendor = (l.vendor as Record<string, unknown>) || {};
+  const rawItems = (l.items as Array<Record<string, unknown>>) || [];
+  const items: OrderListItem[] = rawItems
+    .filter(item => !!item.product)
+    .map(item => {
+      const product = item.product as Record<string, unknown>;
+      return {
+        productId: item.productId as string,
+        product: toVendorProduct(product),
+        defaultQty: Number(item.defaultQty) || 1,
+      };
+    });
+  return {
+    id: l.id as string,
+    name: (l.name as string) || '',
+    userId: (l.userId as string) || '',
+    vendorId: (l.vendorId as string) || (vendor.id as string) || '',
+    vendorName: (vendor.businessName as string) || '',
+    vendorLogo: (vendor.logoUrl as string) || undefined,
+    items,
+    createdAt: new Date(l.createdAt as string),
+    updatedAt: new Date(l.updatedAt as string),
   };
 }
 
@@ -359,14 +385,16 @@ export const dal = {
   },
 
   lists: {
-    /** Get all quick order lists */
-    async getAll() {
-      return apiFetch<unknown[]>('/api/v1/lists');
+    /** Get all quick order lists (with items + products, shaped for the UI). */
+    async getAll(): Promise<OrderList[]> {
+      const raw = await apiFetch<Array<Record<string, unknown>>>('/api/v1/lists');
+      return raw.map(toOrderList);
     },
 
-    /** Get single list with items */
-    async getById(id: string) {
-      return apiFetch(`/api/v1/lists/${id}`);
+    /** Get single list with items, shaped for the UI. */
+    async getById(id: string): Promise<OrderList> {
+      const raw = await apiFetch<Record<string, unknown>>(`/api/v1/lists/${id}`);
+      return toOrderList(raw);
     },
 
     /** Create new list. Items may carry their own vendorId (multi-vendor lists). */

@@ -8,7 +8,19 @@ export class ListService {
       where: { userId },
       include: {
         vendor: { select: { id: true, businessName: true, slug: true, logoUrl: true } },
-        _count: { select: { items: true } },
+        items: {
+          include: {
+            product: {
+              include: {
+                priceSlabs: { orderBy: { sortOrder: 'asc' } },
+                inventory: { select: { qtyAvailable: true } },
+                vendor: { select: { id: true, businessName: true, logoUrl: true } },
+                category: { select: { id: true, name: true } },
+              },
+            },
+          },
+          orderBy: { sortOrder: 'asc' },
+        },
       },
       orderBy: { updatedAt: 'desc' },
     });

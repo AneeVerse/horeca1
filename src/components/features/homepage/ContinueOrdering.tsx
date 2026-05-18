@@ -247,7 +247,7 @@ export function ContinueOrdering() {
             .catch(() => setVendors([]));
 
         dal.lists.getAll()
-            .then((res) => setOrderLists(res as Record<string, unknown>[]))
+            .then((res) => setOrderLists(res as unknown as Record<string, unknown>[]))
             .catch(() => setOrderLists([]));
     }, [isMounted, isLoggedIn]);
 

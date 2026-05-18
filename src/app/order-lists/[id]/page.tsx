@@ -39,41 +39,19 @@ export default function OrderListDetailPage() {
     }, []);
 
     React.useEffect(() => {
-        let found: OrderList | null = null;
-
-        // 1. Check Merged Local Storage (Mock + Custom) - PRIORITY for updates
-        const saved = localStorage.getItem('horeca_order_lists_all');
-        if (saved) {
-            try {
-                const parsed: OrderList[] = JSON.parse(saved);
-                found = parsed.find((l) => l.id === listId) ?? null;
-            } catch (e) {
-                console.error('Failed to parse lists', e);
-            }
-        }
-
-        // 2. Check DAL - FALLBACK
-        if (!found) {
-            dal.lists.getById(listId)
-                .then((list) => {
-                    const typedList = list as OrderList | null;
-if (typedList) {
-                        setOrderList({ ...typedList, items: typedList.items ?? [] });
-                        setQuantities(Object.fromEntries((typedList.items || []).map((item) => [item.productId, item.defaultQty || 0])));
-                    }
-                    setIsLoading(false);
-                })
-                .catch(() => {
-                    setIsLoading(false);
-                });
-            return;
-        }
-
-if (found) {
-            setOrderList({ ...found, items: found.items ?? [] });
-            setQuantities(Object.fromEntries((found.items ?? []).map(item => [item.productId, item.defaultQty || 0])));
-        }
-        setIsLoading(false);
+        // DB is the source of truth. Always fetch fresh so product price/stock
+        // reflects current data, not whatever the cache last saw.
+        dal.lists.getById(listId)
+            .then((list) => {
+                if (list) {
+                    setOrderList({ ...list, items: list.items ?? [] });
+                    setQuantities(Object.fromEntries((list.items || []).map((item) => [item.productId, item.defaultQty || 0])));
+                }
+                setIsLoading(false);
+            })
+            .catch(() => {
+                setIsLoading(false);
+            });
     }, [listId]);
 
     // Poll fresh stock every 30s + on focus, so other shoppers' purchases lower stock here too.

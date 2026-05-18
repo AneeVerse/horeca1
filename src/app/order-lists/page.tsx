@@ -65,38 +65,31 @@ export default function OrderListsPage() {
         }
 
         dal.lists.getAll()
-            .then(lists => {
-                const parsed = (lists as Array<Record<string, unknown>>).map((l) => ({
-                    ...l,
-                    createdAt: new Date(l.createdAt as string),
-                    updatedAt: new Date(l.updatedAt as string),
-                    lastUsed: l.lastUsed ? new Date(l.lastUsed as string) : undefined,
-                } as OrderList));
-
-                // Preserve any locally-created lists (custom-<timestamp> ids) that
-                // haven't been persisted to the DB yet, so the create flow keeps working.
-                let merged: OrderList[] = parsed;
+            .then(parsed => {
+                // Carry over the locally-tracked `lastUsed` (Quick Order timestamp,
+                // not persisted server-side) by matching list ids from the cache.
                 const savedAll = localStorage.getItem('horeca_order_lists_all');
+                let withLastUsed: OrderList[] = parsed;
                 if (savedAll) {
                     try {
                         const cached: Array<Record<string, unknown>> = JSON.parse(savedAll);
-                        const dbIds = new Set(parsed.map(l => l.id));
-                        const localOnly = cached
-                            .filter(l => typeof l.id === 'string' && (l.id as string).startsWith('custom-') && !dbIds.has(l.id as string))
-                            .map(l => ({
-                                ...l,
-                                createdAt: new Date(l.createdAt as string),
-                                updatedAt: new Date(l.updatedAt as string),
-                                lastUsed: l.lastUsed ? new Date(l.lastUsed as string) : undefined,
-                            } as OrderList));
-                        merged = [...parsed, ...localOnly];
+                        const lastUsedMap = new Map<string, Date>();
+                        cached.forEach(l => {
+                            if (typeof l.id === 'string' && l.lastUsed) {
+                                lastUsedMap.set(l.id, new Date(l.lastUsed as string));
+                            }
+                        });
+                        withLastUsed = parsed.map(l => {
+                            const lu = lastUsedMap.get(l.id);
+                            return lu ? { ...l, lastUsed: lu } : l;
+                        });
                     } catch (e) {
                         console.error('Failed to parse all lists', e);
                     }
                 }
 
-                setAllLists(merged);
-                localStorage.setItem('horeca_order_lists_all', JSON.stringify(merged));
+                setAllLists(withLastUsed);
+                localStorage.setItem('horeca_order_lists_all', JSON.stringify(withLastUsed));
                 window.dispatchEvent(new Event('storage'));
             })
             .catch(() => {
