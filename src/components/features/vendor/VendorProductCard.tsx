@@ -14,9 +14,18 @@ interface VendorProductCardProps {
     product: VendorProduct;
     /** Visual layout — `'grid'` is the default 2-up tile, `'list'` is a wide 1-up row. */
     variant?: 'grid' | 'list';
+    distributorName?: string;
+    distributorCount?: number;
+    onDistributorClick?: (e: React.MouseEvent) => void;
 }
 
-export const VendorProductCard = React.memo(function VendorProductCard({ product, variant = 'grid' }: VendorProductCardProps) {
+export const VendorProductCard = React.memo(function VendorProductCard({ 
+    product, 
+    variant = 'grid',
+    distributorName,
+    distributorCount,
+    onDistributorClick
+}: VendorProductCardProps) {
     const { addToCart, groups, updateQuantity, removeFromCart } = useCart();
     const { status: sessionStatus } = useSession();
 
@@ -468,7 +477,23 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
 
                     {/* Middle Column (Only on md+ screens to utilize empty space) */}
                     <div className="hidden md:flex flex-col gap-2 flex-1 justify-center px-6 border-l border-gray-100/80 relative z-20">
-                        {isOutOfStock ? (
+                        {distributorName ? (
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Distributor</span>
+                                <p className="text-[13px] font-bold text-gray-700 leading-normal truncate">
+                                    {distributorName}
+                                </p>
+                                {distributorCount && distributorCount > 1 && onDistributorClick && (
+                                    <button
+                                        type="button"
+                                        onClick={onDistributorClick}
+                                        className="text-[11px] font-extrabold text-[#53B175] hover:underline text-left mt-1"
+                                    >
+                                        Available from {distributorCount} distributors ➔
+                                    </button>
+                                )}
+                            </div>
+                        ) : isOutOfStock ? (
                             <div className="flex flex-col gap-1">
                                 <span className="text-[10px] font-black text-red-500 bg-red-50 w-fit px-2 py-0.5 rounded-md uppercase tracking-wider">
                                     Unavailable
@@ -620,7 +645,23 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                         {imageBadges}
 
                         {/* Bottom Overlay Bar: Dropdown or Pack Size */}
-                        {bulkTiers.length > 0 && !isOutOfStock ? (
+                        {distributorCount && distributorCount > 1 && onDistributorClick ? (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    onDistributorClick(e);
+                                }}
+                                className="absolute bottom-0 left-0 right-0 h-[30px] bg-[#EFF8F2] border-t border-[#D8ECDF] text-[#1B5E20] flex items-center justify-center gap-1 hover:bg-[#e2f3e8] transition-colors z-20"
+                                aria-label="Show distributors list"
+                            >
+                                <span className="text-[10px] font-black truncate">
+                                    {distributorCount} dist.
+                                </span>
+                                <ChevronDown size={11} strokeWidth={3} className="shrink-0" />
+                            </button>
+                        ) : bulkTiers.length > 0 && !isOutOfStock ? (
                             <button
                                 type="button"
                                 onClick={(e) => {
@@ -735,7 +776,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                             {product.displayName ?? product.name}
                         </h3>
                         <div className="flex items-center gap-2 flex-wrap">
-                            {product.brandSlug && product.brandName && (
+                            {product.brandSlug && product.brandName ? (
                                 <Link
                                     href={`/brand/${product.brandSlug}`}
                                     onClick={(e) => e.stopPropagation()}
@@ -743,8 +784,21 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                                 >
                                     by {product.brandName}
                                 </Link>
-                            )}
+                            ) : distributorName ? (
+                                <span className="text-[11px] text-gray-400 font-bold uppercase tracking-tight truncate">
+                                    Via {distributorName}
+                                </span>
+                            ) : null}
                             <p className="text-[12px] text-gray-500 font-medium truncate">{product.packSize}</p>
+                            {distributorCount && distributorCount > 1 && onDistributorClick && (
+                                <button
+                                    type="button"
+                                    onClick={onDistributorClick}
+                                    className="text-[11px] font-extrabold text-[#53B175] hover:underline ml-auto shrink-0 relative z-20"
+                                >
+                                    {distributorCount} dist.
+                                </button>
+                            )}
                             {(product.minOrderQuantity || 1) > 1 && (
                                 <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
                                     Min {product.minOrderQuantity}

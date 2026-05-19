@@ -3,13 +3,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, MapPin, Store, ArrowLeft, Search, X, AlertCircle, Plus, Minus, ShoppingCart, Loader2, Check } from 'lucide-react';
+import { ChevronLeft, MapPin, Store, ArrowLeft, Search, X, AlertCircle, Plus, Minus, ShoppingCart, Loader2, Check, LayoutGrid, LayoutList, ChevronRight, ChevronDown, Package, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatPackSize } from '@/lib/utils';
 import { parseImageMeta, getDisplayStyle } from '@/lib/imageMeta';
 import { useAddress } from '@/context/AddressContext';
 import { useCart } from '@/context/CartContext';
 import type { VendorProduct } from '@/types';
+import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
 
 // Avatar that renders a clean logo if available, else a colored initial-letter tile.
 // Used for vendor cards on the brand storefront where many vendors won't have logos uploaded yet.
@@ -176,6 +177,18 @@ export function BrandStore({ brandId }: BrandStoreProps) {
     const [showAllVendors, setShowAllVendors] = useState(false);
     const [vendorPickerProduct, setVendorPickerProduct] = useState<BrandProduct | null>(null);
     const [adding, setAdding] = useState<string | null>(null); // distributorProductId currently being added
+    const [selectedCategory, setSelectedCategory] = useState<string>('all');
+    const [layoutMode, setLayoutMode] = useState<'grid' | 'list'>('grid');
+
+    useEffect(() => {
+        const saved = localStorage.getItem('horeca_brand_layout');
+        if (saved === 'grid' || saved === 'list') setLayoutMode(saved);
+    }, []);
+
+    const updateLayoutMode = (mode: 'grid' | 'list') => {
+        setLayoutMode(mode);
+        try { localStorage.setItem('horeca_brand_layout', mode); } catch {}
+    };
 
     // Always fetch from the API — no client-side mock data anymore.
     // Pass pincode so the API can flag servicesPincode per vendor + return coverage stats.
@@ -222,15 +235,33 @@ export function BrandStore({ brandId }: BrandStoreProps) {
             .finally(() => setLoading(false));
     }, [brandId, pincode, showAllVendors]);
 
+    // Compute unique categories and counts from brand products
+    const categories = useMemo(() => {
+        if (!brand) return [];
+        const counts: Record<string, number> = {};
+        brand.products.forEach((p) => {
+            counts[p.category] = (counts[p.category] || 0) + 1;
+        });
+        return Object.entries(counts).map(([name, count]) => ({
+            id: name,
+            name,
+            count,
+        })).sort((a, b) => b.count - a.count);
+    }, [brand]);
+
     // Must be before early returns (hook rules)
     const filteredProducts = useMemo(() => {
         if (!brand) return [];
-        if (!searchQuery.trim()) return brand.products;
+        let items = brand.products;
+        if (selectedCategory !== 'all') {
+            items = items.filter(p => p.category === selectedCategory);
+        }
+        if (!searchQuery.trim()) return items;
         const q = searchQuery.toLowerCase();
-        return brand.products.filter(
+        return items.filter(
             (p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
         );
-    }, [brand, searchQuery]);
+    }, [brand, selectedCategory, searchQuery]);
 
     // Pick the cheapest in-stock serviceable distributor for a brand product.
     // If none serviceable, falls back to cheapest in-stock regardless of pincode (so the
@@ -538,114 +569,174 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                 {/* ALL ITEMS TAB */}
                 {activeTab === 'items' && (
                     <>
-                    {/* Search bar — inside content, below tabs */}
-                    <div className="relative mb-4 max-w-[500px]">
-                        <Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" strokeWidth={3} />
-                        <input
-                            type="text"
-                            placeholder={`Search in ${brand.name}...`}
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-11 pr-10 py-3 bg-white border border-gray-100 rounded-2xl text-[14px] font-bold text-gray-800 placeholder:text-gray-400 placeholder:font-bold focus:outline-none focus:border-[#53B175]/50 shadow-sm transition-all"
-                        />
-                        {searchQuery && (
-                            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-xl bg-gray-100 text-gray-400 hover:bg-gray-200 transition">
-                                <X size={13} strokeWidth={3} />
-                            </button>
-                        )}
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
-                        {filteredProducts.map((product) => {
-                            const best = pickBestDistributor(product);
-                            const distCount = product.distributors.filter(d => d.inStock).length;
-                            const cartQty = best ? cartQtyFor(best.distributorProductId) : 0;
-                            const isAdding = best ? adding === best.distributorProductId : false;
-                            const noDistributors = product.distributors.length === 0;
-                            const allOOS = !noDistributors && product.distributors.every(d => !d.inStock);
-                            const noServiceable = pincode && !showAllVendors && best && best.servicesPincode === false;
-
-                            return (
-                                <div
-                                    key={product.id}
-                                    className="flex flex-col bg-white rounded-[18px] border border-gray-100 overflow-hidden hover:border-[#53B175]/40 hover:shadow-md transition-all duration-200"
-                                >
-                                    <button
-                                        onClick={() => handleProductClick(product)}
-                                        className="text-left"
-                                    >
-                                        <div className="w-full aspect-square bg-gray-50 overflow-hidden">
-                                            <img
-                                                src={product.image}
-                                                alt={product.name}
-                                                className="w-full h-full object-contain p-3"
-                                                onError={(e) => { (e.currentTarget as HTMLImageElement).src = fallbackSvg(100); }}
-                                            />
-                                        </div>
-                                        <div className="px-3 pt-2.5">
-                                            <p className="text-[12px] font-black text-[#181725] line-clamp-2 leading-tight">
-                                                {product.name}
-                                            </p>
-                                            <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tight">
-                                                {formatPackSize(product.packSize, product.unit) || product.category}
-                                            </p>
-                                        </div>
+                    {/* Search & Toggle Bar */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                        <div className="relative flex-1 md:max-w-[450px] lg:max-w-[600px] flex items-center gap-2 md:gap-3">
+                            <div className="relative flex-1">
+                                <Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 focus-within:text-[#53B175] transition-colors" strokeWidth={3} />
+                                <input
+                                    type="text"
+                                    placeholder={`Search in ${brand.name}...`}
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full pl-11 pr-10 py-3 bg-white border border-gray-100 rounded-2xl text-[14px] font-bold text-gray-800 placeholder:text-gray-400 placeholder:font-bold focus:outline-none focus:border-[#53B175]/50 focus:bg-white focus:ring-8 focus:ring-[#53B175]/5 transition-all duration-300 shadow-sm"
+                                />
+                                {searchQuery && (
+                                    <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-xl bg-gray-100 text-gray-400 hover:bg-gray-200 transition">
+                                        <X size={13} strokeWidth={3} />
                                     </button>
+                                )}
+                            </div>
+                            
+                            {/* Grid/List Toggle */}
+                            <div className="flex items-center bg-white border border-gray-100 rounded-2xl p-0.5 shrink-0 shadow-sm">
+                                <button
+                                    onClick={() => updateLayoutMode('grid')}
+                                    aria-label="Grid view"
+                                    className={cn(
+                                        'p-2 rounded-xl transition-all',
+                                        layoutMode === 'grid' ? 'bg-[#53B175] text-white shadow-sm' : 'text-gray-400 hover:text-[#53B175]'
+                                    )}
+                                >
+                                    <LayoutGrid size={16} strokeWidth={2.5} />
+                                </button>
+                                <button
+                                    onClick={() => updateLayoutMode('list')}
+                                    aria-label="List view"
+                                    className={cn(
+                                        'p-2 rounded-xl transition-all',
+                                        layoutMode === 'list' ? 'bg-[#53B175] text-white shadow-sm' : 'text-gray-400 hover:text-[#53B175]'
+                                    )}
+                                >
+                                    <LayoutList size={16} strokeWidth={2.5} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
 
-                                    {/* ADD area */}
-                                    <div className="px-3 pb-3 pt-2 mt-auto space-y-1.5">
-                                        {best ? (
-                                            <>
-                                                <div className="flex items-baseline justify-between gap-1">
-                                                    <span className="text-[14px] font-[1000] text-[#181725]">₹{best.price}</span>
-                                                    {distCount > 1 && (
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); setVendorPickerProduct(product); }}
-                                                            className="text-[10px] font-bold text-[#53B175] hover:underline"
-                                                        >
-                                                            {distCount} distributors
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                {cartQty > 0 ? (
-                                                    <div className="flex items-center justify-between gap-1 bg-[#EEF8F1] rounded-lg px-2 py-1">
-                                                        <span className="text-[11px] font-bold text-[#53B175]">In cart: {cartQty}</span>
-                                                        <Link href="/cart" className="text-[10px] font-bold text-[#53B175] hover:underline flex items-center gap-0.5">
-                                                            <ShoppingCart size={11} /> View
-                                                        </Link>
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); addBrandProductToCart(product, best); }}
-                                                        disabled={isAdding}
-                                                        className={cn(
-                                                            'w-full py-1.5 rounded-lg text-[12px] font-bold transition-all flex items-center justify-center gap-1',
-                                                            noServiceable
-                                                                ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                                                                : 'bg-[#53B175] text-white hover:bg-[#3d9e5f]',
-                                                            isAdding && 'opacity-60'
-                                                        )}
-                                                    >
-                                                        {isAdding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} strokeWidth={3} />}
-                                                        {isAdding ? 'Adding…' : (noServiceable ? 'Add anyway' : 'Add')}
-                                                    </button>
-                                                )}
-                                                <p className="text-[9px] text-gray-400 font-semibold truncate text-center">
-                                                    From {best.vendorName}
-                                                </p>
-                                            </>
-                                        ) : noDistributors ? (
-                                            <button disabled className="w-full py-1.5 rounded-lg text-[11px] font-bold bg-gray-50 text-gray-400 cursor-not-allowed">
-                                                No distributors yet
-                                            </button>
-                                        ) : allOOS ? (
-                                            <button disabled className="w-full py-1.5 rounded-lg text-[11px] font-bold bg-red-50 text-red-500 cursor-not-allowed">
-                                                Out of stock
-                                            </button>
-                                        ) : null}
+                    <div className="flex gap-2 md:gap-4 lg:gap-6 items-start">
+                        {/* LEFT: CATEGORIES SIDEBAR */}
+                        <aside className="w-[76px] md:w-[200px] lg:w-[260px] shrink-0 sticky top-24 z-30">
+                            <div className="bg-white rounded-2xl border border-gray-100 p-1 md:p-3 shadow-sm">
+                                {/* All Products option */}
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedCategory('all')}
+                                    className={cn(
+                                        "w-full rounded-xl transition-all text-left flex flex-col items-center md:flex-row md:items-center md:justify-between px-1 md:px-3 py-2 md:py-2.5",
+                                        selectedCategory === 'all' ? "bg-[#53B175]/10" : "hover:bg-gray-50"
+                                    )}
+                                >
+                                    <div className="flex flex-col items-center md:flex-row md:items-center md:gap-3 min-w-0 w-full">
+                                        <div className={cn(
+                                            "w-12 h-12 md:w-9 md:h-9 rounded-lg flex items-center justify-center transition-all shrink-0",
+                                            selectedCategory === 'all' ? "bg-white border border-[#53B175]/30 shadow-sm" : "bg-gray-50"
+                                        )}>
+                                            <Sparkles size={18} className={cn('md:!w-4 md:!h-4', selectedCategory === 'all' ? 'text-[#53B175]' : 'text-gray-400')} strokeWidth={2.5} />
+                                        </div>
+                                        <span className={cn(
+                                            "text-[10px] md:text-[13px] font-semibold md:font-bold leading-tight text-center md:text-left mt-1 md:mt-0 line-clamp-2 md:line-clamp-none md:truncate w-full md:flex-1",
+                                            selectedCategory === 'all' ? "text-[#53B175]" : "text-[#181725]"
+                                        )}>
+                                            All Products
+                                        </span>
                                     </div>
+                                    <span className="hidden md:inline text-[11px] font-bold text-gray-400 shrink-0 ml-2">{brand.products.length}</span>
+                                </button>
+
+                                {/* Category list */}
+                                {categories.map((cat) => {
+                                    const isActive = selectedCategory === cat.name;
+                                    return (
+                                        <button
+                                            key={cat.id}
+                                            type="button"
+                                            onClick={() => setSelectedCategory(cat.name)}
+                                            className={cn(
+                                                "w-full rounded-xl transition-all text-left flex flex-col items-center md:flex-row md:items-center md:justify-between px-1 md:px-3 py-2 md:py-2.5 mt-1",
+                                                isActive ? "bg-[#53B175]/10" : "hover:bg-gray-50"
+                                            )}
+                                        >
+                                            <div className="flex flex-col items-center md:flex-row md:items-center md:gap-3 min-w-0 w-full">
+                                                <div className={cn(
+                                                    "w-12 h-12 md:w-9 md:h-9 rounded-lg flex items-center justify-center transition-all shrink-0",
+                                                    isActive ? "bg-white border border-[#53B175]/30 shadow-sm" : "bg-gray-50"
+                                                )}>
+                                                    <Package size={16} className={cn('md:!w-4 md:!h-4', isActive ? 'text-[#53B175]' : 'text-gray-400')} strokeWidth={2.5} />
+                                                </div>
+                                                <span className={cn(
+                                                    "text-[10px] md:text-[13px] font-semibold md:font-bold leading-tight text-center md:text-left mt-1 md:mt-0 line-clamp-2 md:line-clamp-none md:truncate w-full md:flex-1",
+                                                    isActive ? "text-[#53B175]" : "text-[#181725]"
+                                                )}>
+                                                    {cat.name}
+                                                </span>
+                                            </div>
+                                            <span className="hidden md:inline text-[11px] font-bold text-gray-400 shrink-0 ml-2">{cat.count}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </aside>
+
+                        {/* RIGHT: PRODUCTS CATALOG */}
+                        <div className="flex-1 min-w-0">
+                            {filteredProducts.length > 0 ? (
+                                <div className={cn(
+                                    layoutMode === 'grid'
+                                        ? 'grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4'
+                                        : 'flex flex-col gap-3 md:gap-4'
+                                )}>
+                                    {filteredProducts.map((product) => {
+                                        const best = pickBestDistributor(product);
+                                        const distCount = product.distributors.filter(d => d.inStock).length;
+                                        
+                                        const mappedProduct: VendorProduct = {
+                                            id: best ? best.distributorProductId : product.id,
+                                            name: product.name,
+                                            displayName: product.name,
+                                            description: '',
+                                            price: best ? best.price : 0,
+                                            images: [product.image || ''],
+                                            category: product.category,
+                                            packSize: formatPackSize(product.packSize, product.unit) || product.category,
+                                            unit: product.unit || '',
+                                            stock: (best && best.inStock) ? 999 : 0,
+                                            isActive: best ? true : false,
+                                            createdAt: new Date(),
+                                            updatedAt: new Date(),
+                                            vendorId: best ? best.vendorId : '',
+                                            vendorName: best ? best.vendorName : 'No distributor',
+                                            bulkPrices: [],
+                                            creditBadge: false,
+                                            minOrderQuantity: 1,
+                                        };
+
+                                        return (
+                                            <VendorProductCard
+                                                key={product.id}
+                                                product={mappedProduct}
+                                                variant={layoutMode}
+                                                distributorName={best?.vendorName}
+                                                distributorCount={distCount}
+                                                onDistributorClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    setVendorPickerProduct(product);
+                                                }}
+                                            />
+                                        );
+                                    })}
                                 </div>
-                            );
-                        })}
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-24 text-center">
+                                    <div className="p-6 bg-gray-50 rounded-full mb-4">
+                                        <Package className="text-gray-300" size={48} strokeWidth={1.5} />
+                                    </div>
+                                    <h3 className="text-[20px] font-black text-[#181725]">No items found</h3>
+                                    <p className="text-gray-400 font-bold mt-1">Try adjusting your search or filters</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     </>
                 )}
