@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImageUpload, MultiImageUpload } from '@/components/ui/ImageUpload';
+import { CategoryMultiPickerById } from '@/components/features/brand/CategoryMultiPickerById';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -66,7 +67,9 @@ interface PriceSlabRow {
 interface ProductForm {
     name: string;
     slug: string;
-    categoryId: string;
+    // Multi-category — vendor picks 1..N category IDs. First entry becomes the
+    // primary on the server (mirrored into Product.categoryId). Empty is allowed.
+    categoryIds: string[];
     basePrice: string;
     originalPrice: string;
     packSize: string;
@@ -95,7 +98,7 @@ const PAGE_SIZE = 20;
 const EMPTY_FORM: ProductForm = {
     name: '',
     slug: '',
-    categoryId: '',
+    categoryIds: [],
     basePrice: '',
     originalPrice: '',
     packSize: '',
@@ -426,11 +429,14 @@ export default function VendorProductsPage() {
         setBasedOnProductId(s.id);
         setShowSuggestions(false);
         setSuggestions([]);
+        // Suggestion gives us category by slug — resolve to ID for the multi-select.
+        const matched = s.category?.slug ? categories.find(c => c.slug === s.category!.slug) : null;
+        const seedCategoryIds = matched ? [matched.id] : [];
         setForm(prev => ({
             ...prev,
             name: s.name,
             slug: slugify(s.name),
-            categoryId: s.category?.slug || prev.categoryId,
+            categoryIds: seedCategoryIds.length > 0 ? seedCategoryIds : prev.categoryIds,
             basePrice: s.basePrice != null ? String(s.basePrice) : prev.basePrice,
             originalPrice: s.originalPrice != null ? String(s.originalPrice) : '',
             packSize: s.packSize || '',
@@ -455,11 +461,13 @@ export default function VendorProductsPage() {
         setBrandSuggestions([]);
         setBasedOnBrandMasterProductId(b.id);
         setBasedOnBrandName(b.brand.name);
+        const matched = b.category?.slug ? categories.find(c => c.slug === b.category!.slug) : null;
+        const seedCategoryIds = matched ? [matched.id] : [];
         setForm(prev => ({
             ...prev,
             name: b.name,
             slug: slugify(b.name),
-            categoryId: b.category?.slug || prev.categoryId,
+            categoryIds: seedCategoryIds.length > 0 ? seedCategoryIds : prev.categoryIds,
             packSize: b.packSize || prev.packSize,
             unit: b.unit || prev.unit,
             sku: b.sku || prev.sku,
@@ -507,10 +515,21 @@ export default function VendorProductsPage() {
             const json = await res.json();
             const p = json.success ? json.data : product;
 
+            // Pre-fill multi-category: prefer the categoryLinks join rows (full set,
+            // primary-first), fall back to the legacy single Product.categoryId for
+            // older rows that haven't been migrated to the join table yet.
+            const linkIds: string[] = Array.isArray(p.categoryLinks)
+                ? (p.categoryLinks as Array<{ categoryId: string }>).map(l => l.categoryId)
+                : [];
+            const fallbackId: string | null = p.category?.id ?? null;
+            const editCategoryIds = linkIds.length > 0
+                ? linkIds
+                : (fallbackId ? [fallbackId] : []);
+
             setForm({
                 name: p.name || '',
                 slug: p.slug || '',
-                categoryId: p.category?.id || p.category?.slug || '',
+                categoryIds: editCategoryIds,
                 basePrice: p.basePrice != null ? String(p.basePrice) : '',
                 originalPrice: p.originalPrice != null ? String(p.originalPrice) : '',
                 packSize: p.packSize || '',
@@ -535,11 +554,15 @@ export default function VendorProductsPage() {
                     : [],
             });
         } catch {
-            // Fallback: populate from the product list data
+            // Fallback: populate from the product list data. We don't have full
+            // categoryLinks here — best-effort resolve from the list's slug.
+            const fallbackMatch = product.category?.slug
+                ? categories.find(c => c.slug === product.category!.slug)
+                : null;
             setForm({
                 name: product.name,
                 slug: product.slug,
-                categoryId: product.category?.slug || '',
+                categoryIds: fallbackMatch ? [fallbackMatch.id] : [],
                 basePrice: String(product.basePrice),
                 originalPrice: '',
                 packSize: product.packSize || '',
@@ -654,10 +677,16 @@ export default function VendorProductsPage() {
                 body.originalPrice = parseFloat(form.originalPrice);
             }
 
-            // Category: find by slug or id
-            if (form.categoryId) {
-                const cat = categories.find(c => c.slug === form.categoryId || c.id === form.categoryId);
-                if (cat) body.categoryId = cat.id;
+            // Categories — the multi-picker already stores UUIDs, send the array
+            // directly. The backend mirrors the first entry into Product.categoryId
+            // for back-compat with single-category queries. Sending an empty array
+            // clears the category set; omit the field to leave it untouched.
+            if (form.categoryIds.length > 0) {
+                body.categoryIds = form.categoryIds;
+                body.categoryId = form.categoryIds[0];
+            } else if (editingProduct) {
+                // Existing product, user removed all categories — explicitly clear.
+                body.categoryIds = [];
             }
 
             // Price slabs: sort by minQty, filter out incomplete rows
@@ -1335,25 +1364,17 @@ export default function VendorProductsPage() {
                                             </div>
                                         </div>
 
-                                        {/* Category */}
-                                        <div>
-                                            <FieldLabel>Category</FieldLabel>
-                                            <div className="relative">
-                                                <select
-                                                    value={form.categoryId}
-                                                    onChange={(e) => updateField('categoryId', e.target.value)}
-                                                    className={selectCls}
-                                                >
-                                                    <option value="">Select category</option>
-                                                    {categories.map(c => (
-                                                        <option key={c.id} value={c.slug}>
-                                                            {c.parentId ? `— ${c.name}` : c.name}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                <ChevronRight size={16} className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-[#AEAEAE] pointer-events-none" />
-                                            </div>
-                                        </div>
+                                        {/* Categories — multi-select. First pick becomes the primary
+                                            and is mirrored into Product.categoryId on the server so
+                                            existing single-category filters keep working. */}
+                                        <CategoryMultiPickerById
+                                            value={form.categoryIds}
+                                            onChange={(ids) => updateField('categoryIds', ids)}
+                                            max={5}
+                                            endpoint="/api/v1/vendor/categories/suggest"
+                                            label="Categories"
+                                            helper="Pick up to 5 — first one becomes the primary. Customers can find your product under any of these."
+                                        />
 
                                         {/* Description */}
                                         <div>

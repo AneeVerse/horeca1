@@ -36,6 +36,9 @@ const updateProductSchema = z.object({
   isActive: z.boolean().optional(),
   creditEligible: z.boolean().optional(),
   categoryId: z.string().uuid().optional(),
+  // Multi-category — when provided, replaces the existing category set. First
+  // entry becomes the new primary (mirrored into Product.categoryId).
+  categoryIds: z.array(z.string().uuid()).max(5).optional(),
   priceSlabs: z.array(z.object({
     minQty: z.number().int().min(1),
     maxQty: z.number().int().min(1).optional(),
@@ -101,6 +104,12 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         priceSlabs: { orderBy: { sortOrder: 'asc' } },
         inventory: { select: { qtyAvailable: true, qtyReserved: true } },
         category: { select: { id: true, name: true, slug: true } },
+        // Multi-category set, primary first — used by the edit form to pre-fill
+        // the multi-select picker. Always returned (empty for legacy rows).
+        categoryLinks: {
+          orderBy: { isPrimary: 'desc' },
+          include: { category: { select: { id: true, name: true, slug: true } } },
+        },
       },
     });
     if (!product) throw Errors.notFound('Product');

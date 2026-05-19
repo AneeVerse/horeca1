@@ -20,6 +20,10 @@ const createProductSchema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1),
   categoryId: z.string().uuid().optional(),
+  // Multi-category — vendor picks 1..N categories. First entry becomes the
+  // primary (mirrored into Product.categoryId). Empty array is allowed for
+  // products that don't fit a category cleanly.
+  categoryIds: z.array(z.string().uuid()).max(5).optional(),
   basePrice: z.number().positive(),
   originalPrice: z.number().positive().optional(),
   packSize: z.string().optional(),

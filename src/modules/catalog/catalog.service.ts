@@ -150,6 +150,7 @@ export class CatalogService {
     name: string;
     slug: string;
     categoryId?: string;
+    categoryIds?: string[];
     description?: string;
     imageUrl?: string;
     images?: string[];
@@ -168,7 +169,17 @@ export class CatalogService {
     basedOnProductId?: string;
     basedOnBrandMasterProductId?: string;
   }) {
-    const { basedOnProductId, basedOnBrandMasterProductId, ...productData } = data;
+    const { basedOnProductId, basedOnBrandMasterProductId, categoryIds, ...productData } = data;
+
+    // Resolve the category set: prefer the explicit multi-category array, fall
+    // back to the single legacy categoryId so existing callers keep working.
+    // The first entry is the "primary" — mirrored into Product.categoryId and
+    // flagged isPrimary=true in the join table so existing single-category
+    // queries (filtering, breadcrumbs) keep working unchanged.
+    const resolvedCategoryIds = categoryIds && categoryIds.length > 0
+      ? categoryIds
+      : (data.categoryId ? [data.categoryId] : []);
+    productData.categoryId = resolvedCategoryIds[0] ?? productData.categoryId;
 
     // If based on an existing approved product, auto-approve and lock name/brand/images
     let approvalStatus: 'pending' | 'approved' = 'pending';
@@ -218,6 +229,20 @@ export class CatalogService {
     const created = await prisma.product.create({
       data: { ...productData, vendorId, basePrice: productData.basePrice, approvalStatus },
     });
+
+    // Write the multi-category join rows. First entry is isPrimary=true to match
+    // Product.categoryId. skipDuplicates guards against the caller passing the
+    // same id twice.
+    if (resolvedCategoryIds.length > 0) {
+      await prisma.productCategory.createMany({
+        data: resolvedCategoryIds.map((categoryId, idx) => ({
+          productId: created.id,
+          categoryId,
+          isPrimary: idx === 0,
+        })),
+        skipDuplicates: true,
+      });
+    }
 
     // When the vendor explicitly picked the brand catalog entry, create a verified
     // mapping immediately. No need to wait on embedding or the fuzzy auto-mapper —
@@ -272,7 +297,32 @@ export class CatalogService {
       delete data.images;
     }
 
-    return prisma.product.update({ where: { id: productId }, data });
+    // Pull categoryIds out of the main update payload — ProductCategory is a
+    // separate table. When provided, replace the existing set and sync
+    // Product.categoryId to the first entry (the new primary).
+    const categoryIds = Array.isArray(data.categoryIds) ? (data.categoryIds as string[]) : undefined;
+    delete data.categoryIds;
+    if (categoryIds !== undefined) {
+      data.categoryId = categoryIds[0] ?? null;
+    }
+
+    const updated = await prisma.product.update({ where: { id: productId }, data });
+
+    if (categoryIds !== undefined) {
+      await prisma.productCategory.deleteMany({ where: { productId } });
+      if (categoryIds.length > 0) {
+        await prisma.productCategory.createMany({
+          data: categoryIds.map((categoryId, idx) => ({
+            productId,
+            categoryId,
+            isPrimary: idx === 0,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    return updated;
   }
 
   // Hard-delete the product. If FK references block deletion (existing order/cart/list
