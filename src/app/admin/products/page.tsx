@@ -20,9 +20,15 @@ import {
     FileSpreadsheet,
     FileDown,
     ImageIcon,
+    Info,
+    DollarSign,
+    Tag,
+    BoxIcon,
+    Settings as SettingsIcon,
+    BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ImageUpload } from '@/components/ui/ImageUpload';
+import { ImageUpload, MultiImageUpload } from '@/components/ui/ImageUpload';
 import ProductImportModal from '@/components/features/admin/ProductImportModal';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 import { CategoryMultiPickerById } from '@/components/features/brand/CategoryMultiPickerById';
@@ -57,6 +63,12 @@ interface Product {
     vendors?: string[];
     vendorStock?: { vendor: string; qty: number }[];
     totalStock?: number;
+    // Fields aligned with the vendor product form (admin API already returns these).
+    packSize?: string | null;
+    unit?: string | null;
+    tags?: string[] | null;
+    images?: string[] | null;
+    barcode?: string | null;
 }
 
 interface Vendor {
@@ -101,6 +113,10 @@ interface ProductFormData {
     creditEligible: boolean;
     imageUrl: string;
     priceSlabs: SlabRow[];
+    // Aligned with the vendor product form. Backend API already accepts these.
+    packSize: string;
+    tags: string[];
+    images: string[]; // additional images, NOT including imageUrl
 }
 
 // Same enum-like constants used by vendor form. GST slabs are government-fixed,
@@ -125,7 +141,80 @@ const EMPTY_FORM: ProductFormData = {
     creditEligible: false,
     imageUrl: '',
     priceSlabs: [],
+    packSize: '',
+    tags: [],
+    images: [],
 };
+
+// ---------------------------------------------------------------------------
+// Reusable small components (mirrors vendor product form for consistent UX)
+// ---------------------------------------------------------------------------
+
+function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
+    return (
+        <div className="flex items-center gap-2.5 mb-5 mt-1">
+            <div className="w-[32px] h-[32px] rounded-[8px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]">
+                {icon}
+            </div>
+            <h3 className="text-[16px] font-bold text-[#181725]">{title}</h3>
+        </div>
+    );
+}
+
+function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+    return (
+        <label className="block text-[13px] font-bold text-[#181725] mb-1.5">
+            {children}{required && <span className="text-[#E74C3C] ml-0.5">*</span>}
+        </label>
+    );
+}
+
+const inputCls = 'w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors bg-white';
+const selectCls = 'w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors bg-white appearance-none';
+const textareaCls = 'w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors resize-none bg-white';
+
+function TagInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+    const [input, setInput] = useState('');
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if ((e.key === 'Enter' || e.key === ',') && input.trim()) {
+            e.preventDefault();
+            const newTags = input
+                .split(',')
+                .map(t => t.trim())
+                .filter(t => t && !tags.includes(t));
+            if (newTags.length) onChange([...tags, ...newTags]);
+            setInput('');
+        }
+    };
+
+    const removeTag = (tag: string) => {
+        onChange(tags.filter(t => t !== tag));
+    };
+
+    return (
+        <div>
+            <div className="flex flex-wrap gap-2 mb-2">
+                {tags.map(tag => (
+                    <span key={tag} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#EEF8F1] text-[#299E60] text-[12px] font-bold rounded-[8px]">
+                        {tag}
+                        <button type="button" onClick={() => removeTag(tag)} className="hover:text-[#E74C3C] transition-colors">
+                            <X size={12} />
+                        </button>
+                    </span>
+                ))}
+            </div>
+            <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className={inputCls}
+                placeholder="Type tags separated by commas, press Enter"
+            />
+        </div>
+    );
+}
 
 const STATUS_CONFIG = {
     approved: { label: 'Approved', bg: 'bg-[#EEF8F1]', text: 'text-[#299E60]', dot: 'bg-[#299E60]' },
@@ -411,7 +500,7 @@ export default function ProductsPage() {
             name: product.name,
             sku: product.sku ?? '',
             hsn: product.hsn ?? '',
-            barcode: '',
+            barcode: product.barcode ?? '',
             brand: product.brand ?? '',
             categoryIds: uniqueIds,
             description: product.description ?? '',
@@ -419,11 +508,14 @@ export default function ProductsPage() {
             originalPrice: product.originalPrice != null ? String(product.originalPrice) : '',
             vendorId: product.vendor?.id ?? '',
             taxPercent: String(product.taxPercent),
-            unit: 'piece',
+            unit: product.unit ?? 'piece',
             minOrderQty: String(product.minOrderQty),
             creditEligible: product.creditEligible,
             imageUrl: product.imageUrl ?? '',
             priceSlabs: [],
+            packSize: product.packSize ?? '',
+            tags: Array.isArray(product.tags) ? product.tags : [],
+            images: Array.isArray(product.images) ? product.images.filter(Boolean) : [],
         });
         setFormErrors({});
         setPanelOpen(true);
@@ -493,6 +585,10 @@ export default function ProductsPage() {
             if (formData.originalPrice && Number(formData.originalPrice) > 0) {
                 payload.originalPrice = Number(formData.originalPrice);
             }
+            if (formData.packSize.trim()) payload.packSize = formData.packSize.trim();
+            if (formData.tags.length > 0) payload.tags = formData.tags;
+            const additionalImages = formData.images.filter(Boolean);
+            if (additionalImages.length > 0) payload.images = additionalImages;
 
             const isEdit = !!editingProduct;
             const url = isEdit
@@ -993,7 +1089,7 @@ export default function ProductsPage() {
                 </div>
 
                 {/* Panel Body */}
-                <div className="flex-1 overflow-y-auto px-8 py-8 space-y-8">
+                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 bg-[#F8F9FB]">
                     {formErrors._server && (
                         <div className="flex items-center gap-3 bg-[#FFF0F0] border border-[#E74C3C]/20 text-[#E74C3C] rounded-[12px] px-5 py-4 text-[13px] font-semibold">
                             <AlertTriangle size={18} />
@@ -1001,23 +1097,21 @@ export default function ProductsPage() {
                         </div>
                     )}
 
-                    {/* Basic Info */}
-                    <div>
-                        <h3 className="text-[16px] font-[800] text-[#181725] mb-5">Basic Information</h3>
-                        <div className="space-y-5">
+                    {/* ======== Section 1: Basic Information ======== */}
+                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                        <SectionHeader icon={<Info size={16} />} title="Basic Information" />
+                        <div className="space-y-4">
                             {/* Product Name */}
                             <div>
-                                <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                    Product Name <span className="text-[#E74C3C]">*</span>
-                                </label>
+                                <FieldLabel required>Product Name</FieldLabel>
                                 <input
                                     type="text"
                                     value={formData.name}
                                     onChange={e => updateField('name', e.target.value)}
                                     placeholder="Enter product name"
                                     className={cn(
-                                        'w-full h-[48px] bg-[#F8F9FB] border rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:bg-white focus:shadow-sm',
-                                        formErrors.name ? 'border-[#E74C3C] focus:border-[#E74C3C]' : 'border-[#EEEEEE] focus:border-[#299E60]/40',
+                                        inputCls,
+                                        formErrors.name && 'border-[#E74C3C] focus:border-[#E74C3C]',
                                     )}
                                 />
                                 {formErrors.name && (
@@ -1025,79 +1119,62 @@ export default function ProductsPage() {
                                 )}
                             </div>
 
-                            {/* SKU + HSN + Barcode + Unit */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {/* SKU, HSN, Brand, Barcode — 2-column grid */}
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">SKU</label>
+                                    <FieldLabel>SKU</FieldLabel>
                                     <input
                                         type="text"
                                         value={formData.sku}
                                         onChange={e => updateField('sku', e.target.value)}
-                                        placeholder="e.g. SKU-001"
-                                        className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
+                                        placeholder="e.g., RIC-BAS-001"
+                                        className={inputCls}
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">HSN Code</label>
+                                    <FieldLabel>HSN Code</FieldLabel>
                                     <input
                                         type="text"
                                         value={formData.hsn}
                                         onChange={e => updateField('hsn', e.target.value)}
-                                        placeholder="e.g. 2106"
-                                        className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
+                                        placeholder="e.g., 1006"
+                                        className={inputCls}
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">Barcode</label>
+                                    <FieldLabel>Brand</FieldLabel>
+                                    <select
+                                        value={formData.brand}
+                                        onChange={e => updateField('brand', e.target.value)}
+                                        className={cn(selectCls, 'cursor-pointer')}
+                                    >
+                                        <option value="">Select brand</option>
+                                        {brands.map(b => (
+                                            <option key={b.id} value={b.name}>{b.name}</option>
+                                        ))}
+                                    </select>
+                                    {brands.length === 0 && (
+                                        <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
+                                            No brands yet — add one in <a href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</a>
+                                        </p>
+                                    )}
+                                </div>
+                                <div>
+                                    <FieldLabel>Barcode</FieldLabel>
                                     <input
                                         type="text"
                                         value={formData.barcode}
                                         onChange={e => updateField('barcode', e.target.value)}
-                                        placeholder="EAN / UPC"
-                                        className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
+                                        placeholder="e.g., 8901234567890"
+                                        className={inputCls}
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">Unit</label>
-                                    <select
-                                        value={formData.unit}
-                                        onChange={e => updateField('unit', e.target.value)}
-                                        className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white cursor-pointer"
-                                    >
-                                        {UNIT_OPTIONS.map(u => (
-                                            <option key={u} value={u}>{u}</option>
-                                        ))}
-                                    </select>
-                                </div>
                             </div>
 
-                            {/* Brand */}
-                            <div>
-                                <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                    Brand
-                                </label>
-                                <select
-                                    value={formData.brand}
-                                    onChange={e => updateField('brand', e.target.value)}
-                                    className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white cursor-pointer"
-                                >
-                                    <option value="">Select brand</option>
-                                    {brands.map(b => (
-                                        <option key={b.id} value={b.name}>{b.name}</option>
-                                    ))}
-                                </select>
-                                {brands.length === 0 && (
-                                    <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
-                                        No brands yet — add one in <a href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</a>
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Categories — single multi-select picker shared with the vendor
-                                product form. First chip is the primary (mirrored into
-                                Product.categoryId on the server). disableSuggest hides the
-                                "request new" CTA since admin can create categories directly
-                                via the Categories page. */}
+                            {/* Categories — multi-select. First chip is the primary (mirrored
+                                into Product.categoryId on the server). disableSuggest hides
+                                the "request new" CTA since admin can create categories
+                                directly via the Categories page. */}
                             <CategoryMultiPickerById
                                 value={formData.categoryIds}
                                 onChange={(ids) => setFormData(prev => ({ ...prev, categoryIds: ids }))}
@@ -1109,108 +1186,94 @@ export default function ProductsPage() {
 
                             {/* Description */}
                             <div>
-                                <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                    Description
-                                </label>
+                                <FieldLabel>Description</FieldLabel>
                                 <textarea
                                     value={formData.description}
                                     onChange={e => updateField('description', e.target.value)}
-                                    placeholder="Product description..."
-                                    rows={3}
-                                    className="w-full bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] p-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm resize-none"
+                                    rows={4}
+                                    className={textareaCls}
+                                    placeholder="Describe the product, its quality, origin, etc."
                                 />
                             </div>
                         </div>
                     </div>
 
-                    {/* Product Image */}
-                    <div>
-                        <h3 className="text-[16px] font-[800] text-[#181725] mb-5">Product Image</h3>
-                        <ImageUpload
-                            value={formData.imageUrl}
-                            onChange={(url) => updateField('imageUrl', url)}
-                            folder="products"
-                            size="lg"
-                        />
-                    </div>
+                    {/* ======== Section 2: Pricing & Tax ======== */}
+                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                        <SectionHeader icon={<DollarSign size={16} />} title="Pricing & Tax" />
 
-                    {/* Pricing & Tax */}
-                    <div>
-                        <h3 className="text-[16px] font-[800] text-[#181725] mb-5">Pricing & Tax</h3>
-                        <div className="grid grid-cols-3 gap-4">
-                            <div>
-                                <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                    Taxable Rate (Amt) <span className="text-[#E74C3C]">*</span>
-                                </label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={formData.basePrice}
-                                    onChange={e => updateField('basePrice', e.target.value)}
-                                    placeholder="0.00"
-                                    className={cn(
-                                        'w-full h-[48px] bg-[#F8F9FB] border rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:bg-white focus:shadow-sm',
-                                        formErrors.basePrice ? 'border-[#E74C3C] focus:border-[#E74C3C]' : 'border-[#EEEEEE] focus:border-[#299E60]/40',
-                                    )}
-                                />
-                                {formErrors.basePrice && (
-                                    <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.basePrice}</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                    Tax % (GST) <span className="text-[#E74C3C]">*</span>
-                                </label>
-                                <select
-                                    value={formData.taxPercent}
-                                    onChange={e => updateField('taxPercent', e.target.value)}
-                                    className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white cursor-pointer"
-                                >
-                                    {TAX_OPTIONS.map(t => (
-                                        <option key={t} value={t}>{t}%</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                    Gross Rate (Customer Price) <span className="text-[#E74C3C]">*</span>
-                                </label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={formData.basePrice && formData.taxPercent
-                                        ? (parseFloat(formData.basePrice) * (1 + parseFloat(formData.taxPercent || '0') / 100)).toFixed(2)
-                                        : formData.originalPrice || ''}
-                                    onChange={e => {
-                                        const gross = e.target.value;
-                                        updateField('originalPrice', gross);
-                                        const tp = parseFloat(formData.taxPercent || '0');
-                                        const g = parseFloat(gross);
-                                        if (!isNaN(g) && !isNaN(tp)) {
-                                            updateField('basePrice', (g / (1 + tp / 100)).toFixed(2));
-                                        }
-                                    }}
-                                    placeholder="0.00"
-                                    className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
-                                />
-                                {formData.basePrice && parseFloat(formData.taxPercent || '0') > 0 && (
-                                    <p className="text-[11px] text-[#7C7C7C] font-medium mt-1.5">
-                                        Taxable: {'\u20B9'}{parseFloat(formData.basePrice).toFixed(2)} | GST {formData.taxPercent}%: {'\u20B9'}{(parseFloat(formData.basePrice) * parseFloat(formData.taxPercent || '0') / 100).toFixed(2)}
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Bulk Pricing Slabs (up to 3 tiers) \u2014 only useful when assigned to a vendor */}
-                    {formData.vendorId && (
-                        <div>
-                            <div className="flex items-center justify-between mb-5">
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-3 gap-4">
                                 <div>
-                                    <h3 className="text-[16px] font-[800] text-[#181725]">Bulk Pricing Slabs</h3>
-                                    <p className="text-[12px] text-[#7C7C7C] font-medium mt-0.5">Up to 3 quantity-based discount tiers (taxable rate, ex-GST)</p>
+                                    <FieldLabel required>Taxable Rate (Amt)</FieldLabel>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={formData.basePrice}
+                                        onChange={e => updateField('basePrice', e.target.value)}
+                                        placeholder="0.00"
+                                        className={cn(
+                                            inputCls,
+                                            formErrors.basePrice && 'border-[#E74C3C] focus:border-[#E74C3C]',
+                                        )}
+                                    />
+                                    {formErrors.basePrice && (
+                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.basePrice}</p>
+                                    )}
+                                </div>
+                                <div>
+                                    <FieldLabel required>Tax % (GST)</FieldLabel>
+                                    <select
+                                        value={formData.taxPercent}
+                                        onChange={e => updateField('taxPercent', e.target.value)}
+                                        className={cn(selectCls, 'cursor-pointer')}
+                                    >
+                                        {TAX_OPTIONS.map(t => (
+                                            <option key={t} value={t}>{t}%</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <FieldLabel required>Gross Rate (Customer Price)</FieldLabel>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={formData.basePrice && formData.taxPercent
+                                            ? (parseFloat(formData.basePrice) * (1 + parseFloat(formData.taxPercent || '0') / 100)).toFixed(2)
+                                            : formData.originalPrice || ''}
+                                        onChange={e => {
+                                            const gross = e.target.value;
+                                            updateField('originalPrice', gross);
+                                            const tp = parseFloat(formData.taxPercent || '0');
+                                            const g = parseFloat(gross);
+                                            if (!isNaN(g) && !isNaN(tp)) {
+                                                updateField('basePrice', (g / (1 + tp / 100)).toFixed(2));
+                                            }
+                                        }}
+                                        placeholder="0.00"
+                                        className={inputCls}
+                                    />
+                                    {formData.basePrice && parseFloat(formData.taxPercent || '0') > 0 && (
+                                        <p className="text-[11px] text-[#7C7C7C] font-medium mt-1.5">
+                                            Taxable: {'\u20B9'}{parseFloat(formData.basePrice).toFixed(2)} | GST {formData.taxPercent}%: {'\u20B9'}{(parseFloat(formData.basePrice) * parseFloat(formData.taxPercent || '0') / 100).toFixed(2)}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ======== Section 3: Bulk Pricing Tiers (only when assigned to a vendor) ======== */}
+                    {formData.vendorId && (
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                            <div className="flex items-start justify-between mb-5">
+                                <div>
+                                    <SectionHeader icon={<Tag size={16} />} title="Bulk Pricing Tiers" />
+                                    <p className="text-[12px] text-[#AEAEAE] font-medium -mt-3 ml-[42px]">
+                                        Up to 3 quantity-based discount tiers (taxable rate, ex-GST)
+                                    </p>
                                 </div>
                                 {formData.priceSlabs.length < 3 && (
                                     <button
@@ -1219,78 +1282,112 @@ export default function ProductsPage() {
                                             ...prev,
                                             priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '' }],
                                         }))}
-                                        className="px-3 py-2 text-[12px] font-bold text-[#299E60] bg-[#EEF8F1] hover:bg-[#dff2e7] rounded-[10px] transition-colors flex items-center gap-1"
+                                        className="h-[40px] px-5 bg-[#1a365d] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#1a365d]/90 transition-colors flex items-center gap-2 shrink-0"
                                     >
-                                        <Plus size={14} /> Add tier
+                                        <Plus size={14} />
+                                        Add Bulk Tier
                                     </button>
                                 )}
                             </div>
-                            {formData.priceSlabs.length === 0 ? (
-                                <p className="text-[13px] text-[#AEAEAE] font-medium bg-[#F8F9FB] border border-dashed border-[#EEEEEE] rounded-[12px] px-4 py-6 text-center">
-                                    No bulk tiers yet. Click <strong className="text-[#299E60]">Add tier</strong> to offer discounts above the base price.
-                                </p>
-                            ) : (
-                                <div className="space-y-3">
-                                    {formData.priceSlabs.map((slab, i) => (
-                                        <div key={i} className="grid grid-cols-12 gap-3 items-end">
-                                            <div className="col-span-3">
-                                                <label className="block text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-1.5">Min qty *</label>
-                                                <input type="number" min="1" value={slab.minQty}
-                                                    onChange={e => setFormData(prev => ({
-                                                        ...prev,
-                                                        priceSlabs: prev.priceSlabs.map((s, idx) => idx === i ? { ...s, minQty: e.target.value } : s),
-                                                    }))}
-                                                    placeholder="e.g. 10"
-                                                    className="w-full h-[44px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] font-medium outline-none focus:border-[#299E60]/40 focus:bg-white" />
+
+                            <div className="space-y-4">
+                                {formData.priceSlabs.map((slab, index) => (
+                                    <div key={index} className="rounded-[14px] border border-[#EEEEEE] overflow-hidden">
+                                        {/* Tier header */}
+                                        <div className="flex items-center justify-between px-5 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE]">
+                                            <div className="flex items-center gap-2.5">
+                                                <span className="w-[28px] h-[28px] rounded-full bg-[#299E60] text-white text-[12px] font-bold flex items-center justify-center">
+                                                    {index + 1}
+                                                </span>
+                                                <h4 className="text-[14px] font-bold text-[#181725]">Bulk Tier {index + 1}</h4>
                                             </div>
-                                            <div className="col-span-3">
-                                                <label className="block text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-1.5">Max qty</label>
-                                                <input type="number" min="1" value={slab.maxQty}
-                                                    onChange={e => setFormData(prev => ({
-                                                        ...prev,
-                                                        priceSlabs: prev.priceSlabs.map((s, idx) => idx === i ? { ...s, maxQty: e.target.value } : s),
-                                                    }))}
-                                                    placeholder="(optional)"
-                                                    className="w-full h-[44px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] font-medium outline-none focus:border-[#299E60]/40 focus:bg-white" />
-                                            </div>
-                                            <div className="col-span-5">
-                                                <label className="block text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-1.5">Price per unit (\u20B9) *</label>
-                                                <input type="number" min="0" step="0.01" value={slab.price}
-                                                    onChange={e => setFormData(prev => ({
-                                                        ...prev,
-                                                        priceSlabs: prev.priceSlabs.map((s, idx) => idx === i ? { ...s, price: e.target.value } : s),
-                                                    }))}
-                                                    placeholder="0.00"
-                                                    className="w-full h-[44px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] font-medium outline-none focus:border-[#299E60]/40 focus:bg-white" />
-                                            </div>
-                                            <div className="col-span-1 flex justify-end">
-                                                <button type="button"
-                                                    onClick={() => setFormData(prev => ({
-                                                        ...prev,
-                                                        priceSlabs: prev.priceSlabs.filter((_, idx) => idx !== i),
-                                                    }))}
-                                                    className="w-[44px] h-[44px] flex items-center justify-center rounded-[10px] bg-[#FFF0F0] text-[#E74C3C] hover:bg-[#FFE4E4] transition-colors">
-                                                    <Trash2 size={15} />
-                                                </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData(prev => ({
+                                                    ...prev,
+                                                    priceSlabs: prev.priceSlabs.filter((_, idx) => idx !== index),
+                                                }))}
+                                                className="p-1.5 hover:bg-[#FFF0F0] rounded-[6px] transition-colors text-[#AEAEAE] hover:text-[#E74C3C]"
+                                            >
+                                                <Trash2 size={15} />
+                                            </button>
+                                        </div>
+
+                                        {/* Tier body */}
+                                        <div className="p-5">
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <div>
+                                                    <FieldLabel>Min Quantity</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        value={slab.minQty}
+                                                        onChange={e => setFormData(prev => ({
+                                                            ...prev,
+                                                            priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, minQty: e.target.value } : s),
+                                                        }))}
+                                                        className={inputCls}
+                                                        placeholder="e.g., 10"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Max Quantity</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        value={slab.maxQty}
+                                                        onChange={e => setFormData(prev => ({
+                                                            ...prev,
+                                                            priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, maxQty: e.target.value } : s),
+                                                        }))}
+                                                        className={inputCls}
+                                                        placeholder="(optional)"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel required>Taxable Rate (per Unit)</FieldLabel>
+                                                    <div className="relative">
+                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] text-[14px]">{'\u20B9'}</span>
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            min="0"
+                                                            value={slab.price}
+                                                            onChange={e => setFormData(prev => ({
+                                                                ...prev,
+                                                                priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, price: e.target.value } : s),
+                                                            }))}
+                                                            className={cn(inputCls, 'pl-8')}
+                                                            placeholder="0.00"
+                                                        />
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
+                                    </div>
+                                ))}
+
+                                {formData.priceSlabs.length === 0 && (
+                                    <div className="text-center py-8 text-[#AEAEAE]">
+                                        <BarChart3 size={32} className="mx-auto mb-2 text-[#E5E7EB]" />
+                                        <p className="text-[13px] font-medium">No bulk tiers yet. Click &quot;Add Bulk Tier&quot; to add quantity-based pricing.</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
 
-                    {/* Vendor Selection (Optional) */}
-                    <div>
-                        <h3 className="text-[16px] font-[800] text-[#181725] mb-5">Vendor Assignment</h3>
+                    {/* ======== Section 4: Vendor Assignment (admin-only) ======== */}
+                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                        <SectionHeader icon={<SettingsIcon size={16} />} title="Vendor Assignment" />
                         <div>
-                            <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                Vendor <span className="text-[11px] font-medium text-[#AEAEAE] normal-case">(optional — leave empty for catalog product)</span>
-                            </label>
+                            <FieldLabel>
+                                Vendor <span className="text-[11px] font-medium text-[#AEAEAE]">(optional — leave empty for catalog product)</span>
+                            </FieldLabel>
                             <select
                                 value={formData.vendorId}
                                 onChange={e => updateField('vendorId', e.target.value)}
-                                className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all focus:bg-white cursor-pointer focus:border-[#299E60]/40"
+                                className={cn(selectCls, 'cursor-pointer')}
                             >
                                 <option value="">No vendor (Catalog product)</option>
                                 {vendors.map(v => (
@@ -1303,41 +1400,104 @@ export default function ProductsPage() {
                         </div>
                     </div>
 
-                    {/* Settings */}
-                    <div>
-                        <h3 className="text-[16px] font-[800] text-[#181725] mb-5">Settings</h3>
+                    {/* ======== Section 5: Inventory & Packaging ======== */}
+                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                        <SectionHeader icon={<BoxIcon size={16} />} title="Inventory & Packaging" />
+
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <FieldLabel>Pack Size</FieldLabel>
+                                    <input
+                                        type="text"
+                                        value={formData.packSize}
+                                        onChange={e => updateField('packSize', e.target.value)}
+                                        className={inputCls}
+                                        placeholder="e.g., 1 kg, 500 ml"
+                                    />
+                                </div>
+                                <div>
+                                    <FieldLabel>Unit</FieldLabel>
+                                    <select
+                                        value={formData.unit}
+                                        onChange={e => updateField('unit', e.target.value)}
+                                        className={cn(selectCls, 'cursor-pointer')}
+                                    >
+                                        <option value="">Select unit</option>
+                                        {UNIT_OPTIONS.map(u => (
+                                            <option key={u} value={u}>{u}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <FieldLabel>Min Order Quantity</FieldLabel>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={formData.minOrderQty}
+                                        onChange={e => updateField('minOrderQty', e.target.value)}
+                                        className={inputCls}
+                                        placeholder="1"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ======== Section 6: Media ======== */}
+                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                        <SectionHeader icon={<ImageIcon size={16} />} title="Media" />
+
                         <div className="space-y-5">
+                            {/* Primary Image */}
+                            <ImageUpload
+                                value={formData.imageUrl}
+                                onChange={(url) => updateField('imageUrl', url)}
+                                folder="products"
+                                label="Primary Image"
+                                size="lg"
+                            />
+
+                            {/* Additional Images */}
+                            <MultiImageUpload
+                                values={formData.images.filter(Boolean)}
+                                onChange={(urls) => setFormData(prev => ({ ...prev, images: urls }))}
+                                folder="products"
+                                label="Additional Images"
+                                max={8}
+                            />
+                        </div>
+                    </div>
+
+                    {/* ======== Section 7: Tags & Settings ======== */}
+                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                        <SectionHeader icon={<SettingsIcon size={16} />} title="Tags & Settings" />
+
+                        <div className="space-y-4">
+                            {/* Tags */}
                             <div>
-                                <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                    Min Order Qty
-                                </label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    value={formData.minOrderQty}
-                                    onChange={e => updateField('minOrderQty', e.target.value)}
-                                    placeholder="1"
-                                    className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
+                                <FieldLabel>Tags</FieldLabel>
+                                <TagInput
+                                    tags={formData.tags}
+                                    onChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
                                 />
                             </div>
 
                             {/* Credit Eligible */}
-                            <label className="flex items-center gap-3 cursor-pointer group">
-                                <div
-                                    className={cn(
-                                        'w-[44px] h-[24px] rounded-full relative transition-colors duration-200',
-                                        formData.creditEligible ? 'bg-[#299E60]' : 'bg-[#DCDCDC]',
-                                    )}
-                                    onClick={() => updateField('creditEligible', !formData.creditEligible)}
-                                >
-                                    <div
-                                        className={cn(
-                                            'w-[20px] h-[20px] bg-white rounded-full shadow-sm absolute top-[2px] transition-all duration-200',
-                                            formData.creditEligible ? 'left-[22px]' : 'left-[2px]',
-                                        )}
-                                    />
+                            <label className="flex items-center gap-3 cursor-pointer py-1">
+                                <input
+                                    type="checkbox"
+                                    checked={formData.creditEligible}
+                                    onChange={(e) => updateField('creditEligible', e.target.checked)}
+                                    className="w-5 h-5 accent-[#299E60] shrink-0"
+                                />
+                                <div>
+                                    <span className="text-[14px] font-bold text-[#181725]">Credit Eligible</span>
+                                    <p className="text-[11px] text-[#AEAEAE] font-medium">Allow buyers to purchase this product on credit terms</p>
                                 </div>
-                                <span className="text-[14px] font-semibold text-[#181725]">Credit Eligible</span>
                             </label>
                         </div>
                     </div>
