@@ -705,19 +705,18 @@ export default function CartPage() {
                                         >
                                             {selectedVendors.has(shipment.id) && <Check size={15} strokeWidth={3.5} />}
                                         </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => toggleVendor(shipment.id)}
+                                        <Link
+                                            href={`/vendor/${shipment.id}`}
                                             className="flex items-center gap-3 hover:opacity-80 transition-opacity flex-1 min-w-0 text-left"
                                         >
                                             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                                                 <Store size={18} className="text-primary" />
                                             </div>
                                             <div className="min-w-0">
-                                                <h3 className="text-[17px] font-bold text-[#181725]">{shipment.vendor}</h3>
+                                                <h3 className="text-[17px] font-bold text-[#181725] hover:text-primary transition-colors">{shipment.vendor}</h3>
                                                 <p className="text-[13px] text-gray-400 font-medium">{getShipmentItemCount(shipment.items)} items · ₹{getShipmentTotal(shipment.items).toFixed(0)}</p>
                                             </div>
-                                        </button>
+                                        </Link>
                                         <div className="flex items-center gap-3 shrink-0">
                                             <button
                                                 onClick={() => handleClearVendor(shipment.id, shipment.vendor)}
