@@ -6,13 +6,11 @@ import {
     ChevronRight,
     ShoppingBag,
     HelpCircle,
-    Heart,
     Pencil,
     RotateCcw,
     ListOrdered,
     Store,
     MapPin,
-    Gift,
     CreditCard,
     Bell,
     Info,
@@ -20,6 +18,10 @@ import {
     LogOut,
     Home,
     User,
+    Phone,
+    Building2,
+    BadgeCheck,
+    Mail,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
@@ -27,9 +29,7 @@ import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { EditProfileOverlay } from './EditProfileOverlay';
-import { WishlistOverlay } from './WishlistOverlay';
 import { SavedAddressesOverlay } from './SavedAddressesOverlay';
-import { RewardsOverlay } from './RewardsOverlay';
 import { PaymentManagementOverlay } from './PaymentManagementOverlay';
 import { NotificationOverlay } from './NotificationOverlay';
 import { GeneralInformationOverlay } from './GeneralInformationOverlay';
@@ -40,12 +40,27 @@ interface ProfileScreenProps {
     onClose: () => void;
 }
 
+type LucideIcon = React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+
+function DetailRow({ icon: Icon, label, value, sub, muted }: { icon: LucideIcon; label: string; value: string; sub?: string; muted?: boolean }) {
+    return (
+        <div className="flex items-center gap-4 px-5 py-3.5">
+            <span className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
+                <Icon size={16} className="text-gray-500" />
+            </span>
+            <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-[700] text-gray-400 uppercase tracking-wider">{label}</p>
+                <p className={cn('text-[13.5px] font-[600] truncate mt-0.5', muted ? 'text-gray-400' : 'text-[#181725]')}>{value}</p>
+                {sub && <p className="text-[11px] text-gray-400 font-medium mt-0.5 truncate">{sub}</p>}
+            </div>
+        </div>
+    );
+}
+
 export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
     const router = useRouter();
     const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-    const [isWishlistOpen, setIsWishlistOpen] = useState(false);
     const [isSavedAddressesOpen, setIsSavedAddressesOpen] = useState(false);
-    const [isRewardsOpen, setIsRewardsOpen] = useState(false);
     const [isPaymentOpen, setIsPaymentOpen] = useState(false);
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
     const [isGeneralInfoOpen, setIsGeneralInfoOpen] = useState(false);
@@ -108,39 +123,18 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
         window.location.href = '/';
     };
 
-    const topActions = [
-        { id: 'reorder', label: 'Reorder', sub: 'From last order', icon: RotateCcw, color: 'bg-blue-50 text-blue-600', onClick: () => { router.push('/orders'); } },
-        { id: 'quick-order', label: 'Quick Order', sub: 'Order lists', icon: ListOrdered, color: 'bg-purple-50 text-purple-600', onClick: () => { router.push('/order-lists'); } },
-        { id: 'my-vendors', label: 'My Vendors', sub: 'Saved vendors', icon: Store, color: 'bg-orange-50 text-orange-600', onClick: () => { router.push('/vendors'); } },
-    ];
-
-    const quickActions = [
-        {
-            id: 'orders',
-            label: 'Your\nOrder',
-            icon: ShoppingBag,
-            onClick: () => { router.push('/orders'); }
-        },
-        {
-            id: 'support',
-            label: 'Help &\nSupports',
-            icon: HelpCircle,
-            onClick: () => { router.push('/contact'); }
-        },
-        {
-            id: 'wishlist',
-            label: 'Your\nWishlist',
-            icon: Heart,
-            onClick: () => {
-                router.push('/wishlist');
-            },
-        },
+    // Four primary actions for B2B procurement landing — uniform brand styling
+    // (no per-tile color pastels) to keep the dashboard feeling enterprise, not consumer.
+    const primaryActions = [
+        { id: 'reorder', label: 'Reorder', sub: 'From last order', icon: RotateCcw, onClick: () => router.push('/orders') },
+        { id: 'quick-order', label: 'Quick Order', sub: 'Saved order lists', icon: ListOrdered, onClick: () => router.push('/order-lists') },
+        { id: 'my-vendors', label: 'My Vendors', sub: 'Saved suppliers', icon: Store, onClick: () => router.push('/vendors') },
+        { id: 'orders', label: 'Your Orders', sub: 'Track & history', icon: ShoppingBag, onClick: () => router.push('/orders') },
     ];
 
     const yourInfoItems = [
         { id: 'edit-profile', label: 'Edit Profile', desc: 'Update your personal details', icon: Pencil, onClick: () => setIsEditProfileOpen(true) },
         { id: 'saved-addresses', label: 'Saved Addresses', desc: 'Manage delivery locations', icon: MapPin, onClick: () => setIsSavedAddressesOpen(true) },
-        { id: 'rewards', label: 'Rewards', desc: 'View points & referrals', icon: Gift, onClick: () => setIsRewardsOpen(true) },
         { id: 'payment', label: 'Payment Management', desc: 'Cards, UPI & banking', icon: CreditCard, onClick: () => setIsPaymentOpen(true) },
     ];
 
@@ -148,7 +142,11 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
         { id: 'notifications', label: 'Notification', desc: 'Push & email preferences', icon: Bell, onClick: () => setIsNotificationOpen(true) },
         { id: 'general', label: 'General Information', desc: 'About, terms & policies', icon: Info, onClick: () => setIsGeneralInfoOpen(true) },
         { id: 'settings', label: 'Settings', desc: 'Language, theme & more', icon: Settings, onClick: () => setIsSettingsOpen(true) },
+        { id: 'support', label: 'Help & Support', desc: 'Reach our team', icon: HelpCircle, onClick: () => router.push('/contact') },
     ];
+
+    const isProfileComplete = !!(userData.fullName && userData.businessName && userData.pincode);
+    const defaultLocation = [userData.city, userData.pincode].filter(Boolean).join(' · ');
 
     return (
         <>
@@ -185,61 +183,97 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                 <div className="flex-1 overflow-y-auto pb-24 md:pb-16 px-4 pt-2 md:px-0 md:pt-0">
                     <div className="md:max-w-[var(--container-max)] md:mx-auto md:px-[var(--container-padding)] md:pt-10">
                         
-                        {/* === MOBILE LAYOUT (unchanged) === */}
+                        {/* === MOBILE LAYOUT === */}
                         <div className="md:hidden">
-                            {/* User Avatar & Info */}
-                            <div className="flex flex-col items-center pb-6">
-                                <div className="relative mb-3">
-                                    <div className="w-[82px] h-[82px] rounded-full overflow-hidden border-[2px] border-[#53B175] bg-white">
+                            {/* Identity card */}
+                            <div className="flex items-center gap-3 bg-white border border-gray-100 rounded-2xl p-4 shadow-sm mb-4">
+                                <div className="relative shrink-0">
+                                    <div className="w-[60px] h-[60px] rounded-full overflow-hidden border-[2px] border-[#53B175] bg-white">
                                         <img src={userData.image || '/images/profile/sample-profile.png'} alt="Profile" className="w-full h-full object-cover" />
                                     </div>
-                                    <button className="absolute bottom-0.5 right-0.5 w-6 h-6 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm cursor-pointer">
+                                    <button onClick={() => setIsEditProfileOpen(true)} className="absolute -bottom-0.5 -right-0.5 w-6 h-6 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm cursor-pointer">
                                         <Pencil size={11} className="text-gray-400" />
                                     </button>
                                 </div>
-                                <h3 className="text-[19px] font-[700] text-[#181725] mb-0.5">{userData.fullName}</h3>
-                                <p className="text-[12px] text-gray-400 font-medium">{userData.email}</p>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5">
+                                        <h3 className="text-[16px] font-[700] text-[#181725] truncate">{userData.fullName || 'Welcome'}</h3>
+                                        {isProfileComplete && <BadgeCheck size={15} className="text-[#53B175] shrink-0" />}
+                                    </div>
+                                    <p className="text-[12px] text-gray-400 font-medium truncate">{userData.email}</p>
+                                    {userData.businessName && (
+                                        <span className="inline-flex items-center mt-1 text-[10px] font-bold text-[#53B175] bg-[#53B175]/10 border border-[#53B175]/15 px-2 py-0.5 rounded-full max-w-full truncate">
+                                            {userData.businessName}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
 
-                            {/* Top Actions */}
-                            <div className="grid grid-cols-3 gap-3 mb-4">
-                                {topActions.map((action) => {
+                            {/* Primary actions — 2x2 */}
+                            <div className="grid grid-cols-2 gap-3 mb-6">
+                                {primaryActions.map((action) => {
                                     const Icon = action.icon;
                                     return (
-                                        <button key={action.id} onClick={action.onClick} className="flex flex-col items-center bg-white border border-gray-100 rounded-[15px] py-3 px-1 shadow-sm active:scale-[0.98] transition-all cursor-pointer">
-                                            <div className={cn("w-9 h-9 rounded-full flex items-center justify-center mb-1.5", action.color)}>
-                                                <Icon size={16} strokeWidth={2.5} />
+                                        <button key={action.id} onClick={action.onClick} className="flex items-center gap-3 bg-white border border-gray-100 rounded-2xl p-3 shadow-sm active:scale-[0.98] transition-all text-left cursor-pointer">
+                                            <div className="w-10 h-10 rounded-xl bg-[#53B175]/10 text-[#53B175] flex items-center justify-center shrink-0">
+                                                <Icon size={18} strokeWidth={2.4} />
                                             </div>
-                                            <p className="text-[11px] font-[700] text-[#181725] leading-tight mb-0.5">{action.label}</p>
-                                            <p className="text-[8px] text-gray-400 font-medium whitespace-nowrap uppercase tracking-tighter">{action.sub}</p>
+                                            <div className="min-w-0">
+                                                <p className="text-[13px] font-[700] text-[#181725] leading-tight">{action.label}</p>
+                                                <p className="text-[10px] text-gray-400 font-medium mt-0.5 truncate">{action.sub}</p>
+                                            </div>
                                         </button>
                                     );
                                 })}
                             </div>
 
-                            {/* Quick Actions */}
-                            <div className="grid grid-cols-3 gap-3 mb-8">
-                                {quickActions.map((action) => {
-                                    const Icon = action.icon;
-                                    return (
-                                        <button key={action.id} onClick={action.onClick} className="flex flex-col items-center bg-white border border-gray-100 rounded-[12px] py-4 px-1 shadow-sm active:scale-[0.98] transition-all cursor-pointer">
-                                            <div className="mb-3"><Icon size={20} className="text-[#181725]" strokeWidth={2} /></div>
-                                            <span className="text-[11px] font-[600] text-[#181725] text-center leading-tight whitespace-pre-line px-1">{action.label}</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
+                            {/* Account details snapshot */}
+                            {(userData.phone || userData.businessName || userData.address || defaultLocation) && (
+                                <div className="mb-6">
+                                    <h4 className="text-[12px] font-[800] text-gray-400 uppercase tracking-wider mb-2 px-1">Account details</h4>
+                                    <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm divide-y divide-gray-50">
+                                        {userData.phone && (
+                                            <div className="flex items-center gap-3 px-4 py-3">
+                                                <Phone size={15} className="text-gray-400 shrink-0" />
+                                                <span className="text-[13px] font-[600] text-[#181725]">{userData.phone}</span>
+                                            </div>
+                                        )}
+                                        {userData.email && (
+                                            <div className="flex items-center gap-3 px-4 py-3">
+                                                <Mail size={15} className="text-gray-400 shrink-0" />
+                                                <span className="text-[13px] font-[600] text-[#181725] truncate">{userData.email}</span>
+                                            </div>
+                                        )}
+                                        {userData.businessName && (
+                                            <div className="flex items-center gap-3 px-4 py-3">
+                                                <Building2 size={15} className="text-gray-400 shrink-0" />
+                                                <span className="text-[13px] font-[600] text-[#181725] truncate">{userData.businessName}</span>
+                                            </div>
+                                        )}
+                                        {(userData.address || defaultLocation) && (
+                                            <div className="flex items-start gap-3 px-4 py-3">
+                                                <MapPin size={15} className="text-gray-400 shrink-0 mt-0.5" />
+                                                <div className="text-[13px] font-[600] text-[#181725]">
+                                                    {userData.address && <p className="truncate">{userData.address}</p>}
+                                                    {defaultLocation && <p className="text-[11px] text-gray-400 font-medium">{defaultLocation}</p>}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Your Information */}
                             <div className="mb-6">
-                                <h4 className="text-[14px] font-[700] text-[#181725] mb-2 px-1">Your Information</h4>
-                                <div className="bg-white border border-gray-100 rounded-[12px] overflow-hidden shadow-sm">
+                                <h4 className="text-[12px] font-[800] text-gray-400 uppercase tracking-wider mb-2 px-1">Account</h4>
+                                <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
                                     {yourInfoItems.map((item, idx) => {
                                         const Icon = item.icon;
                                         return (
-                                            <button key={item.id} onClick={item.onClick} className={cn("w-full flex items-center justify-between px-4 py-3.5 active:bg-gray-50 transition-colors text-left cursor-pointer", idx < yourInfoItems.length - 1 && "border-b border-gray-50/80")}>
-                                                <span className="text-[13px] font-[600] text-[#181725]">{item.label}</span>
-                                                <ChevronRight size={16} className="text-gray-400/60" />
+                                            <button key={item.id} onClick={item.onClick} className={cn("w-full flex items-center gap-3 px-4 py-3.5 active:bg-gray-50 transition-colors text-left cursor-pointer", idx < yourInfoItems.length - 1 && "border-b border-gray-50")}>
+                                                <Icon size={16} className="text-gray-500 shrink-0" />
+                                                <span className="text-[13px] font-[600] text-[#181725] flex-1">{item.label}</span>
+                                                <ChevronRight size={16} className="text-gray-300" />
                                             </button>
                                         );
                                     })}
@@ -247,15 +281,16 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                             </div>
 
                             {/* Other Information */}
-                            <div className="mb-8">
-                                <h4 className="text-[14px] font-[700] text-[#181725] mb-2 px-1">Other Information</h4>
-                                <div className="bg-white border border-gray-100 rounded-[12px] overflow-hidden shadow-sm">
+                            <div className="mb-6">
+                                <h4 className="text-[12px] font-[800] text-gray-400 uppercase tracking-wider mb-2 px-1">More</h4>
+                                <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
                                     {otherInfoItems.map((item, idx) => {
                                         const Icon = item.icon;
                                         return (
-                                            <button key={item.id} onClick={item.onClick} className={cn("w-full flex items-center justify-between px-4 py-3.5 active:bg-gray-50 transition-colors text-left cursor-pointer", idx < otherInfoItems.length - 1 && "border-b border-gray-50/80")}>
-                                                <span className="text-[13px] font-[600] text-[#181725]">{item.label}</span>
-                                                <ChevronRight size={16} className="text-gray-400/60" />
+                                            <button key={item.id} onClick={item.onClick} className={cn("w-full flex items-center gap-3 px-4 py-3.5 active:bg-gray-50 transition-colors text-left cursor-pointer", idx < otherInfoItems.length - 1 && "border-b border-gray-50")}>
+                                                <Icon size={16} className="text-gray-500 shrink-0" />
+                                                <span className="text-[13px] font-[600] text-[#181725] flex-1">{item.label}</span>
+                                                <ChevronRight size={16} className="text-gray-300" />
                                             </button>
                                         );
                                     })}
@@ -263,147 +298,199 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                             </div>
 
                             {/* Logout - Mobile */}
-                            <div className="bg-white border border-gray-100 rounded-[12px] overflow-hidden shadow-sm mb-12">
-                                <button onClick={handleLogout} className="w-full py-3.5 text-center text-red-500 font-[700] text-[15px] active:bg-red-50/30 transition-colors cursor-pointer">
-                                    Logout
-                                </button>
-                            </div>
+                            <button onClick={handleLogout} className="w-full bg-white border border-gray-100 rounded-2xl py-3.5 text-red-500 font-[700] text-[15px] active:bg-red-50/30 transition-colors flex items-center justify-center gap-2 shadow-sm mb-12 cursor-pointer">
+                                <LogOut size={16} />
+                                Logout
+                            </button>
                         </div>
 
-                        {/* === DESKTOP LAYOUT === */}
-                        <div className="hidden md:grid md:grid-cols-[280px_1fr] lg:grid-cols-[340px_1fr] xl:grid-cols-[360px_1fr] md:gap-6 lg:gap-10 md:items-start">
-                            
-                            {/* LEFT COLUMN: Profile Card + Your Information */}
-                            <div className="space-y-6">
-                                {/* Profile Card */}
-                                <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_16px_rgba(0,0,0,0.06)] p-6 md:p-6 lg:p-8 pb-8">
-                                    <div className="flex flex-col items-center">
-                                        <div className="relative mb-4 lg:mb-5">
-                                            <div className="w-[100px] h-[100px] lg:w-[120px] lg:h-[120px] rounded-full overflow-hidden border-[3px] border-[#53B175] bg-white transition-all">
+                        {/* === DESKTOP LAYOUT — sidebar nav + main dashboard (B2B enterprise feel) === */}
+                        <div className="hidden md:grid md:grid-cols-[280px_1fr] lg:grid-cols-[300px_1fr] xl:grid-cols-[320px_1fr] md:gap-6 lg:gap-8 md:items-start">
+
+                            {/* LEFT SIDEBAR — profile card + grouped nav + logout */}
+                            <aside className="md:sticky md:top-6 md:self-start space-y-3">
+
+                                {/* Profile identity card */}
+                                <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] p-5">
+                                    <div className="flex flex-col items-center text-center">
+                                        <div className="relative mb-3">
+                                            <div className="w-[80px] h-[80px] rounded-full overflow-hidden border-[2px] border-[#53B175] bg-white">
                                                 <img src={userData.image || '/images/profile/sample-profile.png'} alt="Profile" className="w-full h-full object-cover" />
                                             </div>
-                                            <button className="absolute bottom-1 right-1 w-7 h-7 lg:w-8 lg:h-8 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors cursor-pointer">
-                                                <Pencil size={12} className="text-gray-400 lg:!w-3.5 lg:!h-3.5" />
+                                            <button
+                                                onClick={() => setIsEditProfileOpen(true)}
+                                                className="absolute bottom-0 right-0 w-7 h-7 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors cursor-pointer"
+                                                title="Edit profile"
+                                            >
+                                                <Pencil size={11} className="text-gray-400" />
                                             </button>
                                         </div>
-                                        <h3 className="text-[20px] lg:text-[24px] font-[700] text-[#181725] mb-0.5">{userData.fullName}</h3>
-                                        <p className="text-[14px] text-gray-400 font-medium">{userData.email}</p>
-                                        {userData.businessName && <p className="text-[13px] text-gray-400 font-medium mt-1.5">{userData.businessName}</p>}
+                                        <div className="flex items-center gap-1.5 max-w-full">
+                                            <h3 className="text-[15px] font-[700] text-[#181725] truncate">{userData.fullName || 'Welcome'}</h3>
+                                            {isProfileComplete && <BadgeCheck size={14} className="text-[#53B175] shrink-0" />}
+                                        </div>
+                                        <p className="text-[11.5px] text-gray-400 font-medium mt-0.5 truncate max-w-full">{userData.email}</p>
+                                        {userData.businessName && (
+                                            <span className="mt-2 inline-flex items-center text-[10.5px] font-bold text-[#53B175] bg-[#53B175]/10 border border-[#53B175]/15 px-2.5 py-0.5 rounded-full max-w-full truncate">
+                                                {userData.businessName}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 
-                                {/* Logout Button */}
-                                <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-                                    <button onClick={handleLogout} className="w-full py-4 text-center text-red-500 font-[700] text-[15px] hover:bg-red-50/30 transition-colors flex items-center justify-center gap-2 cursor-pointer">
-                                        <LogOut size={18} />
-                                        Logout
-                                    </button>
-                                </div>
-
-                                {/* Your Information */}
-                                <div>
-                                    <h4 className="text-[18px] font-[700] text-[#181725] mb-3 px-1">Your Information</h4>
-                                    <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-[0_2px_16px_rgba(0,0,0,0.06)]">
-                                        {yourInfoItems.map((item, idx) => {
+                                {/* Grouped nav */}
+                                <nav className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] p-2.5">
+                                    <p className="text-[10px] font-[700] text-gray-400 uppercase tracking-[0.12em] px-2 pt-1 pb-1.5">Account</p>
+                                    <ul className="space-y-0.5">
+                                        {yourInfoItems.map((item) => {
                                             const Icon = item.icon;
                                             return (
+                                                <li key={item.id}>
+                                                    <button
+                                                        onClick={item.onClick}
+                                                        className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#53B175]/8 text-[#181725] hover:text-[#53B175] transition-colors group cursor-pointer"
+                                                    >
+                                                        <Icon size={15} className="text-gray-400 group-hover:text-[#53B175] shrink-0" />
+                                                        <span className="text-[13px] font-[600] flex-1 text-left">{item.label}</span>
+                                                        <ChevronRight size={13} className="text-gray-300 group-hover:text-[#53B175]" />
+                                                    </button>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+
+                                    <p className="text-[10px] font-[700] text-gray-400 uppercase tracking-[0.12em] px-2 pt-3 pb-1.5">Activity</p>
+                                    <ul className="space-y-0.5">
+                                        <li>
+                                            <button onClick={() => router.push('/orders')} className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#53B175]/8 text-[#181725] hover:text-[#53B175] transition-colors group cursor-pointer">
+                                                <ShoppingBag size={15} className="text-gray-400 group-hover:text-[#53B175] shrink-0" />
+                                                <span className="text-[13px] font-[600] flex-1 text-left">Your Orders</span>
+                                                <ChevronRight size={13} className="text-gray-300 group-hover:text-[#53B175]" />
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button onClick={() => router.push('/order-lists')} className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#53B175]/8 text-[#181725] hover:text-[#53B175] transition-colors group cursor-pointer">
+                                                <ListOrdered size={15} className="text-gray-400 group-hover:text-[#53B175] shrink-0" />
+                                                <span className="text-[13px] font-[600] flex-1 text-left">Quick Order Lists</span>
+                                                <ChevronRight size={13} className="text-gray-300 group-hover:text-[#53B175]" />
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button onClick={() => router.push('/vendors')} className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#53B175]/8 text-[#181725] hover:text-[#53B175] transition-colors group cursor-pointer">
+                                                <Store size={15} className="text-gray-400 group-hover:text-[#53B175] shrink-0" />
+                                                <span className="text-[13px] font-[600] flex-1 text-left">My Vendors</span>
+                                                <ChevronRight size={13} className="text-gray-300 group-hover:text-[#53B175]" />
+                                            </button>
+                                        </li>
+                                    </ul>
+
+                                    <p className="text-[10px] font-[700] text-gray-400 uppercase tracking-[0.12em] px-2 pt-3 pb-1.5">Preferences</p>
+                                    <ul className="space-y-0.5">
+                                        {otherInfoItems.map((item) => {
+                                            const Icon = item.icon;
+                                            return (
+                                                <li key={item.id}>
+                                                    <button
+                                                        onClick={item.onClick}
+                                                        className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#53B175]/8 text-[#181725] hover:text-[#53B175] transition-colors group cursor-pointer"
+                                                    >
+                                                        <Icon size={15} className="text-gray-400 group-hover:text-[#53B175] shrink-0" />
+                                                        <span className="text-[13px] font-[600] flex-1 text-left">{item.label}</span>
+                                                        <ChevronRight size={13} className="text-gray-300 group-hover:text-[#53B175]" />
+                                                    </button>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </nav>
+
+                                {/* Logout */}
+                                <button
+                                    onClick={handleLogout}
+                                    className="w-full bg-white border border-gray-100 rounded-2xl py-3 text-red-500 font-[700] text-[13px] hover:bg-red-50/40 transition-colors flex items-center justify-center gap-2 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] cursor-pointer"
+                                >
+                                    <LogOut size={15} />
+                                    Logout
+                                </button>
+                            </aside>
+
+                            {/* RIGHT MAIN — welcome + actions + account snapshot */}
+                            <main className="space-y-6">
+
+                                {/* Welcome strip — flat, professional, B2B-friendly */}
+                                <div className="bg-white border border-gray-100 rounded-2xl px-6 lg:px-8 py-5 lg:py-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] flex items-center justify-between gap-4">
+                                    <div className="min-w-0">
+                                        <p className="text-[10.5px] font-[800] text-[#53B175] uppercase tracking-[0.18em] mb-1">Welcome back</p>
+                                        <h2 className="text-[22px] lg:text-[26px] font-black text-[#181725] leading-tight truncate">
+                                            {userData.fullName ? `Hi, ${userData.fullName.split(' ')[0]}` : 'Hi there'}
+                                        </h2>
+                                        <p className="text-[13px] text-gray-500 mt-1.5 truncate">
+                                            {userData.businessName
+                                                ? `Manage ${userData.businessName}'s procurement from one place.`
+                                                : 'Manage your procurement from one place.'}
+                                        </p>
+                                    </div>
+                                    {!isProfileComplete && (
+                                        <button
+                                            onClick={() => setIsEditProfileOpen(true)}
+                                            className="hidden lg:flex items-center gap-2 shrink-0 bg-[#53B175] text-white text-[12px] font-bold px-4 py-2.5 rounded-xl hover:bg-[#469E66] transition-colors cursor-pointer"
+                                        >
+                                            <Pencil size={13} />
+                                            Complete profile
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Primary actions — 4 enterprise-style tiles with shared brand accent */}
+                                <section>
+                                    <div className="flex items-baseline justify-between mb-3 px-1">
+                                        <h3 className="text-[15px] font-[700] text-[#181725]">Shortcuts</h3>
+                                        <span className="text-[11px] font-medium text-gray-400">Jump back in</span>
+                                    </div>
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+                                        {primaryActions.map((action) => {
+                                            const Icon = action.icon;
+                                            return (
                                                 <button
-                                                    key={item.id}
-                                                    onClick={item.onClick}
-                                                    className={cn(
-                                                        "w-full flex items-center justify-between px-4 lg:px-5 py-3 lg:py-4 group active:bg-gray-50 transition-colors text-left hover:bg-gray-50/50 cursor-pointer",
-                                                        idx < yourInfoItems.length - 1 && "border-b border-gray-50/80"
-                                                    )}
+                                                    key={action.id}
+                                                    onClick={action.onClick}
+                                                    className="group relative text-left bg-white border border-gray-100 rounded-2xl p-5 hover:border-[#53B175]/40 hover:shadow-[0_8px_24px_rgba(83,177,117,0.12)] hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.98] cursor-pointer overflow-hidden"
                                                 >
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
-                                                            <Icon size={18} className="text-text-muted" />
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-[15px] font-[600] text-[#181725] block">{item.label}</span>
-                                                            <span className="text-[12px] text-gray-400 font-medium mt-0.5 block">{item.desc}</span>
-                                                        </div>
+                                                    <div className="w-11 h-11 rounded-xl bg-[#53B175]/10 text-[#53B175] flex items-center justify-center mb-4 group-hover:bg-[#53B175] group-hover:text-white transition-colors">
+                                                        <Icon size={20} strokeWidth={2.3} />
                                                     </div>
-                                                    <ChevronRight size={16} className="text-gray-300" />
+                                                    <p className="text-[14px] font-[700] text-[#181725] leading-tight">{action.label}</p>
+                                                    <p className="text-[11.5px] text-gray-400 font-medium mt-1">{action.sub}</p>
+                                                    <ChevronRight size={16} className="absolute top-5 right-5 text-gray-200 group-hover:text-[#53B175] transition-colors" />
                                                 </button>
                                             );
                                         })}
                                     </div>
-                                </div>
-                            </div>
+                                </section>
 
-                            {/* RIGHT COLUMN: Action Cards + Other Information */}
-                            <div className="space-y-6">
-                                {/* Top Actions (Reorder, Quick Order, My Vendors) */}
-                                <div className="grid grid-cols-3 gap-3 lg:gap-5">
-                                    {topActions.map((action) => {
-                                        const Icon = action.icon;
-                                        return (
-                                            <button
-                                                key={action.id}
-                                                onClick={action.onClick}
-                                                className="flex flex-col items-center bg-white border border-gray-100 rounded-2xl py-5 lg:py-7 px-2 lg:px-3 shadow-sm active:scale-[0.98] transition-all hover:shadow-lg hover:border-primary/20 hover:-translate-y-0.5 cursor-pointer"
-                                            >
-                                                <div className={cn("w-14 h-14 rounded-full flex items-center justify-center mb-3", action.color)}>
-                                                    <Icon size={22} strokeWidth={2.5} />
-                                                </div>
-                                                <p className="text-[15px] font-[700] text-[#181725] leading-tight mb-1">{action.label}</p>
-                                                <p className="text-[11px] text-gray-400 font-medium whitespace-nowrap uppercase tracking-tighter">{action.sub}</p>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Quick Utility Actions (Your Order, Help, Wishlist) */}
-                                <div className="grid grid-cols-3 gap-3 lg:gap-5">
-                                    {quickActions.map((action) => {
-                                        const Icon = action.icon;
-                                        return (
-                                            <button
-                                                key={action.id}
-                                                onClick={action.onClick}
-                                                className="flex flex-col items-center bg-white border border-gray-100 rounded-2xl py-6 lg:py-8 px-2 lg:px-3 shadow-sm group active:scale-[0.98] transition-all hover:shadow-lg hover:border-primary/20 hover:-translate-y-0.5 cursor-pointer"
-                                            >
-                                                <div className="mb-4">
-                                                    <Icon size={26} className="text-[#181725]" strokeWidth={2} />
-                                                </div>
-                                                <span className="text-[14px] font-[600] text-[#181725] text-center leading-tight whitespace-pre-line px-1">{action.label}</span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Other Information */}
-                                <div>
-                                    <h4 className="text-[18px] font-[700] text-[#181725] mb-3 px-1">Other Information</h4>
-                                    <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-[0_2px_16px_rgba(0,0,0,0.06)]">
-                                        {otherInfoItems.map((item, idx) => {
-                                            const Icon = item.icon;
-                                            return (
-                                                <button
-                                                    key={item.id}
-                                                    onClick={item.onClick}
-                                                    className={cn(
-                                                        "w-full flex items-center justify-between px-5 py-4 group active:bg-gray-50 transition-colors text-left hover:bg-gray-50/50 cursor-pointer",
-                                                        idx < otherInfoItems.length - 1 && "border-b border-gray-50/80"
-                                                    )}
-                                                >
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
-                                                            <Icon size={18} className="text-text-muted" />
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-[15px] font-[600] text-[#181725] block">{item.label}</span>
-                                                            <span className="text-[12px] text-gray-400 font-medium mt-0.5 block">{item.desc}</span>
-                                                        </div>
-                                                    </div>
-                                                    <ChevronRight size={16} className="text-gray-300" />
-                                                </button>
-                                            );
-                                        })}
+                                {/* Account details snapshot — surfaces business info from existing userData */}
+                                <section>
+                                    <div className="flex items-baseline justify-between mb-3 px-1">
+                                        <h3 className="text-[15px] font-[700] text-[#181725]">Account details</h3>
+                                        <button onClick={() => setIsEditProfileOpen(true)} className="text-[12px] font-bold text-[#53B175] hover:text-[#469E66] transition-colors cursor-pointer">
+                                            Edit
+                                        </button>
                                     </div>
-                                </div>
-                            </div>
+                                    <div className="bg-white border border-gray-100 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] divide-y divide-gray-50">
+                                        <DetailRow icon={Mail} label="Email" value={userData.email || '—'} />
+                                        <DetailRow icon={Phone} label="Phone" value={userData.phone || 'Not added'} muted={!userData.phone} />
+                                        <DetailRow icon={Building2} label="Business" value={userData.businessName || 'Not added'} muted={!userData.businessName} />
+                                        <DetailRow
+                                            icon={MapPin}
+                                            label="Default delivery"
+                                            value={userData.address || 'No address saved'}
+                                            sub={defaultLocation || undefined}
+                                            muted={!userData.address}
+                                        />
+                                    </div>
+                                </section>
+
+                            </main>
                         </div>
 
                     </div>
@@ -436,22 +523,10 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                 }}
             />
 
-            {/* Wishlist Overlay */}
-            <WishlistOverlay
-                isOpen={isWishlistOpen}
-                onClose={() => setIsWishlistOpen(false)}
-            />
-
             {/* Saved Addresses Overlay */}
             <SavedAddressesOverlay
                 isOpen={isSavedAddressesOpen}
                 onClose={() => setIsSavedAddressesOpen(false)}
-            />
-
-            {/* Rewards Overlay */}
-            <RewardsOverlay
-                isOpen={isRewardsOpen}
-                onClose={() => setIsRewardsOpen(false)}
             />
 
             {/* Payment Management Overlay */}
