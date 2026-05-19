@@ -88,8 +88,8 @@ export default function BrandAnalyticsPage() {
     const tiles = [
         { label: 'Distributors', value: data.headline.distributorCount, icon: Users, color: '#3B82F6', bg: '#EFF6FF' },
         { label: 'Pincode reach', value: data.headline.servicedPincodeCount, icon: MapPin, color: '#8B5CF6', bg: '#F3F0FF' },
-        { label: 'Mapped SKUs', value: data.headline.mappedDistributorProductCount, icon: Package, color: '#F59E0B', bg: '#FFF7E6' },
-        { label: 'Master products', value: data.headline.masterProductCount, icon: BarChart3, color: '#53B175', bg: '#EEF8F1' },
+        { label: 'Mapped distributor products', value: data.headline.mappedDistributorProductCount, icon: Package, color: '#F59E0B', bg: '#FFF7E6' },
+        { label: 'Brand products', value: data.headline.masterProductCount, icon: BarChart3, color: '#53B175', bg: '#EEF8F1' },
         { label: 'Orders (30d)', value: data.headline.last30dOrders, icon: ShoppingCart, color: '#EC4899', bg: '#FDF2F8' },
         { label: 'Revenue (30d)', value: inr(data.headline.last30dRevenue), icon: IndianRupee, color: '#10B981', bg: '#ECFDF5' },
     ];
@@ -162,7 +162,7 @@ export default function BrandAnalyticsPage() {
                 {/* Top products */}
                 <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                     <div className="p-5 border-b border-gray-100">
-                        <h2 className="text-[15px] font-bold text-[#181725]">Top selling SKUs</h2>
+                        <h2 className="text-[15px] font-bold text-[#181725]">Top selling products</h2>
                         <p className="text-[12px] text-gray-500">By revenue (last 6 months)</p>
                     </div>
                     {data.topProducts.length === 0 ? (

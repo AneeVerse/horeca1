@@ -264,12 +264,24 @@ export function BrandStore({ brandId }: BrandStoreProps) {
     }, [brand, selectedCategory, searchQuery]);
 
     // Pick the cheapest in-stock serviceable distributor for a brand product.
-    // If none serviceable, falls back to cheapest in-stock regardless of pincode (so the
-    // user can still add and a "doesn't deliver to your pincode" guard kicks in at cart).
+    //
+    // ── No-silent-fallback rule (2026-05-19) ──
+    // When the customer has a pincode set AND no in-stock distributor services that
+    // pincode, we deliberately return `null` instead of silently falling back to the
+    // cheapest non-serviceable vendor. The previous behaviour was a UX trap: the card
+    // would "Add" successfully, toast "Added X from Y", and then the customer would
+    // hit a delivery-area wall at checkout. Instead, callers should detect the null
+    // result and open the vendor picker modal, where every distributor is listed with
+    // a clear "Doesn't deliver to {pincode}" warning so the customer can make an
+    // informed choice (or pick a different brand).
+    //
+    // When the customer has NO pincode, we keep the old behaviour (cheapest in-stock)
+    // because there's no delivery-area to violate.
     const pickBestDistributor = (product: BrandProduct): BrandDistributor | null => {
         const inStock = product.distributors.filter(d => d.inStock);
         if (inStock.length === 0) return null;
         const serviceable = inStock.filter(d => d.servicesPincode !== false);
+        if (pincode && serviceable.length === 0) return null;
         const pool = serviceable.length > 0 ? serviceable : inStock;
         return pool.slice().sort((a, b) => a.price - b.price)[0];
     };
@@ -689,7 +701,14 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                                     {filteredProducts.map((product) => {
                                         const best = pickBestDistributor(product);
                                         const distCount = product.distributors.filter(d => d.inStock).length;
-                                        
+                                        // True when at least one distributor stocks the product but
+                                        // none of them deliver to the customer's selected pincode.
+                                        // In that case we render the card in a "needs picker" state:
+                                        // stock=0 (so VendorProductCard's add button is disabled) AND
+                                        // a transparent click-capturing overlay that opens the vendor
+                                        // picker modal instead of silently swallowing the click.
+                                        const noServiceableButHasStock = !best && distCount > 0;
+
                                         const mappedProduct: VendorProduct = {
                                             id: best ? best.distributorProductId : product.id,
                                             name: product.name,
@@ -705,15 +724,14 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                                             createdAt: new Date(),
                                             updatedAt: new Date(),
                                             vendorId: best ? best.vendorId : '',
-                                            vendorName: best ? best.vendorName : 'No distributor',
+                                            vendorName: best ? best.vendorName : (noServiceableButHasStock ? 'View distributors' : 'No distributor'),
                                             bulkPrices: [],
                                             creditBadge: false,
                                             minOrderQuantity: 1,
                                         };
 
-                                        return (
+                                        const card = (
                                             <VendorProductCard
-                                                key={product.id}
                                                 product={mappedProduct}
                                                 variant={layoutMode}
                                                 distributorName={best?.vendorName}
@@ -725,6 +743,28 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                                                 }}
                                             />
                                         );
+
+                                        // When no distributor delivers to the pincode but the product
+                                        // is otherwise in stock, wrap the card in a relative container
+                                        // with an overlay that captures clicks and opens the picker
+                                        // modal. This lets the customer browse all distributors with
+                                        // explicit "Doesn't deliver to {pincode}" warnings instead of
+                                        // silently adding a non-deliverable item to cart.
+                                        if (noServiceableButHasStock) {
+                                            return (
+                                                <div key={product.id} className="relative">
+                                                    {card}
+                                                    <button
+                                                        type="button"
+                                                        aria-label={`View distributors for ${product.name}`}
+                                                        onClick={() => setVendorPickerProduct(product)}
+                                                        className="absolute inset-0 z-10 w-full h-full rounded-2xl cursor-pointer bg-transparent"
+                                                    />
+                                                </div>
+                                            );
+                                        }
+
+                                        return <React.Fragment key={product.id}>{card}</React.Fragment>;
                                     })}
                                 </div>
                             ) : (
@@ -833,28 +873,51 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                                 .sort((a, b) => Number(b.servicesPincode !== false) - Number(a.servicesPincode !== false) || a.price - b.price)
                                 .map((dist) => {
                                     const isAdding = adding === dist.distributorProductId;
+                                    // A distributor counts as "non-serviceable" only when the customer
+                                    // has a pincode selected AND the API marked the vendor as not
+                                    // covering it. Without a pincode we have no way to verify and the
+                                    // Add button stays enabled (customer can still proceed; the cart
+                                    // page gates on pincode selection elsewhere).
+                                    const nonServiceable = !!pincode && dist.servicesPincode === false;
+                                    const addDisabled = !dist.inStock || isAdding || nonServiceable;
                                     return (
                                         <div key={dist.distributorProductId} className="p-4 flex items-center gap-3">
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-[13px] font-bold text-[#181725] truncate">{dist.vendorName}</p>
-                                                <div className="flex items-center gap-2 mt-1">
+                                                <div className="flex items-center gap-2 mt-1 flex-wrap">
                                                     <span className="text-[16px] font-[1000] text-[#53B175]">₹{dist.price}</span>
                                                     {!dist.inStock && <span className="text-[10px] font-bold text-red-500">Out of stock</span>}
-                                                    {pincode && dist.servicesPincode === false && <span className="text-[10px] font-bold text-amber-600">Doesn&rsquo;t deliver to {pincode}</span>}
+                                                    {nonServiceable && (
+                                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">
+                                                            <AlertCircle size={11} strokeWidth={2.5} />
+                                                            Doesn&rsquo;t deliver to {pincode}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
-                                            <button
-                                                onClick={() => { addBrandProductToCart(vendorPickerProduct, dist); setVendorPickerProduct(null); }}
-                                                disabled={!dist.inStock || isAdding}
-                                                className={cn(
-                                                    'px-3 py-1.5 rounded-lg text-[12px] font-bold flex items-center gap-1 transition-colors shrink-0',
-                                                    dist.inStock ? 'bg-[#53B175] text-white hover:bg-[#3d9e5f]' : 'bg-gray-100 text-gray-400 cursor-not-allowed',
-                                                    isAdding && 'opacity-60'
-                                                )}
-                                            >
-                                                {isAdding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} strokeWidth={3} />}
-                                                Add
-                                            </button>
+                                            {nonServiceable ? (
+                                                <Link
+                                                    href={`/vendor/${dist.vendorId}`}
+                                                    onClick={() => setVendorPickerProduct(null)}
+                                                    className="px-3 py-1.5 rounded-lg text-[12px] font-bold flex items-center gap-1 bg-white border border-[#53B175]/30 text-[#53B175] hover:bg-[#EEF8F1] shrink-0"
+                                                >
+                                                    View vendor
+                                                    <ChevronRight size={12} strokeWidth={3} />
+                                                </Link>
+                                            ) : (
+                                                <button
+                                                    onClick={() => { addBrandProductToCart(vendorPickerProduct, dist); setVendorPickerProduct(null); }}
+                                                    disabled={addDisabled}
+                                                    className={cn(
+                                                        'px-3 py-1.5 rounded-lg text-[12px] font-bold flex items-center gap-1 transition-colors shrink-0',
+                                                        dist.inStock ? 'bg-[#53B175] text-white hover:bg-[#3d9e5f]' : 'bg-gray-100 text-gray-400 cursor-not-allowed',
+                                                        isAdding && 'opacity-60'
+                                                    )}
+                                                >
+                                                    {isAdding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} strokeWidth={3} />}
+                                                    Add
+                                                </button>
+                                            )}
                                         </div>
                                     );
                                 })}

@@ -1,9 +1,13 @@
-// GET  /api/v1/vendor/brand-mappings — Vendor's own mappings (split by status)
+// GET  /api/v1/vendor/brand-mappings — Vendor's own mappings, split by state.
 //   Returns:
-//     - unmapped: vendor's products with NO active mapping (manual matching needed)
-//     - pendingReview: rule_based mappings ≥0.70 <0.90 awaiting vendor confirmation
-//     - mapped: verified + auto_mapped (active live mappings)
-// POST /api/v1/vendor/brand-mappings — Vendor manually maps one of their products to a brand SKU
+//     - unmapped:      products with NO live AND NO pending mapping (vendor must pick a brand SKU)
+//     - pendingReview: products with one OR MORE auto-detected candidates awaiting confirm/reject;
+//                      each row groups ALL candidates for the same product so the vendor can see
+//                      every suggestion the auto-mapper produced (not just the latest one).
+//     - mapped:        one row per LIVE mapping (auto_mapped or verified). A vendor product may
+//                      appear more than once here if it's linked to multiple brand catalogs
+//                      (e.g. private-label SKU listed under two distinct brand storefronts).
+// POST /api/v1/vendor/brand-mappings — Vendor manually links one of their products to a brand SKU.
 //   BODY: { distributorProductId, brandMasterProductId }
 // REQUIRES: role=vendor (or admin), products:write permission for POST
 
@@ -26,7 +30,11 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
     const { vendorId } = await resolveVendorContext(ctx, req);
 
-    // All vendor's active approved products
+    // Fetch every active approved product for this vendor, with ALL its mappings
+    // in any reviewable state. We deliberately DO NOT `take: 1` — the auto-mapper
+    // can produce multiple plausible candidates per product (e.g. "Tomato Ketchup
+    // 1kg" against Knorr + Heinz + Maggi catalogs) and the vendor needs to see
+    // every suggestion so they can confirm the correct one and reject the rest.
     const products = await prisma.product.findMany({
       where: { vendorId, isActive: true, approvalStatus: 'approved' },
       select: {
@@ -36,51 +44,86 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
           include: {
             brandMasterProduct: {
               select: {
-                id: true, name: true, packSize: true, imageUrl: true,
+                id: true, name: true, packSize: true, imageUrl: true, sku: true,
                 brand: { select: { id: true, name: true, slug: true, logoUrl: true } },
               },
             },
           },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
+          orderBy: { confidenceScore: 'desc' },
         },
       },
       orderBy: { name: 'asc' },
     });
 
-    const unmapped = products
-      .filter(p => p.brandMappings.length === 0)
-      .map(p => ({
-        productId: p.id,
-        name: p.name,
-        brand: p.brand,
-        packSize: p.packSize,
-        imageUrl: p.imageUrl,
-        basePrice: Number(p.basePrice),
-      }));
+    type Suggestion = {
+      mappingId: string;
+      confidenceScore: number;
+      brandMasterProduct: {
+        id: string; name: string; packSize: string | null; imageUrl: string | null; sku: string | null;
+        brand: { id: string; name: string; slug: string; logoUrl: string | null };
+      };
+    };
 
-    const pendingReview = products
-      .filter(p => p.brandMappings[0]?.status === 'pending_review')
-      .map(p => ({
-        mappingId: p.brandMappings[0].id,
-        productId: p.id,
-        productName: p.name,
-        productImage: p.imageUrl,
-        confidenceScore: Number(p.brandMappings[0].confidenceScore),
-        brandMasterProduct: p.brandMappings[0].brandMasterProduct,
-      }));
+    const unmapped: Array<{ productId: string; name: string; brand: string | null; packSize: string | null; imageUrl: string | null; basePrice: number }> = [];
+    const pendingReview: Array<{
+      productId: string; productName: string; productImage: string | null;
+      brand: string | null; packSize: string | null; basePrice: number;
+      suggestions: Suggestion[];
+    }> = [];
+    const mapped: Array<{
+      mappingId: string; productId: string; productName: string; productImage: string | null;
+      status: 'auto_mapped' | 'verified'; confidenceScore: number;
+      brandMasterProduct: Suggestion['brandMasterProduct'];
+    }> = [];
 
-    const mapped = products
-      .filter(p => ['auto_mapped', 'verified'].includes(p.brandMappings[0]?.status ?? ''))
-      .map(p => ({
-        mappingId: p.brandMappings[0].id,
-        productId: p.id,
-        productName: p.name,
-        productImage: p.imageUrl,
-        status: p.brandMappings[0].status,
-        confidenceScore: Number(p.brandMappings[0].confidenceScore),
-        brandMasterProduct: p.brandMappings[0].brandMasterProduct,
-      }));
+    for (const p of products) {
+      const liveMappings = p.brandMappings.filter(m => m.status === 'auto_mapped' || m.status === 'verified');
+      const pendingMappings = p.brandMappings.filter(m => m.status === 'pending_review');
+
+      // Each LIVE mapping = its own row (a vendor product can legitimately appear under
+      // multiple brand storefronts; the vendor needs per-link controls).
+      for (const m of liveMappings) {
+        mapped.push({
+          mappingId: m.id,
+          productId: p.id,
+          productName: p.name,
+          productImage: p.imageUrl,
+          status: m.status as 'auto_mapped' | 'verified',
+          confidenceScore: Number(m.confidenceScore),
+          brandMasterProduct: m.brandMasterProduct,
+        });
+      }
+
+      // Pending suggestions: ONE row per product, with ALL candidates nested. Vendor picks one
+      // (or none). Sorted highest-confidence first so the most likely match leads.
+      if (pendingMappings.length > 0) {
+        pendingReview.push({
+          productId: p.id,
+          productName: p.name,
+          productImage: p.imageUrl,
+          brand: p.brand,
+          packSize: p.packSize,
+          basePrice: Number(p.basePrice),
+          suggestions: pendingMappings.map(m => ({
+            mappingId: m.id,
+            confidenceScore: Number(m.confidenceScore),
+            brandMasterProduct: m.brandMasterProduct,
+          })),
+        });
+      }
+
+      // Unmapped: nothing live, nothing pending — vendor needs to manually pick a brand SKU.
+      if (liveMappings.length === 0 && pendingMappings.length === 0) {
+        unmapped.push({
+          productId: p.id,
+          name: p.name,
+          brand: p.brand,
+          packSize: p.packSize,
+          imageUrl: p.imageUrl,
+          basePrice: Number(p.basePrice),
+        });
+      }
+    }
 
     return NextResponse.json({
       success: true,

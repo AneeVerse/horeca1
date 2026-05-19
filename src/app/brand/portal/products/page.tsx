@@ -139,8 +139,8 @@ export default function BrandProductsPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-[26px] font-[900] text-[#181725] tracking-tight">My Products</h1>
-                    <p className="text-[#7C7C7C] font-medium mt-0.5 text-[14px]">Your canonical brand catalog</p>
+                    <h1 className="text-[26px] font-[900] text-[#181725] tracking-tight">Brand Products</h1>
+                    <p className="text-[#7C7C7C] font-medium mt-0.5 text-[14px]">Your brand&apos;s product catalog. Customers see these names everywhere your distributors list this product.</p>
                 </div>
                 <button
                     onClick={openAdd}

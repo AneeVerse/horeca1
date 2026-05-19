@@ -88,7 +88,7 @@ export default function BrandPortalDashboard() {
 
     const stats = [
         {
-            label: 'Catalog Products',
+            label: 'Brand Products',
             value: profile._count.masterProducts,
             icon: Package,
             color: '#3B82F6',
@@ -223,7 +223,7 @@ export default function BrandPortalDashboard() {
                         <div className="space-y-4">
                             {[
                                 { label: 'Approval Status', value: profile.approvalStatus.charAt(0).toUpperCase() + profile.approvalStatus.slice(1) },
-                                { label: 'Catalog Products', value: String(profile._count.masterProducts) },
+                                { label: 'Brand Products', value: String(profile._count.masterProducts) },
                                 { label: 'Distributor Mappings', value: String(profile._count.productMappings) },
                                 { label: 'Brand Slug', value: `/${profile.slug}` },
                                 {
@@ -319,7 +319,7 @@ export default function BrandPortalDashboard() {
                 {/* Recent Products */}
                 <div className="lg:col-span-2 bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-[16px] font-[900] text-[#181725]">Catalog Products</h3>
+                        <h3 className="text-[16px] font-[900] text-[#181725]">Brand Products</h3>
                         <Link href="/brand/portal/products"
                             className="text-[13px] font-bold text-[#53B175] hover:underline flex items-center gap-1">
                             View all <ArrowRight size={13} />

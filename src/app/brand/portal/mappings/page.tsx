@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { GitMerge, Loader2, RefreshCw, CheckCircle, Clock, XCircle, Zap, Store } from 'lucide-react';
+import { GitMerge, Loader2, CheckCircle, Clock, XCircle, Zap, Store, Info } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { confidenceLabel, mappingStatusLabel, TONE_STYLES } from '@/lib/brandMappingLabels';
 
 interface CoverageItem {
     masterProductId: string;
@@ -21,11 +23,21 @@ interface CoverageItem {
     }>;
 }
 
-const STATUS_CONFIG = {
-    auto_mapped: { label: 'Auto-mapped', color: '#53B175', bg: '#EEF8F1', icon: CheckCircle },
-    verified: { label: 'Verified', color: '#3B82F6', bg: '#EFF6FF', icon: CheckCircle },
-    pending_review: { label: 'Pending Review', color: '#F59E0B', bg: '#FFF7E6', icon: Clock },
-    rejected: { label: 'Rejected', color: '#E74C3C', bg: '#FEF2F2', icon: XCircle },
+interface RunMappingResponse {
+    success: boolean;
+    message?: string;
+    before?: number;
+    after?: number;
+    newMappings?: number;
+    error?: { message?: string };
+}
+
+// Icon per status — labels + colours come from the shared helper.
+const STATUS_ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+    auto_mapped: CheckCircle,
+    verified: CheckCircle,
+    pending_review: Clock,
+    rejected: XCircle,
 };
 
 export default function BrandMappingsPage() {
@@ -48,15 +60,29 @@ export default function BrandMappingsPage() {
     const handleRunAll = async () => {
         setRunningAll(true);
         try {
-            await fetch('/api/v1/brand/coverage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+            const res = await fetch('/api/v1/brand/coverage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            const result: RunMappingResponse = await res.json();
+            if (result.success) {
+                toast.success(result.message ?? 'Auto-mapping complete');
+            } else {
+                toast.error(result.error?.message ?? 'Auto-mapping failed');
+            }
             await fetchCoverage();
-        } catch { /* silent */ }
+        } catch {
+            toast.error('Network error — please try again');
+        }
         finally { setRunningAll(false); }
     };
 
-    const totalMappings = coverage.reduce((sum, item) => sum + item.mappings.length, 0);
+    const totalCovered = coverage.filter(c => c.mappings.length > 0).length;
     const activeMappings = coverage.reduce((sum, item) =>
         sum + item.mappings.filter(m => m.status === 'auto_mapped' || m.status === 'verified').length, 0);
+    const pendingMappings = coverage.reduce((s, c) =>
+        s + c.mappings.filter(m => m.status === 'pending_review').length, 0);
 
     return (
         <div className="max-w-[1100px] mx-auto space-y-6 animate-in fade-in duration-500">
@@ -71,6 +97,7 @@ export default function BrandMappingsPage() {
                 <button
                     onClick={handleRunAll}
                     disabled={runningAll}
+                    title="Scans all approved distributor catalogs for products that match your brand. New matches show up below."
                     className="flex items-center gap-2 px-4 py-2.5 bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#3d9e41] transition-colors disabled:opacity-60"
                 >
                     {runningAll ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
@@ -81,9 +108,9 @@ export default function BrandMappingsPage() {
             {/* Stats */}
             <div className="grid grid-cols-3 gap-4">
                 {[
-                    { label: 'Products Covered', value: coverage.filter(c => c.mappings.length > 0).length, color: '#3B82F6', bg: '#EFF6FF' },
+                    { label: 'Products Covered', value: totalCovered, color: '#3B82F6', bg: '#EFF6FF' },
                     { label: 'Active Mappings', value: activeMappings, color: '#53B175', bg: '#EEF8F1' },
-                    { label: 'Pending Review', value: coverage.reduce((s, c) => s + c.mappings.filter(m => m.status === 'pending_review').length, 0), color: '#F59E0B', bg: '#FFF7E6' },
+                    { label: 'Pending Review', value: pendingMappings, color: '#F59E0B', bg: '#FFF7E6' },
                 ].map(stat => (
                     <div key={stat.label} className="bg-white p-4 rounded-[14px] border border-[#EEEEEE] shadow-sm flex items-center gap-3">
                         <div className="w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0" style={{ backgroundColor: stat.bg }}>
@@ -141,8 +168,11 @@ export default function BrandMappingsPage() {
                             ) : (
                                 <div className="divide-y divide-[#F5F5F5]">
                                     {item.mappings.map(mapping => {
-                                        const cfg = STATUS_CONFIG[mapping.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.pending_review;
-                                        const StatusIcon = cfg.icon;
+                                        const status = mappingStatusLabel(mapping.status);
+                                        const statusTone = TONE_STYLES[status.tone];
+                                        const StatusIcon = STATUS_ICONS[mapping.status] ?? Clock;
+                                        const confidence = confidenceLabel(mapping.confidenceScore);
+                                        const confidenceTone = TONE_STYLES[confidence.tone];
                                         return (
                                             <div key={mapping.id} className="px-5 py-3 flex items-center gap-3">
                                                 {mapping.distributorProduct.vendor.logoUrl ? (
@@ -164,13 +194,16 @@ export default function BrandMappingsPage() {
                                                         ₹{Number(mapping.distributorProduct.basePrice).toFixed(0)}
                                                     </p>
                                                     <div className="flex items-center gap-1 justify-end mt-0.5">
-                                                        <StatusIcon size={11} style={{ color: cfg.color }} />
-                                                        <span className="text-[10px] font-bold" style={{ color: cfg.color }}>{cfg.label}</span>
+                                                        <StatusIcon size={11} className={statusTone.text} />
+                                                        <span className={cn('text-[10px] font-bold', statusTone.text)}>{status.label}</span>
                                                     </div>
                                                 </div>
-                                                <div className="text-right shrink-0 ml-2">
-                                                    <span className="text-[10px] font-bold text-[#AEAEAE]">
-                                                        {Math.round(mapping.confidenceScore * 100)}% match
+                                                <div
+                                                    className="text-right shrink-0 ml-2"
+                                                    title={`${confidence.percent}% confidence`}
+                                                >
+                                                    <span className={cn('text-[10px] font-bold', confidenceTone.text)}>
+                                                        {confidence.label}
                                                     </span>
                                                 </div>
                                             </div>
@@ -182,6 +215,19 @@ export default function BrandMappingsPage() {
                     ))}
                 </div>
             )}
+
+            {/* How this works tip */}
+            <div className="bg-[#F8F9FB] border border-[#EEEEEE] rounded-[14px] p-5 flex items-start gap-3">
+                <div className="w-9 h-9 rounded-[10px] bg-[#EEF8F1] flex items-center justify-center shrink-0">
+                    <Info size={16} className="text-[#53B175]" />
+                </div>
+                <div>
+                    <p className="text-[13px] font-[900] text-[#181725]">How distributor mapping works</p>
+                    <p className="text-[12px] text-[#7C7C7C] font-medium mt-1 leading-relaxed">
+                        Distributors carrying your brand are matched to your catalog automatically. High-confidence matches go live; lower-confidence ones wait for distributor confirmation. Click <span className="font-bold text-[#181725]">Run Auto-Mapping</span> to re-scan any time.
+                    </p>
+                </div>
+            </div>
         </div>
     );
 }

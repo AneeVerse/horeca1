@@ -2,9 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import { GitMerge, Search, X, Check, Loader2, Package, AlertCircle, ChevronRight, Sparkles } from 'lucide-react';
+import {
+    GitMerge, Search, X, Check, Loader2, Package, AlertCircle, ChevronRight, Sparkles, Unlink,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { confidenceLabel, mappingStatusLabel, TONE_STYLES } from '@/lib/brandMappingLabels';
 
 interface BrandMasterPick {
     id: string;
@@ -24,13 +27,20 @@ interface UnmappedProduct {
     basePrice: number;
 }
 
-interface PendingMapping {
+interface PendingSuggestion {
     mappingId: string;
+    confidenceScore: number;
+    brandMasterProduct: BrandMasterPick;
+}
+
+interface PendingReviewGroup {
     productId: string;
     productName: string;
     productImage: string | null;
-    confidenceScore: number;
-    brandMasterProduct: BrandMasterPick;
+    brand: string | null;
+    packSize: string | null;
+    basePrice: number;
+    suggestions: PendingSuggestion[];
 }
 
 interface MappedItem {
@@ -150,11 +160,15 @@ function BrandPickerModal({
 
 export default function VendorBrandMappingsPage() {
     const [unmapped, setUnmapped] = useState<UnmappedProduct[]>([]);
-    const [pendingReview, setPendingReview] = useState<PendingMapping[]>([]);
+    const [pendingReview, setPendingReview] = useState<PendingReviewGroup[]>([]);
     const [mapped, setMapped] = useState<MappedItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [pickerFor, setPickerFor] = useState<UnmappedProduct | null>(null);
     const [savingId, setSavingId] = useState<string | null>(null);
+    // Optimistic rejections: mappingIds that the user just dismissed (either explicitly or
+    // because they confirmed a sibling). Used so the row visually fades before the reload
+    // settles. Cleared on every successful reload.
+    const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -165,6 +179,7 @@ export default function VendorBrandMappingsPage() {
                 setUnmapped(j.data.unmapped);
                 setPendingReview(j.data.pendingReview);
                 setMapped(j.data.mapped);
+                setDismissedIds(new Set());
             }
         } catch {
             toast.error('Failed to load mappings');
@@ -196,20 +211,96 @@ export default function VendorBrandMappingsPage() {
         }
     };
 
-    const reviewPending = async (mappingId: string, status: 'verified' | 'rejected') => {
-        setSavingId(mappingId);
+    // Reject a single pending suggestion (used both for "Not this one" and as part of
+    // confirming a sibling). Stays silent so the caller can batch a single toast.
+    const rejectMapping = async (mappingId: string): Promise<boolean> => {
         try {
             const r = await fetch(`/api/v1/vendor/brand-mappings/${mappingId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status }),
+                body: JSON.stringify({ status: 'rejected' }),
             });
             const j = await r.json();
-            if (!j.success) throw new Error(j.error?.message || 'Update failed');
-            toast.success(status === 'verified' ? 'Mapping confirmed' : 'Mapping rejected');
+            return !!j.success;
+        } catch {
+            return false;
+        }
+    };
+
+    const handleConfirmSuggestion = async (group: PendingReviewGroup, picked: PendingSuggestion) => {
+        setSavingId(picked.mappingId);
+        // Optimistically dismiss all siblings so the row shrinks immediately.
+        const siblings = group.suggestions.filter(s => s.mappingId !== picked.mappingId);
+        setDismissedIds(prev => {
+            const next = new Set(prev);
+            siblings.forEach(s => next.add(s.mappingId));
+            return next;
+        });
+        try {
+            // Confirm the chosen one
+            const r = await fetch(`/api/v1/vendor/brand-mappings/${picked.mappingId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'verified' }),
+            });
+            const j = await r.json();
+            if (!j.success) throw new Error(j.error?.message || 'Confirm failed');
+
+            // Reject every sibling in parallel (fire-and-forget; we batch the toast).
+            if (siblings.length > 0) {
+                await Promise.all(siblings.map(s => rejectMapping(s.mappingId)));
+                toast.success(`Confirmed as ${picked.brandMasterProduct.brand.name} — ${picked.brandMasterProduct.name}, dismissed ${siblings.length} other ${siblings.length === 1 ? 'suggestion' : 'suggestions'}.`);
+            } else {
+                toast.success(`Confirmed as ${picked.brandMasterProduct.brand.name} — ${picked.brandMasterProduct.name}.`);
+            }
             await load();
         } catch (e: unknown) {
-            toast.error(e instanceof Error ? e.message : 'Update failed');
+            toast.error(e instanceof Error ? e.message : 'Confirm failed');
+            // Roll back optimistic dismissals on failure.
+            setDismissedIds(prev => {
+                const next = new Set(prev);
+                siblings.forEach(s => next.delete(s.mappingId));
+                return next;
+            });
+        } finally {
+            setSavingId(null);
+        }
+    };
+
+    const handleRejectSuggestion = async (suggestion: PendingSuggestion) => {
+        setSavingId(suggestion.mappingId);
+        setDismissedIds(prev => new Set(prev).add(suggestion.mappingId));
+        const ok = await rejectMapping(suggestion.mappingId);
+        if (ok) {
+            toast.success('Suggestion dismissed.');
+            await load();
+        } else {
+            toast.error('Could not dismiss suggestion.');
+            setDismissedIds(prev => {
+                const next = new Set(prev);
+                next.delete(suggestion.mappingId);
+                return next;
+            });
+        }
+        setSavingId(null);
+    };
+
+    const handleUnlink = async (item: MappedItem) => {
+        const ok = window.confirm(
+            `Unlink this product from ${item.brandMasterProduct.brand.name}? Customers shopping ${item.brandMasterProduct.brand.name} won't see this stock anymore. You can re-link it later if needed.`
+        );
+        if (!ok) return;
+        setSavingId(item.mappingId);
+        try {
+            const r = await fetch(`/api/v1/vendor/brand-mappings/${item.mappingId}`, {
+                method: 'DELETE',
+            });
+            const j = await r.json();
+            if (!j.success) throw new Error(j.error?.message || 'Unlink failed');
+            toast.success(`Unlinked from ${item.brandMasterProduct.brand.name}.`);
+            await load();
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Unlink failed');
         } finally {
             setSavingId(null);
         }
@@ -218,6 +309,11 @@ export default function VendorBrandMappingsPage() {
     if (loading) {
         return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="w-8 h-8 animate-spin text-[#53B175]" /></div>;
     }
+
+    // Filter pending groups so empty (fully dismissed) groups disappear optimistically.
+    const visiblePending = pendingReview
+        .map(g => ({ ...g, suggestions: g.suggestions.filter(s => !dismissedIds.has(s.mappingId)) }))
+        .filter(g => g.suggestions.length > 0);
 
     return (
         <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-500">
@@ -228,80 +324,119 @@ export default function VendorBrandMappingsPage() {
                         <GitMerge size={26} className="text-[#53B175]" /> Brand Mappings
                     </h1>
                     <p className="text-[#7C7C7C] font-medium mt-0.5 text-[14px] max-w-2xl">
-                        Match your products to brand SKUs once, then customers see the canonical brand name everywhere they discover your inventory.
+                        Match your products to a brand&rsquo;s official catalog. Customers will see the brand&rsquo;s name on your stock everywhere they shop.
                     </p>
                 </div>
             </div>
 
             {/* Stats row */}
             <div className="grid grid-cols-3 gap-3">
-                <div className="bg-white rounded-2xl border border-gray-100 p-4">
-                    <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">Unmapped</p>
+                <div className={cn('bg-white rounded-2xl border p-4', TONE_STYLES.low.border)}>
+                    <p className={cn('text-[11px] font-bold uppercase tracking-wider', TONE_STYLES.low.text)}>Unmapped</p>
                     <p className="text-[26px] font-black text-[#181725] mt-0.5">{unmapped.length}</p>
                 </div>
-                <div className="bg-white rounded-2xl border border-amber-100 p-4">
-                    <p className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">Awaiting your review</p>
-                    <p className="text-[26px] font-black text-amber-700 mt-0.5">{pendingReview.length}</p>
+                <div className={cn('bg-white rounded-2xl border p-4', TONE_STYLES.pending.border)}>
+                    <p className={cn('text-[11px] font-bold uppercase tracking-wider', TONE_STYLES.pending.text)}>Awaiting your review</p>
+                    <p className={cn('text-[26px] font-black mt-0.5', TONE_STYLES.pending.text)}>{visiblePending.length}</p>
                 </div>
-                <div className="bg-white rounded-2xl border border-[#EEF8F1] p-4">
-                    <p className="text-[11px] font-bold text-[#53B175] uppercase tracking-wider">Mapped</p>
-                    <p className="text-[26px] font-black text-[#53B175] mt-0.5">{mapped.length}</p>
+                <div className={cn('bg-white rounded-2xl border p-4', TONE_STYLES.live.border)}>
+                    <p className={cn('text-[11px] font-bold uppercase tracking-wider', TONE_STYLES.live.text)}>Live mappings</p>
+                    <p className={cn('text-[26px] font-black mt-0.5', TONE_STYLES.live.text)}>{mapped.length}</p>
                 </div>
             </div>
 
-            {/* Pending review (suggestions from auto-mapper) */}
-            {pendingReview.length > 0 && (
+            {/* Pending review (suggestions from auto-mapper) — shown FIRST as it is the most actionable */}
+            {visiblePending.length > 0 && (
                 <div className="bg-white rounded-2xl border border-amber-100 overflow-hidden">
                     <div className="p-5 border-b border-amber-100 bg-amber-50/40 flex items-center gap-2">
                         <Sparkles size={16} className="text-amber-600" />
-                        <h2 className="text-[15px] font-bold text-amber-900">Suggested matches awaiting your review</h2>
-                        <span className="ml-auto text-[11px] text-amber-700 font-semibold">Auto-detected, please confirm</span>
+                        <h2 className="text-[15px] font-bold text-amber-900">Auto-detected suggestions</h2>
+                        <span className="ml-auto text-[11px] text-amber-700 font-semibold">Please confirm or dismiss</span>
                     </div>
                     <div className="divide-y divide-amber-50">
-                        {pendingReview.map(p => (
-                            <div key={p.mappingId} className="p-4 flex items-center gap-4">
-                                {/* Vendor product side */}
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {visiblePending.map(group => (
+                            <div key={group.productId} className="p-4 space-y-3">
+                                {/* Product header */}
+                                <div className="flex items-center gap-3">
                                     <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative">
-                                        {p.productImage ? (
-                                            <Image src={p.productImage} alt="" fill sizes="48px" className="object-cover" />
+                                        {group.productImage ? (
+                                            <Image src={group.productImage} alt="" fill sizes="48px" className="object-cover" />
                                         ) : <div className="w-full h-full flex items-center justify-center"><Package size={16} className="text-gray-300" /></div>}
                                     </div>
-                                    <div className="min-w-0">
-                                        <p className="text-[10px] font-bold text-gray-400 uppercase">Your product</p>
-                                        <p className="text-[13px] font-bold text-[#181725] truncate">{p.productName}</p>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Your product</p>
+                                        <p className="text-[13px] font-bold text-[#181725] truncate">{group.productName}</p>
+                                        <p className="text-[11px] text-gray-400">
+                                            {group.brand ? <>Brand field: <span className="text-gray-600 font-medium">{group.brand}</span> · </> : null}
+                                            {group.packSize ?? '—'}
+                                        </p>
                                     </div>
                                 </div>
 
-                                <ChevronRight size={16} className="text-gray-300 shrink-0" />
+                                {/* Hint if multiple candidates */}
+                                {group.suggestions.length > 1 && (
+                                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-1.5">
+                                        We found {group.suggestions.length} possible matches — pick the one that&rsquo;s the same product, or reject all.
+                                    </p>
+                                )}
 
-                                {/* Brand master side */}
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative">
-                                        {p.brandMasterProduct.imageUrl ? (
-                                            <Image src={p.brandMasterProduct.imageUrl} alt="" fill sizes="48px" className="object-cover" />
-                                        ) : <div className="w-full h-full flex items-center justify-center"><Package size={16} className="text-gray-300" /></div>}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-[10px] font-bold text-[#53B175] uppercase">{p.brandMasterProduct.brand.name}</p>
-                                        <p className="text-[13px] font-bold text-[#181725] truncate">{p.brandMasterProduct.name}</p>
-                                        <p className="text-[10px] text-gray-400">Confidence {(p.confidenceScore * 100).toFixed(0)}%</p>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <button
-                                        onClick={() => reviewPending(p.mappingId, 'verified')}
-                                        disabled={savingId === p.mappingId}
-                                        className="flex items-center gap-1 px-3 py-1.5 bg-[#53B175] text-white text-[12px] font-bold rounded-lg hover:bg-[#3d9e5f] transition-colors disabled:opacity-60">
-                                        {savingId === p.mappingId ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Confirm
-                                    </button>
-                                    <button
-                                        onClick={() => reviewPending(p.mappingId, 'rejected')}
-                                        disabled={savingId === p.mappingId}
-                                        className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-[12px] font-bold rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-60">
-                                        <X size={12} /> Wrong
-                                    </button>
+                                {/* Candidate rows */}
+                                <div className="space-y-2">
+                                    {group.suggestions.map(s => {
+                                        const conf = confidenceLabel(s.confidenceScore);
+                                        const tone = TONE_STYLES[conf.tone];
+                                        const isSaving = savingId === s.mappingId;
+                                        return (
+                                            <div
+                                                key={s.mappingId}
+                                                className="flex items-center gap-3 p-3 bg-gray-50/60 border border-gray-100 rounded-xl"
+                                            >
+                                                <div className="w-10 h-10 rounded-lg overflow-hidden bg-white shrink-0 relative border border-gray-100">
+                                                    {s.brandMasterProduct.imageUrl ? (
+                                                        <Image src={s.brandMasterProduct.imageUrl} alt="" fill sizes="40px" className="object-cover" />
+                                                    ) : <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-gray-300" /></div>}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-1.5">
+                                                        {s.brandMasterProduct.brand.logoUrl && (
+                                                            <Image src={s.brandMasterProduct.brand.logoUrl} alt={s.brandMasterProduct.brand.name} width={14} height={14} className="rounded-sm object-contain" />
+                                                        )}
+                                                        <span className="text-[11px] font-bold text-[#53B175] uppercase tracking-wide">{s.brandMasterProduct.brand.name}</span>
+                                                    </div>
+                                                    <p className="text-[13px] font-semibold text-[#181725] truncate">{s.brandMasterProduct.name}</p>
+                                                    <p className="text-[10px] text-gray-400">
+                                                        {s.brandMasterProduct.packSize ?? '—'} · SKU {s.brandMasterProduct.sku ?? '—'}
+                                                    </p>
+                                                </div>
+                                                <span
+                                                    title={`Confidence ${conf.percent}%`}
+                                                    className={cn(
+                                                        'text-[10px] font-bold px-2 py-1 rounded-md whitespace-nowrap border',
+                                                        tone.text, tone.bg, tone.border,
+                                                    )}
+                                                >
+                                                    {conf.label}
+                                                </span>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <button
+                                                        onClick={() => handleConfirmSuggestion(group, s)}
+                                                        disabled={isSaving || savingId !== null}
+                                                        className="flex items-center gap-1 px-3 py-1.5 bg-[#53B175] text-white text-[12px] font-bold rounded-lg hover:bg-[#3d9e5f] transition-colors disabled:opacity-60"
+                                                    >
+                                                        {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                                                        Confirm this match
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleRejectSuggestion(s)}
+                                                        disabled={isSaving || savingId !== null}
+                                                        className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-[12px] font-bold rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-60"
+                                                    >
+                                                        <X size={12} /> Not this one
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ))}
@@ -314,7 +449,7 @@ export default function VendorBrandMappingsPage() {
                 <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                     <div className="p-5 border-b border-gray-100 flex items-center justify-between">
                         <div>
-                            <h2 className="text-[15px] font-bold text-[#181725]">Products without a brand match</h2>
+                            <h2 className="text-[15px] font-bold text-[#181725]">Products needing a brand match</h2>
                             <p className="text-[12px] text-gray-500 mt-0.5">Click any product and pick a brand SKU. One-time setup.</p>
                         </div>
                         <span className="text-[11px] font-bold text-gray-400">{unmapped.length} products</span>
@@ -333,7 +468,8 @@ export default function VendorBrandMappingsPage() {
                                 <button
                                     onClick={() => setPickerFor(p)}
                                     disabled={savingId === p.productId}
-                                    className="px-4 py-2 bg-[#53B175] text-white text-[12px] font-bold rounded-lg hover:bg-[#3d9e5f] transition-colors disabled:opacity-60 flex items-center gap-1.5">
+                                    className="px-4 py-2 bg-[#53B175] text-white text-[12px] font-bold rounded-lg hover:bg-[#3d9e5f] transition-colors disabled:opacity-60 flex items-center gap-1.5"
+                                >
                                     {savingId === p.productId ? <Loader2 size={12} className="animate-spin" /> : <GitMerge size={12} />}
                                     Match to brand SKU
                                 </button>
@@ -343,7 +479,93 @@ export default function VendorBrandMappingsPage() {
                 </div>
             )}
 
-            {unmapped.length === 0 && pendingReview.length === 0 && mapped.length === 0 && (
+            {/* Live mappings — visible by default, with per-link unlink controls */}
+            {mapped.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                    <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+                        <div>
+                            <h2 className="text-[15px] font-bold text-[#181725] flex items-center gap-2">
+                                <Check size={16} className="text-[#53B175]" /> Live mappings
+                            </h2>
+                            <p className="text-[12px] text-gray-500 mt-0.5">These links are live for customers right now. Unlink any you didn&rsquo;t want.</p>
+                        </div>
+                        <span className="text-[11px] font-bold text-gray-400">{mapped.length} live</span>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                        {mapped.map(m => {
+                            const status = mappingStatusLabel(m.status);
+                            const statusTone = TONE_STYLES[status.tone];
+                            const conf = confidenceLabel(m.confidenceScore);
+                            const confTone = TONE_STYLES[conf.tone];
+                            const isSaving = savingId === m.mappingId;
+                            return (
+                                <div key={m.mappingId} className="p-4 flex items-center gap-3">
+                                    {/* Vendor product */}
+                                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative">
+                                            {m.productImage ? <Image src={m.productImage} alt="" fill sizes="40px" className="object-cover" /> :
+                                                <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-gray-300" /></div>}
+                                        </div>
+                                        <p className="text-[12px] font-semibold text-[#181725] truncate">{m.productName}</p>
+                                    </div>
+
+                                    <ChevronRight size={14} className="text-gray-300 shrink-0" />
+
+                                    {/* Brand master */}
+                                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative">
+                                            {m.brandMasterProduct.imageUrl ? (
+                                                <Image src={m.brandMasterProduct.imageUrl} alt="" fill sizes="40px" className="object-cover" />
+                                            ) : <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-gray-300" /></div>}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-1.5">
+                                                {m.brandMasterProduct.brand.logoUrl && (
+                                                    <Image src={m.brandMasterProduct.brand.logoUrl} alt={m.brandMasterProduct.brand.name} width={12} height={12} className="rounded-sm object-contain" />
+                                                )}
+                                                <span className="text-[10px] font-bold text-[#53B175] uppercase tracking-wide">{m.brandMasterProduct.brand.name}</span>
+                                            </div>
+                                            <p className="text-[12px] font-semibold text-[#181725] truncate">{m.brandMasterProduct.name}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Badges */}
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <span className={cn(
+                                            'text-[10px] font-bold px-2 py-1 rounded-md border whitespace-nowrap',
+                                            m.status === 'auto_mapped'
+                                                ? 'bg-blue-50 text-blue-600 border-blue-100'
+                                                : cn(statusTone.text, statusTone.bg, statusTone.border),
+                                        )}>
+                                            {status.label}
+                                        </span>
+                                        <span
+                                            title={`Confidence ${conf.percent}%`}
+                                            className={cn(
+                                                'text-[10px] font-bold px-2 py-1 rounded-md border whitespace-nowrap',
+                                                confTone.text, confTone.bg, confTone.border,
+                                            )}
+                                        >
+                                            {conf.label}
+                                        </span>
+                                        <button
+                                            onClick={() => handleUnlink(m)}
+                                            disabled={isSaving}
+                                            title="Unlink this mapping"
+                                            className="ml-1 flex items-center gap-1 px-2 py-1.5 bg-white border border-gray-200 text-gray-500 text-[11px] font-bold rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-60"
+                                        >
+                                            {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Unlink size={12} />}
+                                            Unlink
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {unmapped.length === 0 && visiblePending.length === 0 && mapped.length === 0 && (
                 <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
                     <Package size={36} className="mx-auto text-gray-200 mb-3" />
                     <h3 className="text-[15px] font-bold text-[#181725]">No products yet</h3>
@@ -351,47 +573,16 @@ export default function VendorBrandMappingsPage() {
                 </div>
             )}
 
-            {/* Mapped (collapsed by default would be nicer, but list for now) */}
-            {mapped.length > 0 && (
-                <details className="bg-white rounded-2xl border border-gray-100 overflow-hidden group">
-                    <summary className="p-5 border-b border-gray-100 cursor-pointer flex items-center justify-between list-none">
-                        <div>
-                            <h2 className="text-[15px] font-bold text-[#181725] flex items-center gap-2"><Check size={16} className="text-[#53B175]" /> Active mappings</h2>
-                            <p className="text-[12px] text-gray-500 mt-0.5">Live links between your products and brand SKUs.</p>
-                        </div>
-                        <span className="text-[11px] font-bold text-gray-400 group-open:rotate-180 transition-transform"><ChevronRight size={14} /></span>
-                    </summary>
-                    <div className="divide-y divide-gray-50">
-                        {mapped.map(m => (
-                            <div key={m.mappingId} className="p-4 flex items-center gap-4">
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative">
-                                        {m.productImage ? <Image src={m.productImage} alt="" fill sizes="40px" className="object-cover" /> :
-                                            <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-gray-300" /></div>}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-[12px] font-semibold text-[#181725] truncate">{m.productName}</p>
-                                        <p className="text-[10px] text-gray-400">→ {m.brandMasterProduct.brand.name} · {m.brandMasterProduct.name}</p>
-                                    </div>
-                                </div>
-                                <span className={cn(
-                                    'text-[10px] font-bold px-2 py-1 rounded-md uppercase',
-                                    m.status === 'verified' ? 'bg-[#EEF8F1] text-[#53B175]' : 'bg-blue-50 text-blue-600'
-                                )}>
-                                    {m.status === 'verified' ? 'Manual' : 'Auto'}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-                </details>
-            )}
-
             {/* Tips */}
             <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
                 <AlertCircle size={18} className="text-blue-600 shrink-0 mt-0.5" />
-                <div className="text-[12px] text-blue-900 leading-relaxed">
-                    <p className="font-bold mb-0.5">How brand mapping works</p>
-                    <p>When you map your product to a brand&rsquo;s SKU, customers searching the brand or shopping the brand store will see your stock under the canonical brand name. You keep your prices and inventory — only the display name uses the brand&rsquo;s official wording.</p>
+                <div className="text-[12px] text-blue-900 leading-relaxed space-y-1.5">
+                    <p className="font-bold">How brand mapping works</p>
+                    <ul className="list-disc pl-4 space-y-1">
+                        <li>When you confirm a mapping, customers searching that brand see your stock under the brand&rsquo;s official product name.</li>
+                        <li>Auto-detected matches (high confidence) go live automatically — you can always unlink them.</li>
+                        <li>Your prices, inventory, and SKU stay yours. Only the display name changes.</li>
+                    </ul>
                 </div>
             </div>
 
