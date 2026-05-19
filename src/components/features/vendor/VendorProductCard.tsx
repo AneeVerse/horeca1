@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CreditCard, Share2, ShoppingCart, Plus, Minus, Navigation, X, Loader2, Package, Trash2, ChevronDown } from 'lucide-react';
+import { CreditCard, Share2, ShoppingCart, Plus, Minus, Navigation, X, Loader2, Package, Trash2, ChevronDown, CheckCircle, Clock } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { toast } from 'sonner';
@@ -124,6 +124,13 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
     };
 
     const bulkTiers = (product.bulkPrices ?? []).slice(0, 3);
+    const activeTierIdx = currentQty > 0
+        ? bulkTiers
+            .map((t, idx) => ({ ...t, originalIdx: idx }))
+            .sort((a, b) => b.minQty - a.minQty)
+            .find(t => currentQty >= t.minQty)
+            ?.originalIdx
+        : null;
 
     const isOutOfStock = product.stock === 0 || product.isActive === false;
 
@@ -132,82 +139,41 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
         : `/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`;
 
     // ── Renders a single bulk-tier pill (used by the desktop grid card).
-    //    Collapsed: price + qty range + "+ Add"; expanded: mini stepper that commits the chosen slab qty. ──
+    //    Directly adds the tier's minimum quantity to the cart on click. ──
     const renderTier = (tier: { price: number; minQty: number }, i: number) => {
-        const isOpen = !isOutOfStock && openStepperIdx === i;
+        // Find if this specific tier is currently active based on currentQty
+        const isActive = !isOutOfStock && currentQty > 0 && (
+            // It is the active tier if currentQty is within this tier's range:
+            // currentQty >= tier.minQty AND (it is the last tier OR currentQty < next tier's minQty)
+            currentQty >= tier.minQty && (i === bulkTiers.length - 1 || currentQty < bulkTiers[i + 1].minQty)
+        );
+
         return (
             <div key={i} className={cn(
-                "rounded-xl border px-2.5 py-1.5 flex items-center gap-1.5 transition-colors h-[40px]",
-                isOutOfStock ? "bg-gray-50 border-gray-100" : "bg-[#EFF8F2] border-[#D8ECDF] hover:border-[#53B175]/40"
+                "rounded-xl border px-2.5 py-1.5 flex items-center gap-1.5 transition-all duration-300 h-[40px] justify-between",
+                isOutOfStock
+                    ? "bg-gray-50 border-gray-100 text-gray-300"
+                    : isActive
+                        ? "bg-[#E2F3E9] border-[#53B175] text-[#1B5E20] shadow-sm font-black"
+                        : "bg-[#EFF8F2] border-[#D8ECDF] hover:border-[#53B175]/40 text-[#1B5E20]"
             )}>
-                {isOpen ? (
-                    <span className={cn("text-[12px] font-bold tracking-tight whitespace-nowrap shrink-0", isOutOfStock ? "text-gray-300" : "text-[#1B5E20]")}>
-                        ₹{tier.price}
-                    </span>
-                ) : (
-                    <span className={cn("text-[13px] font-bold tracking-tight whitespace-nowrap flex-1 min-w-0", isOutOfStock ? "text-gray-300" : "text-[#1B5E20]")}>
-                        ₹{tier.price} <span className="opacity-70 text-[11px] font-medium">({tier.minQty}+ pcs)</span>
-                    </span>
-                )}
-                {!isOutOfStock && !isOpen && (
+                <span className="text-[13px] tracking-tight whitespace-nowrap flex-1 min-w-0">
+                    ₹{tier.price} <span className="opacity-70 text-[11px] font-medium">({tier.minQty}+ pcs)</span>
+                </span>
+                {!isOutOfStock && (
                     <button
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpenStepperIdx(i); setStepperQty(tier.minQty); }}
-                        className="text-[#53B175] text-[11px] font-bold hover:text-[#2c7a2c] transition-colors shrink-0"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleAdd(e, tier.minQty);
+                        }}
+                        className={cn(
+                            "text-[11px] font-bold transition-colors shrink-0",
+                            isActive ? "text-[#1B5E20] hover:text-[#0f3d13] underline underline-offset-2" : "text-[#53B175] hover:text-[#2c7a2c]"
+                        )}
                     >
-                        + Add
+                        {isActive ? 'Added' : '+ Add'}
                     </button>
-                )}
-                {isOpen && (
-                    <>
-                        <button
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (stepperQty <= tier.minQty) return; setStepperQty(stepperQty - 1); }}
-                            disabled={stepperQty <= tier.minQty}
-                            className={cn(
-                                "w-6 h-6 rounded-md flex items-center justify-center transition-colors shrink-0",
-                                stepperQty <= tier.minQty ? "text-gray-300 cursor-not-allowed" : "text-red-400 hover:bg-red-50 bg-white"
-                            )}
-                        >
-                            <Minus size={12} strokeWidth={2.5} />
-                        </button>
-                        <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={stepperQty}
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); (e.target as HTMLInputElement).select(); }}
-                            onChange={(e) => { e.stopPropagation(); const raw = e.target.value.replace(/[^0-9]/g, ''); setStepperQty(raw === '' ? 0 : parseInt(raw, 10)); }}
-                            onBlur={() => { if (stepperQty < tier.minQty) setStepperQty(tier.minQty); }}
-                            onKeyDown={(e) => {
-                                e.stopPropagation();
-                                if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    const finalQty = stepperQty < tier.minQty ? tier.minQty : stepperQty;
-                                    setStepperQty(finalQty);
-                                    handleAdd(e as unknown as React.MouseEvent, finalQty);
-                                    setOpenStepperIdx(null);
-                                }
-                            }}
-                            className="flex-1 min-w-0 w-full h-6 px-1 rounded-md bg-white border border-[#D8ECDF] text-[12px] font-bold text-[#181725] text-center tabular-nums focus:outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/20 transition-all"
-                        />
-                        <button
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setStepperQty(Math.max(stepperQty, tier.minQty) + 1); }}
-                            className="w-6 h-6 rounded-md flex items-center justify-center text-[#53B175] hover:bg-green-50 bg-white transition-colors shrink-0"
-                        >
-                            <Plus size={12} strokeWidth={2.5} />
-                        </button>
-                        <button
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                const finalQty = stepperQty < tier.minQty ? tier.minQty : stepperQty;
-                                handleAdd(e, finalQty);
-                                setOpenStepperIdx(null);
-                            }}
-                            className="px-2 h-6 rounded-md bg-[#53B175] text-white text-[10px] font-bold hover:bg-[#489d67] transition-colors shrink-0"
-                        >
-                            Add
-                        </button>
-                    </>
                 )}
             </div>
         );
@@ -218,7 +184,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
     //    at ~120px wide, mobile list-card image column at ~104px). It drops the icon, shortens
     //    the label to "ADD", shrinks the stepper, and folds the separate remove button into the
     //    trash that already appears when qty === 1. ──
-    const renderPrimaryCTA = (compact = false) => {
+    const renderPrimaryCTA = (compact = false, showRemoveButton = false) => {
         if (isOutOfStock) {
             return (
                 <button
@@ -289,12 +255,14 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                         <Plus size={compact ? 14 : 18} strokeWidth={3} />
                     </button>
                 </div>
-                {/* Separate remove pill — only on the spacious (non-compact) layout */}
-                {!compact && (
+                {(!compact || showRemoveButton) && (
                     <button
                         onClick={handleRemove}
                         aria-label="Remove from cart"
-                        className="w-11 rounded-2xl border border-gray-200 bg-white text-gray-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 active:scale-95 transition-all shrink-0 flex items-center justify-center"
+                        className={cn(
+                            "border border-red-100 bg-[#FFF0F0] text-[#F44336] hover:text-[#D32F2F] hover:bg-[#FFE4E4] active:scale-95 transition-all shrink-0 flex items-center justify-center",
+                            compact ? "w-9 h-9 rounded-xl" : "w-11 h-[44px] rounded-2xl"
+                        )}
                     >
                         <X size={16} strokeWidth={2.5} />
                     </button>
@@ -417,47 +385,77 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
 
     return (<>
         {variant === 'list' ? (
-            // ── LIST VARIANT — Swiggy-style card:
-            //    Top row: name + meta + price on LEFT, image + ADD CTA on RIGHT.
-            //    Bottom row: subtle bulk-tier suggestions spanning full width
-            //    ("₹X/pc for Y pcs+" + small "Add Y" link), separated by a hairline. ──
-            <Link
-                href={productHref}
+            // ── LIST VARIANT — Swiggy-style card optimized for large screens:
+            //    Divided into 3 columns on desktop/tablets (md+):
+            //      1. Product Info & Price (Left column - flex-1)
+            //      2. Bulk pricing tiers or trust features (Center column - flex-1)
+            //      3. Thumbnail Image & Primary ADD CTA (Right column - shrink-0)
+            //    On mobile, retains a stacked layout with bulk tiers at the bottom.
+            <div
                 className={cn(
                     "bg-white rounded-2xl border border-gray-100 overflow-hidden transition-all duration-300 group p-3 sm:p-4 relative flex flex-col gap-3",
                     isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_12px_30px_-12px_rgba(83,177,117,0.18)] hover:border-[#53B175]/30"
                 )}
-                onClick={onCardClick}
             >
-                {/* TOP — content (left) + image+CTA (right) */}
-                <div className="flex gap-3 sm:gap-4 items-stretch">
-                    <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                        <h3 className={cn(
-                            "text-[14px] sm:text-[15px] font-bold leading-[1.35] line-clamp-2",
-                            isOutOfStock ? "text-gray-400" : "text-[#181725]"
-                        )}>
-                            {product.displayName ?? product.name}
-                        </h3>
+                {!isOutOfStock && (
+                    <Link
+                        href={productHref}
+                        className="absolute inset-0 z-10"
+                        onClick={onCardClick}
+                        aria-label={product.displayName ?? product.name}
+                    />
+                )}
+                {/* TOP — content (left) + bulk tiers / details (middle) + image+CTA (right) */}
+                <div className="flex gap-3 sm:gap-4 md:gap-6 items-stretch">
+                    {/* Left: Product Info */}
+                    <div className="flex-[1.2] min-w-0 flex flex-col gap-1.5 justify-between">
+                        <div>
+                            <h3 className={cn(
+                                "text-[14px] sm:text-[15px] font-bold leading-[1.35] line-clamp-2",
+                                isOutOfStock ? "text-gray-400" : "text-[#181725]"
+                            )}>
+                                {product.displayName ?? product.name}
+                            </h3>
 
-                        <div className="flex items-center gap-2 flex-wrap">
-                            {product.brandSlug && product.brandName && (
-                                <Link
-                                    href={`/brand/${product.brandSlug}`}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="text-[11px] font-semibold text-[#53B175] hover:underline shrink-0"
-                                >
-                                    by {product.brandName}
-                                </Link>
-                            )}
-                            <p className="text-[11px] sm:text-[12px] text-gray-500 font-medium truncate">{product.packSize}</p>
-                            {(product.minOrderQuantity || 1) > 1 && (
-                                <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">
-                                    Min {product.minOrderQuantity}
-                                </span>
-                            )}
+                            <div className="flex items-center gap-2 flex-wrap mt-1">
+                                {product.brandSlug && product.brandName && (
+                                    <Link
+                                        href={`/brand/${product.brandSlug}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="relative z-20 text-[11px] font-semibold text-[#53B175] hover:underline shrink-0"
+                                    >
+                                        by {product.brandName}
+                                    </Link>
+                                )}
+                                <p className="text-[11px] sm:text-[12px] text-gray-500 font-medium truncate">{product.packSize}</p>
+                                {(product.minOrderQuantity || 1) > 1 && (
+                                    <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">
+                                        Min {product.minOrderQuantity}
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Trust/Popularity Tags in Left Column */}
+                            <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                                {product.isDeal && (
+                                    <span className="bg-red-50 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                                        Deal
+                                    </span>
+                                )}
+                                {product.frequentlyOrdered && (
+                                    <span className="bg-yellow-50 text-yellow-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                                        Popular
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Description to fill empty space between left and middle */}
+                            <p className="text-[12px] text-gray-400 mt-2 line-clamp-2 leading-relaxed max-w-[85%]">
+                                {product.description || `Premium quality ${product.name.toLowerCase()} sourced directly from verified vendors. Sized and packed for commercial kitchens.`}
+                            </p>
                         </div>
 
-                        <div className="flex items-baseline gap-1.5 mt-auto">
+                        <div className="flex items-baseline gap-1.5 mt-3">
                             <span className={cn(
                                 "text-[18px] sm:text-[20px] font-extrabold tracking-tight leading-none",
                                 isOutOfStock ? "text-gray-300" : "text-[#181725]"
@@ -468,7 +466,71 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                         </div>
                     </div>
 
-                    <div className="shrink-0 flex flex-col items-center gap-2 self-start">
+                    {/* Middle Column (Only on md+ screens to utilize empty space) */}
+                    <div className="hidden md:flex flex-col gap-2 flex-1 justify-center px-6 border-l border-gray-100/80 relative z-20">
+                        {isOutOfStock ? (
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-black text-red-500 bg-red-50 w-fit px-2 py-0.5 rounded-md uppercase tracking-wider">
+                                    Unavailable
+                                </span>
+                                <p className="text-[12px] font-bold text-gray-400 leading-normal">
+                                    This item is currently out of stock. You can request alternatives from other vendors.
+                                </p>
+                            </div>
+                        ) : bulkTiers.length > 0 ? (
+                            <>
+                                <span className="text-[11px] font-black text-gray-400 uppercase tracking-wider">Bulk Savings</span>
+                                <div className="grid grid-cols-1 gap-1.5">
+                                    {bulkTiers.map((tier, i) => {
+                                        const pricePerUnit = tier.price.toFixed(2);
+                                        return (
+                                            <div key={i} className="flex items-center justify-between py-1 px-3 rounded-xl bg-[#EFF8F2] border border-[#D8ECDF] hover:border-[#53B175]/40 transition-all">
+                                                <span className="text-[12px] font-semibold text-[#1B5E20]">
+                                                    <span className="font-extrabold">₹{pricePerUnit}</span>
+                                                    <span className="opacity-80 text-[11px]"> ({tier.minQty}+ pcs)</span>
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleAdd(e, tier.minQty);
+                                                    }}
+                                                    className="text-[11px] font-black text-[#53B175] hover:text-[#2c7a2c] active:scale-95 transition-all shrink-0 ml-3 bg-white px-2.5 py-1 rounded-lg border border-[#D8ECDF]/50 shadow-sm"
+                                                >
+                                                    Add {tier.minQty}
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <div className="w-5 h-5 rounded-full bg-green-50 flex items-center justify-center text-[#53B175] shrink-0">
+                                        <CheckCircle size={12} strokeWidth={3} />
+                                    </div>
+                                    <span className="text-[12px] font-bold">100% Quality Assured</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <div className="w-5 h-5 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 shrink-0">
+                                        <Clock size={12} strokeWidth={3} />
+                                    </div>
+                                    <span className="text-[12px] font-bold">Next Day Delivery Available</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <div className="w-5 h-5 rounded-full bg-purple-50 flex items-center justify-center text-[#7B1FA2] shrink-0">
+                                        <Package size={12} strokeWidth={3} />
+                                    </div>
+                                    <span className="text-[12px] font-bold">Bulk Stock Live Tracked</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+ 
+                    {/* Right: Image & CTA */}
+                    <div className="shrink-0 flex flex-col items-center gap-2 self-center w-[104px] sm:w-[120px] md:w-[140px]">
                         <div className="relative w-[104px] h-[104px] sm:w-[120px] sm:h-[120px] rounded-xl overflow-hidden bg-gradient-to-br from-[#F7FBF8] via-white to-[#F0F7F2] flex items-center justify-center">
                             <div className="relative w-[85%] h-[85%]">
                                 <Image
@@ -484,13 +546,13 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                             </div>
                             {imageBadges}
                         </div>
-                        <div className="w-[104px] sm:w-[120px]">{renderPrimaryCTA(true)}</div>
+                        <div className="w-full relative z-20">{renderPrimaryCTA(true)}</div>
                     </div>
                 </div>
-
-                {/* BOTTOM — bulk-tier suggestions, full-width, Swiggy-style ("Add N" link on the right) */}
+ 
+                {/* BOTTOM — bulk-tier suggestions on mobile only */}
                 {bulkTiers.length > 0 && !isOutOfStock && (
-                    <div className="border-t border-gray-100 -mx-3 sm:-mx-4 px-3 sm:px-4 pt-2.5 flex flex-col divide-y divide-gray-50">
+                    <div className="md:hidden border-t border-gray-100 -mx-3 sm:-mx-4 px-3 sm:px-4 pt-2.5 flex flex-col divide-y divide-gray-50 relative z-20">
                         {bulkTiers.map((tier, i) => {
                             const pricePerUnit = tier.price.toFixed(2);
                             return (
@@ -515,7 +577,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                         })}
                     </div>
                 )}
-            </Link>
+            </div>
         ) : (
             // ── GRID VARIANT — two breakpoint-specific layouts under one Link.
             //    Mobile (<sm): Hyperpure compact tile — floating ADD on image, bulk chip below price.
@@ -523,68 +585,42 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
             //    big "ADD TO CART" pill at the bottom. ──
             <>
                 {/* ── MOBILE COMPACT TILE ── */}
-                <Link
-                    href={productHref}
+                <div
                     className={cn(
-                        "sm:hidden bg-white rounded-2xl border border-gray-100 overflow-hidden transition-all duration-300 group p-2.5 relative flex flex-col gap-2 h-full",
+                        "sm:hidden bg-white rounded-2xl border border-gray-100 overflow-hidden transition-all duration-300 group p-0 relative flex flex-col h-full",
                         isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_12px_30px_-12px_rgba(83,177,117,0.18)] hover:-translate-y-0.5 hover:border-[#53B175]/30"
                     )}
-                    onClick={onCardClick}
                 >
-                    <div className="relative aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-[#F7FBF8] via-white to-[#F0F7F2] flex items-center justify-center">
-                        <div className="relative w-[85%] h-[85%]">
-                            <Image
-                                src={product.images[0] || '/images/recom-product/product-img10.png'}
-                                alt={product.name}
-                                fill
-                                sizes="(max-width: 640px) 45vw, 320px"
-                                className={cn(
-                                    "object-contain transition-transform duration-500 ease-out p-1 group-hover:scale-[1.04]",
-                                    isOutOfStock ? "grayscale" : ""
-                                )}
-                            />
+                    {!isOutOfStock && (
+                        <Link
+                            href={productHref}
+                            className="absolute inset-0 z-10"
+                            onClick={onCardClick}
+                            aria-label={product.displayName ?? product.name}
+                        />
+                    )}
+                    {/* Full-width Image Container */}
+                    <div className="relative w-full aspect-square bg-gradient-to-br from-[#F7FBF8] via-white to-[#F0F7F2] overflow-hidden">
+                        {/* Image wrapper centered in the top area (excluding the bottom 30px bar) */}
+                        <div className="absolute top-0 left-0 right-0 bottom-[30px] flex items-center justify-center p-3">
+                            <div className="relative w-full h-full">
+                                <Image
+                                    src={product.images[0] || '/images/recom-product/product-img10.png'}
+                                    alt={product.name}
+                                    fill
+                                    sizes="(max-width: 640px) 45vw, 320px"
+                                    className={cn(
+                                        "object-contain transition-transform duration-500 ease-out p-1 group-hover:scale-[1.04]",
+                                        isOutOfStock ? "grayscale" : ""
+                                    )}
+                                />
+                            </div>
                         </div>
+
                         {imageBadges}
-                        {renderFloatingCTA()}
-                    </div>
 
-                    <div className="flex flex-col gap-1 mt-0.5">
-                        <h3 className={cn(
-                            "text-[13px] font-bold leading-[1.3] line-clamp-2 min-h-[2.6em]",
-                            isOutOfStock ? "text-gray-400" : "text-[#181725]"
-                        )}>
-                            {product.displayName ?? product.name}
-                        </h3>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                            {product.brandSlug && product.brandName && (
-                                <Link
-                                    href={`/brand/${product.brandSlug}`}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="text-[10px] font-semibold text-[#53B175] hover:underline shrink-0"
-                                >
-                                    by {product.brandName}
-                                </Link>
-                            )}
-                            <p className="text-[11px] text-gray-500 font-medium truncate">{product.packSize}</p>
-                            {(product.minOrderQuantity || 1) > 1 && (
-                                <span className="text-[9px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">
-                                    Min {product.minOrderQuantity}
-                                </span>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="mt-auto pt-1 flex flex-col gap-1.5">
-                        <div className="flex items-baseline gap-1.5 flex-wrap">
-                            <span className={cn(
-                                "text-[16px] font-extrabold tracking-tight leading-none",
-                                isOutOfStock ? "text-gray-300" : "text-[#181725]"
-                            )}>
-                                ₹{product.price}
-                            </span>
-                            <span className="text-[10px] font-medium text-gray-500">/ unit</span>
-                        </div>
-                        {bulkTiers.length > 0 && !isOutOfStock && (
+                        {/* Bottom Overlay Bar: Dropdown or Pack Size */}
+                        {bulkTiers.length > 0 && !isOutOfStock ? (
                             <button
                                 type="button"
                                 onClick={(e) => {
@@ -592,32 +628,88 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                                     e.stopPropagation();
                                     setShowBulkSheet(true);
                                 }}
-                                className="w-full flex items-center justify-between gap-1 px-2 py-1.5 rounded-lg bg-[#EFF8F2] border border-[#D8ECDF] text-[#1B5E20] hover:border-[#53B175]/50 active:scale-[0.98] transition-all"
+                                className="absolute bottom-0 left-0 right-0 h-[30px] bg-[#EFF8F2] border-t border-[#D8ECDF] text-[#1B5E20] flex items-center justify-center gap-1 hover:bg-[#e2f3e8] transition-colors z-20"
                                 aria-label="Show bulk price tiers"
                             >
-                                <span className="text-[10px] font-bold truncate">
-                                    From ₹{bulkTiers[bulkTiers.length - 1].price} · {bulkTiers.length} bulk {bulkTiers.length === 1 ? 'price' : 'prices'}
+                                <span className="text-[10px] font-black truncate">
+                                    From ₹{bulkTiers[bulkTiers.length - 1].price}
                                 </span>
-                                <ChevronDown size={12} strokeWidth={2.5} className="shrink-0" />
+                                <ChevronDown size={11} strokeWidth={3} className="shrink-0" />
                             </button>
+                        ) : (
+                            <div className={cn(
+                                "absolute bottom-0 left-0 right-0 h-[30px] border-t flex items-center justify-center z-20",
+                                isOutOfStock ? "bg-gray-100 border-gray-200 text-gray-400" : "bg-[#F4F4F4] border-gray-200 text-gray-600"
+                            )}>
+                                <span className="text-[10px] font-extrabold truncate">
+                                    {product.packSize}
+                                </span>
+                            </div>
                         )}
                     </div>
 
-                    {isOutOfStock && (
-                        <div className="pt-1">{renderPrimaryCTA(true)}</div>
-                    )}
-                </Link>
+                    {/* Text Details with padding */}
+                    <div className="flex flex-col gap-1 p-2.5 flex-1 justify-between">
+                        <div>
+                            <h3 className={cn(
+                                "text-[13px] font-bold leading-[1.3] line-clamp-2 min-h-[2.6em]",
+                                isOutOfStock ? "text-gray-400" : "text-[#181725]"
+                            )}>
+                                {product.displayName ?? product.name}
+                            </h3>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                {product.brandSlug && product.brandName && (
+                                    <Link
+                                        href={`/brand/${product.brandSlug}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="relative z-20 text-[10px] font-semibold text-[#53B175] hover:underline shrink-0"
+                                    >
+                                        by {product.brandName}
+                                    </Link>
+                                )}
+                                {(product.minOrderQuantity || 1) > 1 && (
+                                    <span className="text-[9px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">
+                                        Min {product.minOrderQuantity}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="mt-2">
+                            <div className="flex items-baseline gap-1.5 flex-wrap mb-2">
+                                <span className={cn(
+                                    "text-[16px] font-extrabold tracking-tight leading-none",
+                                    isOutOfStock ? "text-gray-300" : "text-[#181725]"
+                                )}>
+                                    ₹{product.price}
+                                </span>
+                                <span className="text-[10px] font-medium text-gray-500">/ unit</span>
+                            </div>
+
+                            {/* ADD / Stepper Button at the end of the card */}
+                            <div className="relative z-20">
+                                {renderPrimaryCTA(true)}
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 {/* ── DESKTOP ORIGINAL CARD (restored — share top-right, inline tier pills, bottom ADD) ── */}
-                <Link
-                    href={productHref}
+                <div
                     className={cn(
                         "hidden sm:flex bg-white rounded-[22px] border border-gray-100 overflow-hidden transition-all duration-500 group p-4 md:p-5 relative flex-col gap-3 h-full",
                         isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_18px_45px_-12px_rgba(83,177,117,0.18)] hover:-translate-y-1 hover:border-[#53B175]/30"
                     )}
-                    onClick={onCardClick}
                 >
-                    <div className="absolute top-4 right-4 z-10">{shareButton}</div>
+                    {!isOutOfStock && (
+                        <Link
+                            href={productHref}
+                            className="absolute inset-0 z-10"
+                            onClick={onCardClick}
+                            aria-label={product.displayName ?? product.name}
+                        />
+                    )}
+                    <div className="absolute top-4 right-4 z-20">{shareButton}</div>
 
                     <div className="relative aspect-square overflow-hidden rounded-2xl bg-gradient-to-br from-[#F7FBF8] via-white to-[#F0F7F2] flex items-center justify-center">
                         <div className="relative w-[85%] h-[85%]">
@@ -647,7 +739,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                                 <Link
                                     href={`/brand/${product.brandSlug}`}
                                     onClick={(e) => e.stopPropagation()}
-                                    className="text-[11px] font-semibold text-[#53B175] hover:underline shrink-0"
+                                    className="relative z-20 text-[11px] font-semibold text-[#53B175] hover:underline shrink-0"
                                 >
                                     by {product.brandName}
                                 </Link>
@@ -662,12 +754,12 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                     </div>
 
                     {bulkTiers.length > 0 && (
-                        <div className="flex flex-col gap-1.5 mt-0.5">
+                        <div className="flex flex-col gap-1.5 mt-0.5 relative z-20">
                             {bulkTiers.map((tier, i) => renderTier(tier, i))}
                         </div>
                     )}
 
-                    <div className="mt-auto pt-3 flex flex-col gap-3">
+                    <div className="mt-auto pt-3 flex flex-col gap-3 relative z-20">
                         <div className="flex items-baseline gap-1.5">
                             <span className={cn(
                                 "text-[22px] md:text-[24px] font-extrabold tracking-tight leading-none",
@@ -679,7 +771,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                         </div>
                         {renderPrimaryCTA(false)}
                     </div>
-                </Link>
+                </div>
             </>
         )}
 
@@ -750,12 +842,47 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
                                         </p>
                                         <p className="text-[11px] font-bold text-gray-500 mt-0.5">For {tier.minQty}+ pcs</p>
                                     </div>
-                                    <button
-                                        onClick={(e) => handleAdd(e, tier.minQty)}
-                                        className="px-4 py-2.5 rounded-xl bg-[#53B175] text-white text-[12px] font-black shadow-[0_4px_14px_-4px_rgba(83,177,117,0.5)] hover:bg-[#489d67] active:scale-95 transition-all shrink-0"
-                                    >
-                                        Add {tier.minQty}
-                                    </button>
+                                    {activeTierIdx === i ? (
+                                        <div className="flex items-stretch h-9 bg-[#53B175] rounded-xl overflow-hidden shrink-0 w-28 shadow-[0_4px_14px_-4px_rgba(83,177,117,0.5)]">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    handleDecrement(e);
+                                                }}
+                                                className="w-8 flex items-center justify-center text-white hover:bg-[#489d67] active:scale-95 transition-all"
+                                            >
+                                                {currentQty === 1 ? <Trash2 size={12} strokeWidth={2.5} /> : <Minus size={13} strokeWidth={3} />}
+                                            </button>
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                pattern="[0-9]*"
+                                                value={currentQty}
+                                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); (e.target as HTMLInputElement).select(); }}
+                                                onChange={handleQtyInput}
+                                                onKeyDown={(e) => e.stopPropagation()}
+                                                className="w-12 bg-white text-center font-extrabold text-[#181725] text-[12px] focus:outline-none tabular-nums focus:bg-[#f7fbf8] transition-all"
+                                            />
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    handleAdd(e, 1);
+                                                }}
+                                                className="w-8 flex items-center justify-center text-white hover:bg-[#489d67] active:scale-95 transition-all"
+                                            >
+                                                <Plus size={13} strokeWidth={3} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={(e) => handleAdd(e, tier.minQty)}
+                                            className="px-4 py-2.5 rounded-xl bg-[#53B175] text-white text-[12px] font-black shadow-[0_4px_14px_-4px_rgba(83,177,117,0.5)] hover:bg-[#489d67] active:scale-95 transition-all shrink-0"
+                                        >
+                                            Add {tier.minQty}
+                                        </button>
+                                    )}
                                 </div>
                             );
                         })}
