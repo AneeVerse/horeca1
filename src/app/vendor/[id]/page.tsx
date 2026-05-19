@@ -11,7 +11,7 @@ import { dal } from '@/lib/dal';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
 import type { Vendor, VendorProduct } from '@/types';
-import { Package, Star, CheckCircle, Clock, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
+import { Package, Star, CheckCircle, Clock, Sparkles, ChevronDown, ChevronRight, LayoutGrid } from 'lucide-react';
 import Image from 'next/image';
 
 interface VendorOrder {
@@ -361,7 +361,7 @@ export default function VendorStorePage() {
                                     type="button"
                                     onClick={() => setActiveTab('all')}
                                     className={cn(
-                                        "w-full rounded-xl transition-all text-left flex flex-col items-center md:flex-row md:items-center md:justify-between px-1 md:px-3 py-2 md:py-2.5",
+                                        "w-full rounded-xl transition-all text-left flex flex-col items-center md:flex-row md:items-center md:justify-between px-1 md:px-3 py-3 md:py-2.5",
                                         activeTab === 'all' ? "bg-[#53B175]/10" : "hover:bg-gray-50"
                                     )}
                                 >
@@ -370,7 +370,7 @@ export default function VendorStorePage() {
                                             "w-12 h-12 md:w-9 md:h-9 rounded-lg flex items-center justify-center transition-all shrink-0",
                                             activeTab === 'all' ? "bg-white border border-[#53B175]/30 shadow-sm" : "bg-gray-50"
                                         )}>
-                                            <Sparkles size={18} className={cn('md:!w-4 md:!h-4', activeTab === 'all' ? 'text-[#53B175]' : 'text-gray-400')} strokeWidth={2.5} />
+                                            <LayoutGrid className={cn('w-5 h-5 md:w-4 md:h-4', activeTab === 'all' ? 'text-[#53B175]' : 'text-gray-400')} strokeWidth={2} />
                                         </div>
                                         <span className={cn(
                                             "text-[10px] md:text-[13px] font-semibold md:font-bold leading-tight text-center md:text-left mt-1 md:mt-0 line-clamp-2 md:line-clamp-none md:truncate w-full md:flex-1",
