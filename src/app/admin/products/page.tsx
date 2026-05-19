@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import ProductImportModal from '@/components/features/admin/ProductImportModal';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
+import { CategoryMultiPickerById } from '@/components/features/brand/CategoryMultiPickerById';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,8 +87,10 @@ interface ProductFormData {
     hsn: string;
     barcode: string;
     brand: string;
-    categoryId: string;
-    additionalCategoryIds: string[];
+    // Unified multi-category — first entry is the primary (mirrored into
+    // Product.categoryId on the server). Matches the vendor product form so
+    // both surfaces share CategoryMultiPickerById and behave identically.
+    categoryIds: string[];
     description: string;
     basePrice: string;
     originalPrice: string;
@@ -111,8 +114,7 @@ const EMPTY_FORM: ProductFormData = {
     hsn: '',
     barcode: '',
     brand: '',
-    categoryId: '',
-    additionalCategoryIds: [],
+    categoryIds: [],
     description: '',
     basePrice: '',
     originalPrice: '',
@@ -397,18 +399,21 @@ export default function ProductsPage() {
 
     const openEdit = (product: Product) => {
         setEditingProduct(product);
+        // Build the unified category list, primary first. Falls back to the
+        // legacy single Product.categoryId for rows that pre-date the join
+        // table — same logic as the vendor form.
         const primaryId = product.category?.id ?? '';
-        const additionalIds = (product.categoryLinks ?? [])
-            .filter(l => l.categoryId !== primaryId)
-            .map(l => l.categoryId);
+        const linkIds = (product.categoryLinks ?? []).map(l => l.categoryId);
+        const uniqueIds = primaryId
+            ? [primaryId, ...linkIds.filter(id => id !== primaryId)]
+            : linkIds;
         setFormData({
             name: product.name,
             sku: product.sku ?? '',
             hsn: product.hsn ?? '',
             barcode: '',
             brand: product.brand ?? '',
-            categoryId: primaryId,
-            additionalCategoryIds: additionalIds,
+            categoryIds: uniqueIds,
             description: product.description ?? '',
             basePrice: String(product.basePrice),
             originalPrice: product.originalPrice != null ? String(product.originalPrice) : '',
@@ -471,11 +476,18 @@ export default function ProductsPage() {
                     price: Number(s.price),
                 }));
             if (slabs.length > 0) payload.priceSlabs = slabs;
-            if (formData.categoryId) {
-                payload.categoryId = formData.categoryId;
-                const joinIds = Array.from(new Set([formData.categoryId, ...formData.additionalCategoryIds]));
-                payload.categoryIds = joinIds;
-                payload.primaryCategoryId = formData.categoryId;
+            // Categories: the multi-picker already gives us UUIDs with the
+            // primary at index 0. Send all three field shapes the admin API
+            // accepts — the backend uses `primaryCategoryId` (or first of
+            // categoryIds) as the canonical primary and writes the full set
+            // to the ProductCategory join table.
+            if (formData.categoryIds.length > 0) {
+                payload.categoryId = formData.categoryIds[0];
+                payload.primaryCategoryId = formData.categoryIds[0];
+                payload.categoryIds = formData.categoryIds;
+            } else if (editingProduct) {
+                // User cleared all categories on an existing product — explicit empty.
+                payload.categoryIds = [];
             }
             if (formData.description.trim()) payload.description = formData.description.trim();
             if (formData.originalPrice && Number(formData.originalPrice) > 0) {
@@ -1059,85 +1071,41 @@ export default function ProductsPage() {
                                 </div>
                             </div>
 
-                            {/* Brand + Category */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                        Brand
-                                    </label>
-                                    <select
-                                        value={formData.brand}
-                                        onChange={e => updateField('brand', e.target.value)}
-                                        className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white cursor-pointer"
-                                    >
-                                        <option value="">Select brand</option>
-                                        {brands.map(b => (
-                                            <option key={b.id} value={b.name}>{b.name}</option>
-                                        ))}
-                                    </select>
-                                    {brands.length === 0 && (
-                                        <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
-                                            No brands yet — add one in <a href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</a>
-                                        </p>
-                                    )}
-                                </div>
-                                <div>
-                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                        Primary Category
-                                    </label>
-                                    <select
-                                        value={formData.categoryId}
-                                        onChange={e => {
-                                            const newPrimary = e.target.value;
-                                            setFormData(prev => ({
-                                                ...prev,
-                                                categoryId: newPrimary,
-                                                additionalCategoryIds: prev.additionalCategoryIds.filter(id => id !== newPrimary),
-                                            }));
-                                        }}
-                                        className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white cursor-pointer"
-                                    >
-                                        <option value="">Select category</option>
-                                        {categories.map(c => (
-                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                            {/* Brand */}
+                            <div>
+                                <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
+                                    Brand
+                                </label>
+                                <select
+                                    value={formData.brand}
+                                    onChange={e => updateField('brand', e.target.value)}
+                                    className="w-full h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white cursor-pointer"
+                                >
+                                    <option value="">Select brand</option>
+                                    {brands.map(b => (
+                                        <option key={b.id} value={b.name}>{b.name}</option>
+                                    ))}
+                                </select>
+                                {brands.length === 0 && (
+                                    <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
+                                        No brands yet — add one in <a href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</a>
+                                    </p>
+                                )}
                             </div>
 
-                            {/* Additional Categories (multi-select) */}
-                            {formData.categoryId && categories.length > 1 && (
-                                <div>
-                                    <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">
-                                        Additional Categories
-                                    </label>
-                                    <div className="flex flex-wrap gap-2 bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] p-3">
-                                        {categories.filter(c => c.id !== formData.categoryId).map(c => {
-                                            const selected = formData.additionalCategoryIds.includes(c.id);
-                                            return (
-                                                <button
-                                                    key={c.id}
-                                                    type="button"
-                                                    onClick={() => setFormData(prev => ({
-                                                        ...prev,
-                                                        additionalCategoryIds: selected
-                                                            ? prev.additionalCategoryIds.filter(id => id !== c.id)
-                                                            : [...prev.additionalCategoryIds, c.id],
-                                                    }))}
-                                                    className={cn(
-                                                        'px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-all',
-                                                        selected
-                                                            ? 'bg-[#299E60] text-white border-[#299E60]'
-                                                            : 'bg-white text-[#7C7C7C] border-[#EEEEEE] hover:border-[#299E60]/40',
-                                                    )}
-                                                >
-                                                    {c.name}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
+                            {/* Categories — single multi-select picker shared with the vendor
+                                product form. First chip is the primary (mirrored into
+                                Product.categoryId on the server). disableSuggest hides the
+                                "request new" CTA since admin can create categories directly
+                                via the Categories page. */}
+                            <CategoryMultiPickerById
+                                value={formData.categoryIds}
+                                onChange={(ids) => setFormData(prev => ({ ...prev, categoryIds: ids }))}
+                                max={5}
+                                disableSuggest
+                                label="Categories"
+                                helper="Pick up to 5 — first chip is the primary. Customers can find this product under any of these categories."
+                            />
 
                             {/* Description */}
                             <div>

@@ -36,6 +36,7 @@ export function CategoryMultiPickerById({
     endpoint = '/api/v1/brand/categories/suggest',
     label = 'Categories',
     helper = 'Pick from existing categories or request a new one — admin reviews.',
+    disableSuggest = false,
 }: {
     value: string[];
     onChange: (next: string[]) => void;
@@ -43,6 +44,8 @@ export function CategoryMultiPickerById({
     endpoint?: string;
     label?: string;
     helper?: string;
+    /** Hide the "Request new" button (use when caller can create categories directly, e.g. admin). */
+    disableSuggest?: boolean;
 }) {
     const [allCats, setAllCats] = useState<FlatCat[]>([]);
     const [loading, setLoading] = useState(true);
@@ -99,7 +102,7 @@ export function CategoryMultiPickerById({
         () => allCats.some(c => c.name.toLowerCase() === lcQuery),
         [allCats, lcQuery],
     );
-    const canSuggest = trimmedQuery.length >= 2 && !exactMatch;
+    const canSuggest = !disableSuggest && trimmedQuery.length >= 2 && !exactMatch;
 
     const select = (id: string) => {
         if (value.includes(id)) return;
