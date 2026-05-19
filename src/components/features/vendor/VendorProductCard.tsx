@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CreditCard, Share2, ShoppingCart, Plus, Minus, Navigation, X, Loader2, Package, Trash2 } from 'lucide-react';
+import { CreditCard, Share2, ShoppingCart, Plus, Minus, Navigation, X, Loader2, Package, Trash2, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { toast } from 'sonner';
@@ -12,11 +12,20 @@ import { useCart } from '@/context/CartContext';
 
 interface VendorProductCardProps {
     product: VendorProduct;
+    /** Visual layout — `'grid'` is the default 2-up tile, `'list'` is a wide 1-up row. */
+    variant?: 'grid' | 'list';
 }
 
-export const VendorProductCard = React.memo(function VendorProductCard({ product }: VendorProductCardProps) {
+export const VendorProductCard = React.memo(function VendorProductCard({ product, variant = 'grid' }: VendorProductCardProps) {
     const { addToCart, groups, updateQuantity, removeFromCart } = useCart();
     const { status: sessionStatus } = useSession();
+
+    // ── Bulk pricing bottom-sheet state (opened from the mobile grid card's "Bulk ▾" chip) ──
+    const [showBulkSheet, setShowBulkSheet] = useState(false);
+
+    // ── Desktop grid card inline bulk-tier stepper state ──
+    const [openStepperIdx, setOpenStepperIdx] = useState<number | null>(null);
+    const [stepperQty, setStepperQty] = useState(0);
 
     // ── OOS Alternate Vendors state ──
     const [showAlternates, setShowAlternates] = useState(false);
@@ -32,10 +41,6 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
         basePrice?: number;
     }>>([]);
     const [alternatesLoading, setAlternatesLoading] = useState(false);
-
-    // ── Bulk Slab Stepper state ──
-    const [openStepperIdx, setOpenStepperIdx] = useState<number | null>(null);
-    const [stepperQty, setStepperQty] = useState(0);
 
     const fetchAlternates = async (e: React.MouseEvent) => {
         e.preventDefault();
@@ -122,319 +127,647 @@ export const VendorProductCard = React.memo(function VendorProductCard({ product
 
     const isOutOfStock = product.stock === 0 || product.isActive === false;
 
+    const productHref = isOutOfStock
+        ? '#'
+        : `/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`;
+
+    // ── Renders a single bulk-tier pill (used by the desktop grid card).
+    //    Collapsed: price + qty range + "+ Add"; expanded: mini stepper that commits the chosen slab qty. ──
+    const renderTier = (tier: { price: number; minQty: number }, i: number) => {
+        const isOpen = !isOutOfStock && openStepperIdx === i;
+        return (
+            <div key={i} className={cn(
+                "rounded-xl border px-2.5 py-1.5 flex items-center gap-1.5 transition-colors h-[40px]",
+                isOutOfStock ? "bg-gray-50 border-gray-100" : "bg-[#EFF8F2] border-[#D8ECDF] hover:border-[#53B175]/40"
+            )}>
+                {isOpen ? (
+                    <span className={cn("text-[12px] font-bold tracking-tight whitespace-nowrap shrink-0", isOutOfStock ? "text-gray-300" : "text-[#1B5E20]")}>
+                        ₹{tier.price}
+                    </span>
+                ) : (
+                    <span className={cn("text-[13px] font-bold tracking-tight whitespace-nowrap flex-1 min-w-0", isOutOfStock ? "text-gray-300" : "text-[#1B5E20]")}>
+                        ₹{tier.price} <span className="opacity-70 text-[11px] font-medium">({tier.minQty}+ pcs)</span>
+                    </span>
+                )}
+                {!isOutOfStock && !isOpen && (
+                    <button
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpenStepperIdx(i); setStepperQty(tier.minQty); }}
+                        className="text-[#53B175] text-[11px] font-bold hover:text-[#2c7a2c] transition-colors shrink-0"
+                    >
+                        + Add
+                    </button>
+                )}
+                {isOpen && (
+                    <>
+                        <button
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (stepperQty <= tier.minQty) return; setStepperQty(stepperQty - 1); }}
+                            disabled={stepperQty <= tier.minQty}
+                            className={cn(
+                                "w-6 h-6 rounded-md flex items-center justify-center transition-colors shrink-0",
+                                stepperQty <= tier.minQty ? "text-gray-300 cursor-not-allowed" : "text-red-400 hover:bg-red-50 bg-white"
+                            )}
+                        >
+                            <Minus size={12} strokeWidth={2.5} />
+                        </button>
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={stepperQty}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); (e.target as HTMLInputElement).select(); }}
+                            onChange={(e) => { e.stopPropagation(); const raw = e.target.value.replace(/[^0-9]/g, ''); setStepperQty(raw === '' ? 0 : parseInt(raw, 10)); }}
+                            onBlur={() => { if (stepperQty < tier.minQty) setStepperQty(tier.minQty); }}
+                            onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const finalQty = stepperQty < tier.minQty ? tier.minQty : stepperQty;
+                                    setStepperQty(finalQty);
+                                    handleAdd(e as unknown as React.MouseEvent, finalQty);
+                                    setOpenStepperIdx(null);
+                                }
+                            }}
+                            className="flex-1 min-w-0 w-full h-6 px-1 rounded-md bg-white border border-[#D8ECDF] text-[12px] font-bold text-[#181725] text-center tabular-nums focus:outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/20 transition-all"
+                        />
+                        <button
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setStepperQty(Math.max(stepperQty, tier.minQty) + 1); }}
+                            className="w-6 h-6 rounded-md flex items-center justify-center text-[#53B175] hover:bg-green-50 bg-white transition-colors shrink-0"
+                        >
+                            <Plus size={12} strokeWidth={2.5} />
+                        </button>
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const finalQty = stepperQty < tier.minQty ? tier.minQty : stepperQty;
+                                handleAdd(e, finalQty);
+                                setOpenStepperIdx(null);
+                            }}
+                            className="px-2 h-6 rounded-md bg-[#53B175] text-white text-[10px] font-bold hover:bg-[#489d67] transition-colors shrink-0"
+                        >
+                            Add
+                        </button>
+                    </>
+                )}
+            </div>
+        );
+    };
+
+    // ── Renders the OOS / first-add CTA / qty-stepper triplet (shared by both variants).
+    //    `compact = true` is used wherever horizontal space is at a premium (mobile grid card
+    //    at ~120px wide, mobile list-card image column at ~104px). It drops the icon, shortens
+    //    the label to "ADD", shrinks the stepper, and folds the separate remove button into the
+    //    trash that already appears when qty === 1. ──
+    const renderPrimaryCTA = (compact = false) => {
+        if (isOutOfStock) {
+            return (
+                <button
+                    onClick={fetchAlternates}
+                    className={cn(
+                        "w-full rounded-xl font-bold flex items-center justify-center gap-1 transition-all duration-300 active:scale-[0.98] border bg-white text-[#53B175] border-[#53B175] hover:bg-[#f7fbf8] cursor-pointer",
+                        compact ? "text-[10px] py-2 px-1.5" : "text-[11px] py-2.5 px-2"
+                    )}
+                >
+                    {compact ? 'Find vendor' : <>Find at another vendor <Navigation size={12} strokeWidth={2.5} className="shrink-0" /></>}
+                </button>
+            );
+        }
+        if (currentQty === 0) {
+            return (
+                <button
+                    onClick={(e) => handleAdd(e, 1)}
+                    className={cn(
+                        "w-full rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-[0.98] border bg-gradient-to-r from-[#53B175] to-[#4AA56B] text-white border-[#53B175] shadow-[0_6px_18px_-6px_rgba(83,177,117,0.45)] hover:shadow-[0_10px_24px_-6px_rgba(83,177,117,0.55)]",
+                        compact ? "text-[12px] py-2" : "text-[13px] py-3 rounded-2xl"
+                    )}
+                >
+                    {compact ? <><Plus size={14} strokeWidth={3} /> ADD</> : <><ShoppingCart size={15} strokeWidth={2.5} className="shrink-0" /> ADD TO CART</>}
+                </button>
+            );
+        }
+        // Qty stepper — compact variant has no separate remove pill (trash icon inside the stepper
+        // covers that affordance when qty === 1, which matches the grid-card / list-card spaces).
+        return (
+            <div className={cn("w-full flex items-stretch gap-2", compact ? "h-9" : "h-[44px]")}>
+                <div className={cn(
+                    "flex-1 bg-[#53B175] flex items-stretch overflow-hidden shadow-[0_6px_18px_-6px_rgba(83,177,117,0.35)]",
+                    compact ? "rounded-xl" : "rounded-2xl"
+                )}>
+                    <button
+                        onClick={handleDecrement}
+                        aria-label={currentQty === 1 ? 'Remove from cart' : 'Decrease quantity'}
+                        className={cn(
+                            "flex items-center justify-center text-white hover:bg-[#489d67] active:scale-95 transition-all shrink-0",
+                            compact ? "w-8" : "w-12"
+                        )}
+                    >
+                        {currentQty === 1
+                            ? <Trash2 size={compact ? 13 : 16} strokeWidth={2.5} />
+                            : <Minus size={compact ? 14 : 18} strokeWidth={3} />}
+                    </button>
+                    <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={currentQty}
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); (e.target as HTMLInputElement).select(); }}
+                        onChange={handleQtyInput}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className={cn(
+                            "flex-1 min-w-0 bg-white text-center font-extrabold text-[#181725] tabular-nums focus:outline-none focus:bg-[#f7fbf8] transition-colors",
+                            compact ? "text-[13px] my-[2px]" : "text-[15px] my-[3px]"
+                        )}
+                    />
+                    <button
+                        onClick={(e) => handleAdd(e, 1)}
+                        aria-label="Increase quantity"
+                        className={cn(
+                            "flex items-center justify-center text-white hover:bg-[#489d67] active:scale-95 transition-all shrink-0",
+                            compact ? "w-8" : "w-12"
+                        )}
+                    >
+                        <Plus size={compact ? 14 : 18} strokeWidth={3} />
+                    </button>
+                </div>
+                {/* Separate remove pill — only on the spacious (non-compact) layout */}
+                {!compact && (
+                    <button
+                        onClick={handleRemove}
+                        aria-label="Remove from cart"
+                        className="w-11 rounded-2xl border border-gray-200 bg-white text-gray-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 active:scale-95 transition-all shrink-0 flex items-center justify-center"
+                    >
+                        <X size={16} strokeWidth={2.5} />
+                    </button>
+                )}
+            </div>
+        );
+    };
+
+    // ── Hyperpure-style floating ADD control overlaid on the image corner.
+    //    Compact "+" when nothing in cart; small stepper pill when qty > 0.
+    //    Used by the grid variant to keep cards short — no giant bottom button. ──
+    const renderFloatingCTA = () => {
+        if (isOutOfStock) return null; // OOS uses the bottom "Find vendor" CTA instead
+        if (currentQty === 0) {
+            return (
+                <button
+                    onClick={(e) => handleAdd(e, 1)}
+                    aria-label="Add to cart"
+                    className="absolute top-2 right-2 z-20 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white border-2 border-[#53B175] text-[#53B175] flex items-center justify-center shadow-[0_4px_12px_rgba(83,177,117,0.25)] hover:bg-[#53B175] hover:text-white active:scale-90 transition-all"
+                >
+                    <Plus size={16} strokeWidth={3} />
+                </button>
+            );
+        }
+        return (
+            <div className="absolute top-2 right-2 z-20 flex items-stretch h-8 sm:h-9 bg-[#53B175] rounded-full shadow-[0_4px_14px_rgba(83,177,117,0.35)] overflow-hidden">
+                <button
+                    onClick={handleDecrement}
+                    aria-label={currentQty === 1 ? 'Remove from cart' : 'Decrease quantity'}
+                    className="w-7 sm:w-8 flex items-center justify-center text-white hover:bg-[#489d67] active:scale-95 transition-colors"
+                >
+                    {currentQty === 1 ? <Trash2 size={12} strokeWidth={2.5} /> : <Minus size={13} strokeWidth={3} />}
+                </button>
+                <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={currentQty}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); (e.target as HTMLInputElement).select(); }}
+                    onChange={handleQtyInput}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    aria-label="Quantity"
+                    className="bg-transparent text-white text-[12px] sm:text-[13px] font-extrabold w-7 sm:w-8 text-center tabular-nums focus:outline-none focus:bg-white/10 placeholder:text-white/60"
+                />
+                <button
+                    onClick={(e) => handleAdd(e, 1)}
+                    aria-label="Increase quantity"
+                    className="w-7 sm:w-8 flex items-center justify-center text-white hover:bg-[#489d67] active:scale-95 transition-colors"
+                >
+                    <Plus size={13} strokeWidth={3} />
+                </button>
+            </div>
+        );
+    };
+
+    // ── Image badges (Deal / Top / Out / Credit) shared by both variants. ──
+    const imageBadges = (
+        <>
+            <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
+                {isOutOfStock ? (
+                    <span className="bg-gray-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Out
+                    </span>
+                ) : (
+                    <>
+                        {product.isDeal && (
+                            <span className="bg-gradient-to-r from-[#FF4D4D] to-[#FF6B6B] text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md shadow-red-500/20 tracking-wide">
+                                Deal
+                            </span>
+                        )}
+                        {product.frequentlyOrdered && (
+                            <span className="bg-gradient-to-r from-[#FBC02D] to-[#FFD54F] text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md shadow-yellow-500/20 tracking-wide">
+                                Top
+                            </span>
+                        )}
+                    </>
+                )}
+            </div>
+            {product.creditBadge && !isOutOfStock && (
+                <div className="absolute bottom-1.5 left-1.5 sm:bottom-2.5 sm:left-2.5 flex items-center gap-0.5 sm:gap-1 bg-white/90 backdrop-blur-md text-[#7B1FA2] px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-full border border-purple-100 shadow-sm">
+                    <CreditCard size={9} className="sm:!w-3 sm:!h-3" strokeWidth={2.5} />
+                    <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-wide leading-none">Credit</span>
+                </div>
+            )}
+        </>
+    );
+
     const handleShare = async (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-
         const shareUrl = `${window.location.origin}/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`;
-
-        const shareData = {
-            title: product.name,
-            text: `Check out ${product.name} from ${product.vendorName} on Horeca1`,
-            url: shareUrl,
-        };
-
+        const shareData = { title: product.name, text: `Check out ${product.name} from ${product.vendorName} on Horeca1`, url: shareUrl };
         try {
             if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
                 await navigator.share(shareData);
             } else {
                 await navigator.clipboard.writeText(shareUrl);
-                toast.success('Link copied to clipboard!', {
-                    description: 'You can now share it with others.',
-                });
+                toast.success('Link copied to clipboard!', { description: 'You can now share it with others.' });
             }
         } catch (err) {
-            if (err instanceof Error && err.name !== 'AbortError') {
-                toast.error('Failed to share link');
-            }
+            if (err instanceof Error && err.name !== 'AbortError') toast.error('Failed to share link');
+        }
+    };
+
+    const shareButton = (
+        <button
+            className="p-2 rounded-full backdrop-blur-md bg-white/80 border border-white/60 shadow-[0_4px_12px_rgba(0,0,0,0.06)] hover:bg-[#53B175]/10 hover:text-[#53B175] transition-all"
+            onClick={handleShare}
+        >
+            <Share2 size={14} className="text-gray-500" strokeWidth={2} />
+        </button>
+    );
+
+    const onCardClick = (e: React.MouseEvent) => {
+        if (isOutOfStock) {
+            e.preventDefault();
+            e.stopPropagation();
         }
     };
 
     return (<>
-        <Link
-            href={isOutOfStock ? '#' : `/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`}
-            className={cn(
-                "bg-white rounded-[22px] border border-gray-100 overflow-hidden transition-all duration-500 group p-4 md:p-5 relative flex flex-col gap-3 h-full",
-                isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_18px_45px_-12px_rgba(83,177,117,0.18)] hover:-translate-y-1 hover:border-[#53B175]/30"
-            )}
-            onClick={(e) => {
-                if (isOutOfStock) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            }}
-        >
-            {/* Share Button Only */}
-            <div className="absolute top-4 right-4 z-10">
-                <button
-                    className="p-2 rounded-full backdrop-blur-md bg-white/80 border border-white/60 shadow-[0_4px_12px_rgba(0,0,0,0.06)] hover:bg-[#53B175]/10 hover:text-[#53B175] transition-all"
-                    onClick={handleShare}
-                >
-                    <Share2 size={14} className="text-gray-500" strokeWidth={2} />
-                </button>
-            </div>
-
-            {/* ── IMAGE SECTION ── */}
-            <div className="relative aspect-square overflow-hidden rounded-2xl bg-gradient-to-br from-[#F7FBF8] via-white to-[#F0F7F2] flex items-center justify-center">
-                <div className="relative w-[85%] h-[85%]">
-                    <Image
-                        src={product.images[0] || '/images/recom-product/product-img10.png'}
-                        alt={product.name}
-                        fill
-                        sizes="(max-width: 640px) 45vw, (max-width: 1024px) 33vw, 320px"
-                        className={cn(
-                            "object-contain transition-transform duration-500 ease-out p-1 group-hover:scale-[1.04]",
-                            isOutOfStock ? "grayscale" : ""
-                        )}
-                    />
-                </div>
-                <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
-                    {isOutOfStock ? (
-                        <span className="bg-gray-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
-                            Out
-                        </span>
-                    ) : (
-                        <>
-                            {product.isDeal && (
-                                <span className="bg-gradient-to-r from-[#FF4D4D] to-[#FF6B6B] text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md shadow-red-500/20 tracking-wide">
-                                    Deal
-                                </span>
-                            )}
-                            {product.frequentlyOrdered && (
-                                <span className="bg-gradient-to-r from-[#FBC02D] to-[#FFD54F] text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md shadow-yellow-500/20 tracking-wide">
-                                    Top
-                                </span>
-                            )}
-                        </>
-                    )}
-                </div>
-                {product.creditBadge && !isOutOfStock && (
-                    <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1 bg-white/90 backdrop-blur-md text-[#7B1FA2] px-2.5 py-1 rounded-full border border-purple-100 shadow-sm">
-                        <CreditCard size={11} strokeWidth={2.5} />
-                        <span className="text-[10px] font-bold uppercase tracking-wide">Credit</span>
-                    </div>
+        {variant === 'list' ? (
+            // ── LIST VARIANT — Swiggy-style card:
+            //    Top row: name + meta + price on LEFT, image + ADD CTA on RIGHT.
+            //    Bottom row: subtle bulk-tier suggestions spanning full width
+            //    ("₹X/pc for Y pcs+" + small "Add Y" link), separated by a hairline. ──
+            <Link
+                href={productHref}
+                className={cn(
+                    "bg-white rounded-2xl border border-gray-100 overflow-hidden transition-all duration-300 group p-3 sm:p-4 relative flex flex-col gap-3",
+                    isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_12px_30px_-12px_rgba(83,177,117,0.18)] hover:border-[#53B175]/30"
                 )}
-            </div>
+                onClick={onCardClick}
+            >
+                {/* TOP — content (left) + image+CTA (right) */}
+                <div className="flex gap-3 sm:gap-4 items-stretch">
+                    <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                        <h3 className={cn(
+                            "text-[14px] sm:text-[15px] font-bold leading-[1.35] line-clamp-2",
+                            isOutOfStock ? "text-gray-400" : "text-[#181725]"
+                        )}>
+                            {product.displayName ?? product.name}
+                        </h3>
 
-            {/* ── CONTENT SECTION ── */}
-            <div className="flex flex-col gap-1.5">
-                <h3 className={cn(
-                    "text-[15px] font-bold leading-[1.35] line-clamp-2 h-[2.7em]",
-                    isOutOfStock ? "text-gray-400" : "text-[#181725]"
-                )}>
-                    {product.displayName ?? product.name}
-                </h3>
-                <div className="flex items-center gap-2 flex-wrap">
-                    {product.brandSlug && product.brandName && (
-                        <Link
-                            href={`/brand/${product.brandSlug}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-[11px] font-semibold text-[#53B175] hover:underline shrink-0"
-                        >
-                            by {product.brandName}
-                        </Link>
-                    )}
-                    <p className="text-[12px] text-gray-500 font-medium truncate">
-                        {product.packSize}
-                    </p>
-                    {(product.minOrderQuantity || 1) > 1 && (
-                        <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
-                            Min {product.minOrderQuantity}
-                        </span>
-                    )}
-                </div>
-            </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {product.brandSlug && product.brandName && (
+                                <Link
+                                    href={`/brand/${product.brandSlug}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-[11px] font-semibold text-[#53B175] hover:underline shrink-0"
+                                >
+                                    by {product.brandName}
+                                </Link>
+                            )}
+                            <p className="text-[11px] sm:text-[12px] text-gray-500 font-medium truncate">{product.packSize}</p>
+                            {(product.minOrderQuantity || 1) > 1 && (
+                                <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">
+                                    Min {product.minOrderQuantity}
+                                </span>
+                            )}
+                        </div>
 
-            {/* ── BULK TIERS ── */}
-            {bulkTiers.length > 0 && (
-                <div className="flex flex-col gap-1.5 mt-0.5">
-                    {bulkTiers.map((tier, i) => {
-                        const isOpen = !isOutOfStock && openStepperIdx === i;
-                        return (
-                            <div key={i} className={cn(
-                                "rounded-xl border px-2.5 py-1.5 flex items-center gap-1.5 transition-colors h-[40px]",
-                                isOutOfStock ? "bg-gray-50 border-gray-100" : "bg-[#EFF8F2] border-[#D8ECDF] hover:border-[#53B175]/40"
+                        <div className="flex items-baseline gap-1.5 mt-auto">
+                            <span className={cn(
+                                "text-[18px] sm:text-[20px] font-extrabold tracking-tight leading-none",
+                                isOutOfStock ? "text-gray-300" : "text-[#181725]"
                             )}>
-                                {isOpen ? (
-                                    <span className={cn(
-                                        "text-[12px] font-bold tracking-tight whitespace-nowrap shrink-0",
-                                        isOutOfStock ? "text-gray-300" : "text-[#1B5E20]"
-                                    )}>
-                                        ₹{tier.price}
+                                ₹{product.price}
+                            </span>
+                            <span className="text-[11px] font-medium text-gray-500">/ unit</span>
+                        </div>
+                    </div>
+
+                    <div className="shrink-0 flex flex-col items-center gap-2 self-start">
+                        <div className="relative w-[104px] h-[104px] sm:w-[120px] sm:h-[120px] rounded-xl overflow-hidden bg-gradient-to-br from-[#F7FBF8] via-white to-[#F0F7F2] flex items-center justify-center">
+                            <div className="relative w-[85%] h-[85%]">
+                                <Image
+                                    src={product.images[0] || '/images/recom-product/product-img10.png'}
+                                    alt={product.name}
+                                    fill
+                                    sizes="120px"
+                                    className={cn(
+                                        "object-contain transition-transform duration-500 ease-out p-0.5 group-hover:scale-[1.04]",
+                                        isOutOfStock ? "grayscale" : ""
+                                    )}
+                                />
+                            </div>
+                            {imageBadges}
+                        </div>
+                        <div className="w-[104px] sm:w-[120px]">{renderPrimaryCTA(true)}</div>
+                    </div>
+                </div>
+
+                {/* BOTTOM — bulk-tier suggestions, full-width, Swiggy-style ("Add N" link on the right) */}
+                {bulkTiers.length > 0 && !isOutOfStock && (
+                    <div className="border-t border-gray-100 -mx-3 sm:-mx-4 px-3 sm:px-4 pt-2.5 flex flex-col divide-y divide-gray-50">
+                        {bulkTiers.map((tier, i) => {
+                            const pricePerUnit = tier.price.toFixed(2);
+                            return (
+                                <div key={i} className="flex items-center justify-between py-1.5">
+                                    <span className="text-[11.5px] sm:text-[12px] font-semibold text-gray-600">
+                                        <span className="text-[#181725] font-bold">₹{pricePerUnit}/pc</span>
+                                        <span className="text-gray-400 font-medium"> for {tier.minQty}+ pcs</span>
                                     </span>
-                                ) : (
-                                    <span className={cn(
-                                        "text-[13px] font-bold tracking-tight whitespace-nowrap flex-1 min-w-0",
-                                        isOutOfStock ? "text-gray-300" : "text-[#1B5E20]"
-                                    )}>
-                                        ₹{tier.price} <span className="opacity-70 text-[11px] font-medium">({tier.minQty}+ pcs)</span>
-                                    </span>
-                                )}
-                                {!isOutOfStock && !isOpen && (
                                     <button
+                                        type="button"
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            setOpenStepperIdx(i);
-                                            setStepperQty(tier.minQty);
+                                            handleAdd(e, tier.minQty);
                                         }}
-                                        className="text-[#53B175] text-[11px] font-bold hover:text-[#2c7a2c] transition-colors shrink-0"
+                                        className="text-[12px] font-bold text-[#53B175] hover:text-[#2c7a2c] active:scale-95 transition-all shrink-0 ml-3"
                                     >
-                                        + Add
+                                        Add {tier.minQty}
                                     </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </Link>
+        ) : (
+            // ── GRID VARIANT — two breakpoint-specific layouts under one Link.
+            //    Mobile (<sm): Hyperpure compact tile — floating ADD on image, bulk chip below price.
+            //    Desktop (sm+): original full-size card — share icon top-right, inline bulk-tier pills,
+            //    big "ADD TO CART" pill at the bottom. ──
+            <>
+                {/* ── MOBILE COMPACT TILE ── */}
+                <Link
+                    href={productHref}
+                    className={cn(
+                        "sm:hidden bg-white rounded-2xl border border-gray-100 overflow-hidden transition-all duration-300 group p-2.5 relative flex flex-col gap-2 h-full",
+                        isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_12px_30px_-12px_rgba(83,177,117,0.18)] hover:-translate-y-0.5 hover:border-[#53B175]/30"
+                    )}
+                    onClick={onCardClick}
+                >
+                    <div className="relative aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-[#F7FBF8] via-white to-[#F0F7F2] flex items-center justify-center">
+                        <div className="relative w-[85%] h-[85%]">
+                            <Image
+                                src={product.images[0] || '/images/recom-product/product-img10.png'}
+                                alt={product.name}
+                                fill
+                                sizes="(max-width: 640px) 45vw, 320px"
+                                className={cn(
+                                    "object-contain transition-transform duration-500 ease-out p-1 group-hover:scale-[1.04]",
+                                    isOutOfStock ? "grayscale" : ""
                                 )}
-                                {isOpen && (
-                                    <>
-                                        <button
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                if (stepperQty <= tier.minQty) return;
-                                                setStepperQty(stepperQty - 1);
-                                            }}
-                                            disabled={stepperQty <= tier.minQty}
-                                            className={cn(
-                                                "w-6 h-6 rounded-md flex items-center justify-center transition-colors shrink-0",
-                                                stepperQty <= tier.minQty
-                                                    ? "text-gray-300 cursor-not-allowed"
-                                                    : "text-red-400 hover:bg-red-50 bg-white"
-                                            )}
-                                        >
-                                            <Minus size={12} strokeWidth={2.5} />
-                                        </button>
-                                        <input
-                                            type="text"
-                                            inputMode="numeric"
-                                            pattern="[0-9]*"
-                                            value={stepperQty}
-                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); (e.target as HTMLInputElement).select(); }}
-                                            onChange={(e) => {
-                                                e.stopPropagation();
-                                                const raw = e.target.value.replace(/[^0-9]/g, '');
-                                                setStepperQty(raw === '' ? 0 : parseInt(raw, 10));
-                                            }}
-                                            onBlur={() => {
-                                                if (stepperQty < tier.minQty) setStepperQty(tier.minQty);
-                                            }}
-                                            onKeyDown={(e) => {
-                                                e.stopPropagation();
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    const finalQty = stepperQty < tier.minQty ? tier.minQty : stepperQty;
-                                                    setStepperQty(finalQty);
-                                                    handleAdd(e as unknown as React.MouseEvent, finalQty);
-                                                    setOpenStepperIdx(null);
-                                                }
-                                            }}
-                                            className="flex-1 min-w-0 w-full h-6 px-1 rounded-md bg-white border border-[#D8ECDF] text-[12px] font-bold text-[#181725] text-center tabular-nums focus:outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/20 transition-all"
-                                        />
-                                        <button
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                setStepperQty(Math.max(stepperQty, tier.minQty) + 1);
-                                            }}
-                                            className="w-6 h-6 rounded-md flex items-center justify-center text-[#53B175] hover:bg-green-50 bg-white transition-colors shrink-0"
-                                        >
-                                            <Plus size={12} strokeWidth={2.5} />
-                                        </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                const finalQty = stepperQty < tier.minQty ? tier.minQty : stepperQty;
-                                                handleAdd(e, finalQty);
-                                                setOpenStepperIdx(null);
-                                            }}
-                                            className="px-2 h-6 rounded-md bg-[#53B175] text-white text-[10px] font-bold hover:bg-[#489d67] transition-colors shrink-0"
-                                        >
-                                            Add
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-
-            {/* ── FOOTER: PRICE + CTA ── */}
-            <div className="mt-auto pt-3 flex flex-col gap-3">
-                <div className="flex items-baseline gap-1.5">
-                    <span className={cn(
-                        "text-[22px] md:text-[24px] font-extrabold tracking-tight leading-none",
-                        isOutOfStock ? "text-gray-300" : "text-[#181725]"
-                    )}>
-                        ₹{product.price}
-                    </span>
-                    <span className="text-[12px] font-medium text-gray-500">/ unit</span>
-                </div>
-
-                {isOutOfStock ? (
-                    <button
-                        onClick={fetchAlternates}
-                        className="w-full rounded-2xl font-bold flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-[0.98] border bg-white text-[#53B175] border-[#53B175] hover:bg-[#f7fbf8] cursor-pointer text-[11px] py-2.5 px-2"
-                    >
-                        Find at another vendor <Navigation size={12} strokeWidth={2.5} className="shrink-0" />
-                    </button>
-                ) : currentQty === 0 ? (
-                    <button
-                        onClick={(e) => handleAdd(e, 1)}
-                        className="w-full rounded-2xl font-bold flex items-center justify-center gap-1.5 transition-all duration-300 active:scale-[0.98] border bg-gradient-to-r from-[#53B175] to-[#4AA56B] text-white border-[#53B175] shadow-[0_8px_22px_-6px_rgba(83,177,117,0.45)] hover:shadow-[0_12px_28px_-6px_rgba(83,177,117,0.55)] text-[13px] py-3"
-                    >
-                        <ShoppingCart size={15} strokeWidth={2.5} className="shrink-0" /> ADD TO CART
-                    </button>
-                ) : (
-                    <div className="w-full flex items-stretch gap-2 h-[44px]">
-                        {/* Main stepper pill */}
-                        <div className="flex-1 rounded-2xl bg-[#53B175] flex items-stretch overflow-hidden shadow-[0_8px_22px_-6px_rgba(83,177,117,0.35)]">
-                            <button
-                                onClick={handleDecrement}
-                                aria-label={currentQty === 1 ? 'Remove from cart' : 'Decrease quantity'}
-                                className="w-12 flex items-center justify-center text-white hover:bg-[#489d67] active:scale-95 transition-all shrink-0"
-                            >
-                                {currentQty === 1 ? (
-                                    <Trash2 size={16} strokeWidth={2.5} />
-                                ) : (
-                                    <Minus size={18} strokeWidth={3} />
-                                )}
-                            </button>
-                            <input
-                                type="text"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                value={currentQty}
-                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); (e.target as HTMLInputElement).select(); }}
-                                onChange={handleQtyInput}
-                                onKeyDown={(e) => e.stopPropagation()}
-                                className="flex-1 min-w-0 bg-white text-center text-[15px] font-extrabold text-[#181725] tabular-nums focus:outline-none focus:bg-[#f7fbf8] transition-colors my-[3px]"
                             />
-                            <button
-                                onClick={(e) => handleAdd(e, 1)}
-                                aria-label="Increase quantity"
-                                className="w-12 flex items-center justify-center text-white hover:bg-[#489d67] active:scale-95 transition-all shrink-0"
-                            >
-                                <Plus size={18} strokeWidth={3} />
-                            </button>
                         </div>
+                        {imageBadges}
+                        {renderFloatingCTA()}
+                    </div>
 
-                        {/* Separate remove button — matches DMart reference */}
+                    <div className="flex flex-col gap-1 mt-0.5">
+                        <h3 className={cn(
+                            "text-[13px] font-bold leading-[1.3] line-clamp-2 min-h-[2.6em]",
+                            isOutOfStock ? "text-gray-400" : "text-[#181725]"
+                        )}>
+                            {product.displayName ?? product.name}
+                        </h3>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            {product.brandSlug && product.brandName && (
+                                <Link
+                                    href={`/brand/${product.brandSlug}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-[10px] font-semibold text-[#53B175] hover:underline shrink-0"
+                                >
+                                    by {product.brandName}
+                                </Link>
+                            )}
+                            <p className="text-[11px] text-gray-500 font-medium truncate">{product.packSize}</p>
+                            {(product.minOrderQuantity || 1) > 1 && (
+                                <span className="text-[9px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">
+                                    Min {product.minOrderQuantity}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="mt-auto pt-1 flex flex-col gap-1.5">
+                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                            <span className={cn(
+                                "text-[16px] font-extrabold tracking-tight leading-none",
+                                isOutOfStock ? "text-gray-300" : "text-[#181725]"
+                            )}>
+                                ₹{product.price}
+                            </span>
+                            <span className="text-[10px] font-medium text-gray-500">/ unit</span>
+                        </div>
+                        {bulkTiers.length > 0 && !isOutOfStock && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setShowBulkSheet(true);
+                                }}
+                                className="w-full flex items-center justify-between gap-1 px-2 py-1.5 rounded-lg bg-[#EFF8F2] border border-[#D8ECDF] text-[#1B5E20] hover:border-[#53B175]/50 active:scale-[0.98] transition-all"
+                                aria-label="Show bulk price tiers"
+                            >
+                                <span className="text-[10px] font-bold truncate">
+                                    From ₹{bulkTiers[bulkTiers.length - 1].price} · {bulkTiers.length} bulk {bulkTiers.length === 1 ? 'price' : 'prices'}
+                                </span>
+                                <ChevronDown size={12} strokeWidth={2.5} className="shrink-0" />
+                            </button>
+                        )}
+                    </div>
+
+                    {isOutOfStock && (
+                        <div className="pt-1">{renderPrimaryCTA(true)}</div>
+                    )}
+                </Link>
+
+                {/* ── DESKTOP ORIGINAL CARD (restored — share top-right, inline tier pills, bottom ADD) ── */}
+                <Link
+                    href={productHref}
+                    className={cn(
+                        "hidden sm:flex bg-white rounded-[22px] border border-gray-100 overflow-hidden transition-all duration-500 group p-4 md:p-5 relative flex-col gap-3 h-full",
+                        isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_18px_45px_-12px_rgba(83,177,117,0.18)] hover:-translate-y-1 hover:border-[#53B175]/30"
+                    )}
+                    onClick={onCardClick}
+                >
+                    <div className="absolute top-4 right-4 z-10">{shareButton}</div>
+
+                    <div className="relative aspect-square overflow-hidden rounded-2xl bg-gradient-to-br from-[#F7FBF8] via-white to-[#F0F7F2] flex items-center justify-center">
+                        <div className="relative w-[85%] h-[85%]">
+                            <Image
+                                src={product.images[0] || '/images/recom-product/product-img10.png'}
+                                alt={product.name}
+                                fill
+                                sizes="(max-width: 1024px) 33vw, 320px"
+                                className={cn(
+                                    "object-contain transition-transform duration-500 ease-out p-1 group-hover:scale-[1.04]",
+                                    isOutOfStock ? "grayscale" : ""
+                                )}
+                            />
+                        </div>
+                        {imageBadges}
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                        <h3 className={cn(
+                            "text-[15px] font-bold leading-[1.35] line-clamp-2 h-[2.7em]",
+                            isOutOfStock ? "text-gray-400" : "text-[#181725]"
+                        )}>
+                            {product.displayName ?? product.name}
+                        </h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {product.brandSlug && product.brandName && (
+                                <Link
+                                    href={`/brand/${product.brandSlug}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-[11px] font-semibold text-[#53B175] hover:underline shrink-0"
+                                >
+                                    by {product.brandName}
+                                </Link>
+                            )}
+                            <p className="text-[12px] text-gray-500 font-medium truncate">{product.packSize}</p>
+                            {(product.minOrderQuantity || 1) > 1 && (
+                                <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
+                                    Min {product.minOrderQuantity}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {bulkTiers.length > 0 && (
+                        <div className="flex flex-col gap-1.5 mt-0.5">
+                            {bulkTiers.map((tier, i) => renderTier(tier, i))}
+                        </div>
+                    )}
+
+                    <div className="mt-auto pt-3 flex flex-col gap-3">
+                        <div className="flex items-baseline gap-1.5">
+                            <span className={cn(
+                                "text-[22px] md:text-[24px] font-extrabold tracking-tight leading-none",
+                                isOutOfStock ? "text-gray-300" : "text-[#181725]"
+                            )}>
+                                ₹{product.price}
+                            </span>
+                            <span className="text-[12px] font-medium text-gray-500">/ unit</span>
+                        </div>
+                        {renderPrimaryCTA(false)}
+                    </div>
+                </Link>
+            </>
+        )}
+
+        {/* ── BULK PRICING BOTTOM-SHEET (opens from the grid card's "Bulk ▾" chip) ──
+              Slides up from the bottom of the viewport. Each row = one tier with its
+              price-per-piece, quantity threshold, and an Add CTA that drops tier.minQty
+              into the cart and closes the sheet. ── */}
+        {showBulkSheet && (
+            // z-[10001] sits above the mobile bottom-nav (z-[9999]) so the sheet and its
+            // overlay cover it. The sheet itself has its own scroll + bottom safe area so
+            // the last tier doesn't fall under the nav strip on small viewports.
+            <div
+                className="fixed inset-0 z-[10001] flex items-end justify-center animate-in fade-in duration-200"
+                onClick={() => setShowBulkSheet(false)}
+            >
+                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+                <div
+                    className="relative bg-white rounded-t-[28px] sm:rounded-[28px] sm:mb-auto sm:mt-auto w-full max-w-md z-10 shadow-[0_-12px_40px_rgba(0,0,0,0.18)] sm:shadow-[0_30px_80px_rgba(0,0,0,0.15)] max-h-[85vh] flex flex-col animate-in slide-in-from-bottom duration-300"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* Drag handle (mobile only) */}
+                    <div className="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+                        <span className="w-10 h-1 rounded-full bg-gray-200" />
+                    </div>
+
+                    <div className="px-5 pt-3 pb-4 flex items-start justify-between gap-3 shrink-0">
+                        <div className="min-w-0">
+                            <h3 className="text-[16px] font-black text-[#181725] line-clamp-2">{product.displayName ?? product.name}</h3>
+                            <p className="text-[12px] text-gray-400 font-semibold mt-0.5">Buy more, save more</p>
+                        </div>
                         <button
-                            onClick={handleRemove}
-                            aria-label="Remove from cart"
-                            className="w-11 rounded-2xl border border-gray-200 bg-white text-gray-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 active:scale-95 transition-all shrink-0 flex items-center justify-center"
+                            onClick={() => setShowBulkSheet(false)}
+                            aria-label="Close"
+                            className="p-2 rounded-xl bg-gray-50 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors shrink-0"
                         >
                             <X size={16} strokeWidth={2.5} />
                         </button>
                     </div>
-                )}
+
+                    {/* Scrollable tier list. Bottom padding clears the safe-area inset
+                        so the last "Add N" row stays tappable on phones with rounded corners. */}
+                    <div className="flex-1 overflow-y-auto px-3 pb-[max(env(safe-area-inset-bottom),1rem)] flex flex-col gap-2">
+                        {bulkTiers.map((tier, i) => {
+                            const savings = product.price > tier.price ? Math.round(((product.price - tier.price) / product.price) * 100) : 0;
+                            return (
+                                <div
+                                    key={i}
+                                    className="flex items-center gap-3 p-3 rounded-2xl border border-gray-100 hover:border-[#53B175]/30 hover:bg-[#f7fbf8] transition-all"
+                                >
+                                    <div className="relative w-14 h-14 rounded-xl bg-gray-50 shrink-0 overflow-hidden">
+                                        <Image
+                                            src={product.images[0] || '/images/recom-product/product-img10.png'}
+                                            alt=""
+                                            fill
+                                            sizes="56px"
+                                            className="object-contain p-1"
+                                        />
+                                        {savings > 0 && (
+                                            <span className="absolute top-0 left-0 bg-gradient-to-br from-[#53B175] to-[#469E66] text-white text-[9px] font-black px-1 py-0.5 rounded-br-lg">
+                                                {savings}% OFF
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[14px] font-black text-[#181725]">
+                                            ₹{tier.price}
+                                            <span className="text-[12px] text-gray-400 font-medium ml-1">/ pc</span>
+                                        </p>
+                                        <p className="text-[11px] font-bold text-gray-500 mt-0.5">For {tier.minQty}+ pcs</p>
+                                    </div>
+                                    <button
+                                        onClick={(e) => handleAdd(e, tier.minQty)}
+                                        className="px-4 py-2.5 rounded-xl bg-[#53B175] text-white text-[12px] font-black shadow-[0_4px_14px_-4px_rgba(83,177,117,0.5)] hover:bg-[#489d67] active:scale-95 transition-all shrink-0"
+                                    >
+                                        Add {tier.minQty}
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
             </div>
-        </Link>
+        )}
 
         {/* ── OOS ALTERNATE VENDORS MODAL ── */}
         {showAlternates && (
             <div
-                className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+                className="fixed inset-0 z-[10001] flex items-center justify-center p-4"
                 onClick={() => setShowAlternates(false)}
             >
                 <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />

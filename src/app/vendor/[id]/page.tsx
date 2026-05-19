@@ -7,7 +7,6 @@ import { VendorStoreHeader } from '@/components/features/vendor/VendorStoreHeade
 import { VendorCatalogNav } from '@/components/features/vendor/VendorCatalogNav';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
-import { CategoryShowcase } from '@/components/features/CategoryShowcase';
 import { dal } from '@/lib/dal';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
@@ -50,6 +49,18 @@ export default function VendorStorePage() {
     const [reviewsLoading, setReviewsLoading] = useState(false);
     const [prevOrderedProducts, setPrevOrderedProducts] = useState<VendorProduct[]>([]);
     const [prevOrderedLoading, setPrevOrderedLoading] = useState(false);
+
+    // Grid (2-up) vs list (1-up) product layout. Persisted per-browser so power
+    // buyers don't have to re-pick on every visit.
+    const [layoutMode, setLayoutMode] = useState<'grid' | 'list'>('grid');
+    useEffect(() => {
+        const saved = localStorage.getItem('horeca_vendor_layout');
+        if (saved === 'grid' || saved === 'list') setLayoutMode(saved);
+    }, []);
+    const updateLayoutMode = useCallback((mode: 'grid' | 'list') => {
+        setLayoutMode(mode);
+        try { localStorage.setItem('horeca_vendor_layout', mode); } catch { /* quota / privacy mode */ }
+    }, []);
 
     // Ensure page starts at the top on entry
     useEffect(() => {
@@ -281,27 +292,19 @@ export default function VendorStorePage() {
                 onTabChange={setActiveTab}
             />
 
-            {/* ── DYNAMIC CATEGORY SHOWCASE (mobile only — horizontal scroll) & NAVIGATION ── */}
-            {/* Desktop uses the left sidebar inside the main content area for sub-category nav,
-                per UI/UX Notes: "Vendor Catalog Navigation: Categories >> Sub-Categories (Like Hyperpure 1-column grid)" */}
+            {/* The hierarchical Categories >> Sub-Categories sidebar (rendered inside
+                the main content block below) covers category nav at every breakpoint,
+                so the horizontal CategoryShowcase strip is no longer needed on mobile. */}
             {activeTab !== 'ratings' && activeTab !== 'about' && activeTab !== 'orders' && (
-                <>
-                    <div className="lg:hidden">
-                        <CategoryShowcase
-                            filterByProducts={products}
-                            onCategoryClick={(cat) => setActiveTab(activeTab === `cat:${cat}` ? 'all' : `cat:${cat}`)}
-                            activeCategory={activeTab}
-                            title=""
-                        />
-                    </div>
-                    <VendorCatalogNav
-                        activeTab={activeTab}
-                        onTabChange={setActiveTab}
-                        categories={vendor.categories}
-                        searchQuery={searchQuery}
-                        onSearchChange={setSearchQuery}
-                    />
-                </>
+                <VendorCatalogNav
+                    activeTab={activeTab}
+                    onTabChange={setActiveTab}
+                    categories={vendor.categories}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                    layoutMode={layoutMode}
+                    onLayoutModeChange={updateLayoutMode}
+                />
             )}
 
             {/* Main Content Area */}
@@ -346,33 +349,37 @@ export default function VendorStorePage() {
                         )}
                     </div>
                 ) : activeTab === 'all' || activeTab === 'deals' || activeTab === 'frequent' || activeTab === 'prev-ordered' || activeTab.startsWith('cat:') ? (
-                    <div className="flex gap-6 items-start">
-                        {/* ── DESKTOP SUB-CATEGORY SIDEBAR (Hyperpure 1-column grid per UI/UX Notes) ── */}
-                        <aside className="hidden lg:block w-[260px] shrink-0 sticky top-24">
-                            <div className="bg-white rounded-2xl border border-gray-100 p-3 shadow-sm">
+                    <div className="flex gap-2 md:gap-4 lg:gap-6 items-start">
+                        {/* ── CATEGORIES >> SUB-CATEGORIES SIDEBAR.
+                              Mobile (<md): Hyperpure-style vertical tile rail (~76px), image-on-top + label-below.
+                              Tapping a parent both filters and toggles its children (no separate chevron in the rail).
+                              Desktop (md+): horizontal-row hierarchical panel with chevron expanders. ── */}
+                        <aside className="w-[76px] md:w-[200px] lg:w-[260px] shrink-0 sticky top-24">
+                            <div className="bg-white rounded-2xl border border-gray-100 p-1 md:p-3 shadow-sm">
+                                {/* All Products entry */}
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('all')}
                                     className={cn(
-                                        "flex items-center justify-between w-full px-3 py-2.5 rounded-xl transition-all group text-left",
+                                        "w-full rounded-xl transition-all text-left flex flex-col items-center md:flex-row md:items-center md:justify-between px-1 md:px-3 py-2 md:py-2.5",
                                         activeTab === 'all' ? "bg-[#53B175]/10" : "hover:bg-gray-50"
                                     )}
                                 >
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex flex-col items-center md:flex-row md:items-center md:gap-3 min-w-0 w-full">
                                         <div className={cn(
-                                            "w-9 h-9 rounded-lg flex items-center justify-center transition-all",
-                                            activeTab === 'all' ? "bg-white border border-[#53B175]/20 shadow-sm" : "bg-gray-50"
+                                            "w-12 h-12 md:w-9 md:h-9 rounded-lg flex items-center justify-center transition-all shrink-0",
+                                            activeTab === 'all' ? "bg-white border border-[#53B175]/30 shadow-sm" : "bg-gray-50"
                                         )}>
-                                            <Sparkles size={16} className={activeTab === 'all' ? 'text-[#53B175]' : 'text-gray-400'} strokeWidth={2.5} />
+                                            <Sparkles size={18} className={cn('md:!w-4 md:!h-4', activeTab === 'all' ? 'text-[#53B175]' : 'text-gray-400')} strokeWidth={2.5} />
                                         </div>
                                         <span className={cn(
-                                            "text-[13px] font-bold",
+                                            "text-[10px] md:text-[13px] font-semibold md:font-bold leading-tight text-center md:text-left mt-1 md:mt-0 line-clamp-2 md:line-clamp-none md:truncate w-full md:flex-1",
                                             activeTab === 'all' ? "text-[#53B175]" : "text-[#181725]"
                                         )}>
                                             All Products
                                         </span>
                                     </div>
-                                    <span className="text-[11px] font-bold text-gray-400">{products.length}</span>
+                                    <span className="hidden md:inline text-[11px] font-bold text-gray-400 shrink-0 ml-2">{products.length}</span>
                                 </button>
 
                                 {vendorCategoryTree.map((parent) => {
@@ -382,47 +389,56 @@ export default function VendorStorePage() {
                                     return (
                                         <div key={parent.id} className="mt-1">
                                             <div className={cn(
-                                                "flex items-center w-full rounded-xl transition-all",
+                                                "rounded-xl transition-all",
                                                 isParentActive ? "bg-[#53B175]/10" : "hover:bg-gray-50"
                                             )}>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setActiveTab(`cat:${parent.name}`)}
-                                                    className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2.5 text-left"
+                                                    onClick={() => {
+                                                        setActiveTab(`cat:${parent.name}`);
+                                                        // Mobile has no chevron — tap-on-parent also toggles expansion.
+                                                        if (hasChildren) setExpandedCats(prev => ({ ...prev, [parent.id]: !isOpen }));
+                                                    }}
+                                                    className="w-full flex flex-col items-center md:flex-row md:items-center md:gap-3 px-1 md:px-3 py-2 md:py-2.5 text-left min-w-0"
                                                 >
                                                     <div className={cn(
-                                                        "w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden relative transition-all shrink-0",
-                                                        isParentActive ? "bg-white border border-[#53B175]/20 shadow-sm" : "bg-gray-50"
+                                                        "w-12 h-12 md:w-9 md:h-9 rounded-lg flex items-center justify-center overflow-hidden relative transition-all shrink-0",
+                                                        isParentActive ? "bg-white border border-[#53B175]/30 shadow-sm" : "bg-gray-50"
                                                     )}>
                                                         {parent.image ? (
-                                                            <Image src={parent.image} alt={parent.name} width={28} height={28} className="object-contain" />
+                                                            <Image src={parent.image} alt={parent.name} width={36} height={36} className="object-contain w-full h-full p-1" />
                                                         ) : (
-                                                            <Package size={14} className="text-gray-300" />
+                                                            <Package size={16} className="text-gray-300" />
                                                         )}
                                                     </div>
                                                     <span className={cn(
-                                                        "text-[13px] font-bold truncate",
+                                                        "text-[10px] md:text-[13px] font-semibold md:font-bold leading-tight text-center md:text-left mt-1 md:mt-0 line-clamp-2 md:line-clamp-none md:truncate w-full md:flex-1",
                                                         isParentActive ? "text-[#53B175]" : "text-[#181725]"
                                                     )}>
                                                         {parent.name}
                                                     </span>
+                                                    <span className="hidden md:inline text-[11px] font-bold text-gray-400 shrink-0">{parent.count}</span>
+                                                    {hasChildren && (
+                                                        <span
+                                                            role="button"
+                                                            aria-label={isOpen ? 'Collapse sub-categories' : 'Expand sub-categories'}
+                                                            tabIndex={0}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                setExpandedCats(prev => ({ ...prev, [parent.id]: !isOpen }));
+                                                            }}
+                                                            className="hidden md:flex w-7 h-7 ml-1 items-center justify-center text-gray-400 hover:text-[#53B175] rounded-md hover:bg-white transition-all shrink-0 cursor-pointer"
+                                                        >
+                                                            {isOpen ? <ChevronDown size={14} strokeWidth={2.5} /> : <ChevronRight size={14} strokeWidth={2.5} />}
+                                                        </span>
+                                                    )}
                                                 </button>
-                                                <span className="text-[11px] font-bold text-gray-400 shrink-0 mr-1">{parent.count}</span>
-                                                {hasChildren && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setExpandedCats(prev => ({ ...prev, [parent.id]: !isOpen }))}
-                                                        aria-label={isOpen ? 'Collapse sub-categories' : 'Expand sub-categories'}
-                                                        className="w-7 h-7 mr-1 flex items-center justify-center text-gray-400 hover:text-[#53B175] rounded-md hover:bg-white transition-all"
-                                                    >
-                                                        {isOpen ? <ChevronDown size={14} strokeWidth={2.5} /> : <ChevronRight size={14} strokeWidth={2.5} />}
-                                                    </button>
-                                                )}
                                             </div>
 
-                                            {/* Sub-categories — Hyperpure 1-column nested grid */}
+                                            {/* Sub-categories — text-only on mobile rail, indented row on desktop */}
                                             {hasChildren && isOpen && (
-                                                <div className="ml-5 mt-1 border-l border-gray-100 pl-2 space-y-0.5">
+                                                <div className="ml-0.5 md:ml-5 mt-1 md:border-l md:border-gray-100 pl-0.5 md:pl-2 space-y-0.5">
                                                     {parent.children.map((child) => {
                                                         const isChildActive = activeTab === `cat:${child.name}`;
                                                         return (
@@ -431,17 +447,17 @@ export default function VendorStorePage() {
                                                                 type="button"
                                                                 onClick={() => setActiveTab(`cat:${child.name}`)}
                                                                 className={cn(
-                                                                    "flex items-center justify-between w-full px-3 py-2 rounded-lg transition-all text-left",
+                                                                    "w-full flex items-center justify-center md:justify-between px-1 md:px-3 py-1.5 md:py-2 rounded-lg transition-all text-center md:text-left",
                                                                     isChildActive ? "bg-[#53B175]/10" : "hover:bg-gray-50"
                                                                 )}
                                                             >
                                                                 <span className={cn(
-                                                                    "text-[12px] font-semibold truncate",
+                                                                    "text-[10px] md:text-[12px] font-semibold leading-tight line-clamp-2 md:line-clamp-none md:truncate",
                                                                     isChildActive ? "text-[#53B175]" : "text-gray-600"
                                                                 )}>
                                                                     {child.name}
                                                                 </span>
-                                                                <span className="text-[10px] font-bold text-gray-400 shrink-0 ml-2">{child.count}</span>
+                                                                <span className="hidden md:inline text-[10px] font-bold text-gray-400 shrink-0 ml-2">{child.count}</span>
                                                             </button>
                                                         );
                                                     })}
@@ -453,12 +469,16 @@ export default function VendorStorePage() {
                             </div>
                         </aside>
 
-                        {/* ── PRODUCT GRID (right column on desktop, full width on mobile) ── */}
+                        {/* ── PRODUCT GRID — 2-up at every width in grid mode; single column in list mode ── */}
                         <div className="flex-1 min-w-0">
                             {filteredProducts.length > 0 ? (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
+                                <div className={cn(
+                                    layoutMode === 'grid'
+                                        ? 'grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 md:gap-4 lg:gap-5'
+                                        : 'flex flex-col gap-3 md:gap-4'
+                                )}>
                                     {filteredProducts.map((product) => (
-                                        <VendorProductCard key={product.id} product={product} />
+                                        <VendorProductCard key={product.id} product={product} variant={layoutMode} />
                                     ))}
                                 </div>
                             ) : (
