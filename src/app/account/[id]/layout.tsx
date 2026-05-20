@@ -1,0 +1,133 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useParams } from 'next/navigation';
+import { ArrowLeft, Building2, MapPin, Users, ShieldCheck, Loader2 } from 'lucide-react';
+
+interface AccountHeader {
+  id: string;
+  legalName: string;
+  displayName: string | null;
+  gstin: string | null;
+  isCustomer: boolean;
+  isVendor: boolean;
+  isBrand: boolean;
+  status: string;
+  _count?: { members: number; roles: number };
+}
+
+const TABS = [
+  { href: '',         label: 'Overview', icon: Building2 },
+  { href: '/outlets', label: 'Outlets',  icon: MapPin },
+  { href: '/users',   label: 'Users',    icon: Users },
+  { href: '/roles',   label: 'Roles',    icon: ShieldCheck },
+];
+
+export default function AccountLayout({ children }: { children: React.ReactNode }) {
+  const params = useParams<{ id: string }>();
+  const pathname = usePathname();
+  const id = params.id;
+
+  const [account, setAccount] = useState<AccountHeader | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true); setError(null);
+      try {
+        const res = await fetch(`/api/v1/account/${id}`);
+        const json = await res.json();
+        if (!json.success) { setError(json.error?.message ?? 'Could not load account'); return; }
+        if (!cancelled) setAccount(json.data as AccountHeader);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load account');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [id]);
+
+  const basePath = `/account/${id}`;
+
+  return (
+    <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="max-w-[1200px] mx-auto px-[clamp(1rem,3vw,2rem)] py-[clamp(1rem,3vw,2rem)]">
+        <Link href="/" className="inline-flex items-center gap-2 text-[13px] text-[#666] hover:text-[#181725] mb-4">
+          <ArrowLeft size={14} />
+          Back
+        </Link>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="animate-spin text-[#299E60]" />
+          </div>
+        ) : error || !account ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-700">
+            {error ?? 'Account not found'}
+          </div>
+        ) : (
+          <>
+            <header className="bg-white rounded-2xl border border-[#F0F0F0] p-[clamp(1rem,2vw,1.5rem)] mb-[clamp(1rem,2vw,1.5rem)]">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div>
+                  <h1 className="text-[clamp(1.25rem,2.5vw,1.75rem)] font-bold text-[#181725]">
+                    {account.displayName ?? account.legalName}
+                  </h1>
+                  <p className="text-[13px] text-[#666] mt-0.5">{account.legalName}</p>
+                  {account.gstin && (
+                    <p className="text-[12px] text-[#AEAEAE] font-mono mt-0.5">GSTIN: {account.gstin}</p>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2 sm:ml-auto">
+                  {account.isCustomer && <Badge color="#2563EB" bg="#DBEAFE">Customer</Badge>}
+                  {account.isVendor   && <Badge color="#299E60" bg="#DCFCE7">Vendor</Badge>}
+                  {account.isBrand    && <Badge color="#7C3AED" bg="#EDE9FE">Brand</Badge>}
+                  {account.status !== 'active' && <Badge color="#DC2626" bg="#FEE2E2">{account.status}</Badge>}
+                </div>
+              </div>
+            </header>
+
+            {/* Tabs */}
+            <nav className="bg-white rounded-2xl border border-[#F0F0F0] p-1 mb-[clamp(1rem,2vw,1.5rem)] flex gap-1 overflow-x-auto">
+              {TABS.map((t) => {
+                const href = `${basePath}${t.href}`;
+                const active = pathname === href || (t.href === '' && pathname === basePath);
+                const Icon = t.icon;
+                return (
+                  <Link
+                    key={t.label}
+                    href={href}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold whitespace-nowrap transition-colors ${
+                      active ? 'bg-[#181725] text-white' : 'text-[#666] hover:bg-[#F8F8F8]'
+                    }`}
+                  >
+                    <Icon size={14} />
+                    {t.label}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {children}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Badge({ children, color, bg }: { children: React.ReactNode; color: string; bg: string }) {
+  return (
+    <span
+      className="px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider"
+      style={{ color, backgroundColor: bg }}
+    >
+      {children}
+    </span>
+  );
+}
