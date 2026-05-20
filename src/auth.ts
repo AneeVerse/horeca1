@@ -3,6 +3,7 @@ import Credentials from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
+import { loadActiveContext, type ActiveContext } from '@/lib/activeContext';
 
 function vendorSlug(name: string): string {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50);
@@ -45,7 +46,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const useEmail = !usePhone && !isRegister && !!loginEmail;
         if (!usePhone && !useEmail) return null;
 
-        // Verify OTP against the chosen identifier
         const record = await prisma.otpCode.findFirst({
           where: usePhone
             ? { phone, used: false, expiresAt: { gt: new Date() } }
@@ -56,7 +56,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         await prisma.otpCode.update({ where: { id: record.id }, data: { used: true } });
 
-        // Find existing user by whichever identifier was used
         let user = usePhone
           ? await prisma.user.findUnique({
               where: { phone },
@@ -67,29 +66,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               select: { id: true, email: true, fullName: true, role: true, image: true, isActive: true },
             });
 
-        // Email-OTP login requires an existing account (no auto-register via email)
         if (useEmail && !user) return null;
 
         if (!user && usePhone) {
-          // No account yet — create one automatically.
-          // Register form provides fullName/businessName/email/role; login form falls back to phone-only account.
           const fullName = String(credentials?.fullName ?? '').trim() || phone;
           const businessName = String(credentials?.businessName ?? '').trim() || null;
           const rawEmail = String(credentials?.email ?? '').trim().toLowerCase();
           const email = rawEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : null;
           const role = credentials?.role === 'vendor' ? 'vendor' : 'customer';
 
-          // If email is provided but already used by another account, skip it rather than fail
           const emailTaken = email
             ? !!(await prisma.user.findUnique({ where: { email }, select: { id: true } }))
             : false;
           const finalEmail = emailTaken ? null : email;
 
-          // Optional password set during registration — usable with phone or email
           const rawPassword = String(credentials?.password ?? '');
-          const passwordHash = rawPassword.length >= 6
-            ? await bcrypt.hash(rawPassword, 10)
-            : null;
+          const passwordHash = rawPassword.length >= 6 ? await bcrypt.hash(rawPassword, 10) : null;
 
           user = await prisma.user.create({
             data: {
@@ -123,7 +115,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
 
-    // ── Phone-or-email + password — team members, admins, registered users
+    // ── Phone-or-email + password ── (legacy linkedAccount switchToken path
+    //    is kept for one release cycle so existing client code does not break;
+    //    the new BusinessAccount switcher uses POST /api/v1/auth/switch-business-account.)
     Credentials({
       id: 'credentials',
       name: 'credentials',
@@ -133,7 +127,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         switchToken: { label: 'Switch Token', type: 'text' },
       },
       async authorize(credentials) {
-        // ── Switch token flow (account switcher) ──
+        // Legacy switch-token flow (LinkedAccount). Removed when Step C drops the table.
         if (credentials?.switchToken) {
           const link = await prisma.linkedAccount.findUnique({
             where: { switchToken: credentials.switchToken as string },
@@ -151,7 +145,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return { id: link.linkedUser.id, email: link.linkedUser.email ?? undefined, name: link.linkedUser.fullName, role: link.linkedUser.role, image: link.linkedUser.image ?? undefined };
         }
 
-        // ── Phone or email + password flow ──
         const identifier = String(credentials?.email ?? '').trim();
         const password = String(credentials?.password ?? '');
         if (!identifier || !password) return null;
@@ -182,19 +175,32 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
 
   callbacks: {
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, trigger, session: updatePayload }) {
+      // First sign-in or fresh login
       if (user) {
         token.id = user.id;
         token.role = (user as { role?: string }).role || 'customer';
         if (token.role === 'admin') {
-          const membership = await prisma.adminTeamMember.findUnique({
+          const adminMembership = await prisma.adminTeamMember.findUnique({
             where: { userId: token.id as string },
             select: { role: true },
           });
-          token.adminTeamRole = membership?.role ?? 'owner';
+          token.adminTeamRole = adminMembership?.role ?? 'owner';
         }
+        // Pick the primary BusinessAccount + primary Outlet (V2.2)
+        const active = await loadActiveContext(token.id as string, null, null);
+        applyActiveContext(token, active);
       }
+
+      // Session.update({ activeBusinessAccountId, activeOutletId }) — used by switch endpoints
       if (trigger === 'update' && token.id) {
+        const u = (updatePayload ?? {}) as { activeBusinessAccountId?: string; activeOutletId?: string };
+        const targetAccountId = u.activeBusinessAccountId ?? (token.activeBusinessAccountId as string | undefined) ?? null;
+        const targetOutletId = u.activeOutletId ?? (token.activeOutletId as string | undefined) ?? null;
+        const active = await loadActiveContext(token.id as string, targetAccountId, targetOutletId);
+        applyActiveContext(token, active);
+
+        // Refresh role + adminTeamRole on update too
         const freshUser = await prisma.user.findUnique({
           where: { id: token.id as string },
           select: { role: true },
@@ -202,11 +208,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (freshUser) {
           token.role = freshUser.role;
           if (freshUser.role === 'admin') {
-            const membership = await prisma.adminTeamMember.findUnique({
+            const adminMembership = await prisma.adminTeamMember.findUnique({
               where: { userId: token.id as string },
               select: { role: true },
             });
-            token.adminTeamRole = membership?.role ?? 'owner';
+            token.adminTeamRole = adminMembership?.role ?? 'owner';
           } else {
             token.adminTeamRole = undefined;
           }
@@ -214,13 +220,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return token;
     },
+
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string;
-        (session.user as { role?: string }).role = token.role as string;
-        if (token.adminTeamRole) {
-          (session.user as { adminTeamRole?: string }).adminTeamRole = token.adminTeamRole as string;
-        }
+        const u = session.user as unknown as Record<string, unknown>;
+        u.id = token.id as string;
+        u.role = token.role as string;
+        if (token.adminTeamRole) u.adminTeamRole = token.adminTeamRole as string;
+        if (token.hcidDisplay) u.hcidDisplay = token.hcidDisplay as string;
+        if (token.activeBusinessAccountId) u.activeBusinessAccountId = token.activeBusinessAccountId as string;
+        if (token.activeBusinessAccountType) u.activeBusinessAccountType = token.activeBusinessAccountType as Record<string, boolean>;
+        if (token.activeOutletId) u.activeOutletId = token.activeOutletId as string;
+        if (token.permissions) u.permissions = token.permissions as string[];
+        if (token.availableAccounts) u.availableAccounts = token.availableAccounts as unknown[];
+        if (typeof token.availableAccountsTruncated === 'boolean') u.availableAccountsTruncated = token.availableAccountsTruncated;
+        if (typeof token.totalAccountCount === 'number') u.totalAccountCount = token.totalAccountCount;
       }
       return session;
     },
@@ -230,3 +244,26 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     signIn: '/',
   },
 });
+
+// ─── helpers ────────────────────────────────────────────────────────────
+
+function applyActiveContext(token: Record<string, unknown>, active: ActiveContext | null) {
+  if (!active) {
+    delete token.activeBusinessAccountId;
+    delete token.activeBusinessAccountType;
+    delete token.activeOutletId;
+    delete token.permissions;
+    delete token.availableAccounts;
+    delete token.availableAccountsTruncated;
+    delete token.totalAccountCount;
+    return;
+  }
+  token.hcidDisplay = active.hcidDisplay;
+  token.activeBusinessAccountId = active.activeBusinessAccountId;
+  token.activeBusinessAccountType = active.activeBusinessAccountType;
+  token.activeOutletId = active.activeOutletId;
+  token.permissions = active.permissions;
+  token.availableAccounts = active.availableAccounts;
+  token.availableAccountsTruncated = active.availableAccountsTruncated;
+  token.totalAccountCount = active.totalAccountCount;
+}
