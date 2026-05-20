@@ -28,7 +28,7 @@ import {
     RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AccountSwitcherDropdown } from '@/components/account-switcher/AccountSwitcherDropdown';
+import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
 
 const SIDEBAR_LINKS = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
@@ -133,7 +133,7 @@ export default function AdminLayout({
                         <Bell size={22} className="text-[#181725]" fill="#181725" />
                     </button>
 
-                    <AccountSwitcherDropdown />
+                    <BusinessAccountSwitcherDropdown />
                 </div>
             </header>
 
