@@ -1,0 +1,56 @@
+/**
+ * PATCH  /api/v1/account/[id]/outlets/[outletId] — update outlet (requires outlets.edit)
+ * DELETE /api/v1/account/[id]/outlets/[outletId] — soft-delete outlet (requires outlets.delete)
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { withAuth } from '@/middleware/auth';
+import { prisma } from '@/lib/prisma';
+import { errorResponse, Errors } from '@/middleware/errorHandler';
+import { assertAccountPermission } from '@/lib/accountAccess';
+
+const PatchBody = z.object({
+  name: z.string().min(1).max(255).optional(),
+  code: z.string().max(50).nullable().optional(),
+  addressLine: z.string().min(1).optional(),
+  flatInfo: z.string().max(255).nullable().optional(),
+  landmark: z.string().max(255).nullable().optional(),
+  city: z.string().max(100).nullable().optional(),
+  state: z.string().max(100).nullable().optional(),
+  pincode: z.string().max(10).nullable().optional(),
+  latitude: z.number().nullable().optional(),
+  longitude: z.number().nullable().optional(),
+  placeId: z.string().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
+  requiresAddressUpdate: z.boolean().optional(),
+});
+
+export const PATCH = withAuth(async (req: NextRequest, ctx) => {
+  try {
+    const { id, outletId } = extractIds(req);
+    await assertAccountPermission(ctx.userId, id, 'outlets.edit');
+    const existing = await prisma.outlet.findFirst({ where: { id: outletId, businessAccountId: id }, select: { id: true } });
+    if (!existing) throw Errors.notFound('Outlet');
+    const body = PatchBody.parse(await req.json());
+    const updated = await prisma.outlet.update({ where: { id: outletId }, data: body });
+    return NextResponse.json({ success: true, data: updated });
+  } catch (err) { return errorResponse(err); }
+});
+
+export const DELETE = withAuth(async (req: NextRequest, ctx) => {
+  try {
+    const { id, outletId } = extractIds(req);
+    await assertAccountPermission(ctx.userId, id, 'outlets.delete');
+    const existing = await prisma.outlet.findFirst({ where: { id: outletId, businessAccountId: id }, select: { id: true } });
+    if (!existing) throw Errors.notFound('Outlet');
+    await prisma.outlet.update({ where: { id: outletId }, data: { isActive: false } });
+    return NextResponse.json({ success: true });
+  } catch (err) { return errorResponse(err); }
+});
+
+function extractIds(req: NextRequest) {
+  // /api/v1/account/<id>/outlets/<outletId>
+  const segments = new URL(req.url).pathname.split('/').filter(Boolean);
+  return { id: segments[segments.length - 3], outletId: segments[segments.length - 1] };
+}
