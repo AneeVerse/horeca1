@@ -62,7 +62,9 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
 
   const trimmedId = identifier.trim();
   const isEmail = looksLikeEmail(trimmedId);
-  const phoneDigits = trimmedId.replace(/\D/g, '').replace(/^91/, '').slice(0, 10);
+  const rawDigits = trimmedId.replace(/\D/g, '');
+  const hasCountryCodePrefix = trimmedId.startsWith('+91') || rawDigits.length === 12;
+  const phoneDigits = (hasCountryCodePrefix ? rawDigits.replace(/^91/, '') : rawDigits).slice(0, 10);
 
   const handleSendOtp = async () => {
     setError('');

@@ -94,7 +94,9 @@ export function AuthScreen({ isOpen, onClose, onLoginSuccess, initialMode = 'cus
 
   const trimmedId = identifier.trim();
   const loginIsEmail = authMode === 'login' && looksLikeEmail(trimmedId);
-  const loginPhoneDigits = trimmedId.replace(/\D/g, '').replace(/^91/, '').slice(0, 10);
+  const loginRawDigits = trimmedId.replace(/\D/g, '');
+  const loginHasCountryCode = trimmedId.startsWith('+91') || loginRawDigits.length === 12;
+  const loginPhoneDigits = (loginHasCountryCode ? loginRawDigits.replace(/^91/, '') : loginRawDigits).slice(0, 10);
 
   // ── Send OTP ──────────────────────────────────────────────────────────
   const handleSendOtp = async () => {

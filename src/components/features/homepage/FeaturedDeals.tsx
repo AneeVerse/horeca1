@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Zap } from 'lucide-react';
 import { dal } from '@/lib/dal';
 import { useAddress } from '@/context/AddressContext';
+import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
 import type { VendorProduct } from '@/types';
 
@@ -13,7 +14,9 @@ export function FeaturedDeals() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { selectedAddress } = useAddress();
-  const pincode = selectedAddress?.pincode;
+  // V2.2: prefer the active outlet pincode (logged-in) over legacy selected address.
+  const { currentOutlet } = useBusinessAccountSwitcher();
+  const pincode = currentOutlet?.pincode ?? selectedAddress?.pincode;
 
   useEffect(() => {
     let cancelled = false;

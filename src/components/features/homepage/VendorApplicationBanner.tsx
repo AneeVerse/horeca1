@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Clock, X, PartyPopper, ArrowRight } from 'lucide-react';
@@ -43,12 +43,24 @@ export function VendorApplicationBanner() {
     }
   }, [appStatus]);
 
-  // Auto-refresh session when vendor is approved but session role is still 'customer'
+  // Auto-refresh session when vendor is approved but session role is still 'customer'.
+  // updateSession from useSession() is recreated on every render, so we keep it in a ref
+  // (rather than the dep array) — otherwise the effect re-registers every render and
+  // hammers /api/auth/session, which in turn cascades into refetches of cart/etc.
+  // and eventually surfaces as a ClientFetchError.
+  const updateSessionRef = useRef(updateSession);
+  useEffect(() => { updateSessionRef.current = updateSession; }, [updateSession]);
+  const refreshedForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (appStatus?.status === 'approved' && userRole === 'customer') {
-      updateSession();
-    }
-  }, [appStatus, userRole, updateSession]);
+    if (appStatus?.status !== 'approved') return;
+    if (userRole !== 'customer') return;
+    // Only refresh ONCE per unique (status, role) tuple — even if the dep object
+    // identity changes, we won't call updateSession again until something flips.
+    const key = `${appStatus.status}:${userRole}`;
+    if (refreshedForRef.current === key) return;
+    refreshedForRef.current = key;
+    updateSessionRef.current();
+  }, [appStatus, userRole]);
 
   // Auto-dismiss approved banner when they visit the vendor dashboard
   useEffect(() => {
@@ -72,7 +84,8 @@ export function VendorApplicationBanner() {
   // Don't show on vendor dashboard pages
   if (pathname?.startsWith('/vendor/dashboard') || pathname?.startsWith('/vendor/orders') ||
       pathname?.startsWith('/vendor/products') || pathname?.startsWith('/vendor/inventory') ||
-      pathname?.startsWith('/vendor/settings') || pathname?.startsWith('/admin')) return null;
+      pathname?.startsWith('/vendor/settings') || pathname?.startsWith('/admin') ||
+      pathname?.startsWith('/account')) return null;
 
   // === APPROVED BANNER ===
   if (appStatus.status === 'approved') {

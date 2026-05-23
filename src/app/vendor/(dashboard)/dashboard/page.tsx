@@ -12,6 +12,7 @@ import {
     Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 
 // Format Indian currency: 115000 → "₹1,15,000"
 function formatINR(val: number): string {
@@ -71,6 +72,7 @@ const STATUS_PILL_COLORS: Record<string, string> = {
 
 export default function VendorDashboardPage() {
     const { data: session } = useSession();
+    const { currentOutlet } = useBusinessAccountSwitcher();
     const [data, setData] = useState<VendorDashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -133,6 +135,7 @@ export default function VendorDashboardPage() {
                 <h1 className="text-[26px] font-medium text-[#000000]">Dashboard</h1>
                 <p className="text-[#000000] text-[12px] font-light">
                     Welcome back, {session?.user?.name || 'Vendor'}
+                    {currentOutlet?.name ? ` — ${currentOutlet.name}` : ''}
                 </p>
             </div>
 

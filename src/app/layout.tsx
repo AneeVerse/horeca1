@@ -14,6 +14,8 @@ import { Toaster } from 'sonner';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 import { VendorApplicationBanner } from '@/components/features/homepage/VendorApplicationBanner';
 import { ScrollRestoration } from '@/components/layout/ScrollRestoration';
+import { PostLoginAccountSelector } from '@/components/auth/PostLoginAccountSelector';
+import { OutletCompletionBanner } from '@/components/auth/OutletCompletionBanner';
 
 const quicksand = Quicksand({
   subsets: ["latin"],
@@ -66,11 +68,13 @@ export default function RootLayout({
                   <Suspense fallback={null}><ScrollRestoration /></Suspense>
                   <Toaster position="top-center" richColors />
                   <Navbar />
+                  <OutletCompletionBanner />
                   <VendorApplicationBanner />
                   <main className="w-full min-h-screen pb-20 md:pb-0">
                     {children}
                   </main>
                   <Footer />
+                  <PostLoginAccountSelector />
                 </ConfirmProvider>
               </CartProvider>
           </WishlistProvider>

@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ChevronLeft, Clock, CheckCircle2, Shield, User, Loader2, Check } from 'lucide-react';
+import { ChevronLeft, Clock, CheckCircle2, Shield, User, Loader2, Check, MapPin, AlertCircle, ChevronDown } from 'lucide-react';
 import { CreditCard, Smartphone, Building2, FileText, Wallet as WalletIcon } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
@@ -11,6 +11,7 @@ import { useSession } from 'next-auth/react';
 import { AuthScreen } from '@/components/auth/AuthScreen';
 import { dal } from '@/lib/dal';
 import { DeliverySlotPicker } from '@/components/features/checkout/DeliverySlotPicker';
+import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import type { VendorCartGroup } from '@/types';
 
 declare global {
@@ -69,9 +70,174 @@ const PAYMENT_OPTIONS = [
     { id: 'po_number', name: 'PO Number', desc: 'Enterprise purchase order', icon: FileText, color: 'orange' },
 ];
 
+// ─── Inline "Delivering to" row + outlet switcher dropdown ──────────────────
+// Colocated with the checkout page because it's the only consumer. Uses the
+// shared `useBusinessAccountSwitcher` for switching, plus a one-off fetch of
+// the active account's outlets to get the full address line (the hook only
+// exposes id/name/pincode).
+interface OutletDetail {
+    id: string;
+    name: string;
+    addressLine: string;
+    city: string | null;
+    state: string | null;
+    pincode: string | null;
+    requiresAddressUpdate: boolean;
+}
+
+function DeliveringToRow() {
+    const {
+        currentAccount,
+        currentOutlet,
+        activeBusinessAccountId,
+        activeOutletId,
+        switchOutlet,
+        switching,
+    } = useBusinessAccountSwitcher();
+    const [outletDetails, setOutletDetails] = useState<OutletDetail[]>([]);
+    const [open, setOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Fetch the full outlet records (with addressLine) for the active account.
+    useEffect(() => {
+        if (!activeBusinessAccountId) return;
+        let cancelled = false;
+        fetch(`/api/v1/account/${activeBusinessAccountId}/outlets`)
+            .then((r) => r.json())
+            .then((json) => {
+                if (cancelled) return;
+                if (json?.success && Array.isArray(json.data)) {
+                    setOutletDetails(json.data as OutletDetail[]);
+                }
+            })
+            .catch(() => { /* silent — falls back to currentOutlet name only */ });
+        return () => { cancelled = true; };
+    }, [activeBusinessAccountId]);
+
+    // Close on outside click.
+    useEffect(() => {
+        if (!open) return;
+        const onMouseDown = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', onMouseDown);
+        return () => document.removeEventListener('mousedown', onMouseDown);
+    }, [open]);
+
+    if (!currentOutlet || !activeBusinessAccountId) return null;
+
+    const activeDetail = outletDetails.find((o) => o.id === currentOutlet.id);
+    const addressLine = [
+        activeDetail?.addressLine,
+        activeDetail?.city,
+        activeDetail?.state,
+        activeDetail?.pincode ?? currentOutlet.pincode ?? null,
+    ].filter(Boolean).join(', ');
+    const otherOutlets = outletDetails.filter((o) => o.id !== currentOutlet.id);
+
+    return (
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 relative" ref={dropdownRef}>
+            <div className="flex items-start gap-3">
+                <div className="w-9 h-9 shrink-0 rounded-xl bg-green-50 flex items-center justify-center">
+                    <MapPin size={16} className="text-[#299e60]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Delivering to</p>
+                    <p className="text-[14px] font-bold text-[#181725] truncate mt-0.5">
+                        {currentOutlet.name}
+                        {currentAccount?.displayName && (
+                            <span className="text-gray-400 font-medium"> · {currentAccount.displayName}</span>
+                        )}
+                    </p>
+                    {addressLine ? (
+                        <p className="text-[11px] text-gray-500 font-medium truncate mt-0.5">{addressLine}</p>
+                    ) : (
+                        <p className="text-[11px] text-amber-600 font-semibold mt-0.5">No address on this outlet</p>
+                    )}
+                </div>
+                <button
+                    type="button"
+                    onClick={() => setOpen((v) => !v)}
+                    className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:border-[#299e60] hover:bg-green-50/50 text-[12px] font-bold text-gray-700 hover:text-[#299e60] transition-colors cursor-pointer"
+                >
+                    Change
+                    <ChevronDown size={12} className={open ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                </button>
+            </div>
+
+            {currentOutlet.requiresAddressUpdate && (
+                <div className="mt-3 flex items-start gap-2 px-3 py-2.5 bg-orange-50 border border-orange-100 rounded-xl">
+                    <AlertCircle size={14} className="text-orange-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-bold text-orange-700">This outlet has no delivery address yet</p>
+                        <p className="text-[11px] text-orange-600 mt-0.5">Add one before placing the order.</p>
+                    </div>
+                    <Link
+                        href={`/account/${activeBusinessAccountId}/outlets`}
+                        className="shrink-0 px-3 py-1.5 bg-orange-600 text-white text-[11px] font-bold rounded-lg hover:bg-orange-700 transition-colors"
+                    >
+                        Edit Outlet
+                    </Link>
+                </div>
+            )}
+
+            {open && (
+                <div className="absolute right-4 top-full mt-2 w-[280px] bg-white rounded-xl border border-gray-100 shadow-xl z-[10010] overflow-hidden">
+                    <div className="px-3 py-2 border-b border-gray-100">
+                        <p className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Switch outlet</p>
+                    </div>
+                    <ul className="max-h-[260px] overflow-y-auto">
+                        {otherOutlets.length === 0 && (
+                            <li className="px-3 py-3 text-[12px] text-gray-400 text-center">
+                                No other outlets in this account
+                            </li>
+                        )}
+                        {otherOutlets.map((o) => (
+                            <li key={o.id}>
+                                <button
+                                    type="button"
+                                    disabled={switching || o.id === activeOutletId}
+                                    onClick={async () => {
+                                        await switchOutlet(o.id);
+                                        setOpen(false);
+                                    }}
+                                    className="w-full flex items-start gap-2 px-3 py-2.5 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-left transition-colors"
+                                >
+                                    <MapPin size={13} className="text-gray-400 shrink-0 mt-0.5" />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[12px] font-bold text-[#181725] truncate">{o.name}</p>
+                                        <p className="text-[10px] text-gray-400 truncate">
+                                            {[o.addressLine, o.city, o.pincode].filter(Boolean).join(', ') || 'No address'}
+                                        </p>
+                                        {o.requiresAddressUpdate && (
+                                            <p className="text-[10px] text-amber-600 font-semibold mt-0.5">Address needed</p>
+                                        )}
+                                    </div>
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                    <div className="px-3 py-2 border-t border-gray-100">
+                        <Link
+                            href={`/account/${activeBusinessAccountId}/outlets`}
+                            className="text-[11px] font-bold text-[#299e60] hover:underline"
+                            onClick={() => setOpen(false)}
+                        >
+                            Manage outlets →
+                        </Link>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function CheckoutPage() {
     const { groups, clearCart, removeFromCart } = useCart();
     const { status: sessionStatus } = useSession();
+    const { currentOutlet, activeBusinessAccountId } = useBusinessAccountSwitcher();
     const [step, setStep] = useState<CheckoutStep>('review');
     const [selectedPayment, setSelectedPayment] = useState('');
     const [orderSnapshot, setOrderSnapshot] = useState<{ groups: VendorCartGroup[], total: number, count: number } | null>(null);
@@ -136,6 +302,13 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
     const handlePlaceOrder = async () => {
         if (selectedGroups.length === 0) {
             setOrderError('Select at least one vendor PO to place.');
+            return;
+        }
+        // V2.2: an outlet without an address cannot receive deliveries. Block the
+        // order here as well, even though the button is disabled below — defence
+        // in depth in case state changes between render and click.
+        if (currentOutlet?.requiresAddressUpdate) {
+            setOrderError('Add a delivery address to this outlet before placing the order.');
             return;
         }
         setIsPlacingOrder(true);
@@ -308,6 +481,11 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
                 {/* === STEP 1: REVIEW === */}
                 {step === 'review' && (
                     <div className="space-y-4">
+                        {/* V2.2: Delivering-to row — the active outlet is the single source of
+                           truth for delivery address. Includes inline switcher + blocking
+                           warning if the outlet still needs an address. */}
+                        <DeliveringToRow />
+
                         <div className="flex items-end justify-between gap-3 flex-wrap">
                             <h2 className="text-[15px] font-bold text-[#181725]">
                                 Purchase Order{groups.length > 1 ? 's' : ''} — {groups.length} vendor{groups.length > 1 ? 's' : ''}
@@ -409,11 +587,26 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
                             <p className="text-[11px] text-gray-400 mt-1">{selectedItemCount} items from {selectedVendorCount} vendor{selectedVendorCount !== 1 ? 's' : ''}</p>
                         </div>
 
+                        {currentOutlet?.requiresAddressUpdate && (
+                            <div className="text-[13px] text-orange-700 bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 font-medium flex items-start gap-2">
+                                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                    Your active outlet has no delivery address. {activeBusinessAccountId && (
+                                        <Link
+                                            href={`/account/${activeBusinessAccountId}/outlets`}
+                                            className="underline font-bold hover:text-orange-800"
+                                        >
+                                            Add one now
+                                        </Link>
+                                    )} to continue.
+                                </div>
+                            </div>
+                        )}
                         <button
                             onClick={() => setStep('payment')}
-                            disabled={selectedVendorCount === 0}
+                            disabled={selectedVendorCount === 0 || currentOutlet?.requiresAddressUpdate}
                             className={`w-full py-3.5 text-[14px] font-bold rounded-xl shadow-lg transition-all ${
-                                selectedVendorCount === 0
+                                selectedVendorCount === 0 || currentOutlet?.requiresAddressUpdate
                                     ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
                                     : 'bg-[#299e60] text-white shadow-green-200/50 hover:bg-[#22844f] active:scale-[0.99]'
                             }`}

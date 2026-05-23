@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { Star, MapPin, Bookmark, ChevronLeft, ChevronRight } from 'lucide-react';
 import { dal } from '@/lib/dal';
 import { useAddress } from '@/context/AddressContext';
+import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import type { Vendor } from '@/types';
 
 // Cover images for vendor cards (cycling through available images)
@@ -102,7 +103,11 @@ export function NearbyVendors() {
     const [vendors, setVendors] = useState<Vendor[]>([]);
     const [servicingIds, setServicingIds] = useState<Set<string> | null>(null);
     const { selectedAddress } = useAddress();
-    const pincode = selectedAddress?.pincode;
+    // V2.2: when the customer has an active outlet, that outlet's pincode is the
+    // single source of truth. Fall back to the localStorage-backed address pincode
+    // only for guests (and for logged-in users while the outlet pincode is loading).
+    const { currentOutlet } = useBusinessAccountSwitcher();
+    const pincode = currentOutlet?.pincode ?? selectedAddress?.pincode;
 
     useEffect(() => {
         dal.vendors.list().then((res) => setVendors(res.vendors)).catch(console.error);

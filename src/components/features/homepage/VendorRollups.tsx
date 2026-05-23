@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { Star, MapPin, Bookmark, ChevronLeft, ChevronRight, TrendingUp } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { useAddress } from '@/context/AddressContext';
+import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import type { Vendor } from '@/types';
 
 const VENDOR_COVERS = [
@@ -70,11 +71,17 @@ export function FrequentlyOrderedVendors() {
     const [vendors, setVendors] = useState<Vendor[]>([]);
     const { status } = useSession();
     const { selectedAddress } = useAddress();
-    const pincode = selectedAddress?.pincode;
+    // V2.2: prefer the active outlet pincode (logged-in) over legacy selected address.
+    // Endpoint here is /vendors?sort=frequent (no pincode filter on the server side),
+    // but we keep the resolution centralized so any future filter wires up cleanly.
+    const { currentOutlet } = useBusinessAccountSwitcher();
+    const pincode = currentOutlet?.pincode ?? selectedAddress?.pincode;
 
     useEffect(() => {
         if (status !== 'authenticated') return;
-        fetch('/api/v1/vendors?sort=frequent&limit=10')
+        const params = new URLSearchParams({ sort: 'frequent', limit: '10' });
+        if (pincode && /^\d{6}$/.test(pincode)) params.set('pincode', pincode);
+        fetch(`/api/v1/vendors?${params.toString()}`)
             .then(r => r.json())
             .then(d => setVendors((d.data?.vendors || []).map((v: any) => ({
                 id: v.id,
@@ -93,7 +100,7 @@ export function FrequentlyOrderedVendors() {
                 description: '',
             }))))
             .catch(() => setVendors([]));
-    }, [status]);
+    }, [status, pincode]);
 
     const checkScroll = () => {
         if (scrollRef.current) {
@@ -151,7 +158,9 @@ export function TopRatedVendors() {
     const [canScrollRight, setCanScrollRight] = useState(true);
     const [vendors, setVendors] = useState<Vendor[]>([]);
     const { selectedAddress } = useAddress();
-    const pincode = selectedAddress?.pincode;
+    // V2.2: prefer the active outlet pincode (logged-in) over legacy selected address.
+    const { currentOutlet } = useBusinessAccountSwitcher();
+    const pincode = currentOutlet?.pincode ?? selectedAddress?.pincode;
 
     useEffect(() => {
         const params = new URLSearchParams({ sort: 'rating', limit: '10' });

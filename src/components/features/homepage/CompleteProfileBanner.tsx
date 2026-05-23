@@ -50,7 +50,7 @@ export function CompleteProfileBanner() {
   };
 
   return (
-    <div className="mx-[clamp(1rem,3vw,3rem)] mt-[clamp(0.75rem,2vw,1.5rem)] flex justify-start">
+    <div className="mx-[clamp(1rem,3vw,3rem)] mt-[clamp(0.75rem,2vw,1.5rem)] flex justify-center">
       <div className="relative w-full max-w-[560px] overflow-hidden rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 p-[clamp(0.875rem,1.6vw,1.1rem)] shadow-md transition hover:shadow-lg">
         {/* Decorative blobs */}
         <div className="pointer-events-none absolute -top-6 -right-6 h-24 w-24 rounded-full bg-orange-200/50 blur-2xl" />

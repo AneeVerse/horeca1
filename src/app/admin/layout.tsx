@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -55,6 +55,28 @@ export default function AdminLayout({
     const router = useRouter();
     const { data: session, status } = useSession();
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [pendingApprovals, setPendingApprovals] = useState(0);
+
+    // Poll the pending-approvals count so the sidebar badge reflects reality
+    // without a full page reload. 60s cadence is friendly to the DB and good
+    // enough for admins — the Approvals page itself shows live numbers.
+    useEffect(() => {
+        if (status !== 'authenticated') return;
+        let cancelled = false;
+        const fetchCount = () => {
+            fetch('/api/v1/admin/approvals/summary', { credentials: 'include' })
+                .then((r) => (r.ok ? r.json() : null))
+                .then((j) => {
+                    if (cancelled || !j?.success) return;
+                    const { pendingVendors = 0, pendingProducts = 0, pendingCategories = 0 } = j.data ?? {};
+                    Promise.resolve().then(() => setPendingApprovals(pendingVendors + pendingProducts + pendingCategories));
+                })
+                .catch(() => {});
+        };
+        fetchCount();
+        const id = setInterval(fetchCount, 60_000);
+        return () => { cancelled = true; clearInterval(id); };
+    }, [status, pathname]);
 
     // Show loading while checking auth
     if (status === 'loading') {
@@ -147,25 +169,51 @@ export default function AdminLayout({
                     <nav className="flex-1 px-4 py-6 space-y-2">
                         {SIDEBAR_LINKS.map((link) => {
                             const isActive = pathname === link.href;
+                            // Badge count only for the Approvals row (extend here if more rows need badges later).
+                            const badge = link.name === 'Approvals' ? pendingApprovals : 0;
+                            const badgeLabel = badge > 99 ? '99+' : String(badge);
                             return (
                                 <Link
                                     key={link.name}
                                     href={link.href}
-                                    title={isCollapsed ? link.name : ""}
+                                    title={isCollapsed ? (badge > 0 ? `${link.name} (${badgeLabel} pending)` : link.name) : ""}
                                     className={cn(
-                                        "flex items-center rounded-[10px] transition-all group text-[14px] overflow-hidden leading-none",
+                                        "relative flex items-center rounded-[10px] transition-all group text-[14px] overflow-hidden leading-none",
                                         isCollapsed ? "justify-center h-[48px] px-0" : "gap-3.5 px-5 py-3.5",
                                         isActive
                                             ? "bg-[#299E60] text-white shadow-md shadow-[#299E60]/20"
                                             : "text-[#191919] hover:bg-[#F8F9FB]"
                                     )}
                                 >
-                                    <link.icon size={22} className={cn(
-                                        "transition-colors shrink-0",
-                                        isActive ? "text-white" : "text-[#000000] group-hover:text-[#000000]"
-                                    )} />
+                                    <span className="relative shrink-0">
+                                        <link.icon size={22} className={cn(
+                                            "transition-colors",
+                                            isActive ? "text-white" : "text-[#000000] group-hover:text-[#000000]"
+                                        )} />
+                                        {/* Collapsed: small red dot on the icon corner with a ping ring */}
+                                        {isCollapsed && badge > 0 && (
+                                            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                                                <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
+                                                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 border border-white" />
+                                            </span>
+                                        )}
+                                    </span>
                                     {!isCollapsed && (
-                                        <span className="font-semibold whitespace-nowrap">{link.name}</span>
+                                        <>
+                                            <span className="font-semibold whitespace-nowrap flex-1">{link.name}</span>
+                                            {/* Expanded: numeric pill on the right with a soft ping ring */}
+                                            {badge > 0 && (
+                                                <span className="relative inline-flex items-center justify-center">
+                                                    <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60 animate-ping" />
+                                                    <span className={cn(
+                                                        "relative inline-flex min-w-[22px] h-[22px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold border",
+                                                        isActive ? "bg-white text-red-600 border-white" : "bg-red-500 text-white border-white"
+                                                    )}>
+                                                        {badgeLabel}
+                                                    </span>
+                                                </span>
+                                            )}
+                                        </>
                                     )}
                                 </Link>
                             );

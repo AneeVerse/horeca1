@@ -141,7 +141,7 @@ export default function CustomerDetailsPage() {
             const payload: Record<string, string> = {
                 fullName: draft.fullName.trim(),
                 email: draft.email.trim(),
-                phone: draft.phone.replace(/\D/g, '').replace(/^91/, ''),
+                phone: (() => { const d = draft.phone.replace(/\D/g, ''); return d.length === 12 ? d.replace(/^91/, '') : d; })(),
                 businessName: draft.businessName.trim(),
                 gstNumber: draft.gstNumber.trim(),
                 pincode: draft.pincode.trim(),

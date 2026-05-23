@@ -172,18 +172,21 @@ export function EditProfileOverlay({ isOpen, onClose, userData, onSave }: EditPr
                             />
                         </div>
                         <div>
-                            <label className="text-[12px] md:text-[13px] font-semibold text-[#181725] ml-0.5 mb-1.5 block">Address</label>
+                            <label className="text-[12px] md:text-[13px] font-semibold text-[#181725] ml-0.5 mb-1.5 block">Address line 1</label>
                             <input
                                 type="text"
                                 value={address}
                                 onChange={(e) => setAddress(e.target.value)}
-                                className="w-full px-3.5 py-2.5 md:px-4 md:py-3 bg-white border border-gray-200 rounded-lg md:rounded-xl text-[13px] md:text-[14px] font-medium text-gray-500 outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/10 transition-all mb-2"
+                                placeholder="House / building / street"
+                                className="w-full px-3.5 py-2.5 md:px-4 md:py-3 bg-white border border-gray-200 rounded-lg md:rounded-xl text-[13px] md:text-[14px] font-medium text-gray-700 placeholder:text-gray-400 outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/10 transition-all mb-3"
                             />
+                            <label className="text-[12px] md:text-[13px] font-semibold text-[#181725] ml-0.5 mb-1.5 block">Address line 2 <span className="text-gray-400 font-normal">(optional)</span></label>
                             <input
                                 type="text"
                                 value={address2}
                                 onChange={(e) => setAddress2(e.target.value)}
-                                className="w-full px-3.5 py-2.5 md:px-4 md:py-3 bg-white border border-gray-200 rounded-lg md:rounded-xl text-[13px] md:text-[14px] font-medium text-gray-500 outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/10 transition-all"
+                                placeholder="Apartment, suite, landmark"
+                                className="w-full px-3.5 py-2.5 md:px-4 md:py-3 bg-white border border-gray-200 rounded-lg md:rounded-xl text-[13px] md:text-[14px] font-medium text-gray-700 placeholder:text-gray-400 outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/10 transition-all"
                             />
                         </div>
                         <div className="grid grid-cols-2 gap-3 md:gap-4">
@@ -191,9 +194,12 @@ export function EditProfileOverlay({ isOpen, onClose, userData, onSave }: EditPr
                                 <label className="text-[12px] md:text-[13px] font-semibold text-[#181725] ml-0.5 mb-1.5 block">Pincode</label>
                                 <input
                                     type="text"
+                                    inputMode="numeric"
+                                    maxLength={6}
                                     value={pincode}
-                                    onChange={(e) => setPincode(e.target.value)}
-                                    className="w-full px-3.5 py-2.5 md:px-4 md:py-3 bg-white border border-gray-200 rounded-lg md:rounded-xl text-[13px] md:text-[14px] font-medium text-gray-500 outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/10 transition-all"
+                                    onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="e.g. 400076"
+                                    className="w-full px-3.5 py-2.5 md:px-4 md:py-3 bg-white border border-gray-200 rounded-lg md:rounded-xl text-[13px] md:text-[14px] font-medium text-gray-700 placeholder:text-gray-400 outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/10 transition-all"
                                 />
                             </div>
                             <div>
@@ -202,7 +208,8 @@ export function EditProfileOverlay({ isOpen, onClose, userData, onSave }: EditPr
                                     type="text"
                                     value={city}
                                     onChange={(e) => setCity(e.target.value)}
-                                    className="w-full px-3.5 py-2.5 md:px-4 md:py-3 bg-white border border-gray-200 rounded-lg md:rounded-xl text-[13px] md:text-[14px] font-medium text-gray-500 outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/10 transition-all"
+                                    placeholder="e.g. Mumbai"
+                                    className="w-full px-3.5 py-2.5 md:px-4 md:py-3 bg-white border border-gray-200 rounded-lg md:rounded-xl text-[13px] md:text-[14px] font-medium text-gray-700 placeholder:text-gray-400 outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/10 transition-all"
                                 />
                             </div>
                         </div>
