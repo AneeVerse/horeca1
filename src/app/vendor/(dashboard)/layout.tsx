@@ -1,5 +1,21 @@
 'use client';
 
+/**
+ * Vendor portal layout — V2.2
+ * ---------------------------
+ * V2.2 introduces a visual "Operating from: <Outlet>" indicator strip
+ * (VendorOutletStrip) directly under the top header so vendors always
+ * see which dispatch outlet/warehouse they're operating as. The strip
+ * also surfaces outlet switching.
+ *
+ * NOTE (V2.3 — ticket T-102): Showing the active outlet here is purely
+ * cosmetic for V2.2. The actual outlet-scoping of vendor inventory,
+ * orders, and delivery slots (queries filtered by activeOutletId,
+ * outlet-specific stock, per-outlet delivery windows, etc.) is
+ * deferred to V2.3 and is NOT implemented yet. The vendor portal's
+ * service layer still queries at the vendor (BusinessAccount) level.
+ */
+
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -23,9 +39,11 @@ import {
     Home,
     Eye,
     LogOut,
+    Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
+import { VendorOutletStrip } from '@/components/vendor/VendorOutletStrip';
 
 const SIDEBAR_LINKS = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/vendor/dashboard' },
@@ -34,6 +52,7 @@ const SIDEBAR_LINKS = [
     { name: 'Brand Mappings', icon: GitMerge, href: '/vendor/brand-mappings' },
     { name: 'Inventory', icon: Warehouse, href: '/vendor/inventory' },
     { name: 'Reports', icon: BarChart3, href: '/vendor/reports' },
+    { name: 'Team', icon: Users, href: '/vendor/team' },
     { name: 'Settings', icon: Settings, href: '/vendor/settings' },
 ];
 
@@ -141,6 +160,9 @@ export default function VendorLayout({
                     <BusinessAccountSwitcherDropdown />
                 </div>
             </header>
+
+            {/* V2.2 — Active outlet indicator strip (dispatch warehouse) */}
+            <VendorOutletStrip />
 
             {/* Body: Sidebar + Content */}
             <div className="flex flex-1">

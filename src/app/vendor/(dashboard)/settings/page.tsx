@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil, Users, Crown, Shield, Eye, Edit3, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImageUploadField } from '@/components/ui/ImageUploadField';
@@ -784,143 +785,20 @@ export default function VendorSettingsPage() {
                 </div>
             </div>
 
-            {/* ── TEAM MEMBERS ── */}
-            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-[#EEEEEE] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <Users size={20} className="text-[#299E60]" />
-                        <h2 className="text-[18px] font-bold text-[#181725]">Team Members</h2>
-                        <span className="text-[14px] text-[#AEAEAE]">({team.length})</span>
+            {/* ── TEAM MEMBERS REDIRECT ── */}
+            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
+                        <Users size={20} />
                     </div>
-                    {isOwner && (
-                        <button onClick={() => { setShowAddMember(true); setMemberError(null); }}
-                            className="h-[36px] px-4 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] transition-colors flex items-center gap-1.5">
-                            <Plus size={14} /> Add Member
-                        </button>
-                    )}
+                    <div>
+                        <h2 className="text-[16px] font-bold text-[#181725]">Team Management</h2>
+                        <p className="text-[13px] text-[#7C7C7C] mt-0.5">Invite staff, manage permissions and roles</p>
+                    </div>
                 </div>
-
-                {/* Add Member Form */}
-                {showAddMember && (
-                    <div className="p-6 border-b border-[#EEEEEE] bg-[#FAFAFA]">
-                        <h3 className="text-[14px] font-bold text-[#181725] mb-4">New Team Member</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1">Full Name</label>
-                                <input type="text" name="fullName" autoComplete="off" value={memberForm.fullName} onChange={e => setMemberForm(f => ({ ...f, fullName: e.target.value }))}
-                                    placeholder="e.g. Rahul Sharma"
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 bg-white" />
-                            </div>
-                            <div>
-                                <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1">Email</label>
-                                <input type="email" value={memberForm.email} onChange={e => setMemberForm(f => ({ ...f, email: e.target.value }))}
-                                    placeholder="rahul@example.com"
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 bg-white" />
-                            </div>
-                            <div>
-                                <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1">Password</label>
-                                <input type="password" name="newPassword" autoComplete="new-password" value={memberForm.password} onChange={e => setMemberForm(f => ({ ...f, password: e.target.value }))}
-                                    placeholder="Min. 6 characters"
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 bg-white" />
-                            </div>
-                            <div>
-                                <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1">Role</label>
-                                <select value={memberForm.role} onChange={e => setMemberForm(f => ({ ...f, role: e.target.value as 'manager' | 'editor' | 'viewer' }))}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 bg-white">
-                                    <option value="manager">Manager — Full access, no team management</option>
-                                    <option value="editor">Editor — Products, orders &amp; inventory only</option>
-                                    <option value="viewer">Viewer — Read only</option>
-                                </select>
-                            </div>
-                        </div>
-                        {memberError && <p className="mt-3 text-[13px] font-bold text-[#E74C3C]">{memberError}</p>}
-                        <div className="flex items-center gap-3 mt-4">
-                            <button onClick={handleAddMember} disabled={addingMember}
-                                className="h-[40px] px-6 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] transition-colors flex items-center gap-1.5 disabled:opacity-50">
-                                {addingMember ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                                {addingMember ? 'Creating...' : 'Create Account'}
-                            </button>
-                            <button onClick={() => setShowAddMember(false)}
-                                className="h-[40px] px-6 bg-gray-100 text-[#7C7C7C] rounded-[10px] text-[13px] font-bold hover:bg-gray-200 transition-colors">
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Role legend */}
-                <div className="px-6 py-3 border-b border-[#F5F5F5] flex flex-wrap gap-3">
-                    {Object.entries(ROLE_CONFIG).map(([key, cfg]) => (
-                        <div key={key} className="flex items-center gap-1.5">
-                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-[5px]" style={{ color: cfg.color, backgroundColor: cfg.bg }}>{cfg.label}</span>
-                            <span className="text-[11px] text-[#AEAEAE]">
-                                {key === 'owner' ? 'Full + team' : key === 'manager' ? 'Full access' : key === 'editor' ? 'Write content' : 'Read only'}
-                            </span>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Member list */}
-                {teamLoading ? (
-                    <div className="p-6 flex justify-center">
-                        <Loader2 size={24} className="animate-spin text-[#299E60]" />
-                    </div>
-                ) : team.length === 0 ? (
-                    <div className="p-6">
-                        <p className="text-[14px] text-[#AEAEAE]">No team members yet.</p>
-                    </div>
-                ) : (
-                    <div className="divide-y divide-[#F5F5F5]">
-                        {team.map((member) => {
-                            const cfg = ROLE_CONFIG[member.role] ?? ROLE_CONFIG.viewer;
-                            return (
-                                <div key={member.id} className="px-6 py-4 flex items-center gap-4">
-                                    {/* Avatar */}
-                                    <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center text-[14px] font-[900] shrink-0"
-                                        style={{ backgroundColor: cfg.bg, color: cfg.color }}>
-                                        {getInitials(member.user.fullName)}
-                                    </div>
-                                    {/* Info */}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <p className="text-[14px] font-bold text-[#181725] truncate">{member.user.fullName}</p>
-                                            <span className="text-[11px] font-[900] px-2 py-0.5 rounded-[5px]"
-                                                style={{ color: cfg.color, backgroundColor: cfg.bg }}>
-                                                {cfg.label}
-                                            </span>
-                                            {!member.user.isActive && (
-                                                <span className="text-[11px] font-bold text-[#AEAEAE] bg-[#F5F5F5] px-2 py-0.5 rounded-[5px]">Inactive</span>
-                                            )}
-                                        </div>
-                                        <p className="text-[12px] text-[#7C7C7C] truncate">{member.user.email}</p>
-                                    </div>
-                                    {/* Joined */}
-                                    <p className="text-[12px] text-[#AEAEAE] shrink-0 hidden md:block">
-                                        {new Date(member.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                    </p>
-                                    {/* Actions (owner only, not for the owner row itself) */}
-                                    {isOwner && !member.isOwner && (
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <select
-                                                value={member.role}
-                                                onChange={e => handleChangeRole(member, e.target.value as 'manager' | 'editor' | 'viewer')}
-                                                className="h-[32px] text-[12px] border border-[#EEEEEE] rounded-[8px] px-2 outline-none focus:border-[#299E60]/40 bg-white"
-                                            >
-                                                <option value="manager">Manager</option>
-                                                <option value="editor">Editor</option>
-                                                <option value="viewer">Viewer</option>
-                                            </select>
-                                            <button onClick={() => handleRemoveMember(member)}
-                                                className="p-1.5 rounded-[6px] hover:bg-red-50 transition-colors" title="Remove">
-                                                <Trash2 size={14} className="text-[#E74C3C]" />
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
+                <Link href="/vendor/team" className="h-[36px] px-4 bg-[#EEF8F1] hover:bg-[#E2F4E7] text-[#299E60] rounded-[10px] text-[13px] font-bold transition-colors flex items-center justify-center shrink-0">
+                    Manage Team
+                </Link>
             </div>
 
             {/* Verification Documents */}

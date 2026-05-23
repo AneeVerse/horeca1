@@ -30,6 +30,7 @@ const SIDEBAR_LINKS = [
     { name: 'Distributor Map', icon: GitMerge, href: '/brand/portal/mappings' },
     { name: 'Distributors', icon: Users, href: '/brand/portal/distributors' },
     { name: 'Analytics', icon: BarChart3, href: '/brand/portal/analytics' },
+    { name: 'Team', icon: Users, href: '/brand/portal/team' },
     { name: 'Settings', icon: Settings, href: '/brand/portal/settings' },
 ];
 
