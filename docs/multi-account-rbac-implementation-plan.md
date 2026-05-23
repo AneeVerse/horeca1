@@ -556,6 +556,7 @@ New: [src/components/auth/PostLoginAccountSelector.tsx](../src/components/auth/)
 - **T-106**: "Pay selected POs" (new `placed_unpaid` state + reconciliation).
 - **T-107**: Brand Store Phase 2 (distributor invite UI, catalog editor, mapping suggestion engine).
 - **T-108**: Guest cart + login merge (merge target = active `(businessAccountId, outletId)`).
+- **T-109**: Migrate the 49 vendor/brand/admin routes that still call `resolveVendorContext` / `resolveBrandContext` / `requireVendorPerm` to the new `resolveBusinessAccountContext` + `requirePermission(key)` middleware. Legacy resolvers (`resolveVendorId.ts`, `resolveBrandId.ts`, `teamPermissions.ts`) are retained as compat shims in V2.2 so the routes keep working unchanged; deleting them in V2.3 forces the migration. ~3 days of mechanical work; high regression risk, do it in dedicated focused PRs grouped by service area (vendor → brand → admin).
 
 ---
 

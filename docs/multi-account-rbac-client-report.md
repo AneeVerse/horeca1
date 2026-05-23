@@ -102,26 +102,32 @@ These items are in the original spec but were too large to fit in V2.2. They get
 
 ## 5. Change Footprint — By the Numbers
 
+Final counts taken from the diff:
+
 | Area | Change |
 |------|--------|
-| **Database — new tables** | 5 (`business_accounts`, `business_account_members`, `outlets`, `roles`, `user_roles`) |
-| **Database — modified tables** | 9 (`User`, `Vendor`, `Brand`, `Cart`, `Order`, `QuickOrderList`, `CustomerVendor`, `SavedAddress`, plus dropped unique constraints) |
-| **Database — deleted tables** | 1 (`LinkedAccount` — replaced by the new membership model) |
-| **Database — new columns** | ~17 across existing tables |
+| **Database — new tables** | 5 (`business_accounts`, `business_account_members`, `outlets`, `account_roles`, `user_roles`) |
+| **Database — modified tables** | 9 (`User`, `Vendor`, `Brand`, `Cart`, `Order`, `QuickOrderList`, `CustomerVendor`, `SavedAddress`, plus dropped legacy uniques on Cart and CustomerVendor) |
+| **Database — deleted tables** | 1 (`LinkedAccount` — dropped by Step C migration after backfill) |
+| **Database — new columns** | 17 across existing tables (HCID display, business_account_id, outlet_id, delivery_address_snapshot, etc.) |
 | **Database — new enums** | 2 (`BusinessAccountStatus`, `RoleScope`) |
-| **Migrations** | 1 schema migration (split into 3 SQL steps) + 1 one-time data backfill script |
-| **Backend — API routes modified** | ~30 files (tenant scoping refactor) |
-| **Backend — API routes added** | ~12 new route files (account/outlet/role/user/permission management) |
-| **Backend — API routes removed** | 3 (old link-account / linked-accounts / switch-account) |
-| **Backend — service files refactored** | ~7 modules (`vendor`, `catalog`, `order`, `cart`, `brand`, `list`, `credit`) |
-| **Backend — new helper files** | 4 (permissions registry, permissions engine, account resolver, outlet resolver) |
-| **Backend — deleted/replaced helpers** | 3 (`resolveVendorId`, `resolveBrandId`, `teamPermissions`) |
-| **Frontend — new pages** | ~6 under `/account/[id]/` (overview, outlets, users, roles) |
-| **Frontend — modified pages** | Checkout, vendor stores, navbar |
-| **Frontend — components rewritten** | Account switcher (now Account + Outlet) |
-| **Total estimated files touched** | **~130 modified, ~25 new** (exact counts populated when the PR is opened) |
+| **Migrations** | 1 schema migration split into 3 SQL steps (Step A additive nullable → backfill → Step C enforce + drop) + 1 idempotent data backfill script (TypeScript, 350 lines, seeds 18 system role templates) |
+| **Backend — API routes added** | 11 new route files (account CRUD + outlets + roles + users sub-resources + switch-business-account + switch-outlet + permissions/registry) |
+| **Backend — API routes modified** | 4 (cart, cart/items/[id], cart/merge, orders — all now active-outlet aware) |
+| **Backend — API routes removed** | 4 (old link-account, link-account/[id], linked-accounts, switch-account) |
+| **Backend — service files refactored** | 2 (`cart.service.ts` re-keyed to (userId, businessAccountId, outletId); `order.service.ts` stamps businessAccountId + outletId + delivery snapshot) |
+| **Backend — new helper files** | 5 (permission registry + engine, activeContext loader, resolveBusinessAccountContext, accountAccess helpers) |
+| **Backend — auth refactor** | `src/auth.ts` JWT/session callbacks + `src/middleware/auth.ts` AuthContext extended with HCID, active account/outlet, permission set |
+| **Backend — legacy compat retained** | `resolveVendorId.ts`, `resolveBrandId.ts`, `teamPermissions.ts` left in place as compat shims so the existing 49 vendor/brand/admin routes keep working unchanged (V2.3 will migrate them off) |
+| **Frontend — new pages** | 5 under `/account/[id]/` (layout, overview, outlets, users, roles permission matrix) |
+| **Frontend — modified layouts** | 2 (admin, vendor portal — both swapped to the new switcher) |
+| **Frontend — components rewritten** | 1 (`BusinessAccountSwitcherDropdown` replaces `AccountSwitcherDropdown` — adds outlet picker, "Showing N of M", manage-account link) |
+| **Frontend — hooks rewritten** | 1 (`useBusinessAccountSwitcher` replaces `useAccountSwitcher`) |
+| **Frontend — components removed** | 1 (`AccountSwitcherDropdown`); 1 hook removed (`useAccountSwitcher`) |
+| **Documentation** | 2 new MD files in `docs/` (this report + the engineering implementation plan) |
+| **Final totals** | **45 files touched: 28 new, 11 modified, 6 deleted · +4,873 / −782 lines** |
 
-> The exact numbers will be re-counted from the final diff and pasted in before this report is shared with you for final sign-off.
+These numbers are lower than the original estimate (~130 modified, ~25 new) because the 93-site tenant-scope refactor is **deferred to V2.3** — the legacy resolvers stay in place as compat shims so existing routes keep working unchanged. The new BusinessAccount + Outlet system runs alongside them via `resolveBusinessAccountContext` and the new `/api/v1/account/*` surface. Migrating the 93 sites to the new resolver is a focused mechanical pass tracked as ticket **T-109** in the deferred list.
 
 ---
 
