@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     ChevronLeft,
     ChevronRight,
@@ -18,13 +18,14 @@ import {
     LogOut,
     Home,
     User,
+    Users,
     Phone,
     Building2,
     BadgeCheck,
     Mail,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -34,6 +35,12 @@ import { PaymentManagementOverlay } from './PaymentManagementOverlay';
 import { NotificationOverlay } from './NotificationOverlay';
 import { GeneralInformationOverlay } from './GeneralInformationOverlay';
 import { SettingsOverlay } from './SettingsOverlay';
+import { BecomeVendorModal } from './BecomeVendorModal';
+import { OutletsOverlay } from './OutletsOverlay';
+import { TeamMembersOverlay } from './TeamMembersOverlay';
+import { RolesPermissionsOverlay } from './RolesPermissionsOverlay';
+import { AccountOverviewOverlay } from './AccountOverviewOverlay';
+import { Sparkles } from 'lucide-react';
 
 interface ProfileScreenProps {
     isOpen: boolean;
@@ -59,14 +66,45 @@ function DetailRow({ icon: Icon, label, value, sub, muted }: { icon: LucideIcon;
 
 export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
     const [isSavedAddressesOpen, setIsSavedAddressesOpen] = useState(false);
     const [isPaymentOpen, setIsPaymentOpen] = useState(false);
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
     const [isGeneralInfoOpen, setIsGeneralInfoOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isBecomeVendorOpen, setIsBecomeVendorOpen] = useState(false);
+    const [isOutletsOpen, setIsOutletsOpen] = useState(false);
+    const [isTeamOpen, setIsTeamOpen] = useState(false);
+    const [isRolesOpen, setIsRolesOpen] = useState(false);
+    const [isOverviewOpen, setIsOverviewOpen] = useState(false);
+    const [hasVendorApplication, setHasVendorApplication] = useState<boolean | null>(null);
 
-    const { data: session } = useSession();
+    useEffect(() => {
+        const openParam = searchParams?.get('open');
+        if (openParam) {
+            if (openParam === 'outlets') {
+                setIsOutletsOpen(true);
+            } else if (openParam === 'team' || openParam === 'team-members' || openParam === 'users') {
+                setIsTeamOpen(true);
+            } else if (openParam === 'roles') {
+                setIsRolesOpen(true);
+            } else if (openParam === 'overview' || openParam === 'account-overview') {
+                setIsOverviewOpen(true);
+            }
+        }
+    }, [searchParams]);
+
+    const { data: session, update: updateSession } = useSession();
+    // updateSession from useSession() is a new reference each render — keep it in a ref
+    // so our role-sync effect doesn't refire and ping the session endpoint in a loop.
+    const updateSessionRef = useRef(updateSession);
+    useEffect(() => { updateSessionRef.current = updateSession; }, [updateSession]);
+    const sessionRoleRefreshedRef = useRef<string | null>(null);
+    // Nuclear-option guard: if updateSession() doesn't actually rotate the JWT
+    // (NextAuth occasionally no-ops on identical payloads, or the cookie write
+    // races with the page render), we hard-reload exactly once per page load.
+    const hardReloadDoneRef = useRef(false);
 
     const [userData, setUserData] = useState({
         fullName: '',
@@ -82,13 +120,58 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
 
     // Fetch full profile from DB (session only carries name/email/role)
     // Also pull the default saved address to fill address/city fields
+    // and the vendor-application status to decide whether to show "Become a vendor".
+    //
+    // ALSO: detect role drift. If DB says role='vendor' but the cached JWT still
+    // says 'customer' (happens when admin approves a vendor application while
+    // the user's session is open), force a JWT refresh once so the navbar's
+    // Dashboard link and the vendor portal actually become reachable.
     useEffect(() => {
         if (!session?.user) return;
         Promise.all([
             fetch('/api/v1/auth/me', { credentials: 'include' }).then(r => r.ok ? r.json() : null),
             fetch('/api/v1/addresses', { credentials: 'include' }).then(r => r.ok ? r.json() : null),
+            fetch('/api/v1/vendor/application-status', { credentials: 'include' }).then(r => r.ok ? r.json() : null),
         ])
-            .then(([profileJson, addrJson]) => {
+            .then(([profileJson, addrJson, vendorJson]) => {
+                if (vendorJson?.success) {
+                    Promise.resolve().then(() => setHasVendorApplication(!!vendorJson.data.hasApplication));
+                }
+                // One-shot role drift fix: DB role > session role?  Refresh JWT.
+                // Pass a non-empty payload so NextAuth definitely fires the jwt
+                // callback with trigger==='update' (a bare update() can no-op).
+                // After ~1.5s, re-check the session and if the role STILL doesn't
+                // match the DB, do a hard reload as a last-resort fallback. The
+                // hardReloadDoneRef guard makes sure this can't loop.
+                const dbRole = profileJson?.success ? profileJson.data?.role : null;
+                const sessionRole = (session.user as { role?: string }).role;
+                if (dbRole && sessionRole && dbRole !== sessionRole) {
+                    const key = `${sessionRole}->${dbRole}`;
+                    if (sessionRoleRefreshedRef.current !== key) {
+                        sessionRoleRefreshedRef.current = key;
+                        Promise.resolve(updateSessionRef.current({ refresh: Date.now() }))
+                            .catch(() => { /* silent — fallback below covers it */ })
+                            .finally(() => {
+                                window.setTimeout(() => {
+                                    if (hardReloadDoneRef.current) return;
+                                    // Re-fetch the DB role and compare against the latest session.
+                                    fetch('/api/v1/auth/me', { credentials: 'include' })
+                                        .then(r => r.ok ? r.json() : null)
+                                        .then(latest => {
+                                            const freshDbRole = latest?.success ? latest.data?.role : null;
+                                            // Read from the live session object captured by closure — by
+                                            // 1.5s the React tree will have re-rendered if update() worked.
+                                            const stillSessionRole = (session.user as { role?: string }).role;
+                                            if (freshDbRole && stillSessionRole && freshDbRole !== stillSessionRole) {
+                                                hardReloadDoneRef.current = true;
+                                                window.location.reload();
+                                            }
+                                        })
+                                        .catch(() => { /* network blip — leave UI as-is */ });
+                                }, 1500);
+                            });
+                    }
+                }
                 const p = profileJson?.success ? profileJson.data : null;
                 const addresses = addrJson?.success ? addrJson.data : [];
                 const defaultAddr = addresses?.[0]; // already sorted by isDefault desc, then createdAt desc
@@ -138,6 +221,17 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
         { id: 'payment', label: 'Payment Management', desc: 'Cards, UPI & banking', icon: CreditCard, onClick: () => setIsPaymentOpen(true) },
     ];
 
+    // Business Account management (V2.2) — only show when the user has an active account
+    // resolved on the session. Each card jumps straight into the matching tab on
+    // /account/[id]/... so this profile screen acts as the customer's dashboard.
+    const activeAccountIdForLinks = (session?.user as { activeBusinessAccountId?: string } | undefined)?.activeBusinessAccountId;
+    const businessAccountItems = activeAccountIdForLinks ? [
+        { id: 'outlets',     label: 'Outlets',       desc: 'Delivery locations & branches',  icon: MapPin,      onClick: () => setIsOutletsOpen(true) },
+        { id: 'team-members',label: 'Team Members',  desc: 'Invite users & manage access',   icon: Users,       onClick: () => setIsTeamOpen(true) },
+        { id: 'roles',       label: 'Roles & Permissions', desc: 'Permission matrix · templates', icon: BadgeCheck, onClick: () => setIsRolesOpen(true) },
+        { id: 'account-overview', label: 'Account Overview', desc: 'GST, business type, members', icon: Building2, onClick: () => setIsOverviewOpen(true) },
+    ] : [];
+
     const otherInfoItems = [
         { id: 'notifications', label: 'Notification', desc: 'Push & email preferences', icon: Bell, onClick: () => setIsNotificationOpen(true) },
         { id: 'general', label: 'General Information', desc: 'About, terms & policies', icon: Info, onClick: () => setIsGeneralInfoOpen(true) },
@@ -147,6 +241,10 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
 
     const isProfileComplete = !!(userData.fullName && userData.businessName && userData.pincode);
     const defaultLocation = [userData.city, userData.pincode].filter(Boolean).join(' · ');
+    const sessionRole = (session?.user as { role?: string } | undefined)?.role;
+    // Show the "Become a vendor" CTA only for customers who haven't yet applied.
+    // Admins, brands, and existing vendors (pending or approved) all skip it.
+    const showBecomeVendorCta = hasVendorApplication === false && sessionRole !== 'admin' && sessionRole !== 'brand' && sessionRole !== 'vendor';
 
     return (
         <>
@@ -263,6 +361,30 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                 </div>
                             )}
 
+                            {/* Business Account management — V2.2 */}
+                            {businessAccountItems.length > 0 && (
+                                <div className="mb-6">
+                                    <h4 className="text-[12px] font-[800] text-gray-400 uppercase tracking-wider mb-2 px-1">Business</h4>
+                                    <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+                                        {businessAccountItems.map((item, idx) => {
+                                            const Icon = item.icon;
+                                            return (
+                                                <button key={item.id} onClick={item.onClick} className={cn("w-full flex items-center gap-3 px-4 py-3.5 active:bg-gray-50 transition-colors text-left cursor-pointer", idx < businessAccountItems.length - 1 && "border-b border-gray-50")}>
+                                                    <span className="w-8 h-8 rounded-lg bg-[#53B175]/10 text-[#53B175] flex items-center justify-center shrink-0">
+                                                        <Icon size={15} />
+                                                    </span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-[13px] font-[700] text-[#181725] leading-tight">{item.label}</p>
+                                                        <p className="text-[11px] text-gray-400 font-medium mt-0.5 truncate">{item.desc}</p>
+                                                    </div>
+                                                    <ChevronRight size={16} className="text-gray-300" />
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Your Information */}
                             <div className="mb-6">
                                 <h4 className="text-[12px] font-[800] text-gray-400 uppercase tracking-wider mb-2 px-1">Account</h4>
@@ -359,6 +481,30 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                         })}
                                     </ul>
 
+                                    {/* V2.2: Business Account management — only renders if user has an active account */}
+                                    {businessAccountItems.length > 0 && (
+                                        <>
+                                            <p className="text-[10px] font-[700] text-gray-400 uppercase tracking-[0.12em] px-2 pt-3 pb-1.5">Business</p>
+                                            <ul className="space-y-0.5">
+                                                {businessAccountItems.map((item) => {
+                                                    const Icon = item.icon;
+                                                    return (
+                                                        <li key={item.id}>
+                                                            <button
+                                                                onClick={item.onClick}
+                                                                className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#53B175]/8 text-[#181725] hover:text-[#53B175] transition-colors group cursor-pointer"
+                                                            >
+                                                                <Icon size={15} className="text-gray-400 group-hover:text-[#53B175] shrink-0" />
+                                                                <span className="text-[13px] font-[600] flex-1 text-left">{item.label}</span>
+                                                                <ChevronRight size={13} className="text-gray-300 group-hover:text-[#53B175]" />
+                                                            </button>
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
+                                        </>
+                                    )}
+
                                     <p className="text-[10px] font-[700] text-gray-400 uppercase tracking-[0.12em] px-2 pt-3 pb-1.5">Activity</p>
                                     <ul className="space-y-0.5">
                                         <li>
@@ -441,6 +587,35 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                     )}
                                 </div>
 
+                                {/* Become a vendor CTA — only for customer-only users who haven't applied yet */}
+                                {showBecomeVendorCta && (
+                                    <button
+                                        onClick={() => setIsBecomeVendorOpen(true)}
+                                        className="w-full text-left bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 border border-emerald-200 rounded-2xl p-5 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 group cursor-pointer"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center shrink-0 shadow-md shadow-emerald-200">
+                                                <Store size={20} className="text-white" />
+                                                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-400 flex items-center justify-center">
+                                                    <Sparkles size={8} className="text-white" />
+                                                </span>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-[14px] font-bold text-emerald-900 leading-tight">
+                                                    Want to sell on Horeca1? Become a vendor.
+                                                </p>
+                                                <p className="text-[12px] text-emerald-800/70 mt-0.5">
+                                                    Keep your account — just unlock the vendor portal. Admin reviews in ~24h.
+                                                </p>
+                                            </div>
+                                            <span className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-[12px] font-bold group-hover:bg-emerald-700 shrink-0">
+                                                Apply
+                                                <ChevronRight size={13} />
+                                            </span>
+                                        </div>
+                                    </button>
+                                )}
+
                                 {/* Primary actions — 4 enterprise-style tiles with shared brand accent */}
                                 <section>
                                     <div className="flex items-baseline justify-between mb-3 px-1">
@@ -467,6 +642,35 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                                         })}
                                     </div>
                                 </section>
+
+                                {/* Business Account — V2.2 multi-account / multi-outlet management */}
+                                {businessAccountItems.length > 0 && (
+                                    <section>
+                                        <div className="flex items-baseline justify-between mb-3 px-1">
+                                            <h3 className="text-[15px] font-[700] text-[#181725]">Business Account</h3>
+                                            <span className="text-[11px] font-medium text-gray-400">Outlets · Team · Roles</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+                                            {businessAccountItems.map((item) => {
+                                                const Icon = item.icon;
+                                                return (
+                                                    <button
+                                                        key={item.id}
+                                                        onClick={item.onClick}
+                                                        className="group relative text-left bg-white border border-gray-100 rounded-2xl p-5 hover:border-[#53B175]/40 hover:shadow-[0_8px_24px_rgba(83,177,117,0.12)] hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.98] cursor-pointer overflow-hidden"
+                                                    >
+                                                        <div className="w-11 h-11 rounded-xl bg-[#53B175]/10 text-[#53B175] flex items-center justify-center mb-4 group-hover:bg-[#53B175] group-hover:text-white transition-colors">
+                                                            <Icon size={20} strokeWidth={2.3} />
+                                                        </div>
+                                                        <p className="text-[14px] font-[700] text-[#181725] leading-tight">{item.label}</p>
+                                                        <p className="text-[11.5px] text-gray-400 font-medium mt-1 line-clamp-2">{item.desc}</p>
+                                                        <ChevronRight size={16} className="absolute top-5 right-5 text-gray-200 group-hover:text-[#53B175] transition-colors" />
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </section>
+                                )}
 
                                 {/* Account details snapshot — surfaces business info from existing userData */}
                                 <section>
@@ -552,6 +756,43 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
             />
+
+            {/* Become a Vendor Modal */}
+            <BecomeVendorModal
+                isOpen={isBecomeVendorOpen}
+                onClose={() => setIsBecomeVendorOpen(false)}
+                defaultBusinessName={userData.businessName}
+                onSubmitted={() => setHasVendorApplication(true)}
+            />
+
+            {/* Business Account Overlays */}
+            {activeAccountIdForLinks && (
+                <>
+                    <OutletsOverlay
+                        isOpen={isOutletsOpen}
+                        onClose={() => setIsOutletsOpen(false)}
+                        accountId={activeAccountIdForLinks}
+                    />
+                    <TeamMembersOverlay
+                        isOpen={isTeamOpen}
+                        onClose={() => setIsTeamOpen(false)}
+                        accountId={activeAccountIdForLinks}
+                    />
+                    <RolesPermissionsOverlay
+                        isOpen={isRolesOpen}
+                        onClose={() => setIsRolesOpen(false)}
+                        accountId={activeAccountIdForLinks}
+                    />
+                    <AccountOverviewOverlay
+                        isOpen={isOverviewOpen}
+                        onClose={() => setIsOverviewOpen(false)}
+                        accountId={activeAccountIdForLinks}
+                        onOpenOutlets={() => setIsOutletsOpen(true)}
+                        onOpenMembers={() => setIsTeamOpen(true)}
+                        onOpenRoles={() => setIsRolesOpen(true)}
+                    />
+                </>
+            )}
         </>
     );
 }

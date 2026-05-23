@@ -123,8 +123,9 @@ export function Navbar() {
     const vendorDashboardPaths = ['/vendor/dashboard', '/vendor/orders', '/vendor/products', '/vendor/inventory', '/vendor/settings'];
     const isVendorDashboard = vendorDashboardPaths.some(p => pathname?.startsWith(p));
     const isBrandPortal = pathname?.startsWith('/brand/portal');
+    const isAccountPage = pathname?.startsWith('/account');
 
-    if (isAdminPage || isVendorDashboard || isBrandPortal || isShipmentPage) return null;
+    if (isAdminPage || isVendorDashboard || isBrandPortal || isShipmentPage || isAccountPage) return null;
 
     // Build iconized nav items — prepend dashboard shortcut for vendor/admin
     const desktopNavItems = [

@@ -35,20 +35,18 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      setLoading(true); setError(null);
-      try {
-        const res = await fetch(`/api/v1/account/${id}`);
-        const json = await res.json();
-        if (!json.success) { setError(json.error?.message ?? 'Could not load account'); return; }
-        if (!cancelled) setAccount(json.data as AccountHeader);
-      } catch (e) {
+    Promise.resolve().then(() => { if (!cancelled) { setLoading(true); setError(null); } });
+    fetch(`/api/v1/account/${id}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (cancelled) return;
+        if (!json.success) setError(json.error?.message ?? 'Could not load account');
+        else setAccount(json.data as AccountHeader);
+      })
+      .catch((e: unknown) => {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load account');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [id]);
 
