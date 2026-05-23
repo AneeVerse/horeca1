@@ -18,10 +18,13 @@
  * Safe to re-run on partial failure (every step checks existence before inserting).
  */
 
+import 'dotenv/config';
 import { PrismaClient, type Prisma, type TeamRole } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter });
 
 // ─── permission JSON helpers ─────────────────────────────────────────────
 
@@ -579,6 +582,81 @@ async function migrateSavedAddresses() {
   console.log(`   ${done} saved addresses → outlets (${skipped} skipped — owner has no primary account)`);
 }
 
+async function provisionFallbackAccountsForOrderOwners() {
+  console.log('→ Provisioning fallback BusinessAccount for non-customer users with orders …');
+  // Catches users with role != customer (typically admin) who placed orders in dev/test
+  // and never got an account via migrateCustomers. Without this, stampOrders would skip
+  // their orders and Step C would later refuse to enforce NOT NULL.
+  const orphanUserIds = await prisma.order.findMany({
+    where: { businessAccountId: null },
+    distinct: ['userId'],
+    select: { userId: true },
+  });
+
+  if (orphanUserIds.length === 0) {
+    console.log('   0 fallback accounts needed');
+    return;
+  }
+
+  const users = await prisma.user.findMany({
+    where: {
+      id: { in: orphanUserIds.map((o) => o.userId) },
+      accountMemberships: { none: { isPrimary: true } },
+    },
+    select: {
+      id: true, fullName: true, businessName: true, gstNumber: true,
+      savedAddresses: { where: { isDefault: true }, take: 1, orderBy: { createdAt: 'asc' } },
+    },
+  });
+
+  const ownerTemplateId = await getTemplateId('Owner', 'account');
+  let done = 0;
+
+  for (const u of users) {
+    const addr = u.savedAddresses[0];
+    await prisma.$transaction(async (tx) => {
+      const ba = await tx.businessAccount.create({
+        data: {
+          legalName: u.businessName ?? u.fullName ?? 'Personal Account',
+          displayName: u.businessName ?? u.fullName ?? null,
+          gstin: u.gstNumber ?? null,
+          businessType: 'personal',
+          isCustomer: true,
+          isVendor: false,
+          isBrand: false,
+          status: 'active',
+        },
+      });
+      const outlet = await tx.outlet.create({
+        data: {
+          businessAccountId: ba.id,
+          name: u.businessName ?? 'Primary Outlet',
+          addressLine: addr?.fullAddress ?? 'Address pending',
+          city: addr?.city ?? null,
+          state: addr?.state ?? null,
+          pincode: addr?.pincode ?? null,
+          latitude: addr?.latitude ?? null,
+          longitude: addr?.longitude ?? null,
+          placeId: addr?.placeId ?? null,
+          requiresAddressUpdate: !addr,
+        },
+      });
+      await tx.businessAccount.update({ where: { id: ba.id }, data: { primaryOutletId: outlet.id } });
+      await tx.businessAccountMember.create({
+        data: { userId: u.id, businessAccountId: ba.id, isPrimary: true, acceptedAt: new Date() },
+      });
+      await tx.userRole.create({
+        data: { userId: u.id, businessAccountId: ba.id, outletId: null, roleId: ownerTemplateId },
+      });
+      if (addr) {
+        await tx.savedAddress.update({ where: { id: addr.id }, data: { outletId: outlet.id } });
+      }
+    });
+    done++;
+  }
+  console.log(`   ${done} fallback accounts provisioned for order owners`);
+}
+
 async function stampOrders() {
   console.log('→ Stamping orders with businessAccountId + outletId + deliveryAddressSnapshot …');
   const orders = await prisma.order.findMany({
@@ -730,6 +808,7 @@ async function main() {
   await migrateVendorTeamMembers();
   await migrateBrandTeamMembers();
   await migrateSavedAddresses();
+  await provisionFallbackAccountsForOrderOwners();
   await stampOrders();
   await stampCarts();
   await stampQuickOrderLists();

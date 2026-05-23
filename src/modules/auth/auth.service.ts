@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/events/emitter';
 import type { Role } from '@prisma/client';
 import { Errors } from '@/middleware/errorHandler';
+import { provisionDefaultAccount } from '@/lib/provisionAccount';
+import { uniqueHcid } from '@/lib/hcid';
 
 interface SignupInput {
   email: string;
@@ -33,6 +35,7 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(input.password, 12);
+    const hcidDisplay = await uniqueHcid();
 
     // All users start as 'customer' — vendors get promoted after admin approval
     const user = await prisma.user.create({
@@ -45,6 +48,7 @@ export class AuthService {
         pincode: input.pincode,
         businessName: input.businessName,
         gstNumber: input.gstNumber,
+        hcidDisplay,
       },
       select: {
         id: true,
@@ -57,8 +61,17 @@ export class AuthService {
       },
     });
 
-    // If user applied as vendor, create a Vendor record (unverified, inactive)
-    // Admin will review and approve via /admin/approvals
+    // V2.2: every new user gets a BusinessAccount + primary Outlet + Owner role.
+    // For vendor applicants we also create the legacy Vendor row and link it.
+    const kind: 'customer' | 'vendor' | 'brand' = input.role === 'vendor' ? 'vendor' : input.role === 'brand' ? 'brand' : 'customer';
+    const provision = await provisionDefaultAccount({
+      userId: user.id,
+      kind,
+      businessName: input.businessName,
+      fullName: input.fullName,
+      gstNumber: input.gstNumber,
+    });
+
     if (input.role === 'vendor') {
       const businessName = input.businessName || input.fullName;
       const slug = businessName
@@ -70,6 +83,7 @@ export class AuthService {
       await prisma.vendor.create({
         data: {
           userId: user.id,
+          businessAccountId: provision.businessAccountId,
           businessName,
           slug,
           isVerified: false,
@@ -100,7 +114,17 @@ export class AuthService {
         businessName: true,
         gstNumber: true,
         image: true,
+        hcidDisplay: true,
         createdAt: true,
+        accountMemberships: {
+          select: {
+            isPrimary: true,
+            businessAccount: {
+              select: { id: true, legalName: true, displayName: true, isCustomer: true, isVendor: true, isBrand: true },
+            },
+          },
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+        },
       },
     });
 

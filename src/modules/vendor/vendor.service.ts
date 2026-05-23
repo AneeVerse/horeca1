@@ -138,17 +138,17 @@ export class VendorService {
     });
   }
 
-  async follow(userId: string, vendorId: string) {
+  async follow(userId: string, businessAccountId: string, vendorId: string) {
     return prisma.customerVendor.upsert({
-      where: { userId_vendorId: { userId, vendorId } },
+      where: { businessAccountId_vendorId: { businessAccountId, vendorId } },
       update: { isFavorite: true },
-      create: { userId, vendorId, isFavorite: true },
+      create: { userId, businessAccountId, vendorId, isFavorite: true },
     });
   }
 
-  async unfollow(userId: string, vendorId: string) {
+  async unfollow(businessAccountId: string, vendorId: string) {
     return prisma.customerVendor.delete({
-      where: { userId_vendorId: { userId, vendorId } },
+      where: { businessAccountId_vendorId: { businessAccountId, vendorId } },
     });
   }
 

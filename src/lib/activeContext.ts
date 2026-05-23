@@ -45,104 +45,115 @@ export async function loadActiveContext(
   targetAccountId: string | null,
   targetOutletId: string | null,
 ): Promise<ActiveContext | null> {
-  // Pull the user's hcidDisplay + first N memberships in one round-trip.
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      hcidDisplay: true,
-      accountMemberships: {
-        select: {
-          isPrimary: true,
-          businessAccount: {
-            select: {
-              id: true,
-              displayName: true,
-              legalName: true,
-              isCustomer: true,
-              isVendor: true,
-              isBrand: true,
-              primaryOutletId: true,
+  // Defensive top-level try/catch: this function is called from the auth.ts jwt
+  // callback on every sign-in and every session.update(). If anything inside
+  // throws (transient DB hiccup, schema drift, missing relation, etc.), we MUST
+  // return null rather than propagate — callers already handle the null path by
+  // clearing the active-context fields on the token, which is far better than
+  // poisoning the JWT or blocking sign-in entirely.
+  try {
+    // Pull the user's hcidDisplay + first N memberships in one round-trip.
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        hcidDisplay: true,
+        accountMemberships: {
+          select: {
+            isPrimary: true,
+            businessAccount: {
+              select: {
+                id: true,
+                displayName: true,
+                legalName: true,
+                isCustomer: true,
+                isVendor: true,
+                isBrand: true,
+                primaryOutletId: true,
+              },
             },
           },
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
         },
-        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
       },
-    },
-  });
-
-  if (!user || user.accountMemberships.length === 0) return null;
-
-  // Pick the active account: explicit target wins, else primary, else first.
-  const memberships = user.accountMemberships;
-  let chosen = targetAccountId
-    ? memberships.find((m) => m.businessAccount.id === targetAccountId)
-    : (memberships.find((m) => m.isPrimary) ?? memberships[0]);
-  if (!chosen) chosen = memberships[0];
-  const account = chosen.businessAccount;
-
-  // Pick the active outlet within the chosen account.
-  // Validate targetOutletId belongs to the account; else fall back to primary.
-  let activeOutletId: string | null = account.primaryOutletId;
-  if (targetOutletId) {
-    const ok = await prisma.outlet.findFirst({
-      where: { id: targetOutletId, businessAccountId: account.id },
-      select: { id: true },
     });
-    if (ok) activeOutletId = ok.id;
-  }
-  // If no primary set and no valid target, pick the first outlet of the account.
-  if (!activeOutletId) {
-    const first = await prisma.outlet.findFirst({
-      where: { businessAccountId: account.id },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
+
+    if (!user || user.accountMemberships.length === 0) return null;
+
+    // Pick the active account: explicit target wins, else primary, else first.
+    const memberships = user.accountMemberships;
+    let chosen = targetAccountId
+      ? memberships.find((m) => m.businessAccount.id === targetAccountId)
+      : (memberships.find((m) => m.isPrimary) ?? memberships[0]);
+    if (!chosen) chosen = memberships[0];
+    const account = chosen.businessAccount;
+
+    // Pick the active outlet within the chosen account.
+    // Validate targetOutletId belongs to the account; else fall back to primary.
+    let activeOutletId: string | null = account.primaryOutletId;
+    if (targetOutletId) {
+      const ok = await prisma.outlet.findFirst({
+        where: { id: targetOutletId, businessAccountId: account.id },
+        select: { id: true },
+      });
+      if (ok) activeOutletId = ok.id;
+    }
+    // If no primary set and no valid target, pick the first outlet of the account.
+    if (!activeOutletId) {
+      const first = await prisma.outlet.findFirst({
+        where: { businessAccountId: account.id },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      activeOutletId = first?.id ?? null;
+    }
+
+    // Compute the flattened permission set: union of every UserRole row that applies.
+    // A UserRole applies if userId = current AND businessAccountId = active
+    // AND (outletId IS NULL OR outletId = activeOutletId).
+    const userRoles = await prisma.userRole.findMany({
+      where: {
+        userId,
+        businessAccountId: account.id,
+        OR: [{ outletId: null }, ...(activeOutletId ? [{ outletId: activeOutletId }] : [])],
+      },
+      select: {
+        role: { select: { permissions: true } },
+      },
     });
-    activeOutletId = first?.id ?? null;
+
+    const permSet = mergePermissions(
+      ...userRoles.map((ur) => flatten(ur.role.permissions as PermissionsJson | null)),
+    );
+    const permissions = Array.from(permSet);
+
+    // Cap the availableAccounts list (cookie size). Compute truncation flag + total count.
+    const totalAccountCount = memberships.length;
+    const availableAccounts: AvailableAccountSummary[] = memberships
+      .slice(0, MAX_AVAILABLE_ACCOUNTS)
+      .map((m) => ({
+        id: m.businessAccount.id,
+        displayName: m.businessAccount.displayName ?? m.businessAccount.legalName,
+        isVendor: m.businessAccount.isVendor,
+        isBrand: m.businessAccount.isBrand,
+      }));
+    const availableAccountsTruncated = totalAccountCount > MAX_AVAILABLE_ACCOUNTS;
+
+    return {
+      hcidDisplay: user.hcidDisplay,
+      activeBusinessAccountId: account.id,
+      activeBusinessAccountType: {
+        isCustomer: account.isCustomer,
+        isVendor: account.isVendor,
+        isBrand: account.isBrand,
+      },
+      activeOutletId,
+      permissions,
+      availableAccounts,
+      availableAccountsTruncated,
+      totalAccountCount,
+    };
+  } catch (err) {
+    console.error('[loadActiveContext] failed for userId=%s targetAccountId=%s targetOutletId=%s:', userId, targetAccountId, targetOutletId, err);
+    return null;
   }
-
-  // Compute the flattened permission set: union of every UserRole row that applies.
-  // A UserRole applies if userId = current AND businessAccountId = active
-  // AND (outletId IS NULL OR outletId = activeOutletId).
-  const userRoles = await prisma.userRole.findMany({
-    where: {
-      userId,
-      businessAccountId: account.id,
-      OR: [{ outletId: null }, ...(activeOutletId ? [{ outletId: activeOutletId }] : [])],
-    },
-    select: {
-      role: { select: { permissions: true } },
-    },
-  });
-
-  const permSet = mergePermissions(
-    ...userRoles.map((ur) => flatten(ur.role.permissions as PermissionsJson | null)),
-  );
-  const permissions = Array.from(permSet);
-
-  // Cap the availableAccounts list (cookie size). Compute truncation flag + total count.
-  const totalAccountCount = memberships.length;
-  const availableAccounts: AvailableAccountSummary[] = memberships
-    .slice(0, MAX_AVAILABLE_ACCOUNTS)
-    .map((m) => ({
-      id: m.businessAccount.id,
-      displayName: m.businessAccount.displayName ?? m.businessAccount.legalName,
-      isVendor: m.businessAccount.isVendor,
-      isBrand: m.businessAccount.isBrand,
-    }));
-  const availableAccountsTruncated = totalAccountCount > MAX_AVAILABLE_ACCOUNTS;
-
-  return {
-    hcidDisplay: user.hcidDisplay,
-    activeBusinessAccountId: account.id,
-    activeBusinessAccountType: {
-      isCustomer: account.isCustomer,
-      isVendor: account.isVendor,
-      isBrand: account.isBrand,
-    },
-    activeOutletId,
-    permissions,
-    availableAccounts,
-    availableAccountsTruncated,
-    totalAccountCount,
-  };
 }

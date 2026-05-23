@@ -1,10 +1,26 @@
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
 
+/**
+ * V2.2: cart is keyed by (userId, businessAccountId, outletId). Every method
+ * accepts a CartContext so switching account or outlet loads the correct
+ * cart. The legacy unique on (userId) was dropped in Step C.
+ *
+ * Resolve the CartContext from the session in route handlers via
+ * resolveCartContext() (below) so the new fields fall back gracefully for
+ * legacy users mid-migration.
+ */
+
+export interface CartContext {
+  userId: string;
+  businessAccountId: string;
+  outletId: string;
+}
+
 export class CartService {
-  async getCart(userId: string) {
-    const cart = await prisma.cart.findUnique({
-      where: { userId },
+  async getCart(ctx: CartContext) {
+    const cart = await prisma.cart.findFirst({
+      where: { userId: ctx.userId, businessAccountId: ctx.businessAccountId, outletId: ctx.outletId },
       include: {
         items: {
           include: {
@@ -51,13 +67,18 @@ export class CartService {
     return { vendorGroups, total };
   }
 
-  async addItem(userId: string, productId: string, vendorId: string, quantity: number) {
-    // Ensure cart exists
-    const cart = await prisma.cart.upsert({
-      where: { userId },
-      update: {},
-      create: { userId },
+  async addItem(ctx: CartContext, productId: string, vendorId: string, quantity: number) {
+    // Ensure cart exists for this (user, account, outlet).
+    let cart = await prisma.cart.findFirst({
+      where: { userId: ctx.userId, businessAccountId: ctx.businessAccountId, outletId: ctx.outletId },
+      select: { id: true },
     });
+    if (!cart) {
+      cart = await prisma.cart.create({
+        data: { userId: ctx.userId, businessAccountId: ctx.businessAccountId, outletId: ctx.outletId },
+        select: { id: true },
+      });
+    }
 
     // Get product price
     const product = await prisma.product.findUnique({
@@ -84,14 +105,16 @@ export class CartService {
     });
   }
 
-  async updateQuantity(userId: string, itemId: string, quantity: number) {
-    const cart = await prisma.cart.findUnique({ where: { userId } });
+  async updateQuantity(ctx: CartContext, itemId: string, quantity: number) {
+    const cart = await prisma.cart.findFirst({
+      where: { userId: ctx.userId, businessAccountId: ctx.businessAccountId, outletId: ctx.outletId },
+      select: { id: true },
+    });
     if (!cart) throw Errors.notFound('Cart');
 
     const item = await prisma.cartItem.findFirst({ where: { id: itemId, cartId: cart.id } });
     if (!item) throw Errors.notFound('Cart item');
 
-    // Recalculate price based on new quantity
     const product = await prisma.product.findUnique({
       where: { id: item.productId },
       include: { priceSlabs: { orderBy: { minQty: 'asc' } } },
@@ -112,16 +135,42 @@ export class CartService {
     });
   }
 
-  async removeItem(userId: string, itemId: string) {
-    const cart = await prisma.cart.findUnique({ where: { userId } });
+  async removeItem(ctx: CartContext, itemId: string) {
+    const cart = await prisma.cart.findFirst({
+      where: { userId: ctx.userId, businessAccountId: ctx.businessAccountId, outletId: ctx.outletId },
+      select: { id: true },
+    });
     if (!cart) throw Errors.notFound('Cart');
 
     return prisma.cartItem.delete({ where: { id: itemId, cartId: cart.id } });
   }
 
-  async clearCart(userId: string) {
-    const cart = await prisma.cart.findUnique({ where: { userId } });
+  async clearCart(ctx: CartContext) {
+    const cart = await prisma.cart.findFirst({
+      where: { userId: ctx.userId, businessAccountId: ctx.businessAccountId, outletId: ctx.outletId },
+      select: { id: true },
+    });
     if (!cart) return;
     await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
   }
+}
+
+/**
+ * Resolve a CartContext from an AuthContext. Fails fast if the user does not
+ * have an active business account + outlet on the session (legacy users
+ * mid-migration should be redirected to the onboarding-outlet step).
+ */
+export function resolveCartContext(ctx: {
+  userId: string;
+  activeBusinessAccountId: string | null;
+  activeOutletId: string | null;
+}): CartContext {
+  if (!ctx.activeBusinessAccountId || !ctx.activeOutletId) {
+    throw Errors.badRequest('No active outlet selected. Pick an outlet before working with the cart.');
+  }
+  return {
+    userId: ctx.userId,
+    businessAccountId: ctx.activeBusinessAccountId,
+    outletId: ctx.activeOutletId,
+  };
 }

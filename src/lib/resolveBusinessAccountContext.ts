@@ -73,9 +73,11 @@ export async function resolveBusinessAccountContext(
   }
 
   // Normal users: read from the JWT-populated session fields.
+  // These messages surface in toast/error banners — keep them actionable and aimed at
+  // the actual cause: a stale JWT cookie from a mid-flight role/account migration.
   const activeBusinessAccountId = ctx.activeBusinessAccountId;
   if (!activeBusinessAccountId) {
-    throw Errors.forbidden('No active business account on the session');
+    throw Errors.forbidden('Your session is out of date — please refresh the page.');
   }
 
   // Look up the legacy Vendor/Brand row ids for this account (used by the still-untouched
@@ -90,7 +92,7 @@ export async function resolveBusinessAccountContext(
       brand: { select: { id: true } },
     },
   });
-  if (!account) throw Errors.forbidden('Active business account no longer exists');
+  if (!account) throw Errors.forbidden('Your session is out of date — please refresh the page.');
 
   return {
     businessAccountId: activeBusinessAccountId,

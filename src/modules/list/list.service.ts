@@ -48,10 +48,11 @@ export class ListService {
     return list;
   }
 
-  async create(userId: string, data: { name: string; vendorId: string; items?: Array<{ productId: string; defaultQty: number; vendorId?: string }> }) {
+  async create(userId: string, businessAccountId: string, data: { name: string; vendorId: string; items?: Array<{ productId: string; defaultQty: number; vendorId?: string }> }) {
     const list = await prisma.quickOrderList.create({
       data: {
         userId,
+        businessAccountId,
         vendorId: data.vendorId,
         name: data.name,
         ...(data.items?.length

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { emitEvent } from '@/events/emitter';
 import { InventoryService } from '@/modules/inventory/inventory.service';
 import { Errors } from '@/middleware/errorHandler';
@@ -15,10 +16,38 @@ interface CreateOrderInput {
   paymentMethod: string;
 }
 
+/**
+ * V2.2: every order is stamped with the user's active BusinessAccount + Outlet
+ * and a snapshot of the outlet's address at order time. Cart lookup is also
+ * scoped to (userId, businessAccountId, outletId).
+ */
+export interface OrderContext {
+  userId: string;
+  businessAccountId: string;
+  outletId: string;
+}
+
 export class OrderService {
   private inventoryService = new InventoryService();
 
-  async create(userId: string, input: CreateOrderInput) {
+  async create(ctx: OrderContext, input: CreateOrderInput) {
+    const { userId, businessAccountId, outletId } = ctx;
+
+    // Snapshot the outlet address once outside the transaction — same value
+    // is written onto every PO in this checkout batch.
+    const outlet = await prisma.outlet.findFirst({
+      where: { id: outletId, businessAccountId },
+      select: {
+        name: true, addressLine: true, flatInfo: true, landmark: true,
+        city: true, state: true, pincode: true, latitude: true, longitude: true,
+        placeId: true, requiresAddressUpdate: true,
+      },
+    });
+    if (!outlet) throw Errors.badRequest('Active outlet not found for this account');
+    if (outlet.requiresAddressUpdate) {
+      throw Errors.badRequest('Active outlet needs its address completed before placing orders');
+    }
+    const deliveryAddressSnapshot: Prisma.InputJsonValue = { ...outlet };
     return prisma.$transaction(async (tx) => {
       const orders: Array<{
         id: string;
@@ -117,6 +146,9 @@ export class OrderService {
             orderNumber,
             userId,
             vendorId: vo.vendorId,
+            businessAccountId,
+            outletId,
+            deliveryAddressSnapshot,
             status: 'pending',
             subtotal,
             totalAmount: subtotal,
@@ -134,8 +166,11 @@ export class OrderService {
         orders.push(order);
       }
 
-      // 7. Clear cart
-      const cart = await tx.cart.findUnique({ where: { userId } });
+      // 7. Clear the (user, account, outlet)-scoped cart
+      const cart = await tx.cart.findFirst({
+        where: { userId, businessAccountId, outletId },
+        select: { id: true },
+      });
       if (cart) {
         await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
       }

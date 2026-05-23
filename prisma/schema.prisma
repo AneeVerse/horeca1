@@ -65,8 +65,8 @@ model User {
   gstNumber     String?   @map("gst_number") @db.VarChar(20)
   isActive      Boolean   @default(true) @map("is_active")
   profileCompletedAt DateTime? @map("profile_completed_at") @db.Timestamptz
-  // V2.2: human-readable HCID display, e.g. "HC-A4F2-9X3K". Backfilled by data_migrate.ts.
-  hcidDisplay   String?   @unique @map("hcid_display") @db.VarChar(20)
+  // V2.2: human-readable HCID display, e.g. "HC-A4F2-9X3K". Generated at signup via src/lib/hcid.ts.
+  hcidDisplay   String    @unique @map("hcid_display") @db.VarChar(20)
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -78,7 +78,7 @@ model User {
 
   vendor          Vendor?
   brand           Brand?
-  cart            Cart?
+  carts           Cart[]   // V2.2: one cart per (businessAccountId, outletId)
   wallet          Wallet?
   orders          Order[]
   quickOrderLists QuickOrderList[]
@@ -152,8 +152,8 @@ model LinkedAccount {
 model Vendor {
   id            String   @id @default(uuid()) @db.Uuid
   userId        String   @unique @map("user_id") @db.Uuid
-  // V2.2: Vendor is a 1:1 extension of BusinessAccount. Nullable during Step A; backfilled; NOT NULL in Step C.
-  businessAccountId String? @unique @map("business_account_id") @db.Uuid
+  // V2.2: Vendor is a 1:1 extension of BusinessAccount. NOT NULL after Step C.
+  businessAccountId String @unique @map("business_account_id") @db.Uuid
   businessName  String   @map("business_name") @db.VarChar(255)
   slug          String   @unique @db.VarChar(255)
   description   String?  @db.Text
@@ -174,7 +174,7 @@ model Vendor {
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   user               User                 @relation(fields: [userId], references: [id])
-  businessAccount    BusinessAccount?     @relation(fields: [businessAccountId], references: [id])
+  businessAccount    BusinessAccount      @relation(fields: [businessAccountId], references: [id])
   serviceAreas       ServiceArea[]
   products           Product[]
   priceSlabs         PriceSlab[]
@@ -231,18 +231,17 @@ model CustomerVendor {
   id            String    @id @default(uuid()) @db.Uuid
   userId        String    @map("user_id") @db.Uuid
   vendorId      String    @map("vendor_id") @db.Uuid
-  // V2.2: ownership shifts from user to account. @@unique([userId, vendorId]) dropped in Step C
-  // and replaced by @@unique([businessAccountId, vendorId]).
-  businessAccountId String? @map("business_account_id") @db.Uuid
+  // V2.2: ownership shifted to (businessAccountId, vendorId). Legacy unique replaced in Step C.
+  businessAccountId String @map("business_account_id") @db.Uuid
   isFavorite    Boolean   @default(false) @map("is_favorite")
   lastOrderedAt DateTime? @map("last_ordered_at") @db.Timestamptz
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  vendor          Vendor           @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  businessAccount BusinessAccount? @relation(fields: [businessAccountId], references: [id])
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vendor          Vendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  businessAccount BusinessAccount @relation(fields: [businessAccountId], references: [id])
 
-  @@unique([userId, vendorId])
+  @@unique([businessAccountId, vendorId])
   @@index([userId])
   @@index([vendorId])
   @@index([businessAccountId])
@@ -424,18 +423,18 @@ model Inventory {
 
 model Cart {
   id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @unique @map("user_id") @db.Uuid
-  // V2.2: cart re-keyed to (userId, businessAccountId, outletId). Nullable during Step A.
-  // The @@unique([userId]) is dropped and replaced in Step C with the composite.
-  businessAccountId String? @map("business_account_id") @db.Uuid
-  outletId          String? @map("outlet_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  // V2.2: cart re-keyed to (userId, businessAccountId, outletId). NOT NULL + composite unique after Step C.
+  businessAccountId String @map("business_account_id") @db.Uuid
+  outletId          String @map("outlet_id") @db.Uuid
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  user            User             @relation(fields: [userId], references: [id])
-  businessAccount BusinessAccount? @relation(fields: [businessAccountId], references: [id])
-  outlet          Outlet?          @relation(fields: [outletId], references: [id])
+  user            User            @relation(fields: [userId], references: [id])
+  businessAccount BusinessAccount @relation(fields: [businessAccountId], references: [id])
+  outlet          Outlet          @relation(fields: [outletId], references: [id])
   items           CartItem[]
 
+  @@unique([userId, businessAccountId, outletId])
   @@map("carts")
 }
 
@@ -465,10 +464,10 @@ model Order {
   orderNumber    String       @unique @map("order_number") @db.VarChar(50)
   userId         String       @map("user_id") @db.Uuid
   vendorId       String       @map("vendor_id") @db.Uuid
-  // V2.2: outlet-stamped order with snapshotted delivery address. Nullable in Step A; NOT NULL in Step C.
-  businessAccountId        String? @map("business_account_id") @db.Uuid
-  outletId                 String? @map("outlet_id") @db.Uuid
-  deliveryAddressSnapshot  Json?   @map("delivery_address_snapshot")
+  // V2.2: outlet-stamped order with snapshotted delivery address. NOT NULL after Step C.
+  businessAccountId        String @map("business_account_id") @db.Uuid
+  outletId                 String @map("outlet_id") @db.Uuid
+  deliveryAddressSnapshot  Json   @map("delivery_address_snapshot")
   status         OrderStatus  @default(pending)
   subtotal       Decimal      @db.Decimal(12, 2)
   taxAmount      Decimal      @default(0) @map("tax_amount") @db.Decimal(12, 2)
@@ -481,11 +480,11 @@ model Order {
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  user            User             @relation(fields: [userId], references: [id])
-  vendor          Vendor           @relation(fields: [vendorId], references: [id])
-  businessAccount BusinessAccount? @relation(fields: [businessAccountId], references: [id])
-  outlet          Outlet?          @relation(fields: [outletId], references: [id])
-  deliverySlot    DeliverySlot?    @relation(fields: [deliverySlotId], references: [id])
+  user            User            @relation(fields: [userId], references: [id])
+  vendor          Vendor          @relation(fields: [vendorId], references: [id])
+  businessAccount BusinessAccount @relation(fields: [businessAccountId], references: [id])
+  outlet          Outlet          @relation(fields: [outletId], references: [id])
+  deliverySlot    DeliverySlot?   @relation(fields: [deliverySlotId], references: [id])
   items          OrderItem[]
   payments       Payment[]
   creditTxns     CreditTransaction[]
@@ -560,14 +559,14 @@ model QuickOrderList {
   userId    String   @map("user_id") @db.Uuid
   vendorId  String   @map("vendor_id") @db.Uuid
   // V2.2: scope = (businessAccountId, vendorId). userId stays as creator/audit metadata.
-  businessAccountId String? @map("business_account_id") @db.Uuid
+  businessAccountId String @map("business_account_id") @db.Uuid
   name      String   @db.VarChar(255)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   vendor          Vendor                 @relation(fields: [vendorId], references: [id])
-  businessAccount BusinessAccount?       @relation(fields: [businessAccountId], references: [id])
+  businessAccount BusinessAccount        @relation(fields: [businessAccountId], references: [id])
   items           QuickOrderListItem[]
 
   @@index([userId])
@@ -757,8 +756,8 @@ enum NotificationStatus {
 model Brand {
   id              String         @id @default(uuid()) @db.Uuid
   userId          String         @unique @map("user_id") @db.Uuid
-  // V2.2: Brand is a 1:1 extension of BusinessAccount (isBrand=true). Nullable during Step A.
-  businessAccountId String?      @unique @map("business_account_id") @db.Uuid
+  // V2.2: Brand is a 1:1 extension of BusinessAccount (isBrand=true). NOT NULL after Step C.
+  businessAccountId String       @unique @map("business_account_id") @db.Uuid
   name            String         @unique @db.VarChar(255)
   slug            String         @unique @db.VarChar(255)
   description     String?        @db.Text
@@ -775,7 +774,7 @@ model Brand {
   updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   user            User                  @relation(fields: [userId], references: [id])
-  businessAccount BusinessAccount?      @relation(fields: [businessAccountId], references: [id])
+  businessAccount BusinessAccount       @relation(fields: [businessAccountId], references: [id])
   masterProducts  BrandMasterProduct[]
   productMappings BrandProductMapping[]
   teamMembers     BrandTeamMember[]

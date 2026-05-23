@@ -4,6 +4,8 @@ import { PrismaAdapter } from '@auth/prisma-adapter';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { loadActiveContext, type ActiveContext } from '@/lib/activeContext';
+import { provisionDefaultAccount } from '@/lib/provisionAccount';
+import { uniqueHcid } from '@/lib/hcid';
 
 function vendorSlug(name: string): string {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50);
@@ -36,7 +38,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         isRegister: {},
       },
       async authorize(credentials) {
-        const phone = String(credentials?.phone ?? '').replace(/\D/g, '').replace(/^91/, '');
+        const phoneRaw = String(credentials?.phone ?? '').replace(/\D/g, '');
+        const phone = phoneRaw.length === 12 ? phoneRaw.replace(/^91/, '') : phoneRaw;
         const loginEmail = String(credentials?.loginEmail ?? '').trim().toLowerCase();
         const code = String(credentials?.code ?? '').trim();
         const isRegister = credentials?.isRegister === 'true' || credentials?.isRegister === true;
@@ -83,6 +86,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const rawPassword = String(credentials?.password ?? '');
           const passwordHash = rawPassword.length >= 6 ? await bcrypt.hash(rawPassword, 10) : null;
 
+          const hcidDisplay = await uniqueHcid();
           user = await prisma.user.create({
             data: {
               phone,
@@ -92,14 +96,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               password: passwordHash,
               role,
               isActive: true,
+              hcidDisplay,
             },
             select: { id: true, email: true, fullName: true, role: true, image: true, isActive: true },
+          });
+
+          // V2.2: provision the user's BusinessAccount + primary Outlet + Owner UserRole.
+          const provision = await provisionDefaultAccount({
+            userId: user.id,
+            kind: role === 'vendor' ? 'vendor' : 'customer',
+            businessName,
+            fullName,
           });
 
           if (role === 'vendor') {
             await prisma.vendor.create({
               data: {
                 userId: user.id,
+                businessAccountId: provision.businessAccountId,
                 businessName: businessName ?? fullName,
                 slug: vendorSlug(businessName ?? fullName),
                 isActive: false,
@@ -115,42 +129,25 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
 
-    // ── Phone-or-email + password ── (legacy linkedAccount switchToken path
-    //    is kept for one release cycle so existing client code does not break;
-    //    the new BusinessAccount switcher uses POST /api/v1/auth/switch-business-account.)
+    // ── Phone-or-email + password ──
+    //    V2.2 removed the legacy LinkedAccount switchToken branch; the new
+    //    BusinessAccount switcher uses POST /api/v1/auth/switch-business-account
+    //    followed by useSession().update(...) to rotate the JWT in place.
     Credentials({
       id: 'credentials',
       name: 'credentials',
       credentials: {
         email: { label: 'Phone or email', type: 'text' },
         password: { label: 'Password', type: 'password' },
-        switchToken: { label: 'Switch Token', type: 'text' },
       },
       async authorize(credentials) {
-        // Legacy switch-token flow (LinkedAccount). Removed when Step C drops the table.
-        if (credentials?.switchToken) {
-          const link = await prisma.linkedAccount.findUnique({
-            where: { switchToken: credentials.switchToken as string },
-            include: {
-              linkedUser: {
-                select: { id: true, email: true, fullName: true, role: true, image: true, isActive: true },
-              },
-            },
-          });
-          if (!link || !link.linkedUser.isActive) return null;
-          await prisma.linkedAccount.update({
-            where: { id: link.id },
-            data: { switchToken: typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).substring(2) },
-          });
-          return { id: link.linkedUser.id, email: link.linkedUser.email ?? undefined, name: link.linkedUser.fullName, role: link.linkedUser.role, image: link.linkedUser.image ?? undefined };
-        }
-
         const identifier = String(credentials?.email ?? '').trim();
         const password = String(credentials?.password ?? '');
         if (!identifier || !password) return null;
 
         const looksEmail = identifier.includes('@');
-        const phoneDigits = identifier.replace(/\D/g, '').replace(/^91/, '');
+        const phoneRawDigits = identifier.replace(/\D/g, '');
+        const phoneDigits = phoneRawDigits.length === 12 ? phoneRawDigits.replace(/^91/, '') : phoneRawDigits;
 
         const user = looksEmail
           ? await prisma.user.findUnique({
@@ -181,41 +178,74 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.id = user.id;
         token.role = (user as { role?: string }).role || 'customer';
         if (token.role === 'admin') {
-          const adminMembership = await prisma.adminTeamMember.findUnique({
-            where: { userId: token.id as string },
-            select: { role: true },
-          });
-          token.adminTeamRole = adminMembership?.role ?? 'owner';
-        }
-        // Pick the primary BusinessAccount + primary Outlet (V2.2)
-        const active = await loadActiveContext(token.id as string, null, null);
-        applyActiveContext(token, active);
-      }
-
-      // Session.update({ activeBusinessAccountId, activeOutletId }) — used by switch endpoints
-      if (trigger === 'update' && token.id) {
-        const u = (updatePayload ?? {}) as { activeBusinessAccountId?: string; activeOutletId?: string };
-        const targetAccountId = u.activeBusinessAccountId ?? (token.activeBusinessAccountId as string | undefined) ?? null;
-        const targetOutletId = u.activeOutletId ?? (token.activeOutletId as string | undefined) ?? null;
-        const active = await loadActiveContext(token.id as string, targetAccountId, targetOutletId);
-        applyActiveContext(token, active);
-
-        // Refresh role + adminTeamRole on update too
-        const freshUser = await prisma.user.findUnique({
-          where: { id: token.id as string },
-          select: { role: true },
-        });
-        if (freshUser) {
-          token.role = freshUser.role;
-          if (freshUser.role === 'admin') {
+          try {
             const adminMembership = await prisma.adminTeamMember.findUnique({
               where: { userId: token.id as string },
               select: { role: true },
             });
             token.adminTeamRole = adminMembership?.role ?? 'owner';
-          } else {
-            token.adminTeamRole = undefined;
+          } catch (err) {
+            console.error('[auth.jwt] adminTeamMember lookup failed on sign-in:', err);
+            token.adminTeamRole = 'owner';
           }
+        }
+        // Pick the primary BusinessAccount + primary Outlet (V2.2).
+        // loadActiveContext is wrapped so a transient DB error here doesn't
+        // poison the rest of the token (role still gets set above).
+        try {
+          const active = await loadActiveContext(token.id as string, null, null);
+          applyActiveContext(token, active);
+        } catch (err) {
+          console.error('[auth.jwt] loadActiveContext failed on sign-in:', err);
+          applyActiveContext(token, null);
+        }
+      }
+
+      // Session.update({ activeBusinessAccountId, activeOutletId }) — used by switch endpoints
+      // AND by the generic updateSession() refresh path (e.g. after "Become a vendor",
+      // after admin approval, etc). The role refresh below MUST run independently of
+      // loadActiveContext so a transient failure on one side never returns a stale role.
+      if (trigger === 'update' && token.id) {
+        const u = (updatePayload ?? {}) as { activeBusinessAccountId?: string; activeOutletId?: string };
+        const targetAccountId = u.activeBusinessAccountId ?? (token.activeBusinessAccountId as string | undefined) ?? null;
+        const targetOutletId = u.activeOutletId ?? (token.activeOutletId as string | undefined) ?? null;
+
+        try {
+          const active = await loadActiveContext(token.id as string, targetAccountId, targetOutletId);
+          applyActiveContext(token, active);
+        } catch (err) {
+          console.error('[auth.jwt] loadActiveContext failed on update:', err);
+          // Keep existing context fields rather than wiping them on a transient DB blip.
+        }
+
+        // Refresh role + adminTeamRole on update too. Wrapped separately so that
+        // a failure here does not undo the loadActiveContext result above, and so
+        // that a failure in loadActiveContext does not prevent the role refresh.
+        try {
+          const freshUser = await prisma.user.findUnique({
+            where: { id: token.id as string },
+            select: { role: true },
+          });
+          if (freshUser) {
+            token.role = freshUser.role;
+            if (freshUser.role === 'admin') {
+              try {
+                const adminMembership = await prisma.adminTeamMember.findUnique({
+                  where: { userId: token.id as string },
+                  select: { role: true },
+                });
+                token.adminTeamRole = adminMembership?.role ?? 'owner';
+              } catch (err) {
+                console.error('[auth.jwt] adminTeamMember lookup failed on update:', err);
+                token.adminTeamRole = 'owner';
+              }
+            } else {
+              token.adminTeamRole = undefined;
+            }
+          }
+        } catch (err) {
+          console.error('[auth.jwt] user role refresh failed on update:', err);
+          // Keep the previous role rather than returning an unparseable token.
         }
       }
       return token;

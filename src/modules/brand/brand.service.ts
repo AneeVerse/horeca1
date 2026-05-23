@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/events/emitter';
 import { Errors } from '@/middleware/errorHandler';
+import { provisionDefaultAccount } from '@/lib/provisionAccount';
 import { runMappingForProduct, runMappingForBrand, embedBrandMasterProduct } from './brand-mapper';
 function slugify(str: string): string {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -419,9 +420,18 @@ export class BrandService {
 
     const slug = slugify(input.name);
 
+    // V2.2: provision a BusinessAccount (isBrand=true) so the Brand can be linked.
+    // Idempotent — if the user already has one it's reused.
+    const provision = await provisionDefaultAccount({
+      userId: input.userId,
+      kind: 'brand',
+      businessName: input.name,
+    });
+
     const brand = await prisma.brand.create({
       data: {
         userId: input.userId,
+        businessAccountId: provision.businessAccountId,
         name: input.name,
         slug,
         description: input.description,
