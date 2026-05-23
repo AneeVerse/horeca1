@@ -17,7 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { OrderService } from '@/modules/order/order.service';
 import { createOrderSchema, listOrdersSchema } from '@/modules/order/order.validator';
 import { withAuth } from '@/middleware/auth';
-import { errorResponse } from '@/middleware/errorHandler';
+import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { checkRateLimit } from '@/lib/rateLimit';
 
 const orderService = new OrderService();
@@ -50,7 +50,13 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     const body = await req.json();
     const input = createOrderSchema.parse(body);
 
-    const result = await orderService.create(ctx.userId, input);
+    if (!ctx.activeBusinessAccountId || !ctx.activeOutletId) {
+      throw Errors.badRequest('No active outlet selected. Pick an outlet before placing orders.');
+    }
+    const result = await orderService.create(
+      { userId: ctx.userId, businessAccountId: ctx.activeBusinessAccountId, outletId: ctx.activeOutletId },
+      input,
+    );
     return NextResponse.json({ success: true, data: result }, { status: 201 });
   } catch (error) {
     return errorResponse(error);

@@ -11,6 +11,8 @@ import { adminOnly } from '@/middleware/rbac';
 import { requireAdminPerm } from '@/lib/teamPermissions';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { prisma } from '@/lib/prisma';
+import { provisionDefaultAccount } from '@/lib/provisionAccount';
+import { uniqueHcid } from '@/lib/hcid';
 import type { AuthContext } from '@/middleware/auth';
 
 const brandService = new BrandService();
@@ -55,6 +57,8 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
 
     const hashedPassword = await bcrypt.hash(input.password, 12);
 
+    const hcidDisplay = await uniqueHcid();
+
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -63,11 +67,19 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
           password: hashedPassword,
           role: 'brand',
           isActive: true,
+          hcidDisplay,
         },
       });
+      const provision = await provisionDefaultAccount({
+        userId: user.id,
+        kind: 'brand',
+        businessName: input.name,
+        fullName: input.fullName,
+      }, tx);
       const brand = await tx.brand.create({
         data: {
           userId: user.id,
+          businessAccountId: provision.businessAccountId,
           name: input.name,
           slug,
           description: input.description ?? null,

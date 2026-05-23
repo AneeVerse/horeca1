@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { CartService } from '@/modules/cart/cart.service';
+import { CartService, resolveCartContext } from '@/modules/cart/cart.service';
 import { withAuth } from '@/middleware/auth';
 import { errorResponse } from '@/middleware/errorHandler';
 
@@ -25,6 +25,7 @@ const mergeSchema = z.object({
 
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
+    const cartCtx = resolveCartContext(ctx);
     const body = await req.json();
     const { items } = mergeSchema.parse(body);
 
@@ -32,7 +33,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
       return NextResponse.json({ success: true, data: { merged: 0, skipped: 0 } });
     }
 
-    const existing = await cartService.getCart(ctx.userId);
+    const existing = await cartService.getCart(cartCtx);
     // Flatten existing items into a productId → quantity map
     const existingQty = new Map<string, number>();
     for (const group of existing.vendorGroups ?? []) {
@@ -51,7 +52,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
         continue;
       }
       try {
-        await cartService.addItem(ctx.userId, item.productId, item.vendorId, target);
+        await cartService.addItem(cartCtx, item.productId, item.vendorId, target);
         merged++;
       } catch {
         // Per-item validation failures (deactivated product, MOQ change, etc.)

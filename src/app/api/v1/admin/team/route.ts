@@ -8,6 +8,7 @@ import { adminOnly } from '@/middleware/rbac';
 import { requireAdminPerm } from '@/lib/teamPermissions';
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
+import { uniqueHcid } from '@/lib/hcid';
 import type { AuthContext } from '@/middleware/auth';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
 
@@ -53,6 +54,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
   if (existing) throw Errors.conflict('Email already in use');
 
   const hashedPassword = await bcrypt.hash(input.password, 12);
+  const hcidDisplay = await uniqueHcid();
 
   const result = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
@@ -62,6 +64,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
         password: hashedPassword,
         role: 'admin',
         isActive: true,
+        hcidDisplay,
       },
     });
     const member = await tx.adminTeamMember.create({

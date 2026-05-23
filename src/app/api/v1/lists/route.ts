@@ -30,7 +30,13 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     const body = await req.json();
     const data = createListSchema.parse(body);
 
-    const list = await listService.create(ctx.userId, data);
+    if (!ctx.activeBusinessAccountId) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NO_ACTIVE_ACCOUNT', message: 'Pick an account before creating lists.' } },
+        { status: 400 },
+      );
+    }
+    const list = await listService.create(ctx.userId, ctx.activeBusinessAccountId, data);
     return NextResponse.json({ success: true, data: list }, { status: 201 });
   } catch (error) {
     return errorResponse(error);

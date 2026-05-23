@@ -104,7 +104,8 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       allowedFields.email = e || null;
     }
     if (typeof body.phone === 'string') {
-      const p = body.phone.replace(/\D/g, '').replace(/^91/, '');
+      const pDigits = body.phone.replace(/\D/g, '');
+      const p = pDigits.length === 12 ? pDigits.replace(/^91/, '') : pDigits;
       if (p && !/^\d{10}$/.test(p)) throw Errors.badRequest('Enter a valid 10-digit phone number');
       if (p) {
         const taken = await prisma.user.findFirst({ where: { phone: p, NOT: { id } }, select: { id: true } });

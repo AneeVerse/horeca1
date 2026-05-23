@@ -41,11 +41,15 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     const id = extractAccountId(req);
     await assertAccountPermission(ctx.userId, id, 'outlets.create');
     const body = CreateBody.parse(await req.json());
+    // "Address complete" = has a valid 6-digit pincode. Pincode is what serviceability
+    // and checkout actually use; lat/lng is nice-to-have. Without this rule, every new
+    // outlet would be permanently flagged "Address needed" because we have no geocoder yet.
+    const hasUsablePincode = !!body.pincode && /^\d{6}$/.test(body.pincode);
     const outlet = await prisma.outlet.create({
       data: {
         businessAccountId: id,
         ...body,
-        requiresAddressUpdate: !(body.latitude && body.longitude),
+        requiresAddressUpdate: !hasUsablePincode,
       },
     });
     return NextResponse.json({ success: true, data: outlet }, { status: 201 });

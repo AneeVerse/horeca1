@@ -62,7 +62,8 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
 
     // Find the invitee user (must already have an account; full invite-by-email flow is V2.3).
     const looksEmail = body.identifier.includes('@');
-    const phoneDigits = body.identifier.replace(/\D/g, '').replace(/^91/, '');
+    const phoneRaw = body.identifier.replace(/\D/g, '');
+    const phoneDigits = phoneRaw.length === 12 ? phoneRaw.replace(/^91/, '') : phoneRaw;
     const invitee = looksEmail
       ? await prisma.user.findUnique({ where: { email: body.identifier.toLowerCase() }, select: { id: true } })
       : (phoneDigits.length === 10

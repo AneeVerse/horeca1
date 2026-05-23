@@ -12,6 +12,8 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requireAdminPerm } from '@/lib/teamPermissions';
+import { provisionDefaultAccount } from '@/lib/provisionAccount';
+import { uniqueHcid } from '@/lib/hcid';
 
 function slugify(name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -123,6 +125,8 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 
     const hashedPassword = await bcrypt.hash(input.password, 12);
 
+    const hcidDisplay = await uniqueHcid();
+
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -132,11 +136,19 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           role: 'vendor',
           phone: input.phone ?? null,
           isActive: true,
+          hcidDisplay,
         },
       });
+      const provision = await provisionDefaultAccount({
+        userId: user.id,
+        kind: 'vendor',
+        businessName: input.businessName,
+        fullName: input.fullName,
+      }, tx);
       const vendor = await tx.vendor.create({
         data: {
           userId: user.id,
+          businessAccountId: provision.businessAccountId,
           businessName: input.businessName,
           slug,
           description: input.description ?? null,

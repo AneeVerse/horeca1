@@ -30,10 +30,26 @@ export const PATCH = withAuth(async (req: NextRequest, ctx) => {
   try {
     const { id, outletId } = extractIds(req);
     await assertAccountPermission(ctx.userId, id, 'outlets.edit');
-    const existing = await prisma.outlet.findFirst({ where: { id: outletId, businessAccountId: id }, select: { id: true } });
+    const existing = await prisma.outlet.findFirst({
+      where: { id: outletId, businessAccountId: id },
+      select: { id: true, pincode: true, requiresAddressUpdate: true },
+    });
     if (!existing) throw Errors.notFound('Outlet');
     const body = PatchBody.parse(await req.json());
-    const updated = await prisma.outlet.update({ where: { id: outletId }, data: body });
+
+    // Auto-clear "address needed" once a valid 6-digit pincode lands.
+    // Pincode is what serviceability + checkout actually need; lat/lng is nice-to-have
+    // for future map features. Without this, users were stuck with the amber chip
+    // forever because the legacy seed never asked for coordinates.
+    const data: Record<string, unknown> = { ...body };
+    if (body.requiresAddressUpdate === undefined) {
+      const incomingPincode = body.pincode === undefined ? existing.pincode : body.pincode;
+      if (incomingPincode && /^\d{6}$/.test(incomingPincode)) {
+        data.requiresAddressUpdate = false;
+      }
+    }
+
+    const updated = await prisma.outlet.update({ where: { id: outletId }, data });
     return NextResponse.json({ success: true, data: updated });
   } catch (err) { return errorResponse(err); }
 });

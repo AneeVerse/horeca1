@@ -11,6 +11,8 @@ import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requireAdminPerm } from '@/lib/teamPermissions';
 import { withRateLimit } from '@/middleware/withRateLimit';
+import { provisionDefaultAccount } from '@/lib/provisionAccount';
+import { uniqueHcid } from '@/lib/hcid';
 import type { Role } from '@prisma/client';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -90,7 +92,8 @@ export const POST = withRateLimit(adminOnly(async (req: NextRequest, ctx) => {
     const body = await req.json();
 
     const fullName = String(body.fullName ?? '').trim();
-    const phone = String(body.phone ?? '').replace(/\D/g, '').replace(/^91/, '');
+    const phoneDigits = String(body.phone ?? '').replace(/\D/g, '');
+    const phone = phoneDigits.length === 12 ? phoneDigits.replace(/^91/, '') : phoneDigits;
     const rawEmail = String(body.email ?? '').trim().toLowerCase();
     const email = rawEmail && EMAIL_RE.test(rawEmail) ? rawEmail : null;
     const businessName = String(body.businessName ?? '').trim() || null;
@@ -114,6 +117,7 @@ export const POST = withRateLimit(adminOnly(async (req: NextRequest, ctx) => {
     }
 
     const passwordHash = password ? await bcrypt.hash(password, 10) : null;
+    const hcidDisplay = await uniqueHcid();
 
     const user = await prisma.user.create({
       data: {
@@ -126,6 +130,7 @@ export const POST = withRateLimit(adminOnly(async (req: NextRequest, ctx) => {
         password: passwordHash,
         role,
         isActive: true,
+        hcidDisplay,
       },
       select: {
         id: true,
@@ -139,10 +144,20 @@ export const POST = withRateLimit(adminOnly(async (req: NextRequest, ctx) => {
       },
     });
 
+    // V2.2: auto-provision a BusinessAccount + primary Outlet + Owner role for the new user.
+    const provision = await provisionDefaultAccount({
+      userId: user.id,
+      kind: role === 'vendor' ? 'vendor' : 'customer',
+      businessName,
+      fullName,
+      gstNumber,
+    });
+
     if (role === 'vendor') {
       await prisma.vendor.create({
         data: {
           userId: user.id,
+          businessAccountId: provision.businessAccountId,
           businessName: businessName ?? fullName,
           slug: vendorSlug(businessName ?? fullName),
           isActive: false,

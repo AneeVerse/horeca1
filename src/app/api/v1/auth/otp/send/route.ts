@@ -49,7 +49,7 @@ async function postHandler(req: NextRequest) {
     const mode: 'login' | 'register' = body.mode === 'register' ? 'register' : 'login';
 
     const rawPhone = String(body.phone ?? '').replace(/\D/g, '');
-    const phone = rawPhone ? rawPhone.replace(/^91/, '') : '';
+    const phone = rawPhone.length === 12 ? rawPhone.replace(/^91/, '') : rawPhone;
     const email = String(body.email ?? '').trim().toLowerCase();
 
     const usePhone = !!phone;

@@ -9,6 +9,7 @@ import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requireVendorPerm } from '@/lib/teamPermissions';
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
+import { uniqueHcid } from '@/lib/hcid';
 import type { AuthContext } from '@/middleware/auth';
 
 const createMemberSchema = z.object({
@@ -66,6 +67,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
   if (existing) throw Errors.conflict('Email already in use');
 
   const hashedPassword = await bcrypt.hash(input.password, 12);
+  const hcidDisplay = await uniqueHcid();
 
   const result = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
@@ -75,6 +77,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
         password: hashedPassword,
         role: 'vendor',
         isActive: true,
+        hcidDisplay,
       },
     });
     const member = await tx.vendorTeamMember.create({

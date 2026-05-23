@@ -22,7 +22,13 @@ export const POST = withAuth(async (
     // URL: /api/v1/vendors/{id}/follow → segments[4] is the vendor ID
     const vendorId = segments[4];
 
-    await vendorService.follow(ctx.userId, vendorId);
+    if (!ctx.activeBusinessAccountId) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NO_ACTIVE_ACCOUNT', message: 'Pick an account before following vendors.' } },
+        { status: 400 },
+      );
+    }
+    await vendorService.follow(ctx.userId, ctx.activeBusinessAccountId, vendorId);
     return NextResponse.json({ success: true, message: 'Vendor followed' });
   } catch (error) {
     return errorResponse(error);
@@ -38,7 +44,13 @@ export const DELETE = withAuth(async (
     const segments = url.pathname.split('/');
     const vendorId = segments[4];
 
-    await vendorService.unfollow(ctx.userId, vendorId);
+    if (!ctx.activeBusinessAccountId) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NO_ACTIVE_ACCOUNT', message: 'Pick an account before unfollowing vendors.' } },
+        { status: 400 },
+      );
+    }
+    await vendorService.unfollow(ctx.activeBusinessAccountId, vendorId);
     return NextResponse.json({ success: true, message: 'Vendor unfollowed' });
   } catch (error) {
     return errorResponse(error);
