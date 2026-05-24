@@ -6,6 +6,8 @@ import { prisma } from '@/lib/prisma';
 import { loadActiveContext, type ActiveContext } from '@/lib/activeContext';
 import { provisionDefaultAccount } from '@/lib/provisionAccount';
 import { uniqueHcid } from '@/lib/hcid';
+import { flatten } from '@/lib/permissions/engine';
+import type { PermissionKey, PermissionsJson } from '@/lib/permissions/registry';
 
 function vendorSlug(name: string): string {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50);
@@ -199,6 +201,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           console.error('[auth.jwt] loadActiveContext failed on sign-in:', err);
           applyActiveContext(token, null);
         }
+        // For admin users, merge the admin-template permissions on top of any
+        // BusinessAccount permissions already in the token. Admin staff are
+        // intentionally outside the BusinessAccount system (see
+        // multi-account-rbac-implementation-plan.md §2), so this is the only
+        // path that lights up the admin permission set.
+        if (token.role === 'admin') {
+          await applyAdminPermissions(token);
+        }
       }
 
       // Session.update({ activeBusinessAccountId, activeOutletId }) — used by switch endpoints
@@ -239,6 +249,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 console.error('[auth.jwt] adminTeamMember lookup failed on update:', err);
                 token.adminTeamRole = 'owner';
               }
+              await applyAdminPermissions(token);
             } else {
               token.adminTeamRole = undefined;
             }
@@ -276,6 +287,51 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 });
 
 // ─── helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Load the AccountRole assigned to an admin user via AdminTeamMember.roleId
+ * and merge its flattened permission set into token.permissions. Existing
+ * permissions from loadActiveContext (if the admin is also a BusinessAccount
+ * member) are preserved via union — additive merge, matches the engine
+ * contract in src/lib/permissions/engine.ts mergePermissions().
+ *
+ * If the admin's AdminTeamMember row has no roleId yet (pre-backfill or
+ * legacy member created via the old enum-only path), no permissions are
+ * added — every admin route call site has its own legacy fallback while
+ * the migration is incomplete.
+ */
+async function applyAdminPermissions(token: Record<string, unknown>): Promise<void> {
+  try {
+    const member = await prisma.adminTeamMember.findUnique({
+      where: { userId: token.id as string },
+      select: { roleRef: { select: { permissions: true } } },
+    });
+
+    let adminPerms = flatten(member?.roleRef?.permissions as PermissionsJson | null | undefined);
+
+    // Fallback: admin user with no AdminTeamMember row at all = seeded owner.
+    // Legacy semantics granted them full access; preserve that by loading the
+    // Super Admin template. Without this, the original platform admin loses
+    // every admin-route permission immediately after the migration.
+    if (adminPerms.size === 0 && !member) {
+      const superAdmin = await prisma.accountRole.findFirst({
+        where: { name: 'Super Admin', scope: 'admin', isTemplate: true, businessAccountId: null },
+        select: { permissions: true },
+      });
+      adminPerms = flatten(superAdmin?.permissions as PermissionsJson | null | undefined);
+    }
+    if (adminPerms.size === 0) return;
+
+    const existing = new Set<PermissionKey>(
+      Array.isArray(token.permissions) ? (token.permissions as PermissionKey[]) : [],
+    );
+    for (const k of adminPerms) existing.add(k);
+    token.permissions = Array.from(existing);
+  } catch (err) {
+    console.error('[auth.jwt] applyAdminPermissions failed:', err);
+    // Keep existing token.permissions unchanged on failure.
+  }
+}
 
 function applyActiveContext(token: Record<string, unknown>, active: ActiveContext | null) {
   if (!active) {

@@ -9,7 +9,7 @@
  * Replaces the hardcoded matrix in the legacy src/lib/teamPermissions.ts.
  */
 
-import { NextResponse } from 'next/server';
+import { Errors } from '@/middleware/errorHandler';
 import { ALL_PERMISSION_KEYS, type PermissionKey, type PermissionsJson } from './registry';
 
 // ─── flatten ──────────────────────────────────────────────────────────────
@@ -65,36 +65,23 @@ export function hasAllPermissions(session: SessionLike | null | undefined, ...ke
   return keys.every((k) => perms.includes(k));
 }
 
-// ─── middleware wrappers ──────────────────────────────────────────────────
-// These wrap a route handler and return 403 if the active session lacks the permission.
-// They expect the handler to be already wrapped in `withAuth` so `ctx.session` is present.
-
-type Ctx = { session: SessionLike };
-type Handler<TArgs extends unknown[]> = (req: Request, ctx: Ctx & { params?: unknown }, ...rest: TArgs) => Promise<Response> | Response;
-
-function forbidden(key: PermissionKey | PermissionKey[]): Response {
-  return NextResponse.json(
-    { error: 'forbidden', requiredPermission: key },
-    { status: 403 },
-  );
+/**
+ * Throwing variant used inside route handlers that are already wrapped in
+ * adminOnly / vendorOnly / brandOnly. Mirrors the contract of the legacy
+ * `requireAdminPerm` / `requireVendorPerm` / `requireBrandPerm` so swapping
+ * one for the other is a mechanical edit. Errors.forbidden is caught by
+ * errorResponse() in middleware/errorHandler.ts and rendered as a 403.
+ */
+export function requirePermission(session: SessionLike | null | undefined, key: PermissionKey): void {
+  if (!hasPermission(session, key)) {
+    throw Errors.forbidden(`Requires ${key} permission`);
+  }
 }
 
-export function requirePermission<TArgs extends unknown[]>(key: PermissionKey) {
-  return function (handler: Handler<TArgs>) {
-    return async function wrapped(req: Request, ctx: Ctx & { params?: unknown }, ...rest: TArgs) {
-      if (!hasPermission(ctx.session, key)) return forbidden(key);
-      return handler(req, ctx, ...rest);
-    };
-  };
-}
-
-export function requireAnyPermission<TArgs extends unknown[]>(...keys: PermissionKey[]) {
-  return function (handler: Handler<TArgs>) {
-    return async function wrapped(req: Request, ctx: Ctx & { params?: unknown }, ...rest: TArgs) {
-      if (!hasAnyPermission(ctx.session, ...keys)) return forbidden(keys);
-      return handler(req, ctx, ...rest);
-    };
-  };
+export function requireAnyPermissionInline(session: SessionLike | null | undefined, ...keys: PermissionKey[]): void {
+  if (!hasAnyPermission(session, ...keys)) {
+    throw Errors.forbidden(`Requires one of: ${keys.join(', ')}`);
+  }
 }
 
 // ─── utility: validate a PermissionsJson at write time ───────────────────

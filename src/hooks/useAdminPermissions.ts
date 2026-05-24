@@ -1,11 +1,21 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
+import type { PermissionKey } from '@/lib/permissions/registry';
 
-export type AdminTeamRole = 'owner' | 'manager' | 'editor' | 'viewer';
-
+/**
+ * Convenience flags consumed by the admin UI. Derived from the flattened
+ * permission set in session.user.permissions (populated by auth.ts jwt
+ * callback → applyAdminPermissions). Server-side route handlers do their
+ * own check via requirePermission(session, 'x.y') in engine.ts — this hook
+ * is only for show/hide decisions in the client UI.
+ *
+ * The shape is preserved from the legacy hook so existing call sites keep
+ * working. New callers should prefer `useHasPermission('module.action')`
+ * once that hook lands, or call hasPermission(session, key) directly.
+ */
 export interface AdminPermissions {
-  role: AdminTeamRole;
+  loading: boolean;
   canRead: boolean;
   canWriteOrders: boolean;
   canWriteProducts: boolean;
@@ -14,17 +24,20 @@ export interface AdminPermissions {
   canManageTeam: boolean;
 }
 
-const MATRIX: Record<AdminTeamRole, Omit<AdminPermissions, 'role'>> = {
-  owner:   { canRead: true, canWriteOrders: true,  canWriteProducts: true,  canWriteInventory: true,  canWriteSettings: true,  canManageTeam: true  },
-  manager: { canRead: true, canWriteOrders: true,  canWriteProducts: true,  canWriteInventory: true,  canWriteSettings: true,  canManageTeam: false },
-  editor:  { canRead: true, canWriteOrders: false, canWriteProducts: true,  canWriteInventory: false, canWriteSettings: false, canManageTeam: false },
-  viewer:  { canRead: true, canWriteOrders: false, canWriteProducts: false, canWriteInventory: false, canWriteSettings: false, canManageTeam: false },
-};
+function has(perms: readonly string[] | undefined, key: PermissionKey): boolean {
+  return !!perms && perms.includes(key);
+}
 
 export function useAdminPermissions(): AdminPermissions {
-  const { data: session } = useSession();
-  const raw = (session?.user as { adminTeamRole?: string } | undefined)?.adminTeamRole;
-  const role = (raw as AdminTeamRole) ?? 'owner';
-  const perms = MATRIX[role] ?? MATRIX.viewer;
-  return { role, ...perms };
+  const { data: session, status } = useSession();
+  const perms = (session?.user as { permissions?: string[] } | undefined)?.permissions;
+  return {
+    loading: status === 'loading',
+    canRead: has(perms, 'dashboard.view'),
+    canWriteOrders: has(perms, 'orders.edit'),
+    canWriteProducts: has(perms, 'products.edit'),
+    canWriteInventory: has(perms, 'inventory.edit'),
+    canWriteSettings: has(perms, 'settings.edit'),
+    canManageTeam: has(perms, 'users.create'),
+  };
 }
