@@ -895,15 +895,18 @@ model VendorTeamMember {
   vendorId  String   @map("vendor_id") @db.Uuid
   userId    String   @map("user_id") @db.Uuid
   role      TeamRole @default(viewer)
+  roleId    String?  @map("role_id") @db.Uuid
   invitedBy String?  @map("invited_by") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  vendor    Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  user      User     @relation("VendorMemberships", fields: [userId], references: [id], onDelete: Cascade)
-  inviter   User?    @relation("VendorInvites", fields: [invitedBy], references: [id])
+  vendor    Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  user      User         @relation("VendorMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  inviter   User?        @relation("VendorInvites", fields: [invitedBy], references: [id])
+  roleRef   AccountRole? @relation("VendorTeamMemberRole", fields: [roleId], references: [id], onDelete: Restrict)
 
   @@unique([vendorId, userId])
   @@index([userId])
+  @@index([roleId])
   @@map("vendor_team_members")
 }
 
@@ -912,15 +915,18 @@ model BrandTeamMember {
   brandId   String   @map("brand_id") @db.Uuid
   userId    String   @map("user_id") @db.Uuid
   role      TeamRole @default(viewer)
+  roleId    String?  @map("role_id") @db.Uuid
   invitedBy String?  @map("invited_by") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  user      User     @relation("BrandMemberships", fields: [userId], references: [id], onDelete: Cascade)
-  inviter   User?    @relation("BrandInvites", fields: [invitedBy], references: [id])
+  brand     Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user      User         @relation("BrandMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  inviter   User?        @relation("BrandInvites", fields: [invitedBy], references: [id])
+  roleRef   AccountRole? @relation("BrandTeamMemberRole", fields: [roleId], references: [id], onDelete: Restrict)
 
   @@unique([brandId, userId])
   @@index([userId])
+  @@index([roleId])
   @@map("brand_team_members")
 }
 
@@ -928,12 +934,15 @@ model AdminTeamMember {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @unique @map("user_id") @db.Uuid
   role      TeamRole @default(viewer)
+  roleId    String?  @map("role_id") @db.Uuid
   invitedBy String?  @map("invited_by") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  user      User     @relation("AdminMembership", fields: [userId], references: [id], onDelete: Cascade)
-  inviter   User?    @relation("AdminInvites", fields: [invitedBy], references: [id])
+  user      User         @relation("AdminMembership", fields: [userId], references: [id], onDelete: Cascade)
+  inviter   User?        @relation("AdminInvites", fields: [invitedBy], references: [id])
+  roleRef   AccountRole? @relation("AdminTeamMemberRole", fields: [roleId], references: [id], onDelete: Restrict)
 
+  @@index([roleId])
   @@map("admin_team_members")
 }
 
@@ -1197,8 +1206,11 @@ model AccountRole {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  businessAccount BusinessAccount? @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
-  userRoles       UserRole[]
+  businessAccount    BusinessAccount?    @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+  userRoles          UserRole[]
+  vendorTeamMembers  VendorTeamMember[]  @relation("VendorTeamMemberRole")
+  brandTeamMembers   BrandTeamMember[]   @relation("BrandTeamMemberRole")
+  adminTeamMembers   AdminTeamMember[]   @relation("AdminTeamMemberRole")
 
   @@unique([businessAccountId, name])
   @@index([isTemplate, scope])
