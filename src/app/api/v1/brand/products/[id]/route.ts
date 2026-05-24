@@ -7,14 +7,14 @@ import { BrandService } from '@/modules/brand/brand.service';
 import { updateBrandProductSchema } from '@/modules/brand/brand.validator';
 import { brandOnly } from '@/middleware/rbac';
 import { resolveUserId, resolveBrandContext } from '@/lib/resolveBrandId';
-import { requireBrandPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import type { AuthContext } from '@/middleware/auth';
 
 const brandService = new BrandService();
 
 export const PATCH = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
-  const { teamRole } = await resolveBrandContext(ctx, req);
-  requireBrandPerm(teamRole, 'products:write');
+  await resolveBrandContext(ctx, req); // tenant guard
+  requirePermission(ctx, 'products.edit');
   const userId = await resolveUserId(ctx, req);
   const productId = req.nextUrl.pathname.split('/').at(-1)!;
   const body = await req.json();
@@ -24,8 +24,8 @@ export const PATCH = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
 });
 
 export const DELETE = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
-  const { teamRole } = await resolveBrandContext(ctx, req);
-  requireBrandPerm(teamRole, 'products:write');
+  await resolveBrandContext(ctx, req); // tenant guard
+  requirePermission(ctx, 'products.delete');
   const userId = await resolveUserId(ctx, req);
   const productId = req.nextUrl.pathname.split('/').at(-1)!;
   await brandService.deleteMasterProduct(userId, productId);

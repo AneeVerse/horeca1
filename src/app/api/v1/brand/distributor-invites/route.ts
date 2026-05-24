@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { brandOnly } from '@/middleware/rbac';
 import { resolveBrandContext } from '@/lib/resolveBrandId';
-import { requireBrandPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { errorResponse } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
 import type { AuthContext } from '@/middleware/auth';
@@ -37,8 +37,8 @@ export const GET = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
 
 export const POST = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
-    const { brandId, teamRole } = await resolveBrandContext(ctx, req);
-    requireBrandPerm(teamRole, 'settings:write');
+    const { brandId } = await resolveBrandContext(ctx, req);
+    requirePermission(ctx, 'brands.edit');
     const body = await req.json();
     const input = createSchema.parse(body);
 

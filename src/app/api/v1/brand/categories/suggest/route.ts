@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { brandOnly } from '@/middleware/rbac';
 import { resolveBrandContext, resolveUserId } from '@/lib/resolveBrandId';
-import { requireBrandPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { errorResponse } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
 import type { AuthContext } from '@/middleware/auth';
@@ -24,8 +24,8 @@ const schema = z.object({
 
 export const POST = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
-    const { teamRole } = await resolveBrandContext(ctx, req);
-    requireBrandPerm(teamRole, 'settings:write');
+    await resolveBrandContext(ctx, req); // tenant guard
+    requirePermission(ctx, 'products.create');
     const userId = await resolveUserId(ctx, req);
 
     const body = await req.json();

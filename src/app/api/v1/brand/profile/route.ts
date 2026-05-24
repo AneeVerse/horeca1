@@ -8,7 +8,7 @@ import { BrandService } from '@/modules/brand/brand.service';
 import { createBrandSchema, updateBrandSchema } from '@/modules/brand/brand.validator';
 import { brandOnly } from '@/middleware/rbac';
 import { resolveUserId, resolveBrandContext } from '@/lib/resolveBrandId';
-import { requireBrandPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import type { AuthContext } from '@/middleware/auth';
 
 const brandService = new BrandService();
@@ -28,8 +28,8 @@ export const POST = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
 });
 
 export const PATCH = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
-  const { teamRole } = await resolveBrandContext(ctx, req);
-  requireBrandPerm(teamRole, 'settings:write');
+  await resolveBrandContext(ctx, req); // tenant guard
+  requirePermission(ctx, 'settings.edit');
   const userId = await resolveUserId(ctx, req);
   const body = await req.json();
   const input = updateBrandSchema.parse(body);
