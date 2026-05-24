@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
-import { requireVendorPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 
 const timeRegex = /^\d{2}:\d{2}$/;
 
@@ -35,8 +35,8 @@ const deleteSchema = z.object({
 // POST — add new delivery slot
 export const POST = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
-    requireVendorPerm(teamRole, 'settings:write');
+    const { vendorId } = await resolveVendorContext(ctx, req);
+    requirePermission(ctx, 'settings.edit');
     const body = await req.json();
     const data = addSchema.parse(body);
 
@@ -59,8 +59,8 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
 // PATCH — update delivery slot fields
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
-    requireVendorPerm(teamRole, 'settings:write');
+    const { vendorId } = await resolveVendorContext(ctx, req);
+    requirePermission(ctx, 'settings.edit');
     const body = await req.json();
     const { id, ...fields } = updateSchema.parse(body);
 
@@ -82,8 +82,8 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
 // DELETE — remove delivery slot
 export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
-    requireVendorPerm(teamRole, 'settings:write');
+    const { vendorId } = await resolveVendorContext(ctx, req);
+    requirePermission(ctx, 'settings.edit');
     const body = await req.json();
     const { id } = deleteSchema.parse(body);
 

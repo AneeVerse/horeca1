@@ -11,7 +11,7 @@ import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { InventoryService } from '@/modules/inventory/inventory.service';
 import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
-import { requireVendorPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 
 // Validation schema for inventory updates
 const updateInventorySchema = z.object({
@@ -50,8 +50,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 // PATCH — update stock quantity or low-stock threshold for a product
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
-    requireVendorPerm(teamRole, 'inventory:write');
+    const { vendorId } = await resolveVendorContext(ctx, req);
+    requirePermission(ctx, 'inventory.edit');
 
     const body = await req.json();
     const { productId, qtyAvailable, lowStockThreshold } = updateInventorySchema.parse(body);

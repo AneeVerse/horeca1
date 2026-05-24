@@ -11,7 +11,7 @@ import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { CatalogService } from '@/modules/catalog/catalog.service';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
-import { requireVendorPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 
 // Validation schema for product updates (all fields optional)
 const updateProductSchema = z.object({
@@ -56,8 +56,8 @@ function extractId(req: NextRequest): string {
 // PATCH — update product fields
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
-    requireVendorPerm(teamRole, 'products:write');
+    const { vendorId } = await resolveVendorContext(ctx, req);
+    requirePermission(ctx, 'products.edit');
 
     const productId = extractId(req);
     const body = await req.json();
@@ -125,8 +125,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 // can be re-added immediately.
 export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
-    requireVendorPerm(teamRole, 'products:write');
+    const { vendorId } = await resolveVendorContext(ctx, req);
+    requirePermission(ctx, 'products.delete');
 
     const productId = extractId(req);
 

@@ -10,7 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
-import { requireVendorPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 
 // Validation schema for profile updates — whitelist of allowed fields
 const updateSettingsSchema = z.object({
@@ -67,8 +67,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 // PATCH — update whitelisted vendor profile fields
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
-    requireVendorPerm(teamRole, 'settings:write');
+    const { vendorId } = await resolveVendorContext(ctx, req);
+    requirePermission(ctx, 'settings.edit');
 
     const body = await req.json();
     const allowedFields = updateSettingsSchema.parse(body);

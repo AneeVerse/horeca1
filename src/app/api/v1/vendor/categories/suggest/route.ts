@@ -10,7 +10,7 @@ import { vendorOnly } from '@/middleware/rbac';
 import { errorResponse } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
-import { requireVendorPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 
 // Auto-generate slug from name
 function slugify(name: string): string {
@@ -30,8 +30,8 @@ const suggestCategorySchema = z.object({
 // POST — suggest a new category (pending admin approval)
 export const POST = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const { teamRole } = await resolveVendorContext(ctx, req);
-    requireVendorPerm(teamRole, 'products:write');
+    await resolveVendorContext(ctx, req); // tenant guard
+    requirePermission(ctx, 'products.create');
     const body = await req.json();
     const data = suggestCategorySchema.parse(body);
 

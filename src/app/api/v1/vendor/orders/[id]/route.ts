@@ -11,7 +11,7 @@ import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { OrderService } from '@/modules/order/order.service';
 import { updateStatusSchema } from '@/modules/order/order.validator';
 import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
-import { requireVendorPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 
 // Helper: extract the [id] segment from /api/v1/vendor/orders/{id}
 function extractId(req: NextRequest): string {
@@ -92,8 +92,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 // PATCH — update order status through fulfillment lifecycle
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
-    const { vendorId, teamRole } = await resolveVendorContext(ctx, req);
-    requireVendorPerm(teamRole, 'orders:write');
+    const { vendorId } = await resolveVendorContext(ctx, req);
+    requirePermission(ctx, 'orders.edit');
 
     const orderId = extractId(req);
     const body = await req.json();
