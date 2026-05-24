@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { provisionDefaultAccount } from '@/lib/provisionAccount';
 import { uniqueHcid } from '@/lib/hcid';
 
@@ -111,7 +111,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 // POST — admin directly creates a verified vendor (no application needed)
 export const POST = adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'settings:write');
+    requirePermission(ctx, 'vendors.create');
 
     const body = await req.json();
     const input = createVendorSchema.parse(body);

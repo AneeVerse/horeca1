@@ -1,97 +1,172 @@
-// GET  /api/v1/admin/team — list admin team members
-// POST /api/v1/admin/team — create a new admin team member (owner only — first admin)
+// GET  /api/v1/admin/team — list admin team members (with assigned Role)
+// POST /api/v1/admin/team — invite a user to the admin team
+//
+// V2.2 RBAC:
+//   - permission check uses the new requirePermission engine
+//   - POST body: { identifier (email|phone), fullName?, password?, roleId } —
+//     mirrors the invite UX in /account/[id]/users. If the identifier matches
+//     an existing User we attach them; otherwise we create one (admins are
+//     internal staff so inline credential issuance is acceptable here, unlike
+//     the customer profile flow where invitee must pre-exist).
+//   - The new roleId FK is set; the legacy `role` enum is also written for
+//     one release to keep any unmigrated read path working.
 
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { adminOnly } from '@/middleware/rbac';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { prisma } from '@/lib/prisma';
-import { Errors } from '@/middleware/errorHandler';
+import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { uniqueHcid } from '@/lib/hcid';
-import type { AuthContext } from '@/middleware/auth';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
+import { toTeamMemberDTO, teamMemberInclude, type TeamMemberDTO } from '@/lib/teamMemberShape';
+import type { AuthContext } from '@/middleware/auth';
+import type { TeamRole } from '@prisma/client';
 
-const createMemberSchema = z.object({
-  fullName: z.string().min(2).max(100),
-  email: z.string().email(),
-  password: z.string().min(6).max(72),
-  role: z.enum(['manager', 'editor', 'viewer']),
+const inviteSchema = z.object({
+  identifier: z.string().min(3).max(255),
+  fullName: z.string().min(2).max(100).optional(),
+  password: z.string().min(6).max(72).optional(),
+  roleId: z.string().uuid(),
 });
 
-export const GET = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
-  // Find all admin users
-  const admins = await prisma.user.findMany({
-    where: { role: 'admin' },
-    orderBy: { createdAt: 'asc' },
-    select: { id: true, fullName: true, email: true, isActive: true, createdAt: true },
-  });
+// Map seeded admin role name → legacy enum so we can keep writing the enum
+// column during the transition window (auth.ts still reads it as a fallback).
+const ADMIN_ROLE_TO_ENUM: Record<string, TeamRole> = {
+  'Super Admin': 'owner',
+  'Ops Admin': 'manager',
+  'Finance Admin': 'manager',
+  'Support Agent': 'viewer',
+  Editor: 'editor',
+  Viewer: 'viewer',
+};
 
-  // Get team role records
-  const teamRecords = await prisma.adminTeamMember.findMany({
-    select: { userId: true, role: true },
-  });
-  const roleMap = new Map(teamRecords.map(r => [r.userId, r.role]));
+export const GET = adminOnly(async (_req: NextRequest, _ctx: AuthContext) => {
+  try {
+    const admins = await prisma.user.findMany({
+      where: { role: 'admin' },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        hcidDisplay: true,
+        isActive: true,
+        createdAt: true,
+      },
+    });
 
-  const data = admins.map(a => ({
-    id: roleMap.has(a.id) ? teamRecords.find(r => r.userId === a.id)!.userId : 'owner-' + a.id,
-    role: roleMap.get(a.id) ?? 'owner',
-    isOwner: !roleMap.has(a.id),
-    createdAt: a.createdAt,
-    user: { id: a.id, fullName: a.fullName, email: a.email, isActive: a.isActive },
-  }));
+    const members = await prisma.adminTeamMember.findMany({
+      where: { userId: { in: admins.map((a) => a.id) } },
+      include: teamMemberInclude,
+    });
+    const memberByUserId = new Map(members.map((m) => [m.userId, m]));
 
-  return NextResponse.json({ success: true, data });
+    const data: TeamMemberDTO[] = admins.map((a) => {
+      const m = memberByUserId.get(a.id);
+      return toTeamMemberDTO({
+        id: m?.id ?? `owner-${a.id}`,
+        createdAt: m?.createdAt ?? a.createdAt,
+        legacyRole: m?.role ?? 'owner',
+        // Seeded admin owner has no AdminTeamMember row.
+        isOwner: !m,
+        user: a,
+        roleRef: m?.roleRef ?? null,
+      });
+    });
+
+    return NextResponse.json({ success: true, data });
+  } catch (error) {
+    return errorResponse(error);
+  }
 });
 
 export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
-  requireAdminPerm(ctx.adminTeamRole, 'team:manage');
+  try {
+    requirePermission(ctx, 'users.create');
 
-  const body = await req.json();
-  const input = createMemberSchema.parse(body);
+    const body = await req.json();
+    const input = inviteSchema.parse(body);
 
-  const existing = await prisma.user.findUnique({ where: { email: input.email }, select: { id: true } });
-  if (existing) throw Errors.conflict('Email already in use');
-
-  const hashedPassword = await bcrypt.hash(input.password, 12);
-  const hcidDisplay = await uniqueHcid();
-
-  const result = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        fullName: input.fullName,
-        email: input.email,
-        password: hashedPassword,
-        role: 'admin',
-        isActive: true,
-        hcidDisplay,
-      },
+    // Resolve the role and validate it's an admin-scope template.
+    const role = await prisma.accountRole.findUnique({
+      where: { id: input.roleId },
+      select: { id: true, name: true, scope: true, description: true, isTemplate: true },
     });
-    const member = await tx.adminTeamMember.create({
+    if (!role || role.scope !== 'admin') {
+      throw Errors.badRequest('roleId must reference an admin-scope role');
+    }
+
+    // Find existing user by email or phone, otherwise create one inline.
+    const identifierTrim = input.identifier.trim();
+    const looksEmail = identifierTrim.includes('@');
+    let user = looksEmail
+      ? await prisma.user.findUnique({ where: { email: identifierTrim.toLowerCase() } })
+      : await prisma.user.findUnique({ where: { phone: identifierTrim.replace(/\D/g, '') } });
+
+    if (!user) {
+      if (!looksEmail) {
+        throw Errors.badRequest('New admin invites require an email identifier');
+      }
+      if (!input.fullName || !input.password) {
+        throw Errors.badRequest('fullName and password are required when the invitee is a new user');
+      }
+      const hashedPassword = await bcrypt.hash(input.password, 12);
+      const hcidDisplay = await uniqueHcid();
+      user = await prisma.user.create({
+        data: {
+          fullName: input.fullName,
+          email: identifierTrim.toLowerCase(),
+          password: hashedPassword,
+          role: 'admin',
+          isActive: true,
+          hcidDisplay,
+        },
+      });
+    } else if (user.role !== 'admin') {
+      // Promote to admin so the impersonation rules in the rest of the codebase apply.
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { role: 'admin' },
+      });
+    }
+
+    const existingMember = await prisma.adminTeamMember.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (existingMember) {
+      throw Errors.conflict('User is already on the admin team — update their role instead');
+    }
+
+    const legacyEnum: TeamRole = ADMIN_ROLE_TO_ENUM[role.name] ?? 'viewer';
+    const member = await prisma.adminTeamMember.create({
       data: {
         userId: user.id,
-        role: input.role,
+        role: legacyEnum,
+        roleId: role.id,
         invitedBy: ctx.userId,
       },
+      include: teamMemberInclude,
     });
-    return { member, user };
-  });
 
-  logAction(ctx, req, {
-    action: AUDIT_ACTIONS.adminTeamInvite,
-    entity: 'AdminTeamMember',
-    entityId: result.user.id,
-    after: { email: result.user.email, role: result.member.role },
-  });
+    logAction(ctx, req, {
+      action: AUDIT_ACTIONS.adminTeamInvite,
+      entity: 'AdminTeamMember',
+      entityId: user.id,
+      after: { email: user.email, roleId: role.id, roleName: role.name },
+    });
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      id: result.member.userId,
-      role: result.member.role,
+    const dto = toTeamMemberDTO({
+      id: member.id,
+      createdAt: member.createdAt,
+      legacyRole: member.role,
       isOwner: false,
-      createdAt: result.member.createdAt,
-      user: { id: result.user.id, fullName: result.user.fullName, email: result.user.email, isActive: result.user.isActive },
-    },
-  }, { status: 201 });
+      user: member.user,
+      roleRef: member.roleRef,
+    });
+
+    return NextResponse.json({ success: true, data: dto }, { status: 201 });
+  } catch (error) {
+    return errorResponse(error);
+  }
 });

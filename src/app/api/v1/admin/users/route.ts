@@ -9,7 +9,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { withRateLimit } from '@/middleware/withRateLimit';
 import { provisionDefaultAccount } from '@/lib/provisionAccount';
 import { uniqueHcid } from '@/lib/hcid';
@@ -88,7 +88,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 // POST — admin creates a user (customer or vendor) without OTP
 export const POST = withRateLimit(adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'settings:write');
+    requirePermission(ctx, 'users.create');
     const body = await req.json();
 
     const fullName = String(body.fullName ?? '').trim();

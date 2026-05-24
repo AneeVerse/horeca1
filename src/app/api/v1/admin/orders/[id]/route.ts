@@ -9,7 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { ApiError, errorResponse, Errors } from '@/middleware/errorHandler';
 import type { OrderStatus } from '@prisma/client';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { emitEvent } from '@/events/emitter';
 import { InventoryService } from '@/modules/inventory/inventory.service';
 
@@ -110,7 +110,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 // PATCH — admin force-update order status
 export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'orders:write');
+    requirePermission(ctx, 'orders.edit');
     const id = extractId(req);
     const body = await req.json();
 

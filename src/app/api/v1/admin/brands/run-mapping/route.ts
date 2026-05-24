@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { errorResponse } from '@/middleware/errorHandler';
 import { runMappingForBrand } from '@/modules/brand/brand-mapper';
 import { getMappingAI } from '@/lib/mapping-ai';
@@ -13,7 +13,7 @@ import type { AuthContext } from '@/middleware/auth';
 
 export const POST = adminOnly(async (_req: NextRequest, ctx: AuthContext) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'settings:write');
+    requirePermission(ctx, 'brands.edit');
 
     const aiProvider = getMappingAI();
     const aiName = aiProvider ? `${aiProvider.name} (${aiProvider.model})` : 'none';

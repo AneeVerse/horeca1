@@ -9,7 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
 
 // Helper: extract the [id] segment from /api/v1/admin/products/{id}/approval
@@ -27,7 +27,7 @@ const approvalSchema = z.object({
 // PATCH — approve or reject a product
 export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'products:write');
+    requirePermission(ctx, 'products.approve');
     const id = extractId(req);
     const body = await req.json();
     const { action, note } = approvalSchema.parse(body);

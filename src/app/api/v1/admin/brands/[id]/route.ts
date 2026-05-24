@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import type { AuthContext } from '@/middleware/auth';
 
@@ -50,7 +50,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx: AuthContext) => {
 
 export const PATCH = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'settings:write');
+    requirePermission(ctx, 'brands.edit');
     const id = req.nextUrl.pathname.split('/').at(-1)!;
     const body = await req.json();
     const input = patchSchema.parse(body);
@@ -73,7 +73,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
 // The owning User row is untouched (FK is non-cascading from User side).
 export const DELETE = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'settings:write');
+    requirePermission(ctx, 'brands.delete');
     const id = req.nextUrl.pathname.split('/').at(-1)!;
     const existing = await prisma.brand.findUnique({ where: { id }, select: { id: true } });
     if (!existing) throw Errors.notFound('Brand');

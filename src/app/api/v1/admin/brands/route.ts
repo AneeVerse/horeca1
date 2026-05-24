@@ -8,7 +8,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { BrandService } from '@/modules/brand/brand.service';
 import { adminOnly } from '@/middleware/rbac';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { prisma } from '@/lib/prisma';
 import { provisionDefaultAccount } from '@/lib/provisionAccount';
@@ -43,7 +43,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx: AuthContext) => {
 // POST — admin directly creates an approved brand (no application needed)
 export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'settings:write');
+    requirePermission(ctx, 'brands.create');
 
     const body = await req.json();
     const input = createBrandSchema.parse(body);

@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 
 // Helper: extract the [id] segment from the URL
 function extractId(req: NextRequest): string {
@@ -57,7 +57,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 // PATCH — update category fields
 export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'products:write');
+    requirePermission(ctx, 'products.edit');
     const id = extractId(req);
     const body = await req.json();
     const data = updateCategorySchema.parse(body);
@@ -90,7 +90,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
 // DELETE — permanently remove category
 export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'products:write');
+    requirePermission(ctx, 'products.delete');
     const id = extractId(req);
 
     const existing = await prisma.category.findUnique({

@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
+import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 
 const SIDEBAR_LINKS = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
@@ -54,8 +55,15 @@ export default function AdminLayout({
     const pathname = usePathname();
     const router = useRouter();
     const { data: session, status } = useSession();
+    const perms = useAdminPermissions();
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [pendingApprovals, setPendingApprovals] = useState(0);
+
+    // Hide sidebar links the current admin role cannot use. Server-side RBAC
+    // still enforces access; this keeps the sidebar honest with what UI is reachable.
+    const visibleLinks = SIDEBAR_LINKS.filter(
+        (link) => link.name !== 'Team' || perms.canManageTeam,
+    );
 
     // Poll the pending-approvals count so the sidebar badge reflects reality
     // without a full page reload. 60s cadence is friendly to the DB and good
@@ -167,7 +175,7 @@ export default function AdminLayout({
                     isCollapsed ? "w-[80px]" : "w-[240px]"
                 )}>
                     <nav className="flex-1 px-4 py-6 space-y-2">
-                        {SIDEBAR_LINKS.map((link) => {
+                        {visibleLinks.map((link) => {
                             const isActive = pathname === link.href;
                             // Badge count only for the Approvals row (extend here if more rows need badges later).
                             const badge = link.name === 'Approvals' ? pendingApprovals : 0;

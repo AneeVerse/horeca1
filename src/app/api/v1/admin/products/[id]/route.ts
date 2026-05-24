@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { CatalogService } from '@/modules/catalog/catalog.service';
 
 // Helper: extract the [id] segment from the URL
@@ -78,7 +78,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 // PATCH — update any product field
 export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'products:write');
+    requirePermission(ctx, 'products.edit');
     const id = extractId(req);
     const body = await req.json();
     const data = updateProductSchema.parse(body);
@@ -158,7 +158,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
 // Tombstone renames the slug so the [vendorId, slug] unique constraint frees up.
 export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'products:write');
+    requirePermission(ctx, 'products.delete');
     const id = extractId(req);
 
     const catalogService = new CatalogService();

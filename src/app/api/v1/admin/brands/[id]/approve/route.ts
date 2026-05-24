@@ -7,7 +7,7 @@ import { BrandService } from '@/modules/brand/brand.service';
 import { adminOnly } from '@/middleware/rbac';
 import { z } from 'zod';
 import type { AuthContext } from '@/middleware/auth';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 
 const brandService = new BrandService();
 const schema = z.object({
@@ -16,7 +16,7 @@ const schema = z.object({
 });
 
 export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
-  requireAdminPerm(ctx.adminTeamRole, 'settings:write');
+  requirePermission(ctx, 'brands.approve');
   const id = req.nextUrl.pathname.split('/').at(-2)!;
   const body = await req.json();
   const { action, reviewNote } = schema.parse(body);

@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse } from '@/middleware/errorHandler';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 
 // Auto-generate slug from name: lowercase, replace spaces with hyphens, strip non-alphanumeric
 function slugify(name: string): string {
@@ -67,7 +67,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 // POST — create a new category (auto-approved by admin)
 export const POST = adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'products:write');
+    requirePermission(ctx, 'products.create');
     const body = await req.json();
     const data = createCategorySchema.parse(body);
 

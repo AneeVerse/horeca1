@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { errorResponse } from '@/middleware/errorHandler';
 import type { AuthContext } from '@/middleware/auth';
 
@@ -34,7 +34,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx: AuthContext) => {
 
 export const PATCH = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'settings:write');
+    requirePermission(ctx, 'brands.edit');
     const id = req.nextUrl.searchParams.get('id');
     if (!id) return NextResponse.json({ success: false, error: { message: 'id query param required' } }, { status: 400 });
     const body = await req.json();

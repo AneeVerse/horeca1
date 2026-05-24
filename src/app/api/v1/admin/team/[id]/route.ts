@@ -1,17 +1,30 @@
-// PATCH  /api/v1/admin/team/[id] — update admin team member role (owner only)
-// DELETE /api/v1/admin/team/[id] — remove admin team member (owner only)
+// PATCH  /api/v1/admin/team/[id] — change an admin team member's role
+// DELETE /api/v1/admin/team/[id] — remove a member from the admin team
+//
+// `[id]` is the AdminTeamMember.userId (matches the legacy contract so the
+// existing front-end DELETE call site keeps working).
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { adminOnly } from '@/middleware/rbac';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 import { prisma } from '@/lib/prisma';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
+import type { TeamRole } from '@prisma/client';
 
 const updateSchema = z.object({
-  role: z.enum(['manager', 'editor', 'viewer']),
+  roleId: z.string().uuid(),
 });
+
+const ADMIN_ROLE_TO_ENUM: Record<string, TeamRole> = {
+  'Super Admin': 'owner',
+  'Ops Admin': 'manager',
+  'Finance Admin': 'manager',
+  'Support Agent': 'viewer',
+  Editor: 'editor',
+  Viewer: 'viewer',
+};
 
 function extractId(req: NextRequest): string {
   const segments = new URL(req.url).pathname.split('/');
@@ -20,23 +33,39 @@ function extractId(req: NextRequest): string {
 
 export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'team:manage');
-    const id = extractId(req);
+    requirePermission(ctx, 'users.edit');
+    const userId = extractId(req);
 
-    const member = await prisma.adminTeamMember.findUnique({ where: { userId: id }, select: { userId: true, role: true } });
+    const member = await prisma.adminTeamMember.findUnique({
+      where: { userId },
+      select: { id: true, role: true, roleId: true },
+    });
     if (!member) throw Errors.notFound('Team member not found');
 
     const body = await req.json();
-    const input = updateSchema.parse(body);
+    const { roleId } = updateSchema.parse(body);
 
-    await prisma.adminTeamMember.update({ where: { userId: id }, data: { role: input.role } });
+    const role = await prisma.accountRole.findUnique({
+      where: { id: roleId },
+      select: { id: true, name: true, scope: true },
+    });
+    if (!role || role.scope !== 'admin') {
+      throw Errors.badRequest('roleId must reference an admin-scope role');
+    }
+
+    const legacyEnum: TeamRole = ADMIN_ROLE_TO_ENUM[role.name] ?? 'viewer';
+
+    await prisma.adminTeamMember.update({
+      where: { id: member.id },
+      data: { roleId: role.id, role: legacyEnum },
+    });
 
     logAction(ctx, req, {
       action: AUDIT_ACTIONS.adminTeamRoleChange,
       entity: 'AdminTeamMember',
-      entityId: id,
-      before: { role: member.role },
-      after: { role: input.role },
+      entityId: userId,
+      before: { roleId: member.roleId, role: member.role },
+      after: { roleId: role.id, role: legacyEnum, roleName: role.name },
     });
 
     return NextResponse.json({ success: true });
@@ -47,19 +76,26 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
 
 export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'team:manage');
-    const id = extractId(req);
+    requirePermission(ctx, 'users.delete');
+    const userId = extractId(req);
 
-    const member = await prisma.adminTeamMember.findUnique({ where: { userId: id }, select: { userId: true, role: true } });
+    if (userId === ctx.userId) {
+      throw Errors.badRequest('You cannot remove yourself from the admin team');
+    }
+
+    const member = await prisma.adminTeamMember.findUnique({
+      where: { userId },
+      select: { id: true, role: true, roleId: true },
+    });
     if (!member) throw Errors.notFound('Team member not found');
 
-    await prisma.adminTeamMember.delete({ where: { userId: id } });
+    await prisma.adminTeamMember.delete({ where: { id: member.id } });
 
     logAction(ctx, req, {
       action: AUDIT_ACTIONS.adminTeamRemove,
       entity: 'AdminTeamMember',
-      entityId: id,
-      before: { role: member.role },
+      entityId: userId,
+      before: { roleId: member.roleId, role: member.role },
     });
 
     return NextResponse.json({ success: true });

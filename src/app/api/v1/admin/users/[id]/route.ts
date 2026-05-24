@@ -9,7 +9,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
-import { requireAdminPerm } from '@/lib/teamPermissions';
+import { requirePermission } from '@/lib/permissions/engine';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -70,7 +70,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 // PATCH — update user fields (isActive, role)
 export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'settings:write');
+    requirePermission(ctx, 'users.edit');
     const id = extractId(req);
     const body = await req.json();
 
@@ -152,7 +152,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
 // DELETE — permanently remove a user from the database
 export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
   try {
-    requireAdminPerm(ctx.adminTeamRole, 'settings:write');
+    requirePermission(ctx, 'users.delete');
     const id = extractId(req);
 
     // Prevent admin from deleting themselves
