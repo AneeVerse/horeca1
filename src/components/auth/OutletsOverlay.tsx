@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { ChevronLeft, Loader2, MapPin, Plus, AlertCircle, X, Trash2, Pencil } from 'lucide-react';
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
 import { useAddress } from '@/context/AddressContext';
+import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import { cn } from '@/lib/utils';
 
 interface Outlet {
@@ -69,6 +70,7 @@ export function OutletsOverlay({ isOpen, onClose, accountId }: OutletsOverlayPro
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<OutletDraft | null>(null); // null = closed, has .id = editing, no .id = creating
+  const { refresh: refreshAccounts } = useBusinessAccountSwitcher();
 
   const load = () => {
     if (!accountId) return;
@@ -87,6 +89,7 @@ export function OutletsOverlay({ isOpen, onClose, accountId }: OutletsOverlayPro
     if (!confirm('Deactivate this outlet?')) return;
     await fetch(`/api/v1/account/${accountId}/outlets/${outletId}`, { method: 'DELETE' });
     load();
+    refreshAccounts();
   };
 
   if (!isOpen) return null;
@@ -175,7 +178,7 @@ export function OutletsOverlay({ isOpen, onClose, accountId }: OutletsOverlayPro
           accountId={accountId}
           draft={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); load(); }}
+          onSaved={() => { setEditing(null); load(); refreshAccounts(); }}
         />
       )}
     </div>
@@ -199,6 +202,21 @@ function OutletEditorModal({ accountId, draft, onClose, onSaved }: {
   const [placeId, setPlaceId] = useState<string | null>(draft.placeId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-fill city & state when a valid 6-digit pincode is typed manually
+  useEffect(() => {
+    if (!/^\d{6}$/.test(pincode)) return;
+    if (city.trim() && state.trim()) return; // already filled (e.g. via map picker)
+    fetch(`https://api.postalpincode.in/pincode/${pincode}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const po = data?.[0]?.PostOffice?.[0];
+        if (!po) return;
+        if (!city.trim()) setCity(po.District || po.Division || '');
+        if (!state.trim()) setState(po.State || '');
+      })
+      .catch(() => {});
+  }, [pincode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pincodeValid = /^\d{6}$/.test(pincode);
   const hasCoords = latitude !== null && longitude !== null;
@@ -228,9 +246,9 @@ function OutletEditorModal({ accountId, draft, onClose, onSaved }: {
       city: city.trim() || null,
       state: state.trim() || null,
       pincode: pincode.trim() || null,
-      latitude: latitude ?? null,
-      longitude: longitude ?? null,
-      placeId: placeId ?? null,
+      // Only include coords when present — API schema uses .optional(), not .nullable()
+      ...(latitude !== null && longitude !== null && { latitude, longitude }),
+      ...(placeId !== null && { placeId }),
     };
     const res = await fetch(url, {
       method,
