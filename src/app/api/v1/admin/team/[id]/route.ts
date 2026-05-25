@@ -83,19 +83,28 @@ export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
       throw Errors.badRequest('You cannot remove yourself from the admin team');
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true },
+    });
+    if (!user || user.role !== 'admin') throw Errors.notFound('Admin user not found');
+
     const member = await prisma.adminTeamMember.findUnique({
       where: { userId },
       select: { id: true, role: true, roleId: true },
     });
-    if (!member) throw Errors.notFound('Team member not found');
 
-    await prisma.adminTeamMember.delete({ where: { id: member.id } });
+    if (member) {
+      await prisma.adminTeamMember.delete({ where: { id: member.id } });
+    }
+    // Demote user role so they can't access admin routes
+    await prisma.user.update({ where: { id: userId }, data: { role: 'customer' } });
 
     logAction(ctx, req, {
       action: AUDIT_ACTIONS.adminTeamRemove,
       entity: 'AdminTeamMember',
       entityId: userId,
-      before: { roleId: member.roleId, role: member.role },
+      before: { roleId: member?.roleId, role: member?.role ?? 'owner' },
     });
 
     return NextResponse.json({ success: true });

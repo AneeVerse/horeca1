@@ -247,6 +247,12 @@ export default function AdminTeamPage() {
                                                 className="p-1.5 rounded-[6px] hover:bg-gray-100 transition-colors" title="Reset password">
                                                 <KeyRound size={14} className="text-[#AEAEAE]" />
                                             </button>
+                                            {!isSelf && (
+                                                <button onClick={() => handleRemove(member)}
+                                                    className="p-1.5 rounded-[6px] hover:bg-red-50 transition-colors" title="Remove">
+                                                    <Trash2 size={14} className="text-[#E74C3C]" />
+                                                </button>
+                                            )}
                                         </div>
                                     ) : isSelf ? (
                                         <div className="flex items-center gap-2 shrink-0">
