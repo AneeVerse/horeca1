@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ChevronDown, LogOut, Loader2, ShieldCheck, Store, User,
-  Sparkles, MapPin, Check, ChevronRight, AlertCircle,
+  Sparkles, MapPin, Check, ChevronRight, AlertCircle, Plus,
 } from 'lucide-react';
 import { useBusinessAccountSwitcher, type AccountSummary } from '@/hooks/useBusinessAccountSwitcher';
+import { CreateBusinessAccountModal } from '@/components/auth/CreateBusinessAccountModal';
 
 type AccountKind = 'customer' | 'vendor' | 'brand';
 
@@ -42,6 +43,7 @@ export function BusinessAccountSwitcherDropdown() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [showOutletPicker, setShowOutletPicker] = useState(false);
+  const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -291,6 +293,15 @@ export function BusinessAccountSwitcherDropdown() {
                 </Link>
               )}
               <button
+                onClick={() => { setIsOpen(false); setShowCreateAccount(true); }}
+                className="flex items-center gap-3 w-full px-4 py-2.5 hover:bg-[#F8F8F8] transition-colors text-left"
+              >
+                <div className="w-[36px] h-[36px] rounded-full bg-[#EEF8F1] flex items-center justify-center text-[#299E60]">
+                  <Plus size={16} />
+                </div>
+                <span className="text-[13px] font-semibold text-[#299E60]">Create new business</span>
+              </button>
+              <button
                 onClick={() => { setIsOpen(false); signOut(); }}
                 className="flex items-center gap-3 w-full px-4 py-2.5 hover:bg-red-50 transition-colors text-left"
               >
@@ -302,6 +313,12 @@ export function BusinessAccountSwitcherDropdown() {
             </div>
           )}
         </div>
+      )}
+      {showCreateAccount && (
+        <CreateBusinessAccountModal
+          isOpen={showCreateAccount}
+          onClose={() => setShowCreateAccount(false)}
+        />
       )}
     </div>
   );

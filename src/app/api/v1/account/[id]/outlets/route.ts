@@ -24,16 +24,16 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
 
 const CreateBody = z.object({
   name: z.string().min(1).max(255),
-  code: z.string().max(50).optional(),
+  code: z.string().max(50).nullable().optional(),
   addressLine: z.string().min(1),
-  flatInfo: z.string().max(255).optional(),
-  landmark: z.string().max(255).optional(),
-  city: z.string().max(100).optional(),
-  state: z.string().max(100).optional(),
-  pincode: z.string().max(10).optional(),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
-  placeId: z.string().max(500).optional(),
+  flatInfo: z.string().max(255).nullable().optional(),
+  landmark: z.string().max(255).nullable().optional(),
+  city: z.string().max(100).nullable().optional(),
+  state: z.string().max(100).nullable().optional(),
+  pincode: z.string().max(10).nullable().optional(),
+  latitude: z.number().nullable().optional(),
+  longitude: z.number().nullable().optional(),
+  placeId: z.string().max(500).nullable().optional(),
 });
 
 export const POST = withAuth(async (req: NextRequest, ctx) => {

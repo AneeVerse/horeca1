@@ -23,6 +23,7 @@ import {
     Building2,
     BadgeCheck,
     Mail,
+    Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -40,6 +41,7 @@ import { OutletsOverlay } from './OutletsOverlay';
 import { TeamMembersOverlay } from './TeamMembersOverlay';
 import { RolesPermissionsOverlay } from './RolesPermissionsOverlay';
 import { AccountOverviewOverlay } from './AccountOverviewOverlay';
+import { CreateBusinessAccountModal } from './CreateBusinessAccountModal';
 import { Sparkles } from 'lucide-react';
 
 interface ProfileScreenProps {
@@ -78,6 +80,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
     const [isTeamOpen, setIsTeamOpen] = useState(false);
     const [isRolesOpen, setIsRolesOpen] = useState(false);
     const [isOverviewOpen, setIsOverviewOpen] = useState(false);
+    const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
     const [hasVendorApplication, setHasVendorApplication] = useState<boolean | null>(null);
 
     useEffect(() => {
@@ -230,6 +233,7 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
         { id: 'team-members',label: 'Team Members',  desc: 'Invite users & manage access',   icon: Users,       onClick: () => setIsTeamOpen(true) },
         { id: 'roles',       label: 'Roles & Permissions', desc: 'Permission matrix · templates', icon: BadgeCheck, onClick: () => setIsRolesOpen(true) },
         { id: 'account-overview', label: 'Account Overview', desc: 'GST, business type, members', icon: Building2, onClick: () => setIsOverviewOpen(true) },
+        { id: 'create-account', label: 'Register New Business', desc: 'Create a new business account', icon: Plus, onClick: () => setIsCreateAccountOpen(true) },
     ] : [];
 
     const otherInfoItems = [
@@ -763,6 +767,12 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                 onClose={() => setIsBecomeVendorOpen(false)}
                 defaultBusinessName={userData.businessName}
                 onSubmitted={() => setHasVendorApplication(true)}
+            />
+
+            {/* Create Business Account Modal */}
+            <CreateBusinessAccountModal
+                isOpen={isCreateAccountOpen}
+                onClose={() => setIsCreateAccountOpen(false)}
             />
 
             {/* Business Account Overlays */}

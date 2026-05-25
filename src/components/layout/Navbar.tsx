@@ -5,9 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import {
     Search,
-    MapPin,
     ShoppingCart,
-    ChevronDown,
     User,
     X,
     Home as HomeIcon,
@@ -29,6 +27,7 @@ import { InitialPincodeOverlay } from './InitialPincodeOverlay';
 import { PushBell } from '../features/PushBell';
 import { dal } from '@/lib/dal';
 import type { Category } from '@/types';
+import { NavDeliverySelector } from './NavDeliverySelector';
 
 const CATEGORY_STYLE: Record<string, { image: string; bgColor: string }> = {
     'vegetables': { image: '/images/category/vegitable.png', bgColor: '#e8f9e9' },
@@ -194,18 +193,11 @@ export function Navbar() {
                             />
                         </Link>
 
-                        <div className="flex-1 flex justify-center px-2 max-w-[190px]">
-                            <button
-                                onClick={() => setIsLocationOverlayOpen(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-100 rounded-full bg-[#F7F7F7] shadow-sm hover:bg-gray-100 transition-colors cursor-pointer w-full justify-center"
-                            >
-                                <MapPin size={13} className="text-[#53B175] shrink-0" />
-                                <span className="text-[12px] font-bold text-gray-600 truncate max-w-[140px]">
-                                    {selectedAddress?.shortAddress || 'Select Location'}
-                                </span>
-                                <ChevronDown size={13} className="text-gray-400 shrink-0" />
-                            </button>
-                        </div>
+                        <NavDeliverySelector
+                            variant="mobile"
+                            fallbackLabel={selectedAddress?.shortAddress || 'Select Location'}
+                            onFallbackClick={() => setIsLocationOverlayOpen(true)}
+                        />
 
                         <div className="flex items-center gap-2">
                             <PushBell />
@@ -284,20 +276,12 @@ export function Navbar() {
                                 </div>
                             </div>
 
-                            {/* Deliver to Location — right of search */}
-                            <button
-                                onClick={() => setIsLocationOverlayOpen(true)}
-                                className="flex items-center gap-2.5 px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 hover:bg-gray-100 hover:border-gray-300 transition-all cursor-pointer shrink-0 w-[195px]"
-                            >
-                                <MapPin size={15} className="text-[#53B175] shrink-0" />
-                                <div className="flex flex-col items-start min-w-0 flex-1">
-                                    <span className="text-[9px] uppercase font-bold text-gray-400 tracking-wider leading-none">Deliver to</span>
-                                    <span className="text-[12px] font-bold text-gray-800 truncate leading-tight mt-0.5 w-full text-left">
-                                        {selectedAddress?.shortAddress || 'Select Location'}
-                                    </span>
-                                </div>
-                                <ChevronDown size={12} className="text-gray-400 shrink-0" />
-                            </button>
+                            {/* Deliver to — account + outlet selector for logged-in users */}
+                            <NavDeliverySelector
+                                variant="desktop"
+                                fallbackLabel={selectedAddress?.shortAddress || 'Select Location'}
+                                onFallbackClick={() => setIsLocationOverlayOpen(true)}
+                            />
 
                             {/* Divider */}
                             <div className="h-9 w-px bg-gray-200 shrink-0" />

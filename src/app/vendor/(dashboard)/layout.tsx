@@ -44,6 +44,7 @@ import {
 import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
 import { VendorOutletStrip } from '@/components/vendor/VendorOutletStrip';
+import { PostLoginAccountSelector } from '@/components/auth/PostLoginAccountSelector';
 
 const SIDEBAR_LINKS = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/vendor/dashboard' },
@@ -258,6 +259,9 @@ export default function VendorLayout({
                     {children}
                 </main>
             </div>
+
+            {/* Post-login account selector — shows once when user has multiple BusinessAccounts */}
+            <PostLoginAccountSelector />
         </div>
     );
 }
