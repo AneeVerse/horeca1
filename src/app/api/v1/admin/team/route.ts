@@ -125,12 +125,14 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
           hcidDisplay,
         },
       });
-    } else if (user.role !== 'admin') {
-      // Promote to admin so the impersonation rules in the rest of the codebase apply.
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { role: 'admin' },
-      });
+    } else {
+      // Existing user — promote to admin if needed, and update password if supplied.
+      const updateData: Record<string, unknown> = {};
+      if (user.role !== 'admin') updateData.role = 'admin';
+      if (input.password) updateData.password = await bcrypt.hash(input.password, 12);
+      if (Object.keys(updateData).length > 0) {
+        user = await prisma.user.update({ where: { id: user.id }, data: updateData });
+      }
     }
 
     const existingMember = await prisma.adminTeamMember.findUnique({ where: { userId: user.id }, select: { id: true } });

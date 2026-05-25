@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import {
-    Users, Plus, Trash2, Loader2, Crown, Shield, Edit3, Eye, AlertCircle, X, UserPlus, Settings2,
+    Users, Plus, Trash2, Loader2, Crown, Shield, Edit3, Eye, AlertCircle, X, UserPlus, Settings2, KeyRound,
 } from 'lucide-react';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -66,6 +66,7 @@ export default function AdminTeamPage() {
     const [loading, setLoading] = useState(true);
     const [showInvite, setShowInvite] = useState(false);
     const [showRolesEditor, setShowRolesEditor] = useState(false);
+    const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
 
     const fetchTeam = useCallback(async () => {
         try {
@@ -239,10 +240,22 @@ export default function AdminTeamPage() {
                                         {new Date(member.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                                     </span>
                                     {/* Per-row controls — never on the seeded owner or on yourself */}
-                                    {isOwnerRow ? (
-                                        <span className="text-[11px] text-[#AEAEAE] shrink-0">Owner</span>
+                                                    {isOwnerRow ? (
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <span className="text-[11px] text-[#AEAEAE]">Owner</span>
+                                            <button onClick={() => setEditingMember(member)}
+                                                className="p-1.5 rounded-[6px] hover:bg-gray-100 transition-colors" title="Reset password">
+                                                <KeyRound size={14} className="text-[#AEAEAE]" />
+                                            </button>
+                                        </div>
                                     ) : isSelf ? (
-                                        <span className="text-[11px] text-[#AEAEAE] shrink-0">You</span>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <span className="text-[11px] text-[#AEAEAE]">You</span>
+                                            <button onClick={() => setEditingMember(member)}
+                                                className="p-1.5 rounded-[6px] hover:bg-gray-100 transition-colors" title="Reset password">
+                                                <KeyRound size={14} className="text-[#AEAEAE]" />
+                                            </button>
+                                        </div>
                                     ) : (
                                         <div className="flex items-center gap-2 shrink-0">
                                             <select
@@ -256,6 +269,10 @@ export default function AdminTeamPage() {
                                                     <option key={r.id} value={r.id}>{r.name}</option>
                                                 ))}
                                             </select>
+                                            <button onClick={() => setEditingMember(member)}
+                                                className="p-1.5 rounded-[6px] hover:bg-gray-100 transition-colors" title="Reset password">
+                                                <KeyRound size={14} className="text-[#AEAEAE]" />
+                                            </button>
                                             <button onClick={() => handleRemove(member)}
                                                 className="p-1.5 rounded-[6px] hover:bg-red-50 transition-colors" title="Remove">
                                                 <Trash2 size={14} className="text-[#E74C3C]" />
@@ -285,10 +302,17 @@ export default function AdminTeamPage() {
                 <InviteModal
                     roles={roles}
                     onClose={() => setShowInvite(false)}
-                    onInvited={(newMember) => {
-                        setTeam((prev) => [...prev, newMember]);
+                    onInvited={() => {
+                        fetchTeam();
                         setShowInvite(false);
                     }}
+                />
+            )}
+
+            {editingMember && (
+                <ResetPasswordModal
+                    member={editingMember}
+                    onClose={() => setEditingMember(null)}
                 />
             )}
 
@@ -312,7 +336,7 @@ function InviteModal({
 }: {
     roles: AdminRole[];
     onClose: () => void;
-    onInvited: (member: TeamMember) => void;
+    onInvited: () => void;
 }) {
     const [identifier, setIdentifier] = useState('');
     const [fullName, setFullName] = useState('');
@@ -341,7 +365,7 @@ function InviteModal({
             });
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Failed to invite');
-            onInvited(json.data);
+            onInvited();
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to invite');
         } finally {
@@ -435,6 +459,100 @@ function InviteModal({
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Reset Password Modal ──────────────────────────────────────────────────
+
+function ResetPasswordModal({
+    member,
+    onClose,
+}: {
+    member: TeamMember;
+    onClose: () => void;
+}) {
+    const [password, setPassword] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [done, setDone] = useState(false);
+
+    const handleSubmit = async () => {
+        if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+        try {
+            setSubmitting(true);
+            setError(null);
+            const res = await fetch(`/api/v1/admin/team/${member.user.id}/password`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Failed');
+            setDone(true);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[15000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-[16px] w-full max-w-[400px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-2">
+                        <KeyRound size={18} className="text-[#E74C3C]" />
+                        <h3 className="text-[16px] font-bold text-[#181725]">Reset Password</h3>
+                    </div>
+                    <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
+                        <X size={16} className="text-[#7C7C7C]" />
+                    </button>
+                </div>
+                {done ? (
+                    <div className="text-center py-4">
+                        <p className="text-[14px] font-bold text-green-700 mb-1">Password updated</p>
+                        <p className="text-[12px] text-[#7C7C7C] mb-4">{member.user.fullName} can now log in with the new password.</p>
+                        <button onClick={onClose} className="px-6 py-2 bg-[#E74C3C] text-white rounded-[10px] text-[13px] font-bold">Done</button>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        <p className="text-[13px] text-[#7C7C7C]">
+                            Setting a new password for <span className="font-bold text-[#181725]">{member.user.fullName}</span>{' '}
+                            ({member.user.email ?? member.user.phone}).
+                        </p>
+                        <div>
+                            <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">New Password</label>
+                            <input
+                                type="password"
+                                autoComplete="new-password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Min. 6 characters"
+                                className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#E74C3C]/40 bg-[#FAFAFA] focus:bg-white transition-colors"
+                            />
+                        </div>
+                        {error && (
+                            <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-[8px] p-2.5">
+                                <AlertCircle size={14} /> {error}
+                            </div>
+                        )}
+                        <div className="flex gap-3 pt-1">
+                            <button
+                                onClick={handleSubmit}
+                                disabled={submitting || password.length < 6}
+                                className="flex-1 h-[44px] bg-[#E74C3C] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#c0392b] disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                            >
+                                {submitting ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+                                {submitting ? 'Saving…' : 'Set Password'}
+                            </button>
+                            <button onClick={onClose} className="h-[44px] px-6 bg-gray-100 text-[#7C7C7C] rounded-[10px] text-[13px] font-bold hover:bg-gray-200 transition-colors">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
