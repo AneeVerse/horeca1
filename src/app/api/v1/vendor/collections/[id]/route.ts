@@ -21,6 +21,10 @@ function extractId(req: NextRequest) {
 const updateAccountSchema = z.object({
   creditLimit: z.number().positive().optional(),
   status: z.enum(['active', 'suspended', 'closed']).optional(),
+  graceDays: z.number().int().min(0).max(365).optional(),
+  interestRatePct: z.number().min(0).max(100).optional(),
+  penaltyRatePct: z.number().min(0).max(100).optional(),
+  freezeOnOverdueDays: z.number().int().min(0).max(365).optional(),
 });
 
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
@@ -41,6 +45,10 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
       data: {
         ...(body.creditLimit !== undefined && { creditLimit: body.creditLimit }),
         ...(body.status !== undefined && { status: body.status }),
+        ...(body.graceDays !== undefined && { graceDays: body.graceDays }),
+        ...(body.interestRatePct !== undefined && { interestRatePct: body.interestRatePct }),
+        ...(body.penaltyRatePct !== undefined && { penaltyRatePct: body.penaltyRatePct }),
+        ...(body.freezeOnOverdueDays !== undefined && { freezeOnOverdueDays: body.freezeOnOverdueDays }),
       },
     });
 

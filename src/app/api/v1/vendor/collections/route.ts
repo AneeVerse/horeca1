@@ -47,7 +47,24 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       const daysOverdue = oldestDue
         ? Math.floor((now.getTime() - oldestDue.getTime()) / 86_400_000)
         : 0;
-      const overdueAmount = Number(acc.creditUsed) > 0 && daysOverdue > 0 ? Number(acc.creditUsed) : 0;
+
+      // Grace period — overdue only counts after grace days pass
+      const effectiveDaysOverdue = Math.max(0, daysOverdue - acc.graceDays);
+      const overdueAmount = Number(acc.creditUsed) > 0 && effectiveDaysOverdue > 0
+        ? Number(acc.creditUsed)
+        : 0;
+
+      // Accrued interest: monthly rate applied pro-rata (per day)
+      const interestRate = Number(acc.interestRatePct) / 100;
+      const accruedInterest = overdueAmount > 0 && interestRate > 0
+        ? Math.round(overdueAmount * interestRate * (effectiveDaysOverdue / 30) * 100) / 100
+        : 0;
+
+      // Accrued penalty: flat daily rate on overdue amount
+      const penaltyRate = Number(acc.penaltyRatePct) / 100;
+      const accruedPenalty = overdueAmount > 0 && penaltyRate > 0
+        ? Math.round(overdueAmount * penaltyRate * effectiveDaysOverdue * 100) / 100
+        : 0;
 
       return {
         id: acc.id,
@@ -56,8 +73,15 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         creditUsed: Number(acc.creditUsed),
         creditAvailable: Math.max(0, Number(acc.creditLimit) - Number(acc.creditUsed)),
         overdueAmount,
-        daysOverdue,
-        aging: agingBucket(daysOverdue),
+        daysOverdue: effectiveDaysOverdue,
+        aging: agingBucket(effectiveDaysOverdue),
+        accruedInterest,
+        accruedPenalty,
+        totalDue: overdueAmount + accruedInterest + accruedPenalty,
+        graceDays: acc.graceDays,
+        interestRatePct: Number(acc.interestRatePct),
+        penaltyRatePct: Number(acc.penaltyRatePct),
+        freezeOnOverdueDays: acc.freezeOnOverdueDays,
         createdAt: acc.createdAt,
         updatedAt: acc.updatedAt,
         user: acc.user,
@@ -68,13 +92,14 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     const totalOutstanding = data.reduce((s, a) => s + a.creditUsed, 0);
     const totalOverdue = data.reduce((s, a) => s + a.overdueAmount, 0);
     const totalLimit = data.reduce((s, a) => s + a.creditLimit, 0);
+    const totalInterestPenalty = data.reduce((s, a) => s + a.accruedInterest + a.accruedPenalty, 0);
     const dueToday = data.filter((a) => a.daysOverdue === 0 && a.creditUsed > 0).reduce((s, a) => s + a.creditUsed, 0);
 
     return NextResponse.json({
       success: true,
       data: {
         accounts: data,
-        summary: { totalOutstanding, totalOverdue, dueToday, totalLimit, count: data.length },
+        summary: { totalOutstanding, totalOverdue, dueToday, totalLimit, totalInterestPenalty, count: data.length },
       },
     });
   } catch (error) {
