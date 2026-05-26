@@ -75,6 +75,7 @@ interface DashboardData {
     fastMovers: FastMover[];
     customerCounts: CustomerCounts;
     creditUtilization: CreditUtilization;
+    fulfillment: { packingPending: number; dispatchPending: number; deliveryDelayed: number };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -492,6 +493,25 @@ export default function VendorDashboardPage() {
                         ))}
                     </div>
 
+                    {/* ── Fulfillment Status ────────────────────────── */}
+                    {(data.fulfillment.packingPending > 0 || data.fulfillment.dispatchPending > 0 || data.fulfillment.deliveryDelayed > 0) && (
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+                            <p className="text-[14px] font-bold text-[#181725] mb-4">Fulfillment Status</p>
+                            <div className="grid grid-cols-3 gap-3">
+                                {[
+                                    { label: 'Packing Pending', value: data.fulfillment.packingPending, color: '#F59E0B', link: '/vendor/orders?status=processing' },
+                                    { label: 'Dispatch Pending', value: data.fulfillment.dispatchPending, color: '#3B82F6', link: '/vendor/orders?status=shipped' },
+                                    { label: 'Delayed (48h+)', value: data.fulfillment.deliveryDelayed, color: '#EF4444', link: '/vendor/orders' },
+                                ].map(({ label, value, color, link }) => (
+                                    <a key={label} href={link} className="flex flex-col items-center p-3 bg-[#F8F9FB] rounded-[10px] hover:bg-[#F0F0F0] transition-colors text-center">
+                                        <span className="text-[22px] font-extrabold" style={{ color }}>{value}</span>
+                                        <span className="text-[11px] text-[#7C7C7C] font-medium mt-0.5">{label}</span>
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Overdue credit alert */}
                     {Number(data.stats.overdueAmount) > 0 && (
                         <Link
@@ -667,6 +687,25 @@ export default function VendorDashboardPage() {
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                    {/* ── Quick Actions ─────────────────────────────── */}
+                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+                        <p className="text-[14px] font-bold text-[#181725] mb-4">Quick Actions</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {[
+                                { label: 'Add Product', icon: '📦', href: '/vendor/products', color: '#EEF8F1', text: '#299E60' },
+                                { label: 'Upload Inventory', icon: '📊', href: '/vendor/bulk-upload', color: '#EFF6FF', text: '#3B82F6' },
+                                { label: 'Create Promotion', icon: '🎁', href: '/vendor/promotions', color: '#FFF7ED', text: '#F59E0B' },
+                                { label: 'Send Reminder', icon: '💬', href: '/vendor/collections', color: '#F3F0FF', text: '#8B5CF6' },
+                                { label: 'View Reports', icon: '📈', href: '/vendor/reports', color: '#FFF0F6', text: '#EC4899' },
+                                { label: 'Manage Team', icon: '👥', href: '/vendor/team', color: '#F0FDF4', text: '#16A34A' },
+                            ].map(({ label, icon, href, color, text }) => (
+                                <a key={label} href={href} className="flex items-center gap-3 p-3 rounded-[10px] hover:opacity-90 transition-opacity" style={{ backgroundColor: color }}>
+                                    <span className="text-[20px]">{icon}</span>
+                                    <span className="text-[13px] font-bold" style={{ color: text }}>{label}</span>
+                                </a>
+                            ))}
                         </div>
                     </div>
                 </>

@@ -44,6 +44,9 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       fastMoversRaw,
       allVendorOrders,
       creditAggregate,
+      packingCount,
+      dispatchCount,
+      delayedCount,
     ] = await Promise.all([
       prisma.order.count({ where: { vendorId } }),
 
@@ -172,6 +175,17 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         where: { vendorId },
         _sum: { creditLimit: true, creditUsed: true },
       }),
+
+      // Fulfillment: packing pending (processing), dispatch pending (shipped), delayed (48h+)
+      prisma.order.count({ where: { vendorId, status: 'processing' } }),
+      prisma.order.count({ where: { vendorId, status: 'shipped' } }),
+      prisma.order.count({
+        where: {
+          vendorId,
+          status: { in: ['confirmed', 'processing', 'shipped'] },
+          createdAt: { lt: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+        },
+      }),
     ]);
 
     const lowStockCount = inventoryRows.filter(
@@ -246,6 +260,11 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         fastMovers,
         customerCounts,
         creditUtilization,
+        fulfillment: {
+          packingPending: packingCount,
+          dispatchPending: dispatchCount,
+          deliveryDelayed: delayedCount,
+        },
       },
     });
   } catch (error) {
