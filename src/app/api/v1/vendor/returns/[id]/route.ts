@@ -1,6 +1,8 @@
 // PATCH /api/v1/vendor/returns/:id — Vendor approves or rejects a return request
 // WHY: Vendor has operational ownership of their orders — they decide the resolution.
 //      Admin can override, but vendor does first review.
+//      On approval with a refundAmount: if the original order was paid via credit,
+//      we write a credit transaction to reduce the customer's outstanding balance.
 // PROTECTED: Vendor only
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -32,20 +34,62 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     // Verify the return belongs to one of this vendor's orders
     const returnReq = await prisma.returnRequest.findFirst({
       where: { id: returnId, order: { vendorId } },
-      include: { order: { select: { id: true, status: true } } },
+      include: {
+        order: {
+          select: { id: true, status: true, userId: true, paymentMethod: true },
+        },
+      },
     });
     if (!returnReq) throw Errors.notFound('Return request');
     if (returnReq.status !== 'pending') {
       throw Errors.badRequest(`Return is already ${returnReq.status}`);
     }
 
-    const updated = await prisma.returnRequest.update({
-      where: { id: returnId },
-      data: {
-        status: body.status,
-        adminNote: body.adminNote,
-        ...(body.refundAmount !== undefined && { refundAmount: body.refundAmount }),
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.returnRequest.update({
+        where: { id: returnId },
+        data: {
+          status: body.status,
+          adminNote: body.adminNote,
+          ...(body.refundAmount !== undefined && { refundAmount: body.refundAmount }),
+        },
+      });
+
+      // Ledger adjustment: if approved with a refundAmount on a credit order,
+      // reduce the customer's outstanding credit balance.
+      if (
+        body.status === 'approved' &&
+        body.refundAmount &&
+        body.refundAmount > 0 &&
+        returnReq.order.paymentMethod === 'credit'
+      ) {
+        const creditAcc = await tx.creditAccount.findUnique({
+          where: {
+            userId_vendorId: { userId: returnReq.order.userId, vendorId },
+          },
+        });
+        if (creditAcc) {
+          const refund = Math.min(body.refundAmount, Number(creditAcc.creditUsed));
+          const newUsed = Math.max(0, Number(creditAcc.creditUsed) - refund);
+          await tx.creditAccount.update({
+            where: { id: creditAcc.id },
+            data: { creditUsed: newUsed },
+          });
+          await tx.creditTransaction.create({
+            data: {
+              creditAccountId: creditAcc.id,
+              orderId: returnReq.order.id,
+              vendorId,
+              type: 'credit',
+              amount: refund,
+              balanceAfter: newUsed,
+              notes: `Return approved — refund of ₹${refund.toFixed(2)} applied`,
+            },
+          });
+        }
+      }
+
+      return result;
     });
 
     return NextResponse.json({ success: true, data: updated });
