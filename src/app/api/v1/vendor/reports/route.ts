@@ -29,7 +29,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
     const period = new URL(req.url).searchParams.get('period');
     const { start, buckets } = parsePeriod(period);
 
-    const [periodOrders, topProducts, orderStatusBreakdown, totals, customerStats, inventoryRows] =
+    const [periodOrders, topProducts, orderStatusBreakdown, totals, customerStats, inventoryRows, creditData] =
       await Promise.all([
         // Orders in period (non-cancelled)
         prisma.order.findMany({
@@ -74,6 +74,18 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
         prisma.inventory.findMany({
           where: { vendorId },
           select: { productId: true, qtyAvailable: true, qtyReserved: true, lowStockThreshold: true, product: { select: { id: true, name: true } } },
+        }),
+
+        // Credit accounts for this vendor's customers
+        prisma.creditAccount.findMany({
+          where: { vendorId },
+          include: {
+            user: { select: { fullName: true, businessName: true } },
+            transactions: {
+              where: { type: 'debit', dueDate: { not: null } },
+              select: { dueDate: true, amount: true },
+            },
+          },
         }),
       ]);
 
@@ -174,6 +186,61 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
       orderStatusBreakdown.map(s => [s.status, s._count.id])
     );
 
+    // ─── Credit analytics ────────────────────────────────────────────────────
+    const now = new Date();
+    const aging: Record<string, number> = { current: 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
+    const riskCustomers: { name: string; businessName: string | null; creditUsed: number; daysOverdue: number }[] = [];
+    let totalOutstanding = 0;
+    let accountsWithCredit = 0;
+    let accountsWithNoOverdue = 0;
+
+    for (const acc of creditData) {
+      const creditUsed = Number(acc.creditUsed);
+      if (creditUsed <= 0) continue;
+      accountsWithCredit += 1;
+      totalOutstanding += creditUsed;
+
+      const overdueDebits = acc.transactions.filter(t => t.dueDate !== null && new Date(t.dueDate) < now);
+      let daysOverdue = 0;
+      if (overdueDebits.length > 0) {
+        const oldest = overdueDebits.reduce<Date>((min, t) => {
+          const d = new Date(t.dueDate as Date);
+          return d < min ? d : min;
+        }, new Date(overdueDebits[0].dueDate as Date));
+        daysOverdue = Math.floor((now.getTime() - oldest.getTime()) / 86_400_000);
+      }
+
+      if (daysOverdue === 0) {
+        aging.current += creditUsed;
+        accountsWithNoOverdue += 1;
+      } else if (daysOverdue <= 30) {
+        aging['1-30'] += creditUsed;
+      } else if (daysOverdue <= 60) {
+        aging['31-60'] += creditUsed;
+      } else if (daysOverdue <= 90) {
+        aging['61-90'] += creditUsed;
+      } else {
+        aging['90+'] += creditUsed;
+        riskCustomers.push({
+          name: acc.user?.fullName ?? 'Unknown',
+          businessName: acc.user?.businessName ?? null,
+          creditUsed,
+          daysOverdue,
+        });
+      }
+    }
+
+    // Round aging bucket values
+    for (const key of Object.keys(aging)) {
+      aging[key] = Math.round(aging[key]);
+    }
+
+    const collectionEfficiency = accountsWithCredit > 0
+      ? Math.round((accountsWithNoOverdue / accountsWithCredit) * 1000) / 10
+      : 100;
+
+    riskCustomers.sort((a, b) => b.daysOverdue - a.daysOverdue);
+
     return NextResponse.json({
       success: true,
       data: {
@@ -198,6 +265,12 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
           outOfStockCount,
           totalSkus: inventoryRows.length,
           deadStock,
+        },
+        creditAnalytics: {
+          aging,
+          totalOutstanding: Math.round(totalOutstanding),
+          collectionEfficiency,
+          riskCustomers,
         },
       },
     });

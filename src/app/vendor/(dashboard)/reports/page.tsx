@@ -6,7 +6,7 @@ import {
     Users, AlertTriangle, Download, RefreshCw,
 } from 'lucide-react';
 import {
-    AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+    AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid,
     Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { cn } from '@/lib/utils';
@@ -19,6 +19,8 @@ interface RevenuePoint { key: string; label: string; revenue: number; orders: nu
 interface TopProduct { productId: string; name: string; qty: number; revenue: number }
 interface TopCustomer { userId: string; fullName: string; businessName?: string | null; orderCount: number; totalSpend: number }
 interface DeadStockItem { productId: string; name: string; qty: number }
+interface RiskCustomer { name: string; businessName: string | null; creditUsed: number; daysOverdue: number }
+interface AgingBuckets { current: number; '1-30': number; '31-60': number; '61-90': number; '90+': number }
 
 interface ReportsData {
     period: string;
@@ -39,6 +41,12 @@ interface ReportsData {
         outOfStockCount: number;
         totalSkus: number;
         deadStock: DeadStockItem[];
+    };
+    creditAnalytics: {
+        aging: AgingBuckets;
+        totalOutstanding: number;
+        collectionEfficiency: number;
+        riskCustomers: RiskCustomer[];
     };
 }
 
@@ -355,6 +363,112 @@ export default function VendorReportsPage() {
                                 <p className="text-[12px] text-[#AEAEAE] text-center py-4">All stocked SKUs had orders this period</p>
                             )}
                         </div>
+                    </div>
+
+                    {/* ─── Credit analytics ─── */}
+                    <div className="space-y-5">
+                        <div>
+                            <h2 className="text-[17px] font-bold text-[#181725]">Credit Analytics</h2>
+                            <p className="text-[12px] text-[#AEAEAE]">DiSCCO credit outstanding and collection health</p>
+                        </div>
+
+                        {/* Stat cards */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+                                <div className="flex items-center justify-between mb-3">
+                                    <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Total Outstanding</p>
+                                    <div className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center bg-[#EF444418] text-[#EF4444]">
+                                        <IndianRupee size={16} />
+                                    </div>
+                                </div>
+                                <p className="text-[22px] font-extrabold text-[#181725]">{fmt(data.creditAnalytics.totalOutstanding)}</p>
+                            </div>
+                            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+                                <div className="flex items-center justify-between mb-3">
+                                    <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Collection Efficiency</p>
+                                    <div className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center"
+                                        style={{ backgroundColor: `${data.creditAnalytics.collectionEfficiency >= 80 ? '#299E60' : '#F59E0B'}18`, color: data.creditAnalytics.collectionEfficiency >= 80 ? '#299E60' : '#F59E0B' }}>
+                                        <TrendingUp size={16} />
+                                    </div>
+                                </div>
+                                <p className="text-[22px] font-extrabold text-[#181725]">{data.creditAnalytics.collectionEfficiency}%</p>
+                            </div>
+                        </div>
+
+                        {/* Aging bucket bar chart */}
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                            <h3 className="text-[15px] font-bold text-[#181725] mb-5">Receivables Aging</h3>
+                            {data.creditAnalytics.totalOutstanding === 0 ? (
+                                <p className="text-[13px] text-[#AEAEAE] text-center py-10">No outstanding credit</p>
+                            ) : (
+                                <ResponsiveContainer width="100%" height={220}>
+                                    <BarChart
+                                        data={[
+                                            { bucket: 'Current',  amount: data.creditAnalytics.aging.current,   fill: '#299E60' },
+                                            { bucket: '1-30d',    amount: data.creditAnalytics.aging['1-30'],   fill: '#F59E0B' },
+                                            { bucket: '31-60d',   amount: data.creditAnalytics.aging['31-60'],  fill: '#F97316' },
+                                            { bucket: '61-90d',   amount: data.creditAnalytics.aging['61-90'],  fill: '#EF4444' },
+                                            { bucket: '90d+',     amount: data.creditAnalytics.aging['90+'],    fill: '#991B1B' },
+                                        ]}
+                                        margin={{ top: 4, right: 16, left: 0, bottom: 0 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#F5F5F5" vertical={false} />
+                                        <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: '#AEAEAE' }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fontSize: 11, fill: '#AEAEAE' }} axisLine={false} tickLine={false}
+                                            tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
+                                        <Tooltip
+                                            formatter={(v) => [fmt(Number(v ?? 0)), 'Outstanding']}
+                                            contentStyle={{ borderRadius: 10, border: '1px solid #EEEEEE', fontSize: 12 }}
+                                        />
+                                        <Bar dataKey="amount" radius={[5, 5, 0, 0]} maxBarSize={48}>
+                                            {(['#299E60', '#F59E0B', '#F97316', '#EF4444', '#991B1B'] as const).map((color, index) => (
+                                                <Cell key={index} fill={color} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
+                        </div>
+
+                        {/* High-risk customers table */}
+                        {data.creditAnalytics.riskCustomers.length > 0 && (
+                            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <AlertTriangle size={15} className="text-[#EF4444]" />
+                                    <h3 className="text-[15px] font-bold text-[#181725]">High-Risk Customers</h3>
+                                    <span className="ml-auto text-[11px] font-bold text-[#EF4444] bg-red-50 px-2.5 py-1 rounded-[6px]">
+                                        {data.creditAnalytics.riskCustomers.length} overdue 90d+
+                                    </span>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-[12px]">
+                                        <thead>
+                                            <tr className="border-b border-[#EEEEEE]">
+                                                <th className="text-left font-bold text-[#AEAEAE] uppercase tracking-wide pb-2 pr-4">Customer</th>
+                                                <th className="text-right font-bold text-[#AEAEAE] uppercase tracking-wide pb-2 pr-4">Outstanding</th>
+                                                <th className="text-right font-bold text-[#AEAEAE] uppercase tracking-wide pb-2">Days Overdue</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-[#EEEEEE]">
+                                            {data.creditAnalytics.riskCustomers.map((c, i) => (
+                                                <tr key={i}>
+                                                    <td className="py-2.5 pr-4">
+                                                        <p className="font-bold text-[#181725] leading-tight">{c.name}</p>
+                                                        {c.businessName && <p className="text-[#AEAEAE] text-[10px]">{c.businessName}</p>}
+                                                    </td>
+                                                    <td className="py-2.5 pr-4 text-right font-bold text-[#EF4444]">{fmt(c.creditUsed)}</td>
+                                                    <td className="py-2.5 text-right">
+                                                        <span className="font-bold text-[#EF4444] bg-red-50 px-2 py-0.5 rounded-[5px]">
+                                                            {c.daysOverdue}d
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
