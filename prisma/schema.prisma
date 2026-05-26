@@ -299,6 +299,9 @@ model Product {
   brand           String?  @db.VarChar(150)
   barcode         String?  @db.VarChar(100)
   tags            String[] @default([]) @map("tags")
+  aliasNames      String[] @default([]) @map("alias_names")
+  shelfLifeDays   Int?     @map("shelf_life_days")
+  countryOfOrigin String?  @map("country_of_origin") @db.VarChar(100)
   basePrice       Decimal  @map("base_price") @db.Decimal(10, 2)       // Taxable rate (before tax)
   originalPrice   Decimal? @map("original_price") @db.Decimal(10, 2)  // MRP / strikethrough price
   taxPercent      Decimal  @default(0) @map("tax_percent") @db.Decimal(5, 2)
