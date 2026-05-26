@@ -308,7 +308,7 @@ function ActionPanel({ order, fulfilledQtys, adjustedTotal, isPartialAccept, onA
                                     Confirm Delivery
                                 </button>
                                 {showProofModal && (
-                                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                                    <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
                                         <div className="bg-white rounded-[16px] shadow-2xl w-full max-w-[420px]">
                                             <div className="px-6 py-4 border-b border-[#F5F5F5]">
                                                 <p className="text-[15px] font-bold text-[#181725]">Delivery Proof</p>

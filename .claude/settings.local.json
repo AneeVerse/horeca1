@@ -21,7 +21,8 @@
       "Bash(node -e \":*)",
       "Read(//c/Users/Roger/.claude/projects/c--Users-Roger-Desktop-horeca1-prod/**)",
       "Bash(npx @sentry/wizard@latest -i nextjs --saas --org horeca1 --project javascript-nextjs)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:claude.ai)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Roger\\Desktop\\horeca1-prod\\src\\app\\api\\auth\\[...nextauth]",

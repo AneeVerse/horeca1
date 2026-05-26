@@ -97,7 +97,7 @@ function EditModal({ customer, priceLists, onClose, onSave }: EditModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[10001] bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-[16px] w-full max-w-[480px] shadow-2xl">
         <div className="px-6 py-4 border-b border-[#EEEEEE]">
           <h2 className="text-[16px] font-bold text-[#181725]">Edit Customer</h2>

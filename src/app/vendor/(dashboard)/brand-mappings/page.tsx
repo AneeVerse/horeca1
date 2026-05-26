@@ -93,7 +93,7 @@ function BrandPickerModal({
     if (!open) return null;
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-[10001] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
             <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
                 <div className="p-5 border-b border-gray-100 flex items-center justify-between">
                     <div>
