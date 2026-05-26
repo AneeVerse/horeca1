@@ -76,29 +76,30 @@ export default function SetupWizardPage() {
 
       {/* Progress bar */}
       <div className="w-full max-w-2xl mb-8">
-        <div className="flex items-center justify-between mb-2">
+        {/* Step dots with connecting line */}
+        <div className="relative flex items-center justify-between">
+          {/* Background track */}
+          <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 h-0.5 bg-[#EEEEEE]" />
+          {/* Filled track */}
+          <div
+            className="absolute left-4 top-1/2 -translate-y-1/2 h-0.5 bg-[#299E60] transition-all duration-500"
+            style={{ width: `calc(${progress}% - 2rem)` }}
+          />
+          {/* Dots */}
           {STEPS.map((s) => (
-            <div key={s.id} className="flex flex-col items-center flex-1">
+            <div key={s.id} className="relative z-10 flex flex-col items-center gap-1.5">
               <div className={cn(
-                'w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold border-2 transition-all',
+                'w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold border-2 transition-all bg-[#F8F9FB]',
                 s.id < step ? 'bg-[#299E60] border-[#299E60] text-white' :
                 s.id === step ? 'bg-white border-[#299E60] text-[#299E60]' :
-                'bg-white border-[#EEEEEE] text-[#AEAEAE]'
+                'bg-[#F8F9FB] border-[#EEEEEE] text-[#AEAEAE]'
               )}>
-                {s.id < step ? <CheckCircle2 size={16} /> : s.id}
+                {s.id < step ? <CheckCircle2 size={14} /> : s.id}
               </div>
-              {s.id < STEPS.length && (
-                <div className="hidden sm:block w-full h-0.5 mt-[-16px] mx-1 bg-[#EEEEEE]">
-                  <div className={cn('h-full bg-[#299E60] transition-all', s.id < step ? 'w-full' : 'w-0')} />
-                </div>
-              )}
             </div>
           ))}
         </div>
-        <div className="w-full h-1.5 bg-[#EEEEEE] rounded-full overflow-hidden">
-          <div className="h-full bg-[#299E60] transition-all duration-500 rounded-full" style={{ width: `${progress}%` }} />
-        </div>
-        <p className="text-[12px] text-[#AEAEAE] text-center mt-1">Step {step} of {STEPS.length}</p>
+        <p className="text-[12px] text-[#AEAEAE] text-center mt-3">Step {step} of {STEPS.length}</p>
       </div>
 
       {/* Card */}
