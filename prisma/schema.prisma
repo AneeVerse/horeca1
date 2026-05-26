@@ -86,6 +86,7 @@ model User {
   creditAccounts  CreditAccount[]
   notifications   Notification[]
   reviews         Review[]
+  vendorCustomers VendorCustomer[] @relation("VendorCustomerUser")
 
   vendorMemberships VendorTeamMember[] @relation("VendorMemberships")
   vendorInvitesSent VendorTeamMember[] @relation("VendorInvites")
@@ -192,6 +193,10 @@ model Vendor {
   reviews            Review[]
   teamMembers        VendorTeamMember[]
   documents          VendorDocument[]
+  vendorWallet       VendorWallet?
+  vendorCustomers    VendorCustomer[]    @relation("VendorCustomerMapping")
+  priceLists         PriceList[]
+  settlements        VendorSettlement[]
 
   @@index([slug])
   @@index([isActive])
@@ -324,6 +329,7 @@ model Product {
   quickOrderListItems QuickOrderListItem[]
   collectionProducts  CollectionProduct[]
   brandMappings       BrandProductMapping[]
+  priceListItems      PriceListItem[]
 
   @@unique([vendorId, slug])
   @@index([vendorId])
@@ -633,14 +639,18 @@ enum PaymentStatus {
 // ═══ CREDIT (DiSCCO) ════════════════════════════════
 
 model CreditAccount {
-  id          String       @id @default(uuid()) @db.Uuid
-  userId      String       @map("user_id") @db.Uuid
-  vendorId    String       @map("vendor_id") @db.Uuid
-  creditLimit Decimal      @default(0) @map("credit_limit") @db.Decimal(12, 2)
-  creditUsed  Decimal      @default(0) @map("credit_used") @db.Decimal(12, 2)
-  status      CreditStatus @default(pending)
-  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id                  String       @id @default(uuid()) @db.Uuid
+  userId              String       @map("user_id") @db.Uuid
+  vendorId            String       @map("vendor_id") @db.Uuid
+  creditLimit         Decimal      @default(0) @map("credit_limit") @db.Decimal(12, 2)
+  creditUsed          Decimal      @default(0) @map("credit_used") @db.Decimal(12, 2)
+  status              CreditStatus @default(pending)
+  graceDays           Int          @default(0) @map("grace_days")
+  interestRatePct     Decimal      @default(0) @map("interest_rate_pct") @db.Decimal(5, 2)
+  penaltyRatePct      Decimal      @default(0) @map("penalty_rate_pct") @db.Decimal(5, 2)
+  freezeOnOverdueDays Int          @default(0) @map("freeze_on_overdue_days")
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   user         User                @relation(fields: [userId], references: [id])
   vendor       Vendor              @relation(fields: [vendorId], references: [id])
@@ -1241,4 +1251,158 @@ model UserRole {
   @@index([userId])
   @@index([businessAccountId])
   @@map("user_roles")
+}
+
+// ═══ VENDOR WALLET & SETTLEMENT ══════════════════════
+
+model VendorWallet {
+  id            String   @id @default(uuid()) @db.Uuid
+  vendorId      String   @unique @map("vendor_id") @db.Uuid
+  balance       Decimal  @default(0) @db.Decimal(12, 2)
+  pendingAmount Decimal  @default(0) @map("pending_amount") @db.Decimal(12, 2)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor       Vendor             @relation(fields: [vendorId], references: [id])
+  transactions VendorWalletTxn[]
+  settlements  VendorSettlement[]
+
+  @@map("vendor_wallets")
+}
+
+model VendorWalletTxn {
+  id            String              @id @default(uuid()) @db.Uuid
+  walletId      String              @map("wallet_id") @db.Uuid
+  type          VendorWalletTxnType
+  amount        Decimal             @db.Decimal(12, 2)
+  balanceAfter  Decimal             @map("balance_after") @db.Decimal(12, 2)
+  referenceId   String?             @map("reference_id") @db.Uuid
+  referenceType String?             @map("reference_type") @db.VarChar(30)
+  notes         String?             @db.Text
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz
+
+  wallet VendorWallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
+  @@map("vendor_wallet_txns")
+}
+
+enum VendorWalletTxnType {
+  order_credit
+  settlement_debit
+  adjustment
+  refund_debit
+}
+
+model VendorSettlement {
+  id            String           @id @default(uuid()) @db.Uuid
+  vendorId      String           @map("vendor_id") @db.Uuid
+  walletId      String           @map("wallet_id") @db.Uuid
+  grossAmount   Decimal          @map("gross_amount") @db.Decimal(12, 2)
+  platformFee   Decimal          @default(0) @map("platform_fee") @db.Decimal(12, 2)
+  gatewayFee    Decimal          @default(0) @map("gateway_fee") @db.Decimal(12, 2)
+  netAmount     Decimal          @map("net_amount") @db.Decimal(12, 2)
+  status        SettlementStatus @default(pending)
+  bankReference String?          @map("bank_reference") @db.VarChar(100)
+  periodStart   DateTime         @map("period_start") @db.Date
+  periodEnd     DateTime         @map("period_end") @db.Date
+  settledAt     DateTime?        @map("settled_at") @db.Timestamptz
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor  Vendor                  @relation(fields: [vendorId], references: [id])
+  wallet  VendorWallet            @relation(fields: [walletId], references: [id])
+  orders  VendorSettlementOrder[]
+
+  @@index([vendorId])
+  @@index([status])
+  @@map("vendor_settlements")
+}
+
+enum SettlementStatus {
+  pending
+  processing
+  settled
+  failed
+}
+
+model VendorSettlementOrder {
+  id           String   @id @default(uuid()) @db.Uuid
+  settlementId String   @map("settlement_id") @db.Uuid
+  orderId      String   @map("order_id") @db.Uuid
+  orderAmount  Decimal  @map("order_amount") @db.Decimal(12, 2)
+  platformFee  Decimal  @default(0) @map("platform_fee") @db.Decimal(12, 2)
+  netAmount    Decimal  @map("net_amount") @db.Decimal(12, 2)
+
+  settlement VendorSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@unique([settlementId, orderId])
+  @@index([settlementId])
+  @@map("vendor_settlement_orders")
+}
+
+// ═══ VENDOR CUSTOMER MAPPING ═════════════════════════
+
+model VendorCustomer {
+  id           String               @id @default(uuid()) @db.Uuid
+  vendorId     String               @map("vendor_id") @db.Uuid
+  userId       String               @map("user_id") @db.Uuid
+  status       VendorCustomerStatus @default(active)
+  priceListId  String?              @map("price_list_id") @db.Uuid
+  territory    String?              @db.VarChar(100)
+  tags         String[]             @default([]) @map("tags")
+  notes        String?              @db.Text
+  paymentTerms String?              @map("payment_terms") @db.VarChar(50)
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor    Vendor     @relation("VendorCustomerMapping", fields: [vendorId], references: [id], onDelete: Cascade)
+  user      User       @relation("VendorCustomerUser", fields: [userId], references: [id])
+  priceList PriceList? @relation(fields: [priceListId], references: [id])
+
+  @@unique([vendorId, userId])
+  @@index([vendorId])
+  @@index([userId])
+  @@map("vendor_customers")
+}
+
+enum VendorCustomerStatus {
+  active
+  blocked
+  suspended
+}
+
+// ═══ PRICE LISTS ═════════════════════════════════════
+
+model PriceList {
+  id              String   @id @default(uuid()) @db.Uuid
+  vendorId        String   @map("vendor_id") @db.Uuid
+  name            String   @db.VarChar(255)
+  discountPercent Decimal  @default(0) @map("discount_percent") @db.Decimal(5, 2)
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor    Vendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  items     PriceListItem[]
+  customers VendorCustomer[]
+
+  @@unique([vendorId, name])
+  @@index([vendorId])
+  @@map("price_lists")
+}
+
+model PriceListItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  priceListId String   @map("price_list_id") @db.Uuid
+  productId   String   @map("product_id") @db.Uuid
+  customPrice Decimal  @map("custom_price") @db.Decimal(10, 2)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([priceListId, productId])
+  @@index([priceListId])
+  @@map("price_list_items")
 }
