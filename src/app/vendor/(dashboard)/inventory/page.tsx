@@ -1,10 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
-import { Loader2, Package, AlertTriangle, Search, X, Save } from 'lucide-react';
+import {
+    Loader2, Package, AlertTriangle, Search, Upload,
+    ChevronDown, ChevronUp, X, FileText, Check,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface InventoryItem {
     id: string;
@@ -16,24 +21,321 @@ interface InventoryItem {
     product: {
         id: string;
         name: string;
+        sku?: string | null;
+        unit?: string | null;
         imageUrl: string | null;
         isActive: boolean;
         basePrice: number;
     };
 }
 
+type FilterTab = 'all' | 'low_stock' | 'out_of_stock';
+
+// ─── CSV helpers ──────────────────────────────────────────────────────────────
+
+interface CsvRow { productId: string; qtyAvailable: number; error?: string }
+
+function parseCsv(text: string): CsvRow[] {
+    const lines = text.trim().split('\n').filter(Boolean);
+    const rows: CsvRow[] = [];
+    for (const line of lines) {
+        const [rawId, rawQty] = line.split(',').map(s => s.trim());
+        if (!rawId || rawId.toLowerCase() === 'productid') continue; // skip header
+        const qty = parseInt(rawQty ?? '', 10);
+        rows.push({
+            productId: rawId,
+            qtyAvailable: isNaN(qty) ? 0 : qty,
+            error: !rawId.match(/^[0-9a-f-]{36}$/) ? 'Invalid UUID' : isNaN(qty) ? 'Missing qty' : undefined,
+        });
+    }
+    return rows;
+}
+
+// ─── CSV Upload Modal ─────────────────────────────────────────────────────────
+
+function CsvUploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+    const [rows, setRows] = useState<CsvRow[]>([]);
+    const [uploading, setUploading] = useState(false);
+    const fileRef = useRef<HTMLInputElement>(null);
+
+    const handleFile = (file: File) => {
+        const reader = new FileReader();
+        reader.onload = (e) => setRows(parseCsv(e.target?.result as string));
+        reader.readAsText(file);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        const file = e.dataTransfer.files[0];
+        if (file) handleFile(file);
+    };
+
+    const errorCount = rows.filter(r => r.error).length;
+    const validRows = rows.filter(r => !r.error);
+
+    const handleUpload = async () => {
+        if (validRows.length === 0) return;
+        setUploading(true);
+        try {
+            const res = await fetch('/api/v1/vendor/inventory', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: validRows.map(r => ({ productId: r.productId, qtyAvailable: r.qtyAvailable })) }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Upload failed');
+            toast.success(`Updated ${json.updated} product${json.updated !== 1 ? 's' : ''}`);
+            onSuccess();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Upload failed');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-[16px] shadow-2xl w-full max-w-[560px] overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[#F5F5F5]">
+                    <div>
+                        <p className="text-[16px] font-bold text-[#181725]">Bulk Stock Update</p>
+                        <p className="text-[12px] text-[#AEAEAE] mt-0.5">Upload a CSV: <span className="font-mono">productId,qtyAvailable</span></p>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 rounded-[8px] hover:bg-[#F5F5F5] transition-colors">
+                        <X size={16} className="text-[#7C7C7C]" />
+                    </button>
+                </div>
+
+                <div className="p-6 space-y-4">
+                    {/* Drop zone */}
+                    <div
+                        onDragOver={e => e.preventDefault()}
+                        onDrop={handleDrop}
+                        onClick={() => fileRef.current?.click()}
+                        className="border-2 border-dashed border-[#EEEEEE] rounded-[12px] p-8 text-center cursor-pointer hover:border-[#299E60]/50 hover:bg-[#EEF8F1]/30 transition-all"
+                    >
+                        <Upload size={24} className="text-[#AEAEAE] mx-auto mb-2" />
+                        <p className="text-[13px] font-bold text-[#181725]">Drop CSV here or click to browse</p>
+                        <p className="text-[11px] text-[#AEAEAE] mt-1">Columns: <span className="font-mono">productId, qtyAvailable</span></p>
+                        <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+                    </div>
+
+                    {/* Preview */}
+                    {rows.length > 0 && (
+                        <div className="rounded-[10px] border border-[#EEEEEE] overflow-hidden">
+                            <div className="px-4 py-2.5 bg-[#FAFAFA] border-b border-[#EEEEEE] flex items-center justify-between">
+                                <span className="text-[12px] font-bold text-[#181725]">{rows.length} rows parsed</span>
+                                {errorCount > 0 && (
+                                    <span className="text-[11px] font-bold text-[#E74C3C]">{errorCount} error{errorCount !== 1 ? 's' : ''} — will be skipped</span>
+                                )}
+                            </div>
+                            <div className="max-h-[200px] overflow-y-auto divide-y divide-[#F5F5F5]">
+                                {rows.slice(0, 50).map((row, i) => (
+                                    <div key={i} className={cn('flex items-center justify-between px-4 py-2', row.error && 'bg-red-50/60')}>
+                                        <span className={cn('text-[12px] font-mono', row.error ? 'text-[#E74C3C]' : 'text-[#181725]')}>
+                                            {row.productId.slice(0, 18)}…
+                                        </span>
+                                        {row.error ? (
+                                            <span className="text-[11px] text-[#E74C3C] font-bold">{row.error}</span>
+                                        ) : (
+                                            <span className="text-[12px] font-bold text-[#299E60]">qty → {row.qtyAvailable}</span>
+                                        )}
+                                    </div>
+                                ))}
+                                {rows.length > 50 && (
+                                    <div className="px-4 py-2 text-[11px] text-[#AEAEAE] text-center">
+                                        …and {rows.length - 50} more rows
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-3 pt-1">
+                        <button onClick={onClose} className="flex-1 h-[42px] rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all">
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleUpload}
+                            disabled={validRows.length === 0 || uploading}
+                            className="flex-1 h-[42px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                            {uploading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                            Import {validRows.length > 0 ? `${validRows.length} rows` : ''}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Inline row component ─────────────────────────────────────────────────────
+
+function InventoryRow({ item, onSaved }: { item: InventoryItem; onSaved: (updated: Partial<InventoryItem> & { id: string }) => void }) {
+    const [qty, setQty] = useState(item.qtyAvailable);
+    const [threshold, setThreshold] = useState(item.lowStockThreshold);
+    const [editingThreshold, setEditingThreshold] = useState(false);
+    const [dirty, setDirty] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Sync if parent refreshes
+    useEffect(() => { setQty(item.qtyAvailable); setThreshold(item.lowStockThreshold); setDirty(false); }, [item.qtyAvailable, item.lowStockThreshold]);
+
+    const persist = useCallback(async (newQty: number, newThreshold: number) => {
+        setSaving(true);
+        try {
+            const res = await fetch('/api/v1/vendor/inventory', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ productId: item.productId, qtyAvailable: newQty, lowStockThreshold: newThreshold }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Save failed');
+            setDirty(false);
+            onSaved({ id: item.id, qtyAvailable: newQty, lowStockThreshold: newThreshold, isLowStock: newQty - item.qtyReserved <= newThreshold });
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Save failed');
+        } finally {
+            setSaving(false);
+        }
+    }, [item.productId, item.id, item.qtyReserved, onSaved]);
+
+    const scheduleAutoSave = (newQty: number, newThreshold: number) => {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        setDirty(true);
+        saveTimer.current = setTimeout(() => persist(newQty, newThreshold), 900);
+    };
+
+    const nudgeQty = (delta: number) => {
+        const newQty = Math.max(0, qty + delta);
+        setQty(newQty);
+        scheduleAutoSave(newQty, threshold);
+    };
+
+    const handleQtyInput = (v: string) => {
+        const n = parseInt(v, 10);
+        if (isNaN(n) || n < 0) return;
+        setQty(n);
+        scheduleAutoSave(n, threshold);
+    };
+
+    const handleThresholdBlur = () => {
+        setEditingThreshold(false);
+        if (threshold !== item.lowStockThreshold) scheduleAutoSave(qty, threshold);
+    };
+
+    const net = qty - item.qtyReserved;
+    const isLow = net <= threshold;
+
+    return (
+        <tr className={cn('transition-colors', isLow ? 'bg-red-50/40' : 'hover:bg-[#FAFAFA]')}>
+            {/* Product */}
+            <td className="px-5 py-3.5">
+                <div className="flex items-center gap-3">
+                    <div className="w-[38px] h-[38px] rounded-[8px] bg-[#F1F4F9] overflow-hidden shrink-0 flex items-center justify-center relative">
+                        {item.product.imageUrl ? (
+                            <Image src={item.product.imageUrl} alt="" fill className="object-cover" unoptimized />
+                        ) : (
+                            <Package size={15} className="text-[#AEAEAE]" />
+                        )}
+                    </div>
+                    <div>
+                        <p className="text-[13px] font-bold text-[#181725] leading-tight">{item.product.name}</p>
+                        <p className="text-[11px] text-[#AEAEAE]">
+                            {item.product.sku ? `SKU ${item.product.sku}` : `₹${Number(item.product.basePrice).toLocaleString('en-IN')}`}
+                            {item.product.unit ? ` · ${item.product.unit}` : ''}
+                        </p>
+                    </div>
+                </div>
+            </td>
+
+            {/* Available — inline +/- */}
+            <td className="px-5 py-3.5">
+                <div className="flex items-center gap-1 justify-center">
+                    <button onClick={() => nudgeQty(-1)} className="w-7 h-7 rounded-[6px] border border-[#EEEEEE] flex items-center justify-center text-[#7C7C7C] hover:bg-[#F5F5F5] hover:border-[#E74C3C]/40 hover:text-[#E74C3C] transition-all text-[14px] font-bold leading-none">−</button>
+                    <input
+                        type="number"
+                        value={qty}
+                        onChange={e => handleQtyInput(e.target.value)}
+                        className="w-[52px] h-7 text-center text-[13px] font-bold text-[#181725] border border-[#EEEEEE] rounded-[6px] outline-none focus:border-[#299E60]/50"
+                        min={0}
+                    />
+                    <button onClick={() => nudgeQty(1)} className="w-7 h-7 rounded-[6px] border border-[#EEEEEE] flex items-center justify-center text-[#7C7C7C] hover:bg-[#EEF8F1] hover:border-[#299E60]/40 hover:text-[#299E60] transition-all text-[14px] font-bold leading-none">+</button>
+                    {saving && <Loader2 size={11} className="animate-spin text-[#299E60] ml-0.5" />}
+                    {dirty && !saving && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 ml-0.5" />}
+                </div>
+            </td>
+
+            {/* Reserved */}
+            <td className="px-5 py-3.5 text-center text-[13px] text-[#7C7C7C] font-medium">{item.qtyReserved}</td>
+
+            {/* Net */}
+            <td className="px-5 py-3.5 text-center">
+                <span className={cn('text-[13px] font-bold', net <= 0 ? 'text-[#E74C3C]' : net <= threshold ? 'text-amber-500' : 'text-[#181725]')}>
+                    {net}
+                </span>
+            </td>
+
+            {/* Threshold */}
+            <td className="px-5 py-3.5 text-center">
+                {editingThreshold ? (
+                    <input
+                        autoFocus
+                        type="number"
+                        value={threshold}
+                        onChange={e => setThreshold(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        onBlur={handleThresholdBlur}
+                        onKeyDown={e => e.key === 'Enter' && handleThresholdBlur()}
+                        className="w-[52px] h-7 text-center text-[13px] font-bold border border-[#299E60]/50 rounded-[6px] outline-none"
+                    />
+                ) : (
+                    <button
+                        onClick={() => setEditingThreshold(true)}
+                        className="text-[13px] text-[#7C7C7C] hover:text-[#181725] hover:underline transition-colors"
+                        title="Click to edit threshold"
+                    >
+                        {threshold}
+                    </button>
+                )}
+            </td>
+
+            {/* Status */}
+            <td className="px-5 py-3.5 text-center">
+                {net <= 0 ? (
+                    <span className="inline-flex items-center gap-1 bg-[#FFF0F0] text-[#E74C3C] text-[11px] font-[900] px-2.5 py-1 rounded-[6px] uppercase">
+                        <AlertTriangle size={11} /> Out
+                    </span>
+                ) : isLow ? (
+                    <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-600 text-[11px] font-[900] px-2.5 py-1 rounded-[6px] uppercase">
+                        <AlertTriangle size={11} /> Low
+                    </span>
+                ) : (
+                    <span className="inline-flex items-center bg-[#EEF8F1] text-[#299E60] text-[11px] font-[900] px-2.5 py-1 rounded-[6px] uppercase">
+                        OK
+                    </span>
+                )}
+            </td>
+        </tr>
+    );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function VendorInventoryPage() {
     const [items, setItems] = useState<InventoryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [editQty, setEditQty] = useState('');
-    const [editThreshold, setEditThreshold] = useState('');
-    const [saving, setSaving] = useState(false);
+    const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
+    const [showCsvModal, setShowCsvModal] = useState(false);
+    const [alertCollapsed, setAlertCollapsed] = useState(false);
 
-    const fetchInventory = useCallback(async () => {
+    const fetchInventory = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
-            setLoading(true);
             const res = await fetch('/api/v1/vendor/inventory');
             const json = await res.json();
             if (json.success) setItems(json.data);
@@ -46,202 +348,174 @@ export default function VendorInventoryPage() {
 
     useEffect(() => { fetchInventory(); }, [fetchInventory]);
 
-    const startEdit = (item: InventoryItem) => {
-        setEditingId(item.id);
-        setEditQty(String(item.qtyAvailable));
-        setEditThreshold(String(item.lowStockThreshold));
-    };
+    const handleRowSaved = useCallback((updated: Partial<InventoryItem> & { id: string }) => {
+        setItems(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated } : i));
+    }, []);
 
-    const cancelEdit = () => {
-        setEditingId(null);
-        setEditQty('');
-        setEditThreshold('');
-    };
+    // Derived counts
+    const lowStockItems = items.filter(i => i.isLowStock && i.qtyAvailable - i.qtyReserved > 0);
+    const outOfStockItems = items.filter(i => i.qtyAvailable - i.qtyReserved <= 0);
 
-    const saveEdit = async (item: InventoryItem) => {
-        try {
-            setSaving(true);
-            const res = await fetch('/api/v1/vendor/inventory', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    productId: item.productId,
-                    qtyAvailable: parseInt(editQty, 10),
-                    lowStockThreshold: parseInt(editThreshold, 10),
-                }),
-            });
-            const json = await res.json();
-            if (json.success) {
-                setItems(prev => prev.map(i => {
-                    if (i.id !== item.id) return i;
-                    const newQty = parseInt(editQty, 10);
-                    const newThreshold = parseInt(editThreshold, 10);
-                    return {
-                        ...i,
-                        qtyAvailable: newQty,
-                        lowStockThreshold: newThreshold,
-                        isLowStock: newQty - i.qtyReserved <= newThreshold,
-                    };
-                }));
-                cancelEdit();
-            } else {
-                toast.error(json.error?.message || 'Update failed');
-            }
-        } catch (err) {
-            console.error('Save failed:', err);
-        } finally {
-            setSaving(false);
-        }
-    };
+    const filtered = items.filter(item => {
+        const matchSearch = item.product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (item.product.sku ?? '').toLowerCase().includes(searchQuery.toLowerCase());
+        if (!matchSearch) return false;
+        if (activeFilter === 'low_stock') return item.isLowStock && item.qtyAvailable - item.qtyReserved > 0;
+        if (activeFilter === 'out_of_stock') return item.qtyAvailable - item.qtyReserved <= 0;
+        return true;
+    });
 
-    const filteredItems = items.filter(i =>
-        i.product.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const lowStockCount = items.filter(i => i.isLowStock).length;
+    const FILTER_TABS: { key: FilterTab; label: string; count: number }[] = [
+        { key: 'all', label: 'All', count: items.length },
+        { key: 'low_stock', label: 'Low Stock', count: lowStockItems.length },
+        { key: 'out_of_stock', label: 'Out of Stock', count: outOfStockItems.length },
+    ];
 
     return (
-        <div className="space-y-6 pb-10">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-5 pb-10">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-[28px] font-bold text-[#000000] leading-none mb-1">Inventory</h1>
-                    <p className="text-[#000000] text-[13px] font-medium opacity-70">
-                        Manage stock levels for your products
-                        {lowStockCount > 0 && (
-                            <span className="ml-2 text-[#E74C3C] font-bold">({lowStockCount} low stock)</span>
-                        )}
-                    </p>
+                    <h1 className="text-[24px] font-bold text-[#181725]">Inventory</h1>
+                    <p className="text-[12px] text-[#AEAEAE]">Manage stock levels — changes save automatically</p>
                 </div>
-                <div className="relative w-full max-w-[240px]">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={16} />
-                    <input
-                        type="text"
-                        placeholder="Search products..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="h-[44px] w-full bg-white border border-[#EEEEEE] rounded-[12px] pl-10 pr-4 text-[13px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 shadow-sm"
-                    />
+                <div className="flex items-center gap-2">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={14} />
+                        <input
+                            type="text"
+                            placeholder="Search products..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="h-[38px] w-[200px] bg-white border border-[#EEEEEE] rounded-[10px] pl-9 pr-3 text-[12px] outline-none placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 shadow-sm"
+                        />
+                    </div>
+                    <button
+                        onClick={() => setShowCsvModal(true)}
+                        className="h-[38px] px-4 rounded-[10px] bg-[#181725] text-white text-[12px] font-bold flex items-center gap-2 hover:bg-[#2d2d40] transition-all shadow-sm"
+                    >
+                        <Upload size={13} />
+                        Bulk Upload
+                    </button>
                 </div>
             </div>
 
+            {/* Low stock alert banner */}
+            {(lowStockItems.length > 0 || outOfStockItems.length > 0) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-[12px] overflow-hidden">
+                    <button
+                        onClick={() => setAlertCollapsed(p => !p)}
+                        className="w-full flex items-center justify-between px-4 py-3"
+                    >
+                        <div className="flex items-center gap-2.5">
+                            <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                            <span className="text-[13px] font-bold text-amber-800">
+                                {outOfStockItems.length > 0 && `${outOfStockItems.length} out of stock`}
+                                {outOfStockItems.length > 0 && lowStockItems.length > 0 && ' · '}
+                                {lowStockItems.length > 0 && `${lowStockItems.length} running low`}
+                            </span>
+                        </div>
+                        {alertCollapsed ? <ChevronDown size={15} className="text-amber-600" /> : <ChevronUp size={15} className="text-amber-600" />}
+                    </button>
+                    {!alertCollapsed && (
+                        <div className="px-4 pb-3 flex flex-wrap gap-2">
+                            {outOfStockItems.slice(0, 12).map(i => (
+                                <span key={i.id} className="text-[11px] font-bold bg-red-100 text-[#E74C3C] px-2.5 py-1 rounded-[6px]">
+                                    {i.product.name}
+                                </span>
+                            ))}
+                            {lowStockItems.slice(0, 12).map(i => (
+                                <span key={i.id} className="text-[11px] font-bold bg-amber-100 text-amber-700 px-2.5 py-1 rounded-[6px]">
+                                    {i.product.name}
+                                </span>
+                            ))}
+                            {(outOfStockItems.length + lowStockItems.length) > 24 && (
+                                <span className="text-[11px] text-amber-600">…and more</span>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Filter tabs */}
+            <div className="flex items-center gap-2">
+                {FILTER_TABS.map(tab => (
+                    <button
+                        key={tab.key}
+                        onClick={() => setActiveFilter(tab.key)}
+                        className={cn(
+                            'h-[34px] px-4 rounded-[8px] text-[12px] font-bold transition-all flex items-center gap-1.5',
+                            activeFilter === tab.key
+                                ? 'bg-[#299E60] text-white shadow-sm'
+                                : 'bg-white border border-[#EEEEEE] text-[#7C7C7C] hover:border-[#299E60]/30'
+                        )}
+                    >
+                        {tab.label}
+                        {tab.count > 0 && (
+                            <span className={cn(
+                                'text-[10px] font-[900] px-1.5 py-0.5 rounded-full',
+                                activeFilter === tab.key ? 'bg-white/20' : 'bg-[#F5F5F5] text-[#7C7C7C]'
+                            )}>
+                                {tab.count}
+                            </span>
+                        )}
+                    </button>
+                ))}
+                <span className="ml-auto text-[11px] text-[#AEAEAE] flex items-center gap-1">
+                    <FileText size={11} />
+                    Click threshold to edit · Changes auto-save
+                </span>
+            </div>
+
+            {/* Table */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
                 {loading ? (
                     <div className="flex items-center justify-center py-20">
-                        <Loader2 className="animate-spin text-[#299E60]" size={32} />
+                        <Loader2 className="animate-spin text-[#299E60]" size={28} />
                     </div>
-                ) : filteredItems.length === 0 ? (
-                    <div className="py-20 text-center">
-                        <Package size={40} className="text-[#E5E7EB] mx-auto mb-3" />
-                        <p className="text-[14px] font-bold text-[#AEAEAE]">No inventory items</p>
+                ) : filtered.length === 0 ? (
+                    <div className="py-16 text-center">
+                        <Package size={36} className="text-[#E5E7EB] mx-auto mb-3" />
+                        <p className="text-[14px] font-bold text-[#AEAEAE]">
+                            {searchQuery ? `No products matching "${searchQuery}"` : `No ${activeFilter === 'all' ? '' : activeFilter.replace('_', ' ')} products`}
+                        </p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
                                 <tr className="bg-[#FAFAFA] border-b border-[#EEEEEE]">
-                                    <th className="px-6 py-4 text-left text-[12px] font-bold text-[#AEAEAE] uppercase">Product</th>
-                                    <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Available</th>
-                                    <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Reserved</th>
-                                    <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Net Stock</th>
-                                    <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Threshold</th>
-                                    <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Status</th>
-                                    <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Action</th>
+                                    <th className="px-5 py-3 text-left text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Product</th>
+                                    <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Available</th>
+                                    <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Reserved</th>
+                                    <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Net</th>
+                                    <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Threshold</th>
+                                    <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Status</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[#F5F5F5]">
-                                {filteredItems.map((item) => {
-                                    const net = item.qtyAvailable - item.qtyReserved;
-                                    const isEditing = editingId === item.id;
-
-                                    return (
-                                        <tr key={item.id} className={cn('hover:bg-[#FAFAFA] transition-colors', item.isLowStock && 'bg-red-50/50')}>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-[40px] h-[40px] rounded-[8px] bg-[#F1F4F9] overflow-hidden shrink-0 flex items-center justify-center relative">
-                                                        {item.product.imageUrl ? (
-                                                            <Image src={item.product.imageUrl} alt="" fill className="object-cover" />
-                                                        ) : (
-                                                            <Package size={16} className="text-[#AEAEAE]" />
-                                                        )}
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[14px] font-bold text-[#181725]">{item.product.name}</p>
-                                                        <p className="text-[12px] text-[#7C7C7C]">₹{Number(item.product.basePrice).toLocaleString('en-IN')}</p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                {isEditing ? (
-                                                    <input
-                                                        type="number"
-                                                        value={editQty}
-                                                        onChange={(e) => setEditQty(e.target.value)}
-                                                        className="w-20 h-[36px] border border-[#299E60]/40 rounded-[8px] text-center text-[14px] font-bold outline-none"
-                                                    />
-                                                ) : (
-                                                    <span className="text-[14px] font-bold text-[#181725]">{item.qtyAvailable}</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4 text-center text-[14px] text-[#7C7C7C] font-medium">{item.qtyReserved}</td>
-                                            <td className="px-6 py-4 text-center text-[14px] font-bold text-[#181725]">{net}</td>
-                                            <td className="px-6 py-4 text-center">
-                                                {isEditing ? (
-                                                    <input
-                                                        type="number"
-                                                        value={editThreshold}
-                                                        onChange={(e) => setEditThreshold(e.target.value)}
-                                                        className="w-20 h-[36px] border border-[#299E60]/40 rounded-[8px] text-center text-[14px] font-bold outline-none"
-                                                    />
-                                                ) : (
-                                                    <span className="text-[14px] text-[#7C7C7C]">{item.lowStockThreshold}</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                {item.isLowStock ? (
-                                                    <span className="inline-flex items-center gap-1 bg-[#FFF0F0] text-[#E74C3C] text-[11px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase">
-                                                        <AlertTriangle size={12} />
-                                                        Low
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center bg-[#EEF8F1] text-[#299E60] text-[11px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase">
-                                                        OK
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                {isEditing ? (
-                                                    <div className="flex items-center justify-center gap-1.5">
-                                                        <button
-                                                            onClick={() => saveEdit(item)}
-                                                            disabled={saving}
-                                                            className="p-2 bg-[#299E60] text-white rounded-[8px] hover:bg-[#238a54] transition-colors"
-                                                        >
-                                                            <Save size={14} />
-                                                        </button>
-                                                        <button
-                                                            onClick={cancelEdit}
-                                                            className="p-2 bg-gray-100 text-[#7C7C7C] rounded-[8px] hover:bg-gray-200 transition-colors"
-                                                        >
-                                                            <X size={14} />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => startEdit(item)}
-                                                        className="text-[12px] font-bold text-[#299E60] hover:underline"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                {filtered.map(item => (
+                                    <InventoryRow key={item.id} item={item} onSaved={handleRowSaved} />
+                                ))}
                             </tbody>
                         </table>
                     </div>
                 )}
+                {!loading && filtered.length > 0 && (
+                    <div className="px-5 py-3 border-t border-[#F5F5F5]">
+                        <p className="text-[12px] text-[#AEAEAE]">
+                            Showing {filtered.length} of {items.length} product{items.length !== 1 ? 's' : ''}
+                        </p>
+                    </div>
+                )}
             </div>
+
+            {showCsvModal && (
+                <CsvUploadModal
+                    onClose={() => setShowCsvModal(false)}
+                    onSuccess={() => { setShowCsvModal(false); fetchInventory(true); }}
+                />
+            )}
         </div>
     );
 }

@@ -20,6 +20,13 @@ const updateInventorySchema = z.object({
   lowStockThreshold: z.number().int().min(0).optional(),
 });
 
+const bulkUpdateSchema = z.object({
+  items: z.array(z.object({
+    productId: z.string().uuid(),
+    qtyAvailable: z.number().int().min(0),
+  })).min(1).max(500),
+});
+
 // GET — list all inventory rows with product info + low-stock flag
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
@@ -47,7 +54,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   }
 });
 
-// PATCH — update stock quantity or low-stock threshold for a product
+// PATCH — update stock quantity or low-stock threshold for a single product
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
     const { vendorId } = await resolveVendorContext(ctx, req);
@@ -63,6 +70,24 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     });
 
     return NextResponse.json({ success: true, data: updated });
+  } catch (error) {
+    return errorResponse(error);
+  }
+});
+
+// POST — bulk set qtyAvailable for multiple products at once (CSV import)
+export const POST = vendorOnly(async (req: NextRequest, ctx) => {
+  try {
+    const { vendorId } = await resolveVendorContext(ctx, req);
+    requirePermission(ctx, 'inventory.edit');
+
+    const body = await req.json();
+    const { items } = bulkUpdateSchema.parse(body);
+
+    const inventoryService = new InventoryService();
+    await inventoryService.bulkUpdateStock(vendorId, items);
+
+    return NextResponse.json({ success: true, updated: items.length });
   } catch (error) {
     return errorResponse(error);
   }

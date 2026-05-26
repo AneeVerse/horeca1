@@ -93,4 +93,31 @@ export class InventoryService {
       });
     }
   }
+
+  // Bulk stock update — set absolute qtyAvailable per product.
+  // Validates each productId belongs to vendorId before writing.
+  async bulkUpdateStock(
+    vendorId: string,
+    items: Array<{ productId: string; qtyAvailable: number }>,
+  ) {
+    const ids = items.map(i => i.productId);
+    const owned = await prisma.inventory.findMany({
+      where: { productId: { in: ids }, vendorId },
+      select: { productId: true },
+    });
+    const ownedSet = new Set(owned.map(r => r.productId));
+    const invalid = ids.filter(id => !ownedSet.has(id));
+    if (invalid.length > 0) {
+      throw new Error(`Products not owned by this vendor: ${invalid.join(', ')}`);
+    }
+
+    return prisma.$transaction(
+      items.map(item =>
+        prisma.inventory.update({
+          where: { productId: item.productId },
+          data: { qtyAvailable: item.qtyAvailable },
+        }),
+      ),
+    );
+  }
 }
