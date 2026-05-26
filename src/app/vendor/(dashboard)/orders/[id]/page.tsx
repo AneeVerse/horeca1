@@ -385,6 +385,117 @@ function ActionPanel({ order, fulfilledQtys, adjustedTotal, isPartialAccept, onA
     );
 }
 
+// ─── PrintPicklist ────────────────────────────────────────────────────────────
+
+function PrintPicklist({ order }: { order: OrderData }) {
+    const totalQty = order.items.reduce((sum, item) => sum + item.quantity, 0);
+
+    return (
+        <>
+            {/* Print media override — hide everything except #picklist */}
+            <style>{`
+                @media print {
+                    body > * { display: none !important; }
+                    #picklist { display: block !important; }
+                }
+            `}</style>
+
+            <div id="picklist" className="hidden print:block font-mono text-[12px] text-black bg-white p-8">
+                {/* Header */}
+                <div className="border-b-2 border-black pb-3 mb-4">
+                    <h1 className="text-[18px] font-bold tracking-tight">
+                        PICK SLIP — {order.orderNumber}
+                    </h1>
+                    <div className="flex justify-between mt-1 text-[11px]">
+                        <span>Date: {new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+                        <span>Status: {STATUS_LABELS[order.status] ?? order.status}</span>
+                    </div>
+                </div>
+
+                {/* Deliver To */}
+                <div className="mb-4">
+                    <p className="font-bold underline mb-1">Deliver To:</p>
+                    <p>{order.user.fullName}</p>
+                    {order.user.businessName && <p>{order.user.businessName}</p>}
+                    {order.user.phone && <p>{order.user.phone}</p>}
+                    {order.user.email && <p>{order.user.email}</p>}
+                    {order.deliverySlot && (
+                        <p className="mt-1">
+                            Delivery Slot: {DAY_NAMES[Number(order.deliverySlot.dayOfWeek)] || `Day ${order.deliverySlot.dayOfWeek}`}
+                            {' '}{formatTime(order.deliverySlot.slotStart)} – {formatTime(order.deliverySlot.slotEnd)}
+                        </p>
+                    )}
+                    {order.deliveryDate && (
+                        <p>Delivery Date: {new Date(order.deliveryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                    )}
+                </div>
+
+                {/* Items table */}
+                <table className="w-full border-collapse border border-black text-[11px] mb-4">
+                    <thead>
+                        <tr className="border border-black">
+                            <th className="border border-black px-2 py-1 text-left w-6">#</th>
+                            <th className="border border-black px-2 py-1 text-left">Product Name</th>
+                            <th className="border border-black px-2 py-1 text-left w-20">SKU</th>
+                            <th className="border border-black px-2 py-1 text-left w-20">Pack Size</th>
+                            <th className="border border-black px-2 py-1 text-center w-14">Qty</th>
+                            <th className="border border-black px-2 py-1 text-center w-16">✓ Picked</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {order.items.map((item, idx) => (
+                            <tr key={item.id} className="border border-black">
+                                <td className="border border-black px-2 py-1 text-center">{idx + 1}</td>
+                                <td className="border border-black px-2 py-1">{item.productName}</td>
+                                <td className="border border-black px-2 py-1">{item.product?.sku ?? '—'}</td>
+                                <td className="border border-black px-2 py-1">
+                                    {item.product?.packSize
+                                        ? `${item.product.packSize}${item.product.unit ? ` ${item.product.unit}` : ''}`
+                                        : '—'}
+                                </td>
+                                <td className="border border-black px-2 py-1 text-center font-bold">{item.quantity}</td>
+                                <td className="border border-black px-2 py-1 text-center">
+                                    <div className="w-4 h-4 border border-black inline-block" />
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+
+                {/* Totals row */}
+                <div className="border border-black p-2 mb-6 text-[11px] flex gap-8">
+                    <span>Total Items: <strong>{order.items.length}</strong></span>
+                    <span>Total Qty: <strong>{totalQty}</strong></span>
+                    <span>Order Value: <strong>{formatPrice(order.totalAmount)}</strong></span>
+                </div>
+
+                {/* Notes */}
+                {order.notes && (
+                    <div className="mb-4 text-[11px]">
+                        <span className="font-bold">Customer Notes: </span>{order.notes}
+                    </div>
+                )}
+
+                {/* Signature line */}
+                <div className="border-t border-black pt-4 mt-6 grid grid-cols-3 gap-8 text-[11px]">
+                    <div>
+                        <p className="mb-6">Packed by:</p>
+                        <div className="border-b border-black" />
+                    </div>
+                    <div>
+                        <p className="mb-6">Date:</p>
+                        <div className="border-b border-black" />
+                    </div>
+                    <div>
+                        <p className="mb-6">Signature:</p>
+                        <div className="border-b border-black" />
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function VendorOrderDetailPage() {
@@ -529,13 +640,15 @@ export default function VendorOrderDetailPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => window.print()}
-                        className="h-9 px-4 rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] flex items-center gap-1.5 transition-all"
-                    >
-                        <Printer size={15} />
-                        Print Pick Slip
-                    </button>
+                    {(['confirmed', 'processing', 'shipped'] as const).includes(order.status as 'confirmed' | 'processing' | 'shipped') && (
+                        <button
+                            onClick={() => window.print()}
+                            className="h-9 px-4 rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] flex items-center gap-1.5 transition-all"
+                        >
+                            <Printer size={15} />
+                            Print Picklist
+                        </button>
+                    )}
                     <span className={cn(
                         'px-4 py-2 rounded-[10px] text-[13px] font-bold capitalize',
                         order.status === 'delivered' || order.status === 'confirmed' ? 'bg-[#EEF8F1] text-[#299E60]' :
@@ -549,15 +662,11 @@ export default function VendorOrderDetailPage() {
                 </div>
             </div>
 
-            {/* Print header */}
-            <div className="hidden print:block mb-6">
-                <h1 className="text-xl font-bold">Pick Slip — {order.orderNumber}</h1>
-                <p className="text-sm text-gray-500">
-                    Customer: {order.user.fullName}{order.user.businessName ? ` (${order.user.businessName})` : ''}
-                </p>
-                <p className="text-sm text-gray-500">Placed: {formatDateTime(order.createdAt)}</p>
-                <hr className="my-3" />
-            </div>
+            {/* Print picklist — only rendered in DOM for confirmed/processing/shipped so
+                the @media print style tag is present when the user prints */}
+            {(['confirmed', 'processing', 'shipped'] as const).includes(order.status as 'confirmed' | 'processing' | 'shipped') && (
+                <PrintPicklist order={order} />
+            )}
 
             {/* ── Status Timeline ───────────────────────────────── */}
             <div className="print:hidden">
