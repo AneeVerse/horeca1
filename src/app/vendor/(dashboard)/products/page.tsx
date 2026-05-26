@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Search, Plus, Loader2, Package, Pencil, X,
     ChevronRight, ChevronLeft, Info, ImageIcon, Settings, DollarSign, Trash2,
-    BarChart3, BoxIcon, Tag, Upload, Percent,
+    BarChart3, BoxIcon, Tag, Upload, Percent, Star,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -25,6 +25,7 @@ interface VendorProduct {
     unit: string | null;
     imageUrl: string | null;
     isActive: boolean;
+    isFeatured: boolean;
     description: string | null;
     creditEligible: boolean;
     categoryName: string;
@@ -89,6 +90,7 @@ interface ProductForm {
     taxPercent: string;
     minOrderQty: string;
     creditEligible: boolean;
+    isFeatured: boolean;
     priceSlabs: PriceSlabRow[];
 }
 
@@ -121,6 +123,7 @@ const EMPTY_FORM: ProductForm = {
     taxPercent: '0',
     minOrderQty: '1',
     creditEligible: false,
+    isFeatured: false,
     priceSlabs: [],
 };
 
@@ -300,6 +303,7 @@ export default function VendorProductsPage() {
     const [brands, setBrands] = useState<BrandOption[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'featured'>('all');
     const [currentPage, setCurrentPage] = useState(1);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<VendorProduct | null>(null);
@@ -381,12 +385,19 @@ export default function VendorProductsPage() {
             .catch(console.error);
     }, [fetchProducts]);
 
-    // Reset to page 1 when search changes
-    useEffect(() => { setCurrentPage(1); }, [searchQuery]);
+    // Reset to page 1 when search or filter changes
+    useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter]);
 
-    const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredProducts = products.filter(p => {
+        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesFilter =
+            statusFilter === 'all' ? true :
+            statusFilter === 'active' ? p.isActive :
+            statusFilter === 'inactive' ? !p.isActive :
+            statusFilter === 'featured' ? p.isFeatured :
+            true;
+        return matchesSearch && matchesFilter;
+    });
     const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
     const safeCurrentPage = Math.min(currentPage, totalPages);
     const paginatedProducts = filteredProducts.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
@@ -569,6 +580,7 @@ export default function VendorProductsPage() {
                 taxPercent: p.taxPercent != null ? String(p.taxPercent) : '0',
                 minOrderQty: p.minOrderQty != null ? String(p.minOrderQty) : '1',
                 creditEligible: !!p.creditEligible,
+                isFeatured: !!p.isFeatured,
                 priceSlabs: Array.isArray(p.priceSlabs)
                     ? p.priceSlabs.map((s: { minQty: number; maxQty?: number | null; price: number }) => ({
                         minQty: String(s.minQty),
@@ -605,6 +617,7 @@ export default function VendorProductsPage() {
                 taxPercent: '0',
                 minOrderQty: '1',
                 creditEligible: product.creditEligible,
+                isFeatured: product.isFeatured,
                 priceSlabs: [],
             });
         } finally {
@@ -690,6 +703,7 @@ export default function VendorProductsPage() {
                 description: form.description || undefined,
                 imageUrl: form.imageUrl || undefined,
                 creditEligible: form.creditEligible,
+                isFeatured: form.isFeatured,
                 sku: form.sku || undefined,
                 hsn: form.hsn || undefined,
                 brand: form.brand || undefined,
@@ -789,6 +803,7 @@ export default function VendorProductsPage() {
                     isActive: p.isActive ?? existing.isActive,
                     description: p.description ?? null,
                     creditEligible: p.creditEligible ?? existing.creditEligible,
+                    isFeatured: p.isFeatured ?? existing.isFeatured,
                     categoryName: cat?.name ?? existing.categoryName,
                     categorySlug: cat?.slug ?? existing.categorySlug,
                     sku: p.sku ?? null,
@@ -813,6 +828,7 @@ export default function VendorProductsPage() {
                     unit: p.unit ?? null,
                     imageUrl: p.imageUrl ?? null,
                     isActive: p.isActive ?? true,
+                    isFeatured: p.isFeatured ?? false,
                     description: p.description ?? null,
                     creditEligible: p.creditEligible ?? false,
                     categoryName: cat?.name ?? '',
@@ -859,6 +875,30 @@ export default function VendorProductsPage() {
             }
         } catch (err) {
             console.error('Toggle failed:', err);
+        }
+    };
+
+    /* ---- Toggle featured ---- */
+
+    const toggleFeatured = async (product: VendorProduct) => {
+        // Optimistic update
+        setProducts(prev => prev.map(p => p.id === product.id ? { ...p, isFeatured: !p.isFeatured } : p));
+        try {
+            const res = await fetch(`/api/v1/vendor/products/${product.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ isFeatured: !product.isFeatured }),
+            });
+            const json = await res.json();
+            if (!json.success) {
+                // Revert on error
+                setProducts(prev => prev.map(p => p.id === product.id ? { ...p, isFeatured: product.isFeatured } : p));
+                toast.error('Failed to update featured status');
+            }
+        } catch {
+            // Revert on error
+            setProducts(prev => prev.map(p => p.id === product.id ? { ...p, isFeatured: product.isFeatured } : p));
+            toast.error('Failed to update featured status');
         }
     };
 
@@ -1007,6 +1047,34 @@ export default function VendorProductsPage() {
                 </div>
             </div>
 
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-1 flex-wrap">
+                {(['all', 'active', 'inactive', 'featured'] as const).map(tab => (
+                    <button
+                        key={tab}
+                        onClick={() => setStatusFilter(tab)}
+                        className={cn(
+                            'h-[34px] px-4 rounded-[8px] text-[12px] font-bold transition-all flex items-center gap-1.5',
+                            statusFilter === tab
+                                ? 'bg-[#299E60] text-white shadow-sm'
+                                : 'bg-white border border-[#EEEEEE] text-[#7C7C7C] hover:bg-[#F5F5F5]'
+                        )}
+                    >
+                        {tab === 'featured' && <Star size={12} className={statusFilter === 'featured' ? 'fill-white' : 'fill-[#AEAEAE] text-[#AEAEAE]'} />}
+                        {tab === 'all' ? 'All' : tab === 'active' ? 'Active' : tab === 'inactive' ? 'Inactive' : 'Featured'}
+                        <span className={cn(
+                            'ml-0.5 text-[10px] font-[900] px-1.5 py-0.5 rounded-[4px]',
+                            statusFilter === tab ? 'bg-white/20 text-white' : 'bg-[#F5F5F5] text-[#AEAEAE]'
+                        )}>
+                            {tab === 'all' ? products.length :
+                             tab === 'active' ? products.filter(p => p.isActive).length :
+                             tab === 'inactive' ? products.filter(p => !p.isActive).length :
+                             products.filter(p => p.isFeatured).length}
+                        </span>
+                    </button>
+                ))}
+            </div>
+
             {/* Products Table */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
                 {loading ? (
@@ -1087,6 +1155,21 @@ export default function VendorProductsPage() {
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center justify-center gap-2">
+                                                <button
+                                                    onClick={() => toggleFeatured(product)}
+                                                    className={cn(
+                                                        'p-2 rounded-[8px] transition-colors',
+                                                        product.isFeatured
+                                                            ? 'text-yellow-500 hover:bg-yellow-50'
+                                                            : 'text-[#AEAEAE] hover:bg-[#F5F5F5]'
+                                                    )}
+                                                    title={product.isFeatured ? 'Remove from featured' : 'Mark as featured'}
+                                                >
+                                                    <Star
+                                                        size={16}
+                                                        className={product.isFeatured ? 'fill-yellow-400 text-yellow-500' : ''}
+                                                    />
+                                                </button>
                                                 <button
                                                     onClick={() => openEditPanel(product)}
                                                     className="p-2 hover:bg-[#EEF8F1] rounded-[8px] transition-colors text-[#299E60]"
@@ -1801,6 +1884,15 @@ export default function VendorProductsPage() {
                                             <div>
                                                 <span className="text-[14px] font-bold text-[#181725]">Credit Eligible</span>
                                                 <p className="text-[11px] text-[#AEAEAE] font-medium">Allow buyers to purchase this product on credit terms</p>
+                                            </div>
+                                        </label>
+
+                                        {/* Featured Product */}
+                                        <label className="flex items-center gap-3 cursor-pointer py-1">
+                                            <input type="checkbox" checked={form.isFeatured} onChange={(e) => updateField('isFeatured', e.target.checked)} className="w-5 h-5 accent-[#F59E0B] shrink-0" />
+                                            <div>
+                                                <span className="text-[14px] font-bold text-[#181725]">Featured Product</span>
+                                                <p className="text-[11px] text-[#AEAEAE] font-medium">Highlighted in your store&apos;s featured section and search results</p>
                                             </div>
                                         </label>
                                     </div>

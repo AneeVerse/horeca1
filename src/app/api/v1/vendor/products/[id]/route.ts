@@ -35,6 +35,7 @@ const updateProductSchema = z.object({
   minOrderQty: z.number().int().min(1).optional(),
   isActive: z.boolean().optional(),
   creditEligible: z.boolean().optional(),
+  isFeatured: z.boolean().optional(),
   categoryId: z.string().uuid().optional(),
   // Multi-category — when provided, replaces the existing category set. First
   // entry becomes the new primary (mirrored into Product.categoryId).
