@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Search, Loader2, Eye, CheckCircle2, ChevronRight, ChevronLeft, AlertTriangle } from 'lucide-react';
+import { Search, Loader2, Eye, CheckCircle2, ChevronRight, ChevronLeft, AlertTriangle, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -156,6 +156,31 @@ export default function VendorOrdersPage() {
 
     const isFirstPage = cursorStack.length === 0;
 
+    const exportCsv = () => {
+        if (orders.length === 0) return;
+        const rows = [
+            ['Order Number', 'Customer', 'Business', 'Items', 'Amount (₹)', 'Date', 'Payment Status', 'Order Status'],
+            ...orders.map(o => [
+                o.orderNumber,
+                o.user.fullName,
+                o.user.businessName ?? '',
+                String(o._count?.items ?? ''),
+                String(Number(o.totalAmount).toFixed(2)),
+                new Date(o.createdAt).toLocaleDateString('en-IN'),
+                o.paymentStatus,
+                o.status,
+            ]),
+        ];
+        const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `orders-${activeTab}-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
     return (
         <div className="space-y-5 pb-10">
             {/* Header */}
@@ -164,15 +189,26 @@ export default function VendorOrdersPage() {
                     <h1 className="text-[24px] font-bold text-[#181725]">Orders</h1>
                     <p className="text-[12px] text-[#AEAEAE]">Manage and fulfil customer orders</p>
                 </div>
-                <div className="relative w-full max-w-[260px]">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={15} />
-                    <input
-                        type="text"
-                        placeholder="Search by order number..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="h-[40px] w-full bg-white border border-[#EEEEEE] rounded-[10px] pl-10 pr-4 text-[13px] outline-none placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 shadow-sm"
-                    />
+                <div className="flex items-center gap-3">
+                    <div className="relative w-full max-w-[260px]">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={15} />
+                        <input
+                            type="text"
+                            placeholder="Search by order number..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="h-[40px] w-full bg-white border border-[#EEEEEE] rounded-[10px] pl-10 pr-4 text-[13px] outline-none placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 shadow-sm"
+                        />
+                    </div>
+                    <button
+                        onClick={exportCsv}
+                        disabled={orders.length === 0}
+                        title="Export current view as CSV"
+                        className="h-[40px] px-3 rounded-[10px] bg-white border border-[#EEEEEE] text-[#7C7C7C] hover:bg-[#F5F5F5] disabled:opacity-50 flex items-center gap-1.5 text-[12px] font-semibold shadow-sm shrink-0"
+                    >
+                        <Download size={14} />
+                        Export
+                    </button>
                 </div>
             </div>
 
