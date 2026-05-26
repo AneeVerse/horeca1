@@ -99,7 +99,25 @@ export class OrderService {
           }
         }
 
-        // 3. Calculate subtotal (GST-inclusive gross prices — DB prices are ex-GST taxable rates)
+        // 3. Resolve customer-specific pricing (VendorCustomer → PriceList → PriceListItem)
+        // Falls back to standard base/slab pricing when no custom pricing is configured.
+        const vendorCustomer = await tx.vendorCustomer.findUnique({
+          where: { vendorId_userId: { vendorId: vo.vendorId, userId } },
+          include: {
+            priceList: {
+              select: {
+                discountPercent: true,
+                items: { select: { productId: true, customPrice: true } },
+              },
+            },
+          },
+        });
+        const customPriceMap = new Map<string, number>(
+          vendorCustomer?.priceList?.items.map((i) => [i.productId, Number(i.customPrice)]) ?? []
+        );
+        const globalDiscount = Number(vendorCustomer?.priceList?.discountPercent ?? 0);
+
+        // 4. Calculate subtotal (GST-inclusive gross prices — DB prices are ex-GST taxable rates)
         let subtotal = 0;
         const itemDetails = [];
 
@@ -116,6 +134,13 @@ export class OrderService {
             if (item.quantity >= slab.minQty && (slab.maxQty === null || item.quantity <= slab.maxQty)) {
               taxableUnitPrice = Number(slab.price);
             }
+          }
+
+          // Apply customer-specific price override (item-level beats global discount)
+          if (customPriceMap.has(item.productId)) {
+            taxableUnitPrice = customPriceMap.get(item.productId)!;
+          } else if (globalDiscount > 0) {
+            taxableUnitPrice = Math.round(taxableUnitPrice * (1 - globalDiscount / 100) * 100) / 100;
           }
 
           // Apply GST to get gross (customer-facing) price
@@ -137,7 +162,7 @@ export class OrderService {
           throw Errors.belowMOV(vendor.businessName, Number(vendor.minOrderValue), subtotal);
         }
 
-        // 3b. Credit check — only when paymentMethod is 'credit'
+        // 4b. Credit check — only when paymentMethod is 'credit'
         if (input.paymentMethod === 'credit') {
           const creditAcc = await tx.creditAccount.findUnique({
             where: { userId_vendorId: { userId, vendorId: vo.vendorId } },
@@ -145,6 +170,33 @@ export class OrderService {
           if (!creditAcc || creditAcc.status !== 'active') {
             throw Errors.badRequest('No active credit account with this vendor');
           }
+
+          // Auto-freeze: if overdue days exceed vendor's configured threshold, suspend the account
+          if (creditAcc.freezeOnOverdueDays > 0) {
+            const oldestOverdue = await tx.creditTransaction.findFirst({
+              where: {
+                creditAccountId: creditAcc.id,
+                type: 'debit',
+                dueDate: { lt: new Date() },
+              },
+              orderBy: { dueDate: 'asc' },
+            });
+            if (oldestOverdue?.dueDate) {
+              const daysOverdue = Math.floor(
+                (Date.now() - oldestOverdue.dueDate.getTime()) / 86_400_000
+              );
+              if (daysOverdue >= creditAcc.freezeOnOverdueDays) {
+                await tx.creditAccount.update({
+                  where: { id: creditAcc.id },
+                  data: { status: 'suspended' },
+                });
+                throw Errors.badRequest(
+                  `Credit account suspended — ${daysOverdue} days overdue (limit: ${creditAcc.freezeOnOverdueDays} days). Please clear outstanding dues to resume credit orders.`
+                );
+              }
+            }
+          }
+
           const available = Number(creditAcc.creditLimit) - Number(creditAcc.creditUsed);
           if (available < subtotal) {
             throw Errors.badRequest(
