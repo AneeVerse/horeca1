@@ -29,7 +29,9 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
     const period = new URL(req.url).searchParams.get('period');
     const { start, buckets } = parsePeriod(period);
 
-    const [periodOrders, topProducts, orderStatusBreakdown, totals, customerStats, inventoryRows, creditData] =
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const [periodOrders, topProducts, orderStatusBreakdown, totals, customerStats, inventoryRows, creditData, slowMovers, brandSalesRaw] =
       await Promise.all([
         // Orders in period (non-cancelled)
         prisma.order.findMany({
@@ -86,6 +88,25 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
               select: { dueDate: true, amount: true },
             },
           },
+        }),
+
+        // Slow movers: active products with 0 sales in last 30 days
+        prisma.product.findMany({
+          where: {
+            vendorId,
+            isActive: true,
+            slug: { not: { startsWith: '_deleted_' } },
+            orderItems: { none: { order: { createdAt: { gte: thirtyDaysAgo }, status: { not: 'cancelled' } } } },
+          },
+          select: { id: true, name: true, basePrice: true, sku: true, inventory: { select: { qtyAvailable: true } } },
+          take: 10,
+          orderBy: { createdAt: 'asc' },
+        }),
+
+        // Brand + category sales: fetch order items with product details for last 30 days
+        prisma.orderItem.findMany({
+          where: { order: { vendorId, createdAt: { gte: thirtyDaysAgo }, status: { not: 'cancelled' } } },
+          select: { totalPrice: true, quantity: true, product: { select: { brand: true, category: { select: { name: true } } } } },
         }),
       ]);
 
@@ -181,6 +202,41 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
       ? Math.round(((inventoryRows.length - outOfStockCount) / inventoryRows.length) * 100)
       : 100;
 
+    // ─── Slow movers ────────────────────────────────────────────────────────
+    const slowMoversHydrated = slowMovers.map(p => ({
+      id: p.id,
+      name: p.name,
+      sku: p.sku,
+      basePrice: Number(p.basePrice),
+      stock: p.inventory?.qtyAvailable ?? 0,
+    }));
+
+    // ─── Category sales aggregation ─────────────────────────────────────────
+    const categoryMap = new Map<string, { name: string; revenue: number; units: number }>();
+    brandSalesRaw.forEach(item => {
+      const catName = item.product?.category?.name || 'Uncategorized';
+      const existing = categoryMap.get(catName) ?? { name: catName, revenue: 0, units: 0 };
+      existing.revenue += Number(item.totalPrice || 0);
+      existing.units += item.quantity;
+      categoryMap.set(catName, existing);
+    });
+    const categorySales = Array.from(categoryMap.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 8);
+
+    // ─── Brand sales aggregation ─────────────────────────────────────────────
+    const brandMap = new Map<string, { name: string; revenue: number; units: number }>();
+    brandSalesRaw.forEach(item => {
+      const brandName = item.product?.brand || 'Unbranded';
+      const existing = brandMap.get(brandName) ?? { name: brandName, revenue: 0, units: 0 };
+      existing.revenue += Number(item.totalPrice || 0);
+      existing.units += item.quantity;
+      brandMap.set(brandName, existing);
+    });
+    const brandSales = Array.from(brandMap.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 8);
+
     // ─── Status breakdown ────────────────────────────────────────────────────
     const statusBreakdown = Object.fromEntries(
       orderStatusBreakdown.map(s => [s.status, s._count.id])
@@ -272,6 +328,9 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
           collectionEfficiency,
           riskCustomers,
         },
+        slowMovers: slowMoversHydrated,
+        categorySales,
+        brandSales,
       },
     });
   } catch (err) {

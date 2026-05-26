@@ -22,6 +22,9 @@ interface DeadStockItem { productId: string; name: string; qty: number }
 interface RiskCustomer { name: string; businessName: string | null; creditUsed: number; daysOverdue: number }
 interface AgingBuckets { current: number; '1-30': number; '31-60': number; '61-90': number; '90+': number }
 
+interface SlowMoverItem { id: string; name: string; sku: string | null; basePrice: number; stock: number }
+interface SalesByGroup { name: string; revenue: number; units: number }
+
 interface ReportsData {
     period: string;
     totals: { revenue: number; orders: number };
@@ -48,6 +51,9 @@ interface ReportsData {
         collectionEfficiency: number;
         riskCustomers: RiskCustomer[];
     };
+    slowMovers: SlowMoverItem[];
+    categorySales: SalesByGroup[];
+    brandSales: SalesByGroup[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -470,6 +476,99 @@ export default function VendorReportsPage() {
                             </div>
                         )}
                     </div>
+
+                    {/* ─── Category & Brand Sales ──────────────────────────────────── */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Category Sales */}
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+                            <p className="text-[14px] font-bold text-[#181725] mb-4">Sales by Category (30d)</p>
+                            {data.categorySales.length === 0 ? (
+                                <p className="text-[13px] text-[#AEAEAE] text-center py-4">No sales data yet</p>
+                            ) : (
+                                <div className="space-y-2.5">
+                                    {data.categorySales.map((c) => {
+                                        const maxRevenue = data.categorySales[0]?.revenue || 1;
+                                        return (
+                                            <div key={c.name}>
+                                                <div className="flex justify-between text-[12px] mb-1">
+                                                    <span className="font-medium text-[#181725] truncate">{c.name}</span>
+                                                    <span className="text-[#7C7C7C] ml-2 shrink-0">₹{c.revenue.toFixed(0)}</span>
+                                                </div>
+                                                <div className="h-1.5 bg-[#F0F0F0] rounded-full overflow-hidden">
+                                                    <div className="h-full bg-[#299E60] rounded-full transition-all" style={{ width: `${(c.revenue / maxRevenue) * 100}%` }} />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Brand Sales */}
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+                            <p className="text-[14px] font-bold text-[#181725] mb-4">Sales by Brand (30d)</p>
+                            {data.brandSales.length === 0 ? (
+                                <p className="text-[13px] text-[#AEAEAE] text-center py-4">No brand sales data yet</p>
+                            ) : (
+                                <div className="space-y-2.5">
+                                    {data.brandSales.map((b) => {
+                                        const maxRevenue = data.brandSales[0]?.revenue || 1;
+                                        return (
+                                            <div key={b.name}>
+                                                <div className="flex justify-between text-[12px] mb-1">
+                                                    <span className="font-medium text-[#181725] truncate">{b.name}</span>
+                                                    <span className="text-[#7C7C7C] ml-2 shrink-0">₹{b.revenue.toFixed(0)}</span>
+                                                </div>
+                                                <div className="h-1.5 bg-[#F0F0F0] rounded-full overflow-hidden">
+                                                    <div className="h-full bg-[#3B82F6] rounded-full transition-all" style={{ width: `${(b.revenue / maxRevenue) * 100}%` }} />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ─── Slow Movers ─────────────────────────────────────────────── */}
+                    {data.slowMovers.length > 0 && (
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+                            <div className="flex items-center justify-between mb-4">
+                                <p className="text-[14px] font-bold text-[#181725]">Slow Movers (0 sales in 30d)</p>
+                                <span className="text-[12px] text-[#AEAEAE]">{data.slowMovers.length} products</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead>
+                                        <tr className="border-b border-[#F5F5F5]">
+                                            <th className="text-left pb-2 text-[12px] font-bold text-[#AEAEAE]">Product</th>
+                                            <th className="text-right pb-2 text-[12px] font-bold text-[#AEAEAE]">Price</th>
+                                            <th className="text-right pb-2 text-[12px] font-bold text-[#AEAEAE]">Stock</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {data.slowMovers.map(p => (
+                                            <tr key={p.id} className="border-b border-[#F5F5F5] last:border-0">
+                                                <td className="py-2.5">
+                                                    <p className="text-[13px] font-medium text-[#181725] truncate max-w-[200px]">{p.name}</p>
+                                                    {p.sku && <p className="text-[11px] text-[#AEAEAE]">{p.sku}</p>}
+                                                </td>
+                                                <td className="py-2.5 text-right text-[13px] text-[#181725]">₹{p.basePrice.toFixed(2)}</td>
+                                                <td className="py-2.5 text-right">
+                                                    <span className={cn(
+                                                        'text-[12px] font-bold px-2 py-0.5 rounded-full',
+                                                        p.stock === 0 ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600',
+                                                    )}>
+                                                        {p.stock === 0 ? 'Out of Stock' : p.stock}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
