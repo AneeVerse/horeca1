@@ -1,57 +1,100 @@
 // GET /api/v1/vendor/dashboard — Vendor dashboard stats
-// WHY: Powers the vendor dashboard overview page with key metrics:
-//      total orders, total revenue, active products, low stock count,
-//      order status breakdown, and recent orders
 // PROTECTED: Vendor only (vendors + admins)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
-import { Errors, errorResponse } from '@/middleware/errorHandler';
+import { errorResponse } from '@/middleware/errorHandler';
 import { resolveVendorId } from '@/lib/resolveVendorId';
 
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
     const vendorId = await resolveVendorId(ctx, req);
 
-    // Run all stat queries in parallel for performance
+    // IST-aware day/month boundaries
+    const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+    const todayStartIST = new Date(nowIST);
+    todayStartIST.setUTCHours(0, 0, 0, 0);
+    todayStartIST.setTime(todayStartIST.getTime() - 5.5 * 60 * 60 * 1000); // back to UTC
+
+    const monthStartIST = new Date(nowIST);
+    monthStartIST.setUTCDate(1);
+    monthStartIST.setUTCHours(0, 0, 0, 0);
+    monthStartIST.setTime(monthStartIST.getTime() - 5.5 * 60 * 60 * 1000);
+
+    const activeStatuses = ['confirmed', 'processing', 'shipped', 'delivered'] as const;
+
     const [
       totalOrders,
       revenueResult,
+      todaySalesResult,
+      mtdSalesResult,
+      pendingPaymentsResult,
       activeProducts,
       inventoryRows,
       ordersByStatusRaw,
+      pendingOrders,
       recentOrders,
     ] = await Promise.all([
-      // Total orders for this vendor
       prisma.order.count({ where: { vendorId } }),
 
-      // Revenue from non-cancelled orders
+      prisma.order.aggregate({
+        _sum: { totalAmount: true },
+        where: { vendorId, status: { in: [...activeStatuses] } },
+      }),
+
+      // Sales placed (& confirmed) today
+      prisma.order.aggregate({
+        _sum: { totalAmount: true },
+        where: { vendorId, status: { in: [...activeStatuses] }, createdAt: { gte: todayStartIST } },
+      }),
+
+      // Month-to-date sales
+      prisma.order.aggregate({
+        _sum: { totalAmount: true },
+        where: { vendorId, status: { in: [...activeStatuses] }, createdAt: { gte: monthStartIST } },
+      }),
+
+      // Unpaid / partially paid order value (outstanding receivables)
       prisma.order.aggregate({
         _sum: { totalAmount: true },
         where: {
           vendorId,
-          status: { in: ['delivered', 'confirmed', 'processing', 'shipped'] },
+          paymentStatus: { in: ['unpaid', 'partial'] },
+          status: { notIn: ['cancelled'] },
         },
       }),
 
-      // Active product count
       prisma.product.count({ where: { vendorId, isActive: true } }),
 
-      // Inventory rows for low-stock calculation
       prisma.inventory.findMany({
         where: { vendorId },
         select: { qtyAvailable: true, qtyReserved: true, lowStockThreshold: true },
       }),
 
-      // Orders grouped by status
       prisma.order.groupBy({
         by: ['status'],
         where: { vendorId },
         _count: { id: true },
       }),
 
-      // Last 10 orders with customer info
+      // Pending orders needing action — oldest first (most urgent)
+      prisma.order.findMany({
+        where: { vendorId, status: 'pending' },
+        take: 20,
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          orderNumber: true,
+          totalAmount: true,
+          createdAt: true,
+          notes: true,
+          user: { select: { id: true, fullName: true, businessName: true, email: true } },
+          _count: { select: { items: true } },
+        },
+      }),
+
+      // Recent 10 orders for the activity table
       prisma.order.findMany({
         where: { vendorId },
         take: 10,
@@ -63,19 +106,16 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
           totalAmount: true,
           paymentStatus: true,
           createdAt: true,
-          user: {
-            select: { id: true, fullName: true, email: true },
-          },
+          user: { select: { id: true, fullName: true, email: true } },
+          _count: { select: { items: true } },
         },
       }),
     ]);
 
-    // Count low-stock items in JS (available - reserved <= threshold)
     const lowStockCount = inventoryRows.filter(
-      (inv) => inv.qtyAvailable - inv.qtyReserved <= inv.lowStockThreshold
+      (inv) => inv.qtyAvailable - inv.qtyReserved <= inv.lowStockThreshold,
     ).length;
 
-    // Transform ordersByStatus into a clean map: { pending: 5, confirmed: 12, ... }
     const ordersByStatus: Record<string, number> = {};
     for (const group of ordersByStatusRaw) {
       ordersByStatus[group.status] = group._count.id;
@@ -87,10 +127,15 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         stats: {
           totalOrders,
           totalRevenue: revenueResult._sum.totalAmount ?? 0,
+          todaySales: todaySalesResult._sum.totalAmount ?? 0,
+          mtdSales: mtdSalesResult._sum.totalAmount ?? 0,
+          pendingPayments: pendingPaymentsResult._sum.totalAmount ?? 0,
           activeProducts,
           lowStockCount,
+          pendingOrdersCount: pendingOrders.length,
         },
         ordersByStatus,
+        pendingOrders,
         recentOrders,
       },
     });

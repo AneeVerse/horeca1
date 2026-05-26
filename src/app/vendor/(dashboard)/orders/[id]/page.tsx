@@ -1,12 +1,17 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ChevronLeft, User, Package, MapPin, Loader2, AlertCircle, Clock } from 'lucide-react';
+import {
+    ChevronLeft, User, Package, MapPin, Loader2, AlertCircle, Clock,
+    CheckCircle2, XCircle, Printer, ChevronRight, AlertTriangle,
+    Truck, ClipboardList,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface OrderUser {
     id: string;
@@ -21,6 +26,7 @@ interface OrderItem {
     productId: string;
     productName: string;
     quantity: number;
+    fulfilledQty: number;
     unitPrice: number;
     totalPrice: number;
     product?: {
@@ -53,24 +59,33 @@ interface OrderData {
     deliveryDate: string | null;
     notes: string | null;
     createdAt: string;
+    updatedAt: string;
+    acceptedAt: string | null;
+    rejectedAt: string | null;
+    rejectionReason: string | null;
+    isPartial: boolean;
     user: OrderUser;
     items: OrderItem[];
     payments: OrderPayment[];
     deliverySlot: { dayOfWeek: string; slotStart: string; slotEnd: string } | null;
 }
 
-const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'] as const;
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-function getStatusStyle(status: string): string {
-    switch (status) {
-        case 'delivered': case 'confirmed': return 'bg-[#EEF8F1] text-[#299E60]';
-        case 'processing': case 'pending': return 'bg-[#FFF4E5] text-[#976538]';
-        case 'shipped': return 'bg-blue-50 text-blue-600';
-        case 'cancelled': return 'bg-[#FFF0F0] text-[#E74C3C]';
-        default: return 'bg-gray-100 text-gray-600';
-    }
-}
+const STATUS_FLOW = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'] as const;
+
+const STATUS_LABELS: Record<string, string> = {
+    pending: 'Pending',
+    confirmed: 'Accepted',
+    processing: 'Packing',
+    shipped: 'Dispatched',
+    delivered: 'Delivered',
+    cancelled: 'Cancelled',
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatPrice(v: number): string {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(v);
@@ -82,6 +97,232 @@ function formatTime(t: string): string {
     return `${h % 12 || 12}:${minutes} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
+function formatDateTime(dt: string): string {
+    return new Date(dt).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: true,
+    });
+}
+
+function getStatusIndex(status: string): number {
+    return STATUS_FLOW.indexOf(status as typeof STATUS_FLOW[number]);
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function StatusTimeline({ status, createdAt, acceptedAt }: {
+    status: string;
+    createdAt: string;
+    acceptedAt: string | null;
+}) {
+    const currentIdx = getStatusIndex(status);
+    const isCancelled = status === 'cancelled';
+
+    if (isCancelled) {
+        return (
+            <div className="bg-[#FFF0F0] border border-[#FFC9C9] rounded-[14px] p-4 flex items-center gap-3">
+                <XCircle size={22} className="text-[#E74C3C] shrink-0" />
+                <div>
+                    <p className="text-[14px] font-bold text-[#E74C3C]">Order Cancelled</p>
+                    <p className="text-[12px] text-[#7C7C7C]">This order was cancelled and inventory has been released.</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+            <div className="flex items-center justify-between relative">
+                {/* Connecting line */}
+                <div className="absolute top-[18px] left-[18px] right-[18px] h-[2px] bg-[#EEEEEE] -z-0" />
+                <div
+                    className="absolute top-[18px] left-[18px] h-[2px] bg-[#299E60] -z-0 transition-all duration-500"
+                    style={{ width: currentIdx > 0 ? `${(currentIdx / (STATUS_FLOW.length - 1)) * 100}%` : '0%' }}
+                />
+
+                {STATUS_FLOW.map((step, idx) => {
+                    const done = currentIdx > idx;
+                    const current = currentIdx === idx;
+                    const ts = idx === 0 ? createdAt : idx === 1 ? acceptedAt : null;
+
+                    return (
+                        <div key={step} className="flex flex-col items-center z-10 gap-1.5 min-w-0">
+                            <div className={cn(
+                                'w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all',
+                                done ? 'bg-[#299E60] border-[#299E60]' :
+                                    current ? 'bg-white border-[#299E60] ring-4 ring-[#299E60]/20' :
+                                        'bg-white border-[#DDDDDD]'
+                            )}>
+                                {done ? (
+                                    <CheckCircle2 size={18} className="text-white" />
+                                ) : current ? (
+                                    <div className="w-3 h-3 rounded-full bg-[#299E60] animate-pulse" />
+                                ) : (
+                                    <div className="w-3 h-3 rounded-full bg-[#DDDDDD]" />
+                                )}
+                            </div>
+                            <div className="text-center">
+                                <p className={cn(
+                                    'text-[11px] font-bold',
+                                    done || current ? 'text-[#181725]' : 'text-[#AEAEAE]'
+                                )}>
+                                    {STATUS_LABELS[step]}
+                                </p>
+                                {ts && (done || current) && (
+                                    <p className="text-[10px] text-[#AEAEAE] whitespace-nowrap">
+                                        {new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+function ActionPanel({ order, onAction }: {
+    order: OrderData;
+    onAction: (status: string, reason?: string) => Promise<void>;
+}) {
+    const [rejecting, setRejecting] = useState(false);
+    const [rejectReason, setRejectReason] = useState('');
+    const [busy, setBusy] = useState(false);
+    const reasonRef = useRef<HTMLTextAreaElement>(null);
+
+    const run = async (status: string, reason?: string) => {
+        setBusy(true);
+        try {
+            await onAction(status, reason);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    useEffect(() => {
+        if (rejecting) reasonRef.current?.focus();
+    }, [rejecting]);
+
+    if (order.status === 'delivered' || order.status === 'cancelled') return null;
+
+    return (
+        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#EEEEEE] flex items-center justify-between">
+                <h3 className="text-[15px] font-bold text-[#181725]">Actions</h3>
+                <span className="text-[12px] text-[#AEAEAE]">
+                    {order.status === 'pending' ? 'Accept or reject this order' :
+                        order.status === 'confirmed' ? 'Mark as packed once items are ready' :
+                            order.status === 'processing' ? 'Mark as dispatched once shipped' :
+                                'Confirm delivery once goods are received'}
+                </span>
+            </div>
+
+            <div className="p-6">
+                {/* Reject reason form */}
+                {rejecting ? (
+                    <div className="space-y-3">
+                        <p className="text-[14px] font-bold text-[#181725]">Why are you rejecting this order?</p>
+                        <textarea
+                            ref={reasonRef}
+                            value={rejectReason}
+                            onChange={(e) => setRejectReason(e.target.value)}
+                            placeholder="e.g. Items out of stock, Delivery area not serviceable..."
+                            rows={3}
+                            className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#E74C3C]/50 resize-none"
+                        />
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => run('cancelled', rejectReason)}
+                                disabled={busy || rejectReason.trim().length < 3}
+                                className={cn(
+                                    'h-[44px] px-6 rounded-[10px] text-[14px] font-bold transition-all flex items-center gap-2',
+                                    rejectReason.trim().length >= 3 && !busy
+                                        ? 'bg-[#E74C3C] text-white hover:bg-[#c0392b]'
+                                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                )}
+                            >
+                                {busy ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
+                                Confirm Rejection
+                            </button>
+                            <button
+                                onClick={() => { setRejecting(false); setRejectReason(''); }}
+                                disabled={busy}
+                                className="h-[44px] px-6 rounded-[10px] text-[14px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-wrap gap-3">
+                        {/* Primary action */}
+                        {order.status === 'pending' && (
+                            <button
+                                onClick={() => run('confirmed')}
+                                disabled={busy}
+                                className="h-[48px] px-8 rounded-[12px] bg-[#299E60] text-white text-[15px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 disabled:opacity-60"
+                            >
+                                {busy ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                                Accept Order
+                            </button>
+                        )}
+                        {order.status === 'confirmed' && (
+                            <button
+                                onClick={() => run('processing')}
+                                disabled={busy}
+                                className="h-[48px] px-8 rounded-[12px] bg-[#F59E0B] text-white text-[15px] font-bold hover:bg-[#D97706] transition-all shadow-sm flex items-center gap-2 disabled:opacity-60"
+                            >
+                                {busy ? <Loader2 size={18} className="animate-spin" /> : <ClipboardList size={18} />}
+                                Mark as Packed
+                            </button>
+                        )}
+                        {order.status === 'processing' && (
+                            <button
+                                onClick={() => run('shipped')}
+                                disabled={busy}
+                                className="h-[48px] px-8 rounded-[12px] bg-[#3B82F6] text-white text-[15px] font-bold hover:bg-[#2563EB] transition-all shadow-sm flex items-center gap-2 disabled:opacity-60"
+                            >
+                                {busy ? <Loader2 size={18} className="animate-spin" /> : <Truck size={18} />}
+                                Mark as Dispatched
+                            </button>
+                        )}
+                        {order.status === 'shipped' && (
+                            <button
+                                onClick={() => run('delivered')}
+                                disabled={busy}
+                                className="h-[48px] px-8 rounded-[12px] bg-[#299E60] text-white text-[15px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 disabled:opacity-60"
+                            >
+                                {busy ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                                Confirm Delivery
+                            </button>
+                        )}
+
+                        {/* Secondary: reject / cancel */}
+                        {(order.status === 'pending' || order.status === 'confirmed' || order.status === 'processing') && (
+                            <button
+                                onClick={() => setRejecting(true)}
+                                disabled={busy}
+                                className={cn(
+                                    'h-[48px] px-6 rounded-[12px] text-[14px] font-bold transition-all flex items-center gap-2 disabled:opacity-60',
+                                    order.status === 'pending'
+                                        ? 'bg-[#FFF0F0] text-[#E74C3C] hover:bg-[#FFE0E0]'
+                                        : 'bg-[#F5F5F5] text-[#7C7C7C] hover:bg-[#EEEEEE]'
+                                )}
+                            >
+                                <XCircle size={16} />
+                                {order.status === 'pending' ? 'Reject Order' : 'Cancel Order'}
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function VendorOrderDetailPage() {
     const params = useParams();
     const router = useRouter();
@@ -90,8 +331,6 @@ export default function VendorOrderDetailPage() {
     const [order, setOrder] = useState<OrderData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [newStatus, setNewStatus] = useState('');
-    const [updating, setUpdating] = useState(false);
 
     const fetchOrder = useCallback(async () => {
         try {
@@ -100,7 +339,6 @@ export default function VendorOrderDetailPage() {
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Failed to load order');
             setOrder(json.data);
-            setNewStatus(json.data.status);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Something went wrong');
         } finally {
@@ -110,24 +348,30 @@ export default function VendorOrderDetailPage() {
 
     useEffect(() => { fetchOrder(); }, [fetchOrder]);
 
-    const handleUpdateStatus = async () => {
-        if (!order || newStatus === order.status || updating) return;
+    const handleAction = useCallback(async (status: string, reason?: string) => {
+        if (!order) return;
         try {
-            setUpdating(true);
             const res = await fetch(`/api/v1/vendor/orders/${orderId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus }),
+                body: JSON.stringify({ status, reason }),
             });
             const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed to update');
-            setOrder((prev) => prev ? { ...prev, status: newStatus } : prev);
+            if (!json.success) throw new Error(json.error?.message || 'Update failed');
+            setOrder((prev) => prev ? { ...prev, ...json.data } : prev);
+            toast.success(
+                status === 'confirmed' ? 'Order accepted! Inventory reserved.' :
+                    status === 'cancelled' ? 'Order rejected. Inventory released.' :
+                        status === 'delivered' ? 'Delivery confirmed!' :
+                            `Order marked as ${STATUS_LABELS[status] ?? status}.`
+            );
         } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : 'Update failed');
-        } finally {
-            setUpdating(false);
+            toast.error(err instanceof Error ? err.message : 'Action failed');
+            throw err;
         }
-    };
+    }, [order, orderId]);
+
+    const handlePrint = () => window.print();
 
     if (loading) {
         return (
@@ -148,34 +392,90 @@ export default function VendorOrderDetailPage() {
     }
 
     return (
-        <div className="space-y-6 pb-10">
-            {/* Header */}
-            <div className="flex items-center justify-between">
+        <div className="space-y-5 pb-12">
+
+            {/* ── Header ───────────────────────────────────────── */}
+            <div className="flex items-start justify-between print:hidden">
                 <div className="flex items-center gap-3">
-                    <button onClick={() => router.back()} className="hover:text-[#299E60] transition-colors">
-                        <ChevronLeft size={20} />
+                    <button
+                        onClick={() => router.back()}
+                        className="w-9 h-9 rounded-full hover:bg-[#F1F4F9] flex items-center justify-center transition-colors"
+                    >
+                        <ChevronLeft size={20} className="text-[#181725]" />
                     </button>
                     <div>
-                        <h1 className="text-[24px] font-bold text-[#181725]">Order {order.orderNumber}</h1>
-                        <p className="text-[13px] text-[#7C7C7C]">
-                            {new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </p>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-[22px] font-bold text-[#181725]">{order.orderNumber}</h1>
+                            {order.isPartial && (
+                                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#FFF4E5] text-[#976538]">Partial</span>
+                            )}
+                        </div>
+                        <p className="text-[12px] text-[#AEAEAE]">Placed {formatDateTime(order.createdAt)}</p>
                     </div>
                 </div>
-                <span className={cn('px-4 py-2 rounded-[10px] text-[14px] font-bold capitalize', getStatusStyle(order.status))}>
-                    {order.status}
-                </span>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handlePrint}
+                        className="h-9 px-4 rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] flex items-center gap-1.5 transition-all"
+                    >
+                        <Printer size={15} />
+                        Print Pick Slip
+                    </button>
+                    <span className={cn(
+                        'px-4 py-2 rounded-[10px] text-[13px] font-bold capitalize',
+                        order.status === 'delivered' || order.status === 'confirmed' ? 'bg-[#EEF8F1] text-[#299E60]' :
+                            order.status === 'processing' || order.status === 'pending' ? 'bg-[#FFF4E5] text-[#976538]' :
+                                order.status === 'shipped' ? 'bg-blue-50 text-blue-600' :
+                                    order.status === 'cancelled' ? 'bg-[#FFF0F0] text-[#E74C3C]' :
+                                        'bg-gray-100 text-gray-600'
+                    )}>
+                        {STATUS_LABELS[order.status] ?? order.status}
+                    </span>
+                </div>
             </div>
 
-            {/* Info Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Customer */}
-                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <User size={18} className="text-[#299E60]" />
-                        <h3 className="text-[16px] font-bold text-[#181725]">Customer</h3>
+            {/* ── Print header (only in print view) ────────────── */}
+            <div className="hidden print:block mb-6">
+                <h1 className="text-xl font-bold">Pick Slip — {order.orderNumber}</h1>
+                <p className="text-sm text-gray-500">Customer: {order.user.fullName}{order.user.businessName ? ` (${order.user.businessName})` : ''}</p>
+                <p className="text-sm text-gray-500">Placed: {formatDateTime(order.createdAt)}</p>
+                <hr className="my-3" />
+            </div>
+
+            {/* ── Status Timeline ───────────────────────────────── */}
+            <div className="print:hidden">
+                <StatusTimeline
+                    status={order.status}
+                    createdAt={order.createdAt}
+                    acceptedAt={order.acceptedAt}
+                />
+            </div>
+
+            {/* ── Action Panel ──────────────────────────────────── */}
+            <div className="print:hidden">
+                <ActionPanel order={order} onAction={handleAction} />
+            </div>
+
+            {/* ── Rejection reason (shown after cancel) ─────────── */}
+            {order.status === 'cancelled' && order.rejectionReason && (
+                <div className="bg-[#FFF8ED] border border-[#FFDCB3] rounded-[14px] p-5 flex gap-3 print:hidden">
+                    <AlertTriangle size={18} className="text-[#F59E0B] shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-[13px] font-bold text-[#181725]">Rejection Reason</p>
+                        <p className="text-[13px] text-[#7C7C7C] mt-0.5">{order.rejectionReason}</p>
                     </div>
-                    <div className="space-y-2 text-[14px]">
+                </div>
+            )}
+
+            {/* ── Info cards ────────────────────────────────────── */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {/* Customer */}
+                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                        <User size={16} className="text-[#299E60]" />
+                        <h3 className="text-[14px] font-bold text-[#181725]">Customer</h3>
+                    </div>
+                    <div className="space-y-1.5 text-[13px]">
                         <p className="font-bold text-[#181725]">{order.user.fullName}</p>
                         {order.user.businessName && <p className="text-[#7C7C7C]">{order.user.businessName}</p>}
                         <p className="text-[#7C7C7C]">{order.user.email}</p>
@@ -184,22 +484,24 @@ export default function VendorOrderDetailPage() {
                 </div>
 
                 {/* Delivery */}
-                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <MapPin size={18} className="text-[#3B82F6]" />
-                        <h3 className="text-[16px] font-bold text-[#181725]">Delivery</h3>
+                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                        <MapPin size={16} className="text-[#3B82F6]" />
+                        <h3 className="text-[14px] font-bold text-[#181725]">Delivery</h3>
                     </div>
-                    <div className="space-y-2 text-[14px]">
-                        {order.deliverySlot && (
+                    <div className="space-y-1.5 text-[13px]">
+                        {order.deliverySlot ? (
                             <div className="flex items-center gap-1.5 text-[#181725]">
-                                <Clock size={14} className="text-[#3B82F6]" />
+                                <Clock size={13} className="text-[#3B82F6]" />
                                 <span className="font-bold">{DAY_NAMES[Number(order.deliverySlot.dayOfWeek)] || `Day ${order.deliverySlot.dayOfWeek}`}</span>
-                                <span className="text-[#7C7C7C]">{formatTime(order.deliverySlot.slotStart)} - {formatTime(order.deliverySlot.slotEnd)}</span>
+                                <span className="text-[#7C7C7C]">{formatTime(order.deliverySlot.slotStart)} – {formatTime(order.deliverySlot.slotEnd)}</span>
                             </div>
-                        )}
+                        ) : null}
                         {order.deliveryDate && (
                             <p className="text-[#7C7C7C]">
-                                Delivery Date: {new Date(order.deliveryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                Date: <span className="font-bold text-[#181725]">
+                                    {new Date(order.deliveryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                </span>
                             </p>
                         )}
                         {order.paymentMethod && (
@@ -212,17 +514,24 @@ export default function VendorOrderDetailPage() {
                 </div>
 
                 {/* Payment */}
-                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Package size={18} className="text-[#8B5CF6]" />
-                        <h3 className="text-[16px] font-bold text-[#181725]">Payment</h3>
+                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                        <Package size={16} className="text-[#8B5CF6]" />
+                        <h3 className="text-[14px] font-bold text-[#181725]">Payment</h3>
                     </div>
-                    <div className="space-y-2 text-[14px]">
+                    <div className="space-y-1.5 text-[13px]">
                         <div className="flex justify-between">
                             <span className="text-[#7C7C7C]">Status</span>
-                            <span className={cn('font-bold capitalize', order.paymentStatus === 'paid' ? 'text-[#299E60]' : 'text-[#976538]')}>
+                            <span className={cn(
+                                'font-bold capitalize',
+                                order.paymentStatus === 'paid' ? 'text-[#299E60]' : 'text-[#976538]'
+                            )}>
                                 {order.paymentStatus}
                             </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-[#7C7C7C]">Total</span>
+                            <span className="font-bold text-[#181725]">{formatPrice(order.totalAmount)}</span>
                         </div>
                         {order.payments[0]?.method && (
                             <div className="flex justify-between">
@@ -234,126 +543,109 @@ export default function VendorOrderDetailPage() {
                 </div>
             </div>
 
-            {/* Items Table */}
+            {/* ── Items Table ───────────────────────────────────── */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-[#EEEEEE]">
-                    <h3 className="text-[18px] font-bold text-[#181725]">Order Items ({order.items.length})</h3>
+                <div className="px-6 py-4 border-b border-[#EEEEEE] flex items-center justify-between">
+                    <h3 className="text-[16px] font-bold text-[#181725]">
+                        Order Items <span className="text-[#AEAEAE] font-normal">({order.items.length})</span>
+                    </h3>
+                    <ChevronRight size={16} className="text-[#AEAEAE] print:hidden" />
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead>
                             <tr className="bg-[#FAFAFA] border-b border-[#EEEEEE]">
-                                <th className="px-6 py-3 text-left text-[12px] font-bold text-[#AEAEAE] uppercase">Product</th>
-                                <th className="px-6 py-3 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">SKU / HSN</th>
-                                <th className="px-6 py-3 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Unit Price</th>
-                                <th className="px-6 py-3 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Qty</th>
-                                <th className="px-6 py-3 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">GST</th>
-                                <th className="px-6 py-3 text-right text-[12px] font-bold text-[#AEAEAE] uppercase">Total</th>
+                                <th className="px-5 py-3 text-left text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Product</th>
+                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">SKU / HSN</th>
+                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Unit Price</th>
+                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Qty</th>
+                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide print:hidden">GST</th>
+                                <th className="px-5 py-3 text-right text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Total</th>
+                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide print:block hidden">✓ Picked</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#F5F5F5]">
                             {order.items.map((item) => {
                                 const taxPct = Number(item.product?.taxPercent ?? 0);
-                                const itemGST = taxPct > 0 ? Number(item.totalPrice) - (Number(item.totalPrice) / (1 + taxPct / 100)) : 0;
+                                const itemGST = taxPct > 0
+                                    ? Number(item.totalPrice) - (Number(item.totalPrice) / (1 + taxPct / 100))
+                                    : 0;
                                 return (
                                     <tr key={item.id} className="hover:bg-[#FAFAFA]">
-                                        <td className="px-6 py-4">
+                                        <td className="px-5 py-4">
                                             <div className="flex items-center gap-3">
                                                 {item.product?.imageUrl ? (
-                                                    <div className="w-[40px] h-[40px] rounded-[8px] overflow-hidden bg-[#F1F4F9] shrink-0 relative">
+                                                    <div className="w-10 h-10 rounded-[8px] overflow-hidden bg-[#F1F4F9] shrink-0 relative print:hidden">
                                                         <Image src={item.product.imageUrl} alt={item.productName} fill className="object-cover" />
                                                     </div>
                                                 ) : (
-                                                    <div className="w-[40px] h-[40px] rounded-[8px] bg-[#F1F4F9] shrink-0 flex items-center justify-center">
+                                                    <div className="w-10 h-10 rounded-[8px] bg-[#F1F4F9] shrink-0 flex items-center justify-center print:hidden">
                                                         <Package size={16} className="text-[#AEAEAE]" />
                                                     </div>
                                                 )}
                                                 <div>
-                                                    <p className="text-[14px] font-bold text-[#181725]">{item.productName}</p>
+                                                    <p className="text-[13px] font-bold text-[#181725]">{item.productName}</p>
                                                     {item.product?.packSize && (
-                                                        <p className="text-[11px] text-[#7C7C7C]">{item.product.packSize}{item.product.unit ? ` / ${item.product.unit}` : ''}</p>
+                                                        <p className="text-[11px] text-[#7C7C7C]">
+                                                            {item.product.packSize}{item.product.unit ? ` · ${item.product.unit}` : ''}
+                                                        </p>
                                                     )}
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <div className="text-[12px] text-[#7C7C7C]">
-                                                {item.product?.sku && <p>{item.product.sku}</p>}
-                                                {item.product?.hsn && <p className="text-[11px]">HSN: {item.product.hsn}</p>}
-                                                {!item.product?.sku && !item.product?.hsn && '—'}
+                                        <td className="px-5 py-4 text-center">
+                                            <div className="text-[11px] text-[#7C7C7C]">
+                                                {item.product?.sku && <p className="font-medium">{item.product.sku}</p>}
+                                                {item.product?.hsn && <p>HSN: {item.product.hsn}</p>}
+                                                {!item.product?.sku && !item.product?.hsn && <span className="text-[#DDDDDD]">—</span>}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-center text-[14px] text-[#7C7C7C]">{formatPrice(item.unitPrice)}</td>
-                                        <td className="px-6 py-4 text-center text-[14px] font-bold text-[#181725]">{item.quantity}</td>
-                                        <td className="px-6 py-4 text-center text-[12px] text-[#7C7C7C]">
+                                        <td className="px-5 py-4 text-center text-[13px] text-[#7C7C7C]">{formatPrice(item.unitPrice)}</td>
+                                        <td className="px-5 py-4 text-center text-[14px] font-bold text-[#181725]">{item.quantity}</td>
+                                        <td className="px-5 py-4 text-center text-[11px] text-[#7C7C7C] print:hidden">
                                             {taxPct > 0 ? (
                                                 <div>
-                                                    <p>{taxPct}%</p>
-                                                    <p className="text-[11px]">{formatPrice(itemGST)}</p>
+                                                    <p className="font-medium">{taxPct}%</p>
+                                                    <p>{formatPrice(itemGST)}</p>
                                                 </div>
-                                            ) : '—'}
+                                            ) : <span className="text-[#DDDDDD]">—</span>}
                                         </td>
-                                        <td className="px-6 py-4 text-right text-[14px] font-bold text-[#181725]">{formatPrice(item.totalPrice)}</td>
+                                        <td className="px-5 py-4 text-right text-[13px] font-bold text-[#181725]">{formatPrice(item.totalPrice)}</td>
+                                        {/* Print pick checkbox */}
+                                        <td className="px-5 py-4 text-center hidden print:table-cell">
+                                            <div className="w-5 h-5 border-2 border-gray-400 rounded inline-block" />
+                                        </td>
                                     </tr>
                                 );
                             })}
                         </tbody>
                     </table>
                 </div>
+
                 {/* Summary */}
-                <div className="p-6 border-t border-[#EEEEEE] flex flex-col items-end gap-2">
-                    <div className="flex gap-8 text-[14px]">
+                <div className="px-6 py-5 border-t border-[#EEEEEE] flex flex-col items-end gap-2">
+                    <div className="flex gap-10 text-[13px]">
                         <span className="text-[#7C7C7C]">Subtotal</span>
                         <span className="font-bold text-[#181725] w-28 text-right">{formatPrice(order.subtotal)}</span>
                     </div>
                     {Number(order.taxAmount) > 0 && (
-                        <div className="flex gap-8 text-[14px]">
+                        <div className="flex gap-10 text-[13px]">
                             <span className="text-[#7C7C7C]">GST / Tax</span>
                             <span className="font-bold text-[#181725] w-28 text-right">{formatPrice(Number(order.taxAmount))}</span>
                         </div>
                     )}
-                    <div className="flex gap-8 text-[16px] pt-2 border-t border-[#EEEEEE]">
+                    <div className="flex gap-10 text-[15px] pt-2 border-t border-[#EEEEEE] mt-1">
                         <span className="font-bold text-[#181725]">Total</span>
                         <span className="font-[900] text-[#299E60] w-28 text-right">{formatPrice(order.totalAmount)}</span>
                     </div>
                 </div>
             </div>
 
-            {/* Notes */}
+            {/* ── Customer Notes ────────────────────────────────── */}
             {order.notes && (
-                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                    <h3 className="text-[16px] font-bold text-[#181725] mb-2">Customer Notes</h3>
-                    <p className="text-[14px] text-[#7C7C7C]">{order.notes}</p>
-                </div>
-            )}
-
-            {/* Status Update */}
-            {order.status !== 'delivered' && order.status !== 'cancelled' && (
-                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                    <h3 className="text-[16px] font-bold text-[#181725] mb-4">Update Order Status</h3>
-                    <div className="flex items-center gap-4">
-                        <select
-                            value={newStatus}
-                            onChange={(e) => setNewStatus(e.target.value)}
-                            className="h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-medium outline-none focus:border-[#299E60]/40 min-w-[200px]"
-                        >
-                            {ORDER_STATUSES.map((s) => (
-                                <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                            ))}
-                        </select>
-                        <button
-                            onClick={handleUpdateStatus}
-                            disabled={updating || newStatus === order.status}
-                            className={cn(
-                                'h-[44px] px-6 rounded-[10px] text-[14px] font-bold transition-all',
-                                newStatus !== order.status
-                                    ? 'bg-[#299E60] text-white hover:bg-[#238a54] shadow-sm'
-                                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            )}
-                        >
-                            {updating ? 'Updating...' : 'Update Status'}
-                        </button>
-                    </div>
+                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+                    <h3 className="text-[14px] font-bold text-[#181725] mb-2">Customer Notes</h3>
+                    <p className="text-[13px] text-[#7C7C7C]">{order.notes}</p>
                 </div>
             )}
         </div>

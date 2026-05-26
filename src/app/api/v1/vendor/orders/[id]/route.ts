@@ -44,6 +44,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
             productId: true,
             productName: true,
             quantity: true,
+            fulfilledQty: true,
             unitPrice: true,
             totalPrice: true,
             product: {
