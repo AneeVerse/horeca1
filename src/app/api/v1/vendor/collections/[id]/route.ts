@@ -58,12 +58,22 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   }
 });
 
-// ─── POST: record offline payment ─────────────────────────────────────────────
+// ─── POST: record offline payment or log dispute ──────────────────────────────
 
 const recordPaymentSchema = z.object({
   amount: z.number().positive(),
   notes: z.string().max(500).optional(),
 });
+
+const logDisputeSchema = z.object({
+  action: z.literal('dispute'),
+  note: z.string().min(1).max(1000),
+});
+
+const postBodySchema = z.union([
+  recordPaymentSchema,
+  logDisputeSchema,
+]);
 
 export const POST = vendorOnly(async (req: NextRequest, ctx) => {
   try {
@@ -71,15 +81,32 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     requirePermission(ctx, 'orders.edit');
 
     const accountId = extractId(req);
-    const { amount, notes } = recordPaymentSchema.parse(await req.json());
+    const body = postBodySchema.parse(await req.json());
 
     const account = await prisma.creditAccount.findFirst({
       where: { id: accountId, vendorId },
     });
     if (!account) throw Errors.notFound('Credit account');
+
+    // ── Dispute log ──
+    if ('action' in body && body.action === 'dispute') {
+      await prisma.creditTransaction.create({
+        data: {
+          creditAccountId: accountId,
+          vendorId,
+          type: 'adjustment',
+          amount: 0,
+          balanceAfter: Number(account.creditUsed),
+          notes: `[DISPUTE] ${body.note}`,
+        },
+      });
+      return NextResponse.json({ success: true, data: { logged: true } });
+    }
+
+    // ── Record payment ──
     if (Number(account.creditUsed) <= 0) throw Errors.badRequest('No outstanding balance to settle');
 
-    const payment = Math.min(amount, Number(account.creditUsed));
+    const payment = Math.min(body.amount, Number(account.creditUsed));
     const newCreditUsed = Math.max(0, Number(account.creditUsed) - payment);
 
     await prisma.$transaction([
@@ -94,7 +121,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
           type: 'credit',
           amount: payment,
           balanceAfter: newCreditUsed,
-          notes: notes ?? 'Offline payment recorded by vendor',
+          notes: body.notes ?? 'Offline payment recorded by vendor',
         },
       }),
     ]);

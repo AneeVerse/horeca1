@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     Loader2, CreditCard, AlertTriangle, CheckCircle2, X,
     IndianRupee, TrendingUp, Clock, ChevronDown, ChevronUp, Settings,
+    MessageCircle, FileDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -59,6 +60,47 @@ const AGING_STYLE: Record<string, string> = {
     '61-90': 'text-[#E74C3C]',
     '90+': 'text-[#E74C3C] font-[900]',
 };
+
+// ─── Helper functions ─────────────────────────────────────────────────────────
+
+function generateWhatsAppLink(phone: string | null | undefined, customerName: string, amountDue: number): string {
+    if (!phone) return '#';
+    const cleaned = phone.replace(/\D/g, '');
+    const msg = encodeURIComponent(
+        `Hi ${customerName},\n\nThis is a payment reminder from our store.\n\nOutstanding Amount: ₹${amountDue.toFixed(2)}\n\nPlease make the payment at your earliest convenience.\n\nThank you!`
+    );
+    return `https://wa.me/${cleaned}?text=${msg}`;
+}
+
+function downloadStatement(customer: CreditAccountRow) {
+    const available = Number(customer.creditLimit) - Number(customer.creditUsed);
+    const rows = [
+        ['Field', 'Value'],
+        ['Customer Name', customer.user?.fullName ?? ''],
+        ['Business', customer.user?.businessName ?? ''],
+        ['Phone', customer.user?.phone ?? ''],
+        ['Email', customer.user?.email ?? ''],
+        ['Credit Limit', `₹${Number(customer.creditLimit).toFixed(2)}`],
+        ['Credit Used', `₹${Number(customer.creditUsed).toFixed(2)}`],
+        ['Available Credit', `₹${available.toFixed(2)}`],
+        ['Overdue Amount', `₹${Number(customer.overdueAmount).toFixed(2)}`],
+        ['Days Overdue', String(customer.daysOverdue)],
+        ['Accrued Interest', `₹${Number(customer.accruedInterest).toFixed(2)}`],
+        ['Accrued Penalty', `₹${Number(customer.accruedPenalty).toFixed(2)}`],
+        ['Total Due', `₹${Number(customer.totalDue).toFixed(2)}`],
+        ['Status', customer.status],
+        ['Statement Date', new Date().toLocaleDateString('en-IN')],
+    ];
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeName = (customer.user?.fullName ?? 'customer').replace(/\s+/g, '-');
+    a.download = `statement-${safeName}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
 
 // ─── Record Payment Modal ─────────────────────────────────────────────────────
 
@@ -380,6 +422,8 @@ export default function VendorCollectionsPage() {
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState<ModalState>(null);
     const [activeTab, setActiveTab] = useState<FilterTab>('all');
+    const [disputeCustomer, setDisputeCustomer] = useState<string | null>(null);
+    const [disputeNote, setDisputeNote] = useState('');
 
     const fetchCollections = useCallback(async () => {
         setLoading(true);
@@ -581,6 +625,34 @@ export default function VendorCollectionsPage() {
                                                             Record Payment
                                                         </button>
                                                     )}
+                                                    {/* WhatsApp payment reminder */}
+                                                    {acc.user.phone && acc.creditUsed > 0 && (
+                                                        <a
+                                                            href={generateWhatsAppLink(acc.user.phone, acc.user.businessName ?? acc.user.fullName, acc.totalDue > 0 ? acc.totalDue : acc.creditUsed)}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            title="Send WhatsApp reminder"
+                                                            className="h-[28px] w-[28px] flex items-center justify-center rounded-[7px] bg-[#25D366] text-white hover:bg-[#1ebe5a] transition-all"
+                                                        >
+                                                            <MessageCircle size={13} />
+                                                        </a>
+                                                    )}
+                                                    {/* Download statement */}
+                                                    <button
+                                                        onClick={() => downloadStatement(acc)}
+                                                        title="Download statement"
+                                                        className="h-[28px] w-[28px] flex items-center justify-center rounded-[7px] border border-[#EEEEEE] text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all"
+                                                    >
+                                                        <FileDown size={13} />
+                                                    </button>
+                                                    {/* Log dispute */}
+                                                    <button
+                                                        onClick={() => setDisputeCustomer(acc.id)}
+                                                        title="Log dispute"
+                                                        className="h-[28px] w-[28px] flex items-center justify-center rounded-[7px] border border-[#EEEEEE] text-[#E74C3C] hover:bg-red-50 transition-all"
+                                                    >
+                                                        <AlertTriangle size={13} />
+                                                    </button>
                                                     <button
                                                         onClick={() => setModal({ type: 'edit', account: acc })}
                                                         className="h-[28px] px-3 rounded-[7px] border border-[#EEEEEE] text-[11px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all whitespace-nowrap"
@@ -619,6 +691,64 @@ export default function VendorCollectionsPage() {
                     onClose={() => setModal(null)}
                     onSuccess={(updates) => handleEditSuccess(modal.account.id, updates)}
                 />
+            )}
+
+            {/* Dispute modal */}
+            {disputeCustomer && (
+                <div className="fixed inset-0 z-[10001] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[16px] shadow-xl w-full max-w-[420px] p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-[16px] font-bold text-[#181725]">Log Dispute</h3>
+                                <p className="text-[13px] text-[#7C7C7C]">Record a dispute note for this account</p>
+                            </div>
+                            <button
+                                onClick={() => { setDisputeCustomer(null); setDisputeNote(''); }}
+                                className="p-1.5 rounded-[8px] hover:bg-[#F5F5F5]"
+                            >
+                                <X size={15} className="text-[#7C7C7C]" />
+                            </button>
+                        </div>
+                        <textarea
+                            value={disputeNote}
+                            onChange={e => setDisputeNote(e.target.value)}
+                            rows={4}
+                            placeholder="Describe the dispute (e.g. customer claims payment was made on 15th May via NEFT...)"
+                            className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#E74C3C]/40 resize-none"
+                        />
+                        <div className="flex gap-3 mt-4">
+                            <button
+                                onClick={() => { setDisputeCustomer(null); setDisputeNote(''); }}
+                                className="flex-1 h-[44px] border border-[#EEEEEE] rounded-[10px] text-[14px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (!disputeNote.trim()) return;
+                                    try {
+                                        const res = await fetch(`/api/v1/vendor/collections/${disputeCustomer}`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ action: 'dispute', note: disputeNote }),
+                                        });
+                                        const json = await res.json();
+                                        if (!json.success) throw new Error(json.error?.message || 'Failed');
+                                        toast.success('Dispute logged');
+                                    } catch (err) {
+                                        toast.error(err instanceof Error ? err.message : 'Failed to log dispute');
+                                    } finally {
+                                        setDisputeCustomer(null);
+                                        setDisputeNote('');
+                                    }
+                                }}
+                                className="flex-1 h-[44px] bg-[#E74C3C] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#c0392b] transition-all"
+                            >
+                                Log Dispute
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
