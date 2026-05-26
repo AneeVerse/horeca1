@@ -41,6 +41,7 @@ import {
     LogOut,
     Users,
     Landmark,
+    RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
@@ -54,7 +55,9 @@ const SIDEBAR_LINKS = [
     { name: 'Brand Mappings', icon: GitMerge, href: '/vendor/brand-mappings' },
     { name: 'Inventory', icon: Warehouse, href: '/vendor/inventory' },
     { name: 'Collections', icon: Landmark, href: '/vendor/collections' },
+    { name: 'Returns', icon: RotateCcw, href: '/vendor/returns' },
     { name: 'Reports', icon: BarChart3, href: '/vendor/reports' },
+    { name: 'Notifications', icon: Bell, href: '/vendor/notifications' },
     { name: 'Team', icon: Users, href: '/vendor/team' },
     { name: 'Settings', icon: Settings, href: '/vendor/settings' },
 ];
