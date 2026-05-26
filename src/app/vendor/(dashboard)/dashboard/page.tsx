@@ -252,6 +252,32 @@ function PendingOrdersWidget({
     );
 }
 
+// ─── Setup Banner ──────────────────────────────────────────────────────────────
+
+function SetupBanner() {
+  const [show, setShow] = useState(true);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('vendor_setup_completed')) {
+      setShow(false);
+    }
+  }, []);
+  if (!show) return null;
+  return (
+    <div className="bg-gradient-to-r from-[#299E60] to-[#1a7a49] rounded-[14px] p-5 text-white mb-6 flex items-center justify-between">
+      <div>
+        <p className="text-[16px] font-bold">Complete your store setup</p>
+        <p className="text-[13px] opacity-80 mt-0.5">Set up your profile, delivery slots, and first products to go live</p>
+      </div>
+      <div className="flex items-center gap-3 ml-4 shrink-0">
+        <a href="/vendor/setup" className="bg-white text-[#299E60] text-[13px] font-bold px-4 py-2 rounded-[8px] hover:bg-gray-50 transition-colors whitespace-nowrap">
+          Start Setup
+        </a>
+        <button onClick={() => { localStorage.setItem('vendor_setup_completed', '1'); setShow(false); }} className="text-white/60 hover:text-white transition-colors text-[20px] leading-none">&times;</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function VendorDashboardPage() {
@@ -394,6 +420,7 @@ export default function VendorDashboardPage() {
 
     return (
         <div className="space-y-6 pb-10">
+            <SetupBanner />
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
