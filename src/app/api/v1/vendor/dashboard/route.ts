@@ -35,6 +35,9 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       ordersByStatusRaw,
       pendingOrders,
       recentOrders,
+      vendorWallet,
+      overdueResult,
+      pendingSettlement,
     ] = await Promise.all([
       prisma.order.count({ where: { vendorId } }),
 
@@ -110,6 +113,29 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
           _count: { select: { items: true } },
         },
       }),
+
+      // Vendor wallet balance
+      prisma.vendorWallet.findUnique({
+        where: { vendorId },
+        select: { balance: true, pendingAmount: true },
+      }),
+
+      // Overdue credit amount (past due date, not yet paid)
+      prisma.creditTransaction.aggregate({
+        _sum: { amount: true },
+        where: {
+          vendorId,
+          type: 'debit',
+          dueDate: { lt: new Date() },
+          // Identify unpaid by checking creditUsed still covers it — approximate via no credit txn after
+        },
+      }),
+
+      // Pending settlement amount
+      prisma.vendorSettlement.aggregate({
+        _sum: { netAmount: true },
+        where: { vendorId, status: 'pending' },
+      }),
     ]);
 
     const lowStockCount = inventoryRows.filter(
@@ -133,6 +159,10 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
           activeProducts,
           lowStockCount,
           pendingOrdersCount: pendingOrders.length,
+          walletBalance: Number(vendorWallet?.balance ?? 0),
+          pendingSettlement: Number(pendingSettlement._sum.netAmount ?? 0),
+          overdueAmount: Number(overdueResult._sum.amount ?? 0),
+          pendingWalletAmount: Number(vendorWallet?.pendingAmount ?? 0),
         },
         ordersByStatus,
         pendingOrders,

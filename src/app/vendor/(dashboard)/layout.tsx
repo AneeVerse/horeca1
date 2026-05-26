@@ -40,8 +40,12 @@ import {
     Eye,
     LogOut,
     Users,
+    UserCircle,
     Landmark,
     RotateCcw,
+    Wallet,
+    BookOpen,
+    Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
@@ -56,6 +60,10 @@ const SIDEBAR_LINKS = [
     { name: 'Inventory', icon: Warehouse, href: '/vendor/inventory' },
     { name: 'Collections', icon: Landmark, href: '/vendor/collections' },
     { name: 'Returns', icon: RotateCcw, href: '/vendor/returns' },
+    { name: 'Customers', icon: UserCircle, href: '/vendor/customers' },
+    { name: 'Price Lists', icon: Tag, href: '/vendor/price-lists' },
+    { name: 'Wallet', icon: Wallet, href: '/vendor/wallet' },
+    { name: 'Ledger', icon: BookOpen, href: '/vendor/ledger' },
     { name: 'Reports', icon: BarChart3, href: '/vendor/reports' },
     { name: 'Notifications', icon: Bell, href: '/vendor/notifications' },
     { name: 'Team', icon: Users, href: '/vendor/team' },

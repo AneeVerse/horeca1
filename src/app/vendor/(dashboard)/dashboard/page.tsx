@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import {
     ShoppingBag, Package, AlertTriangle, Loader2, Eye,
     CheckCircle2, Clock, TrendingUp, CreditCard, ChevronRight,
-    Bell, RefreshCw,
+    Bell, RefreshCw, Wallet, BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
@@ -45,6 +45,10 @@ interface DashboardData {
         activeProducts: number;
         lowStockCount: number;
         pendingOrdersCount: number;
+        walletBalance: number;
+        pendingSettlement: number;
+        overdueAmount: number;
+        pendingWalletAmount: number;
     };
     ordersByStatus: Record<string, number>;
     pendingOrders: PendingOrder[];
@@ -322,6 +326,22 @@ export default function VendorDashboardPage() {
             stripe: '#F59E0B',
             href: '/vendor/orders',
         },
+        {
+            label: 'Wallet Balance',
+            value: formatINR(Number(data.stats.walletBalance)),
+            icon: Wallet,
+            color: 'bg-[#EEF8F1] text-[#299E60]',
+            stripe: '#10B981',
+            href: '/vendor/wallet',
+        },
+        {
+            label: 'Pending Settlement',
+            value: formatINR(Number(data.stats.pendingSettlement)),
+            icon: BookOpen,
+            color: 'bg-teal-50 text-teal-600',
+            stripe: '#14B8A6',
+            href: '/vendor/ledger',
+        },
     ] : [];
 
     return (
@@ -369,7 +389,7 @@ export default function VendorDashboardPage() {
                     />
 
                     {/* ── Stat Cards ────────────────────────────────── */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
                         {statCards.map((stat, idx) => (
                             <Link
                                 key={idx}
@@ -391,6 +411,20 @@ export default function VendorDashboardPage() {
                             </Link>
                         ))}
                     </div>
+
+                    {/* Overdue credit alert */}
+                    {Number(data.stats.overdueAmount) > 0 && (
+                        <Link
+                            href="/vendor/collections"
+                            className="flex items-center gap-3 p-4 bg-[#FFF0F0] border border-[#E74C3C]/30 rounded-[12px] hover:bg-[#FFE5E5] transition-colors"
+                        >
+                            <CreditCard size={18} className="text-[#E74C3C] shrink-0" />
+                            <p className="text-[13px] font-bold text-[#E74C3C]">
+                                {formatINR(Number(data.stats.overdueAmount))} in overdue credit payments
+                            </p>
+                            <ChevronRight size={16} className="text-[#E74C3C] ml-auto" />
+                        </Link>
+                    )}
 
                     {/* Low stock alert */}
                     {data.stats.lowStockCount > 0 && (
