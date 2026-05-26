@@ -16,6 +16,9 @@ interface InventoryItem {
     productId: string;
     qtyAvailable: number;
     qtyReserved: number;
+    qtyInTransit: number;
+    qtyDamaged: number;
+    qtyReturned: number;
     lowStockThreshold: number;
     isLowStock: boolean;
     product: {
@@ -273,6 +276,27 @@ function InventoryRow({ item, onSaved }: { item: InventoryItem; onSaved: (update
             {/* Reserved */}
             <td className="px-5 py-3.5 text-center text-[13px] text-[#7C7C7C] font-medium">{item.qtyReserved}</td>
 
+            {/* In Transit */}
+            <td className="px-5 py-3.5 text-center">
+                <span className={cn('text-[13px] font-medium', item.qtyInTransit > 0 ? 'text-blue-600' : 'text-[#AEAEAE]')}>
+                    {item.qtyInTransit}
+                </span>
+            </td>
+
+            {/* Damaged */}
+            <td className="px-5 py-3.5 text-center">
+                <span className={cn('text-[13px] font-medium', item.qtyDamaged > 0 ? 'text-[#E74C3C]' : 'text-[#AEAEAE]')}>
+                    {item.qtyDamaged}
+                </span>
+            </td>
+
+            {/* Returned */}
+            <td className="px-5 py-3.5 text-center">
+                <span className={cn('text-[13px] font-medium', item.qtyReturned > 0 ? 'text-amber-600' : 'text-[#AEAEAE]')}>
+                    {item.qtyReturned}
+                </span>
+            </td>
+
             {/* Net */}
             <td className="px-5 py-3.5 text-center">
                 <span className={cn('text-[13px] font-bold', net <= 0 ? 'text-[#E74C3C]' : net <= threshold ? 'text-amber-500' : 'text-[#181725]')}>
@@ -488,6 +512,9 @@ export default function VendorInventoryPage() {
                                     <th className="px-5 py-3 text-left text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Product</th>
                                     <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Available</th>
                                     <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Reserved</th>
+                                    <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">In Transit</th>
+                                    <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Damaged</th>
+                                    <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Returned</th>
                                     <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Net</th>
                                     <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Threshold</th>
                                     <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Status</th>

@@ -36,7 +36,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       where: { vendorId },
       include: {
         product: {
-          select: { id: true, name: true, imageUrl: true, isActive: true, basePrice: true },
+          select: { id: true, name: true, sku: true, unit: true, imageUrl: true, isActive: true, basePrice: true },
         },
       },
       orderBy: { updatedAt: 'desc' },
