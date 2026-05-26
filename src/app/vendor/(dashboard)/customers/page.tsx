@@ -29,6 +29,8 @@ interface VendorCustomer {
   status: 'active' | 'blocked' | 'suspended';
   priceListId: string | null;
   territory: string | null;
+  salesExecutive: string | null;
+  deliveryRoute: string | null;
   tags: string[];
   notes: string | null;
   paymentTerms: string | null;
@@ -309,6 +311,8 @@ function EditModal({ customer, priceLists, onClose, onSave }: EditModalProps) {
   const [status, setStatus] = useState(customer.status);
   const [priceListId, setPriceListId] = useState(customer.priceListId ?? '');
   const [territory, setTerritory] = useState(customer.territory ?? '');
+  const [salesExecutive, setSalesExecutive] = useState(customer.salesExecutive ?? '');
+  const [deliveryRoute, setDeliveryRoute] = useState(customer.deliveryRoute ?? '');
   const [paymentTerms, setPaymentTerms] = useState(customer.paymentTerms ?? '');
   const [notes, setNotes] = useState(customer.notes ?? '');
   const [saving, setSaving] = useState(false);
@@ -323,6 +327,8 @@ function EditModal({ customer, priceLists, onClose, onSave }: EditModalProps) {
           status,
           priceListId: priceListId || null,
           territory: territory || null,
+          salesExecutive: salesExecutive || null,
+          deliveryRoute: deliveryRoute || null,
           paymentTerms: paymentTerms || null,
           notes: notes || null,
         }),
@@ -397,6 +403,26 @@ function EditModal({ customer, priceLists, onClose, onSave }: EditModalProps) {
                 value={paymentTerms}
                 onChange={(e) => setPaymentTerms(e.target.value)}
                 placeholder="e.g. Net 30"
+                className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-[#7C7C7C] mb-1">Sales Executive</label>
+              <input
+                type="text"
+                value={salesExecutive}
+                onChange={(e) => setSalesExecutive(e.target.value)}
+                placeholder="e.g. Ravi Sharma"
+                className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-[#7C7C7C] mb-1">Delivery Route</label>
+              <input
+                type="text"
+                value={deliveryRoute}
+                onChange={(e) => setDeliveryRoute(e.target.value)}
+                placeholder="e.g. Route A"
                 className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
               />
             </div>

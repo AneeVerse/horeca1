@@ -436,6 +436,9 @@ model Inventory {
   vendorId          String   @map("vendor_id") @db.Uuid
   qtyAvailable      Int      @default(0) @map("qty_available")
   qtyReserved       Int      @default(0) @map("qty_reserved")
+  qtyInTransit      Int      @default(0) @map("qty_in_transit")
+  qtyDamaged        Int      @default(0) @map("qty_damaged")
+  qtyReturned       Int      @default(0) @map("qty_returned")
   lowStockThreshold Int      @default(10) @map("low_stock_threshold")
   updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -1377,10 +1380,12 @@ model VendorCustomer {
   userId       String               @map("user_id") @db.Uuid
   status       VendorCustomerStatus @default(active)
   priceListId  String?              @map("price_list_id") @db.Uuid
-  territory    String?              @db.VarChar(100)
-  tags         String[]             @default([]) @map("tags")
-  notes        String?              @db.Text
-  paymentTerms String?              @map("payment_terms") @db.VarChar(50)
+  territory       String?              @db.VarChar(100)
+  salesExecutive  String?              @map("sales_executive") @db.VarChar(100)
+  deliveryRoute   String?              @map("delivery_route") @db.VarChar(100)
+  tags            String[]             @default([]) @map("tags")
+  notes           String?              @db.Text
+  paymentTerms    String?              @map("payment_terms") @db.VarChar(50)
   createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
