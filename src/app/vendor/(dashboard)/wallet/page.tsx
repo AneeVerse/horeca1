@@ -1,7 +1,18 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Wallet, ArrowDownCircle, ArrowUpCircle, Clock, Loader2, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
+import {
+  Wallet,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Clock,
+  Loader2,
+  RefreshCw,
+  Building2,
+  ChevronRight,
+  CalendarClock,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface WalletInfo {
@@ -17,6 +28,17 @@ interface WalletTxn {
   balanceAfter: number;
   referenceId: string | null;
   notes: string | null;
+  createdAt: string;
+}
+
+interface Payout {
+  id: string;
+  amount: number;
+  status: 'pending' | 'processing' | 'settled' | 'failed';
+  reference: string | null;
+  periodStart: string;
+  periodEnd: string;
+  settledAt: string | null;
   createdAt: string;
 }
 
@@ -43,9 +65,44 @@ function relativeTime(isoStr: string) {
   return new Date(isoStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
 }
 
+function formatDate(isoStr: string) {
+  return new Date(isoStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function payoutStatusBadge(status: Payout['status']) {
+  switch (status) {
+    case 'settled':
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#EEF8F1] text-[#299E60]">
+          Completed
+        </span>
+      );
+    case 'processing':
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#EFF6FF] text-[#3B82F6]">
+          Processing
+        </span>
+      );
+    case 'failed':
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#FFF0F0] text-[#E74C3C]">
+          Failed
+        </span>
+      );
+    default:
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#F5F5F5] text-[#7C7C7C]">
+          Pending
+        </span>
+      );
+  }
+}
+
 export default function VendorWalletPage() {
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
   const [txns, setTxns] = useState<WalletTxn[]>([]);
+  const [payouts, setPayouts] = useState<Payout[]>([]);
+  const [pendingPayout, setPendingPayout] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -56,11 +113,22 @@ export default function VendorWalletPage() {
     try {
       const url = `/api/v1/vendor/wallet${cursor ? `?cursor=${cursor}` : ''}`;
       const res = await fetch(url);
-      const json = await res.json();
+      const json = await res.json() as {
+        success: boolean;
+        data: {
+          wallet: WalletInfo;
+          transactions: WalletTxn[];
+          nextCursor: string | null;
+          payouts: Payout[];
+          pendingPayout: number;
+        };
+      };
       if (json.success) {
         if (!cursor) {
           setWallet(json.data.wallet);
           setTxns(json.data.transactions);
+          setPayouts(json.data.payouts);
+          setPendingPayout(json.data.pendingPayout);
         } else {
           setTxns((prev) => [...prev, ...json.data.transactions]);
         }
@@ -135,6 +203,61 @@ export default function VendorWalletPage() {
         </div>
       </div>
 
+      {/* Pending Payout Banner */}
+      {!loading && pendingPayout > 0 && (
+        <div className="bg-[#FFF7ED] border border-[#FED7AA] rounded-[12px] p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <CalendarClock size={20} className="text-[#92400E] shrink-0" />
+            <div>
+              <p className="text-[14px] font-bold text-[#92400E]">Upcoming Payout</p>
+              <p className="text-[12px] text-[#A16207]">
+                ₹{pendingPayout.toLocaleString('en-IN', { minimumFractionDigits: 2 })} will be transferred on next Monday
+              </p>
+            </div>
+          </div>
+          <span className="text-[20px] font-bold text-[#92400E] shrink-0">
+            ₹{pendingPayout.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </span>
+        </div>
+      )}
+
+      {/* Bank Account Card */}
+      <div className="bg-white rounded-[14px] border border-[#EEEEEE] p-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-[#F0FDF4] flex items-center justify-center shrink-0">
+              <Building2 size={16} className="text-[#299E60]" />
+            </div>
+            <div>
+              <p className="text-[13px] font-bold text-[#181725]">Bank Account (for settlements)</p>
+              <p className="text-[11px] text-[#AEAEAE] mt-0.5">Payouts are transferred to your registered bank account</p>
+            </div>
+          </div>
+          <Link
+            href="/vendor/settings"
+            className="flex items-center gap-1 text-[12px] font-semibold text-[#299E60] hover:text-[#238a54] transition-colors shrink-0"
+          >
+            Configure
+            <ChevronRight size={14} />
+          </Link>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="bg-[#F9FAFB] rounded-[10px] px-4 py-3">
+            <p className="text-[10px] font-semibold text-[#AEAEAE] uppercase tracking-wide">Bank</p>
+            <p className="text-[13px] font-bold text-[#181725] mt-0.5">Not configured</p>
+          </div>
+          <div className="bg-[#F9FAFB] rounded-[10px] px-4 py-3">
+            <p className="text-[10px] font-semibold text-[#AEAEAE] uppercase tracking-wide">Account Number</p>
+            <p className="text-[13px] font-bold text-[#181725] mt-0.5">—</p>
+          </div>
+          <div className="bg-[#F9FAFB] rounded-[10px] px-4 py-3">
+            <p className="text-[10px] font-semibold text-[#AEAEAE] uppercase tracking-wide">IFSC Code</p>
+            <p className="text-[13px] font-bold text-[#181725] mt-0.5">—</p>
+          </div>
+        </div>
+      </div>
+
       {/* Transaction history */}
       <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-[#F5F5F5]">
@@ -196,6 +319,63 @@ export default function VendorWalletPage() {
               </div>
             )}
           </>
+        )}
+      </div>
+
+      {/* Payout History */}
+      <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#F5F5F5]">
+          <h2 className="text-[15px] font-bold text-[#181725]">Payout History</h2>
+          <p className="text-[11px] text-[#AEAEAE] mt-0.5">Bank transfers for settled periods</p>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="animate-spin text-[#299E60]" size={24} />
+          </div>
+        ) : payouts.length === 0 ? (
+          <div className="py-12 text-center">
+            <CalendarClock size={32} className="text-[#E5E7EB] mx-auto mb-3" />
+            <p className="text-[13px] font-bold text-[#AEAEAE]">No payouts yet</p>
+            <p className="text-[12px] text-[#AEAEAE] mt-1">
+              Your first settlement will be processed next Monday
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-[#F5F5F5]">
+                  <th className="px-5 py-3 text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wide">Period</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wide">Settled On</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wide">Amount</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wide">Status</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wide">Reference</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F5F5F5]">
+                {payouts.map((payout) => (
+                  <tr key={payout.id} className="hover:bg-[#FAFAFA] transition-colors">
+                    <td className="px-5 py-4 text-[12px] text-[#181725]">
+                      {formatDate(payout.periodStart)} – {formatDate(payout.periodEnd)}
+                    </td>
+                    <td className="px-5 py-4 text-[12px] text-[#7C7C7C]">
+                      {payout.settledAt ? formatDate(payout.settledAt) : '—'}
+                    </td>
+                    <td className="px-5 py-4 text-[13px] font-bold text-[#181725]">
+                      ₹{payout.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-5 py-4">
+                      {payoutStatusBadge(payout.status)}
+                    </td>
+                    <td className="px-5 py-4 text-[11px] text-[#AEAEAE] font-mono">
+                      {payout.reference ?? '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

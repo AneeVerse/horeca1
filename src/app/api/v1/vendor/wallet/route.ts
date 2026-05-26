@@ -1,4 +1,4 @@
-// GET  /api/v1/vendor/wallet — Vendor wallet balance + transaction history
+// GET  /api/v1/vendor/wallet — Vendor wallet balance + transaction history + payout info
 // POST /api/v1/vendor/wallet — Admin-only: credit/debit adjustment
 // PROTECTED: Vendor only
 
@@ -39,6 +39,47 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     const nextSettlement = new Date(now);
     nextSettlement.setDate(now.getDate() + daysUntilMonday);
 
+    // Payout history — last 10 VendorSettlement records for this vendor
+    const settlements = await prisma.vendorSettlement.findMany({
+      where: { vendorId },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: {
+        id: true,
+        netAmount: true,
+        status: true,
+        bankReference: true,
+        periodStart: true,
+        periodEnd: true,
+        settledAt: true,
+        createdAt: true,
+      },
+    });
+
+    const payouts = settlements.map((s) => ({
+      id: s.id,
+      amount: Number(s.netAmount),
+      status: s.status,
+      reference: s.bankReference ?? null,
+      periodStart: s.periodStart.toISOString().split('T')[0],
+      periodEnd: s.periodEnd.toISOString().split('T')[0],
+      settledAt: s.settledAt ? s.settledAt.toISOString() : null,
+      createdAt: s.createdAt.toISOString(),
+    }));
+
+    // Pending payout — sum of order_credit txns in the last 2 days
+    // (these are earned but not yet settled)
+    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+    const recentCredits = await prisma.vendorWalletTxn.aggregate({
+      where: {
+        walletId: wallet.id,
+        type: 'order_credit',
+        createdAt: { gte: twoDaysAgo },
+      },
+      _sum: { amount: true },
+    });
+    const pendingPayout = Number(recentCredits._sum.amount ?? 0);
+
     return NextResponse.json({
       success: true,
       data: {
@@ -49,6 +90,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         },
         transactions: items,
         nextCursor,
+        payouts,
+        pendingPayout,
       },
     });
   } catch (error) {
