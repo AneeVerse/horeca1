@@ -104,29 +104,33 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     }
 
     // ── Record payment ──
-    if (Number(account.creditUsed) <= 0) throw Errors.badRequest('No outstanding balance to settle');
+    if (!('action' in body)) {
+      if (Number(account.creditUsed) <= 0) throw Errors.badRequest('No outstanding balance to settle');
 
-    const payment = Math.min(body.amount, Number(account.creditUsed));
-    const newCreditUsed = Math.max(0, Number(account.creditUsed) - payment);
+      const payment = Math.min(body.amount, Number(account.creditUsed));
+      const newCreditUsed = Math.max(0, Number(account.creditUsed) - payment);
 
-    await prisma.$transaction([
-      prisma.creditAccount.update({
-        where: { id: accountId },
-        data: { creditUsed: newCreditUsed },
-      }),
-      prisma.creditTransaction.create({
-        data: {
-          creditAccountId: accountId,
-          vendorId,
-          type: 'credit',
-          amount: payment,
-          balanceAfter: newCreditUsed,
-          notes: body.notes ?? 'Offline payment recorded by vendor',
-        },
-      }),
-    ]);
+      await prisma.$transaction([
+        prisma.creditAccount.update({
+          where: { id: accountId },
+          data: { creditUsed: newCreditUsed },
+        }),
+        prisma.creditTransaction.create({
+          data: {
+            creditAccountId: accountId,
+            vendorId,
+            type: 'credit',
+            amount: payment,
+            balanceAfter: newCreditUsed,
+            notes: body.notes ?? 'Offline payment recorded by vendor',
+          },
+        }),
+      ]);
 
-    return NextResponse.json({ success: true, data: { paid: payment, balanceAfter: newCreditUsed } });
+      return NextResponse.json({ success: true, data: { paid: payment, balanceAfter: newCreditUsed } });
+    }
+
+    return NextResponse.json({ success: true });
   } catch (error) {
     return errorResponse(error);
   }
