@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil, Users, Crown, Shield, Eye, Edit3, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil, Users, Crown, Shield, Eye, Edit3, FileText, CheckCircle2, AlertCircle, Settings2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImageUploadField } from '@/components/ui/ImageUploadField';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -123,6 +123,14 @@ export default function VendorSettingsPage() {
     const [slotCutoff, setSlotCutoff] = useState('');
     const [savingSlot, setSavingSlot] = useState(false);
 
+    // Ordering defaults + policies
+    const [defaultMOQ, setDefaultMOQ] = useState('');
+    const [defaultTaxPercent, setDefaultTaxPercent] = useState('');
+    const [deliveryFeeVal, setDeliveryFeeVal] = useState('');
+    const [freeDeliveryAbove, setFreeDeliveryAbove] = useState('');
+    const [returnPolicy, setReturnPolicy] = useState('');
+    const [cancellationPolicy, setCancellationPolicy] = useState('');
+
     // Documents state
     const [documents, setDocuments] = useState<VendorDocument[]>([]);
     const [docForm, setDocForm] = useState({ type: 'fssai' as VendorDocument['type'], fileUrl: '', fileName: '' });
@@ -156,6 +164,12 @@ export default function VendorSettingsPage() {
                 setStateName(data.state || '');
                 setAddressPincode(data.addressPincode || '');
                 setGstNumber(data.gstNumber || '');
+                setDefaultMOQ(data.defaultMOQ != null ? String(data.defaultMOQ) : '');
+                setDefaultTaxPercent(data.defaultTaxPercent != null ? String(data.defaultTaxPercent) : '');
+                setDeliveryFeeVal(data.deliveryFee != null ? String(data.deliveryFee) : '');
+                setFreeDeliveryAbove(data.freeDeliveryAbove != null ? String(data.freeDeliveryAbove) : '');
+                setReturnPolicy(data.returnPolicy || '');
+                setCancellationPolicy(data.cancellationPolicy || '');
             }
         } catch (err) {
             console.error('Failed to load settings:', err);
@@ -238,6 +252,12 @@ export default function VendorSettingsPage() {
                     state: stateName || undefined,
                     addressPincode: addressPincode || undefined,
                     gstNumber: gstNumber || undefined,
+                    defaultMOQ: defaultMOQ ? parseInt(defaultMOQ, 10) : undefined,
+                    defaultTaxPercent: defaultTaxPercent ? parseFloat(defaultTaxPercent) : undefined,
+                    deliveryFee: deliveryFeeVal ? parseFloat(deliveryFeeVal) : undefined,
+                    freeDeliveryAbove: freeDeliveryAbove ? parseFloat(freeDeliveryAbove) : undefined,
+                    returnPolicy: returnPolicy || undefined,
+                    cancellationPolicy: cancellationPolicy || undefined,
                 }),
             });
             const json = await res.json();
@@ -799,6 +819,58 @@ export default function VendorSettingsPage() {
                 <Link href="/vendor/team" className="h-[36px] px-4 bg-[#EEF8F1] hover:bg-[#E2F4E7] text-[#299E60] rounded-[10px] text-[13px] font-bold transition-colors flex items-center justify-center shrink-0">
                     Manage Team
                 </Link>
+            </div>
+
+            {/* Ordering Defaults */}
+            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                <div className="flex items-center gap-2.5 mb-5">
+                    <div className="w-[32px] h-[32px] rounded-[8px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]"><Settings2 size={16} /></div>
+                    <h3 className="text-[16px] font-bold text-[#181725]">Ordering Defaults</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Default MOQ</label>
+                        <input type="number" min={1} value={defaultMOQ} onChange={e => setDefaultMOQ(e.target.value)} placeholder="e.g. 1" className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 bg-white" />
+                        <p className="text-[11px] text-[#AEAEAE] mt-1">Minimum order qty for new products</p>
+                    </div>
+                    <div>
+                        <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Default Tax %</label>
+                        <select value={defaultTaxPercent} onChange={e => setDefaultTaxPercent(e.target.value)} className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 bg-white appearance-none">
+                            <option value="">Not set</option>
+                            <option value="0">0% (Exempt)</option>
+                            <option value="5">5% GST</option>
+                            <option value="12">12% GST</option>
+                            <option value="18">18% GST</option>
+                            <option value="28">28% GST</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Delivery Fee (₹)</label>
+                        <input type="number" min={0} step={0.01} value={deliveryFeeVal} onChange={e => setDeliveryFeeVal(e.target.value)} placeholder="0 = free" className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 bg-white" />
+                    </div>
+                    <div>
+                        <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Free Delivery Above (₹)</label>
+                        <input type="number" min={0} step={0.01} value={freeDeliveryAbove} onChange={e => setFreeDeliveryAbove(e.target.value)} placeholder="Leave blank to always charge" className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 bg-white" />
+                    </div>
+                </div>
+            </div>
+
+            {/* Store Policies */}
+            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                <div className="flex items-center gap-2.5 mb-5">
+                    <div className="w-[32px] h-[32px] rounded-[8px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]"><FileText size={16} /></div>
+                    <h3 className="text-[16px] font-bold text-[#181725]">Store Policies</h3>
+                </div>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Return Policy</label>
+                        <textarea rows={3} value={returnPolicy} onChange={e => setReturnPolicy(e.target.value)} maxLength={2000} placeholder="e.g. Returns accepted within 48 hours of delivery for damaged or incorrect goods..." className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors resize-none bg-white" />
+                    </div>
+                    <div>
+                        <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Cancellation Policy</label>
+                        <textarea rows={3} value={cancellationPolicy} onChange={e => setCancellationPolicy(e.target.value)} maxLength={2000} placeholder="e.g. Orders can be cancelled before they are accepted. No cancellations after dispatch." className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors resize-none bg-white" />
+                    </div>
+                </div>
             </div>
 
             {/* Verification Documents */}
