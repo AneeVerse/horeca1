@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
     ChevronLeft, User, Package, MapPin, Loader2, AlertCircle, Clock,
     CheckCircle2, XCircle, Printer, ChevronRight, AlertTriangle,
-    Truck, ClipboardList,
+    Truck, ClipboardList, Minus, Plus, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -73,16 +73,10 @@ interface OrderData {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
 const STATUS_FLOW = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'] as const;
-
 const STATUS_LABELS: Record<string, string> = {
-    pending: 'Pending',
-    confirmed: 'Accepted',
-    processing: 'Packing',
-    shipped: 'Dispatched',
-    delivered: 'Delivered',
-    cancelled: 'Cancelled',
+    pending: 'Pending', confirmed: 'Accepted', processing: 'Packing',
+    shipped: 'Dispatched', delivered: 'Delivered', cancelled: 'Cancelled',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -90,41 +84,35 @@ const STATUS_LABELS: Record<string, string> = {
 function formatPrice(v: number): string {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(v);
 }
-
 function formatTime(t: string): string {
     const [hours, minutes] = t.split(':');
     const h = parseInt(hours, 10);
     return `${h % 12 || 12}:${minutes} ${h >= 12 ? 'PM' : 'AM'}`;
 }
-
 function formatDateTime(dt: string): string {
     return new Date(dt).toLocaleDateString('en-IN', {
         day: '2-digit', month: 'short', year: 'numeric',
         hour: '2-digit', minute: '2-digit', hour12: true,
     });
 }
-
 function getStatusIndex(status: string): number {
     return STATUS_FLOW.indexOf(status as typeof STATUS_FLOW[number]);
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── StatusTimeline ───────────────────────────────────────────────────────────
 
 function StatusTimeline({ status, createdAt, acceptedAt }: {
-    status: string;
-    createdAt: string;
-    acceptedAt: string | null;
+    status: string; createdAt: string; acceptedAt: string | null;
 }) {
     const currentIdx = getStatusIndex(status);
-    const isCancelled = status === 'cancelled';
 
-    if (isCancelled) {
+    if (status === 'cancelled') {
         return (
             <div className="bg-[#FFF0F0] border border-[#FFC9C9] rounded-[14px] p-4 flex items-center gap-3">
                 <XCircle size={22} className="text-[#E74C3C] shrink-0" />
                 <div>
                     <p className="text-[14px] font-bold text-[#E74C3C]">Order Cancelled</p>
-                    <p className="text-[12px] text-[#7C7C7C]">This order was cancelled and inventory has been released.</p>
+                    <p className="text-[12px] text-[#7C7C7C]">Inventory has been released back to stock.</p>
                 </div>
             </div>
         );
@@ -133,18 +121,15 @@ function StatusTimeline({ status, createdAt, acceptedAt }: {
     return (
         <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
             <div className="flex items-center justify-between relative">
-                {/* Connecting line */}
                 <div className="absolute top-[18px] left-[18px] right-[18px] h-[2px] bg-[#EEEEEE] -z-0" />
                 <div
                     className="absolute top-[18px] left-[18px] h-[2px] bg-[#299E60] -z-0 transition-all duration-500"
                     style={{ width: currentIdx > 0 ? `${(currentIdx / (STATUS_FLOW.length - 1)) * 100}%` : '0%' }}
                 />
-
                 {STATUS_FLOW.map((step, idx) => {
                     const done = currentIdx > idx;
                     const current = currentIdx === idx;
                     const ts = idx === 0 ? createdAt : idx === 1 ? acceptedAt : null;
-
                     return (
                         <div key={step} className="flex flex-col items-center z-10 gap-1.5 min-w-0">
                             <div className={cn(
@@ -153,19 +138,12 @@ function StatusTimeline({ status, createdAt, acceptedAt }: {
                                     current ? 'bg-white border-[#299E60] ring-4 ring-[#299E60]/20' :
                                         'bg-white border-[#DDDDDD]'
                             )}>
-                                {done ? (
-                                    <CheckCircle2 size={18} className="text-white" />
-                                ) : current ? (
-                                    <div className="w-3 h-3 rounded-full bg-[#299E60] animate-pulse" />
-                                ) : (
-                                    <div className="w-3 h-3 rounded-full bg-[#DDDDDD]" />
-                                )}
+                                {done ? <CheckCircle2 size={18} className="text-white" />
+                                    : current ? <div className="w-3 h-3 rounded-full bg-[#299E60] animate-pulse" />
+                                        : <div className="w-3 h-3 rounded-full bg-[#DDDDDD]" />}
                             </div>
                             <div className="text-center">
-                                <p className={cn(
-                                    'text-[11px] font-bold',
-                                    done || current ? 'text-[#181725]' : 'text-[#AEAEAE]'
-                                )}>
+                                <p className={cn('text-[11px] font-bold', done || current ? 'text-[#181725]' : 'text-[#AEAEAE]')}>
                                     {STATUS_LABELS[step]}
                                 </p>
                                 {ts && (done || current) && (
@@ -182,9 +160,15 @@ function StatusTimeline({ status, createdAt, acceptedAt }: {
     );
 }
 
-function ActionPanel({ order, onAction }: {
+// ─── ActionPanel ──────────────────────────────────────────────────────────────
+
+function ActionPanel({ order, fulfilledQtys, adjustedTotal, isPartialAccept, onAction, onAccept }: {
     order: OrderData;
+    fulfilledQtys: Record<string, number>;
+    adjustedTotal: number;
+    isPartialAccept: boolean;
     onAction: (status: string, reason?: string) => Promise<void>;
+    onAccept: (qtys: Record<string, number>) => Promise<void>;
 }) {
     const [rejecting, setRejecting] = useState(false);
     const [rejectReason, setRejectReason] = useState('');
@@ -193,32 +177,47 @@ function ActionPanel({ order, onAction }: {
 
     const run = async (status: string, reason?: string) => {
         setBusy(true);
-        try {
-            await onAction(status, reason);
-        } finally {
-            setBusy(false);
-        }
+        try { await onAction(status, reason); }
+        finally { setBusy(false); }
+    };
+    const runAccept = async () => {
+        setBusy(true);
+        try { await onAccept(fulfilledQtys); }
+        finally { setBusy(false); }
     };
 
-    useEffect(() => {
-        if (rejecting) reasonRef.current?.focus();
-    }, [rejecting]);
+    useEffect(() => { if (rejecting) reasonRef.current?.focus(); }, [rejecting]);
 
     if (order.status === 'delivered' || order.status === 'cancelled') return null;
+
+    const hint =
+        order.status === 'pending' ? (isPartialAccept ? 'Adjust fulfilled quantities below, then confirm.' : 'Accept in full or reduce quantities for partial fulfilment.') :
+            order.status === 'confirmed' ? 'Mark as packed once items are ready in the warehouse.' :
+                order.status === 'processing' ? 'Mark as dispatched once goods are handed to delivery.' :
+                    'Confirm delivery once the customer has received the goods.';
 
     return (
         <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-[#EEEEEE] flex items-center justify-between">
                 <h3 className="text-[15px] font-bold text-[#181725]">Actions</h3>
-                <span className="text-[12px] text-[#AEAEAE]">
-                    {order.status === 'pending' ? 'Accept or reject this order' :
-                        order.status === 'confirmed' ? 'Mark as packed once items are ready' :
-                            order.status === 'processing' ? 'Mark as dispatched once shipped' :
-                                'Confirm delivery once goods are received'}
-                </span>
+                <span className="text-[12px] text-[#AEAEAE] hidden sm:block">{hint}</span>
             </div>
-
             <div className="p-6">
+
+                {/* Partial accept summary banner */}
+                {order.status === 'pending' && isPartialAccept && (
+                    <div className="mb-4 p-3 rounded-[10px] bg-[#FFF4E5] border border-[#F59E0B]/30 flex items-start gap-2.5">
+                        <Info size={16} className="text-[#F59E0B] shrink-0 mt-0.5" />
+                        <div className="text-[12px]">
+                            <p className="font-bold text-[#976538]">Partial Fulfilment</p>
+                            <p className="text-[#7C7C7C]">
+                                You&apos;ve reduced quantities on some items. The customer will be notified.
+                                Adjusted order value: <span className="font-bold text-[#181725]">{formatPrice(adjustedTotal)}</span>
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Reject reason form */}
                 {rejecting ? (
                     <div className="space-y-3">
@@ -250,23 +249,24 @@ function ActionPanel({ order, onAction }: {
                                 disabled={busy}
                                 className="h-[44px] px-6 rounded-[10px] text-[14px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all"
                             >
-                                Cancel
+                                Go Back
                             </button>
                         </div>
                     </div>
                 ) : (
                     <div className="flex flex-wrap gap-3">
-                        {/* Primary action */}
+                        {/* Accept (pending) */}
                         {order.status === 'pending' && (
                             <button
-                                onClick={() => run('confirmed')}
+                                onClick={runAccept}
                                 disabled={busy}
                                 className="h-[48px] px-8 rounded-[12px] bg-[#299E60] text-white text-[15px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 disabled:opacity-60"
                             >
                                 {busy ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-                                Accept Order
+                                {isPartialAccept ? 'Accept Partial Order' : 'Accept Order'}
                             </button>
                         )}
+                        {/* Mark as Packed (confirmed) */}
                         {order.status === 'confirmed' && (
                             <button
                                 onClick={() => run('processing')}
@@ -277,6 +277,7 @@ function ActionPanel({ order, onAction }: {
                                 Mark as Packed
                             </button>
                         )}
+                        {/* Mark as Dispatched (processing) */}
                         {order.status === 'processing' && (
                             <button
                                 onClick={() => run('shipped')}
@@ -287,6 +288,7 @@ function ActionPanel({ order, onAction }: {
                                 Mark as Dispatched
                             </button>
                         )}
+                        {/* Confirm Delivery (shipped) */}
                         {order.status === 'shipped' && (
                             <button
                                 onClick={() => run('delivered')}
@@ -297,8 +299,7 @@ function ActionPanel({ order, onAction }: {
                                 Confirm Delivery
                             </button>
                         )}
-
-                        {/* Secondary: reject / cancel */}
+                        {/* Reject / Cancel */}
                         {(order.status === 'pending' || order.status === 'confirmed' || order.status === 'processing') && (
                             <button
                                 onClick={() => setRejecting(true)}
@@ -331,6 +332,8 @@ export default function VendorOrderDetailPage() {
     const [order, setOrder] = useState<OrderData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    // Fulfilled quantity per order item — only active when order is pending
+    const [fulfilledQtys, setFulfilledQtys] = useState<Record<string, number>>({});
 
     const fetchOrder = useCallback(async () => {
         try {
@@ -339,6 +342,12 @@ export default function VendorOrderDetailPage() {
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Failed to load order');
             setOrder(json.data);
+            // Initialise fulfilled qtys to full ordered quantities
+            const init: Record<string, number> = {};
+            for (const item of json.data.items as OrderItem[]) {
+                init[item.id] = item.quantity;
+            }
+            setFulfilledQtys(init);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Something went wrong');
         } finally {
@@ -347,6 +356,16 @@ export default function VendorOrderDetailPage() {
     }, [orderId]);
 
     useEffect(() => { fetchOrder(); }, [fetchOrder]);
+
+    // Derived state for partial-fulfilment indicators
+    const isPartialAccept = order?.status === 'pending' && order.items.some(
+        item => (fulfilledQtys[item.id] ?? item.quantity) < item.quantity
+    );
+    const adjustedTotal = order?.items.reduce((sum, item) => {
+        const fulfilled = fulfilledQtys[item.id] ?? item.quantity;
+        const proportion = item.quantity > 0 ? fulfilled / item.quantity : 0;
+        return sum + Number(item.totalPrice) * proportion;
+    }, 0) ?? 0;
 
     const handleAction = useCallback(async (status: string, reason?: string) => {
         if (!order) return;
@@ -358,12 +377,11 @@ export default function VendorOrderDetailPage() {
             });
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Update failed');
-            setOrder((prev) => prev ? { ...prev, ...json.data } : prev);
+            setOrder(prev => prev ? { ...prev, ...json.data } : prev);
             toast.success(
-                status === 'confirmed' ? 'Order accepted! Inventory reserved.' :
-                    status === 'cancelled' ? 'Order rejected. Inventory released.' :
-                        status === 'delivered' ? 'Delivery confirmed!' :
-                            `Order marked as ${STATUS_LABELS[status] ?? status}.`
+                status === 'cancelled' ? 'Order rejected. Inventory released.' :
+                    status === 'delivered' ? 'Delivery confirmed!' :
+                        `Order marked as ${STATUS_LABELS[status] ?? status}.`
             );
         } catch (err: unknown) {
             toast.error(err instanceof Error ? err.message : 'Action failed');
@@ -371,7 +389,36 @@ export default function VendorOrderDetailPage() {
         }
     }, [order, orderId]);
 
-    const handlePrint = () => window.print();
+    const handleAccept = useCallback(async (qtys: Record<string, number>) => {
+        if (!order) return;
+        try {
+            // Build items array for the API
+            const items = order.items.map(item => ({
+                itemId: item.id,
+                fulfilledQty: qtys[item.id] ?? item.quantity,
+            }));
+            const res = await fetch(`/api/v1/vendor/orders/${orderId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Accept failed');
+            setOrder(prev => prev ? { ...prev, ...json.data } : prev);
+            toast.success(
+                isPartialAccept
+                    ? 'Partial order accepted! Unfulfilled stock released.'
+                    : 'Order accepted! Inventory reserved.'
+            );
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Accept failed');
+            throw err;
+        }
+    }, [order, orderId, isPartialAccept]);
+
+    const setFulfilledQty = (itemId: string, qty: number, max: number) => {
+        setFulfilledQtys(prev => ({ ...prev, [itemId]: Math.max(0, Math.min(qty, max)) }));
+    };
 
     if (loading) {
         return (
@@ -380,7 +427,6 @@ export default function VendorOrderDetailPage() {
             </div>
         );
     }
-
     if (error || !order) {
         return (
             <div className="flex flex-col items-center justify-center h-[60vh] gap-3">
@@ -390,6 +436,8 @@ export default function VendorOrderDetailPage() {
             </div>
         );
     }
+
+    const isPending = order.status === 'pending';
 
     return (
         <div className="space-y-5 pb-12">
@@ -415,7 +463,7 @@ export default function VendorOrderDetailPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <button
-                        onClick={handlePrint}
+                        onClick={() => window.print()}
                         className="h-9 px-4 rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] flex items-center gap-1.5 transition-all"
                     >
                         <Printer size={15} />
@@ -434,29 +482,34 @@ export default function VendorOrderDetailPage() {
                 </div>
             </div>
 
-            {/* ── Print header (only in print view) ────────────── */}
+            {/* Print header */}
             <div className="hidden print:block mb-6">
                 <h1 className="text-xl font-bold">Pick Slip — {order.orderNumber}</h1>
-                <p className="text-sm text-gray-500">Customer: {order.user.fullName}{order.user.businessName ? ` (${order.user.businessName})` : ''}</p>
+                <p className="text-sm text-gray-500">
+                    Customer: {order.user.fullName}{order.user.businessName ? ` (${order.user.businessName})` : ''}
+                </p>
                 <p className="text-sm text-gray-500">Placed: {formatDateTime(order.createdAt)}</p>
                 <hr className="my-3" />
             </div>
 
             {/* ── Status Timeline ───────────────────────────────── */}
             <div className="print:hidden">
-                <StatusTimeline
-                    status={order.status}
-                    createdAt={order.createdAt}
-                    acceptedAt={order.acceptedAt}
-                />
+                <StatusTimeline status={order.status} createdAt={order.createdAt} acceptedAt={order.acceptedAt} />
             </div>
 
             {/* ── Action Panel ──────────────────────────────────── */}
             <div className="print:hidden">
-                <ActionPanel order={order} onAction={handleAction} />
+                <ActionPanel
+                    order={order}
+                    fulfilledQtys={fulfilledQtys}
+                    adjustedTotal={adjustedTotal}
+                    isPartialAccept={!!isPartialAccept}
+                    onAction={handleAction}
+                    onAccept={handleAccept}
+                />
             </div>
 
-            {/* ── Rejection reason (shown after cancel) ─────────── */}
+            {/* ── Rejection reason ──────────────────────────────── */}
             {order.status === 'cancelled' && order.rejectionReason && (
                 <div className="bg-[#FFF8ED] border border-[#FFDCB3] rounded-[14px] p-5 flex gap-3 print:hidden">
                     <AlertTriangle size={18} className="text-[#F59E0B] shrink-0 mt-0.5" />
@@ -469,7 +522,6 @@ export default function VendorOrderDetailPage() {
 
             {/* ── Info cards ────────────────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                {/* Customer */}
                 <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
                     <div className="flex items-center gap-2 mb-3">
                         <User size={16} className="text-[#299E60]" />
@@ -483,37 +535,31 @@ export default function VendorOrderDetailPage() {
                     </div>
                 </div>
 
-                {/* Delivery */}
                 <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
                     <div className="flex items-center gap-2 mb-3">
                         <MapPin size={16} className="text-[#3B82F6]" />
                         <h3 className="text-[14px] font-bold text-[#181725]">Delivery</h3>
                     </div>
                     <div className="space-y-1.5 text-[13px]">
-                        {order.deliverySlot ? (
-                            <div className="flex items-center gap-1.5 text-[#181725]">
+                        {order.deliverySlot && (
+                            <div className="flex items-center gap-1.5">
                                 <Clock size={13} className="text-[#3B82F6]" />
                                 <span className="font-bold">{DAY_NAMES[Number(order.deliverySlot.dayOfWeek)] || `Day ${order.deliverySlot.dayOfWeek}`}</span>
                                 <span className="text-[#7C7C7C]">{formatTime(order.deliverySlot.slotStart)} – {formatTime(order.deliverySlot.slotEnd)}</span>
                             </div>
-                        ) : null}
+                        )}
                         {order.deliveryDate && (
-                            <p className="text-[#7C7C7C]">
-                                Date: <span className="font-bold text-[#181725]">
-                                    {new Date(order.deliveryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
-                                </span>
-                            </p>
+                            <p className="text-[#7C7C7C]">Date: <span className="font-bold text-[#181725]">
+                                {new Date(order.deliveryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
+                            </span></p>
                         )}
                         {order.paymentMethod && (
                             <p className="text-[#7C7C7C]">Payment: <span className="capitalize font-bold text-[#181725]">{order.paymentMethod}</span></p>
                         )}
-                        {!order.deliverySlot && !order.deliveryDate && (
-                            <p className="text-[#AEAEAE]">No delivery details set</p>
-                        )}
+                        {!order.deliverySlot && !order.deliveryDate && <p className="text-[#AEAEAE]">No delivery details set</p>}
                     </div>
                 </div>
 
-                {/* Payment */}
                 <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
                     <div className="flex items-center gap-2 mb-3">
                         <Package size={16} className="text-[#8B5CF6]" />
@@ -522,21 +568,18 @@ export default function VendorOrderDetailPage() {
                     <div className="space-y-1.5 text-[13px]">
                         <div className="flex justify-between">
                             <span className="text-[#7C7C7C]">Status</span>
-                            <span className={cn(
-                                'font-bold capitalize',
-                                order.paymentStatus === 'paid' ? 'text-[#299E60]' : 'text-[#976538]'
-                            )}>
+                            <span className={cn('font-bold capitalize', order.paymentStatus === 'paid' ? 'text-[#299E60]' : 'text-[#976538]')}>
                                 {order.paymentStatus}
                             </span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-[#7C7C7C]">Total</span>
+                            <span className="text-[#7C7C7C]">Order Total</span>
                             <span className="font-bold text-[#181725]">{formatPrice(order.totalAmount)}</span>
                         </div>
-                        {order.payments[0]?.method && (
-                            <div className="flex justify-between">
-                                <span className="text-[#7C7C7C]">Method</span>
-                                <span className="font-bold text-[#181725] capitalize">{order.payments[0].method}</span>
+                        {isPartialAccept && (
+                            <div className="flex justify-between text-[#976538]">
+                                <span>Adjusted Total</span>
+                                <span className="font-bold">{formatPrice(adjustedTotal)}</span>
                             </div>
                         )}
                     </div>
@@ -549,6 +592,11 @@ export default function VendorOrderDetailPage() {
                     <h3 className="text-[16px] font-bold text-[#181725]">
                         Order Items <span className="text-[#AEAEAE] font-normal">({order.items.length})</span>
                     </h3>
+                    {isPending && (
+                        <span className="text-[11px] text-[#AEAEAE] hidden sm:block">
+                            Adjust &quot;Fulfil&quot; qty to ship less than ordered
+                        </span>
+                    )}
                     <ChevronRight size={16} className="text-[#AEAEAE] print:hidden" />
                 </div>
                 <div className="overflow-x-auto">
@@ -558,10 +606,13 @@ export default function VendorOrderDetailPage() {
                                 <th className="px-5 py-3 text-left text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Product</th>
                                 <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">SKU / HSN</th>
                                 <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Unit Price</th>
-                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Qty</th>
+                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Ordered</th>
+                                {isPending && (
+                                    <th className="px-5 py-3 text-center text-[11px] font-bold text-[#976538] uppercase tracking-wide">Fulfil</th>
+                                )}
                                 <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide print:hidden">GST</th>
                                 <th className="px-5 py-3 text-right text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Total</th>
-                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide print:block hidden">✓ Picked</th>
+                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide hidden print:table-cell">✓</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#F5F5F5]">
@@ -570,8 +621,15 @@ export default function VendorOrderDetailPage() {
                                 const itemGST = taxPct > 0
                                     ? Number(item.totalPrice) - (Number(item.totalPrice) / (1 + taxPct / 100))
                                     : 0;
+                                const fulfilled = isPending ? (fulfilledQtys[item.id] ?? item.quantity) : item.fulfilledQty;
+                                const isReduced = isPending && fulfilled < item.quantity;
+                                const isSkipped = isPending && fulfilled === 0;
+
                                 return (
-                                    <tr key={item.id} className="hover:bg-[#FAFAFA]">
+                                    <tr key={item.id} className={cn(
+                                        'hover:bg-[#FAFAFA]',
+                                        isSkipped && isPending ? 'opacity-40' : ''
+                                    )}>
                                         <td className="px-5 py-4">
                                             <div className="flex items-center gap-3">
                                                 {item.product?.imageUrl ? (
@@ -600,18 +658,66 @@ export default function VendorOrderDetailPage() {
                                                 {!item.product?.sku && !item.product?.hsn && <span className="text-[#DDDDDD]">—</span>}
                                             </div>
                                         </td>
-                                        <td className="px-5 py-4 text-center text-[13px] text-[#7C7C7C]">{formatPrice(item.unitPrice)}</td>
-                                        <td className="px-5 py-4 text-center text-[14px] font-bold text-[#181725]">{item.quantity}</td>
+                                        <td className="px-5 py-4 text-center text-[13px] text-[#7C7C7C]">
+                                            {formatPrice(item.unitPrice)}
+                                        </td>
+                                        <td className="px-5 py-4 text-center text-[14px] font-bold text-[#181725]">
+                                            {item.quantity}
+                                        </td>
+
+                                        {/* Fulfil qty editor — only visible on pending orders */}
+                                        {isPending && (
+                                            <td className="px-5 py-4 text-center">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <button
+                                                        onClick={() => setFulfilledQty(item.id, (fulfilledQtys[item.id] ?? item.quantity) - 1, item.quantity)}
+                                                        className="w-7 h-7 rounded-[6px] border border-[#EEEEEE] flex items-center justify-center hover:bg-[#F5F5F5] text-[#7C7C7C] transition-colors"
+                                                    >
+                                                        <Minus size={12} />
+                                                    </button>
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        max={item.quantity}
+                                                        value={fulfilledQtys[item.id] ?? item.quantity}
+                                                        onChange={(e) => setFulfilledQty(item.id, parseInt(e.target.value) || 0, item.quantity)}
+                                                        className={cn(
+                                                            'w-12 h-7 text-center text-[13px] font-bold rounded-[6px] border outline-none',
+                                                            isSkipped ? 'border-[#E74C3C] text-[#E74C3C] bg-[#FFF0F0]' :
+                                                                isReduced ? 'border-[#F59E0B] text-[#976538] bg-[#FFF4E5]' :
+                                                                    'border-[#299E60] text-[#299E60] bg-[#F0FBF5]'
+                                                        )}
+                                                    />
+                                                    <button
+                                                        onClick={() => setFulfilledQty(item.id, (fulfilledQtys[item.id] ?? item.quantity) + 1, item.quantity)}
+                                                        className="w-7 h-7 rounded-[6px] border border-[#EEEEEE] flex items-center justify-center hover:bg-[#F5F5F5] text-[#7C7C7C] transition-colors"
+                                                    >
+                                                        <Plus size={12} />
+                                                    </button>
+                                                </div>
+                                                {isReduced && !isSkipped && (
+                                                    <p className="text-[10px] text-[#976538] mt-0.5">of {item.quantity}</p>
+                                                )}
+                                                {isSkipped && (
+                                                    <p className="text-[10px] text-[#E74C3C] mt-0.5">skipped</p>
+                                                )}
+                                            </td>
+                                        )}
+
                                         <td className="px-5 py-4 text-center text-[11px] text-[#7C7C7C] print:hidden">
                                             {taxPct > 0 ? (
-                                                <div>
-                                                    <p className="font-medium">{taxPct}%</p>
-                                                    <p>{formatPrice(itemGST)}</p>
-                                                </div>
+                                                <div><p className="font-medium">{taxPct}%</p><p>{formatPrice(itemGST)}</p></div>
                                             ) : <span className="text-[#DDDDDD]">—</span>}
                                         </td>
-                                        <td className="px-5 py-4 text-right text-[13px] font-bold text-[#181725]">{formatPrice(item.totalPrice)}</td>
-                                        {/* Print pick checkbox */}
+                                        <td className="px-5 py-4 text-right text-[13px] font-bold text-[#181725]">
+                                            {isPending && isReduced
+                                                ? <div>
+                                                    <p className="text-[#976538]">{formatPrice(Number(item.totalPrice) * (fulfilled / item.quantity))}</p>
+                                                    <p className="text-[11px] text-[#AEAEAE] line-through">{formatPrice(item.totalPrice)}</p>
+                                                </div>
+                                                : formatPrice(item.totalPrice)
+                                            }
+                                        </td>
                                         <td className="px-5 py-4 text-center hidden print:table-cell">
                                             <div className="w-5 h-5 border-2 border-gray-400 rounded inline-block" />
                                         </td>
@@ -624,20 +730,35 @@ export default function VendorOrderDetailPage() {
 
                 {/* Summary */}
                 <div className="px-6 py-5 border-t border-[#EEEEEE] flex flex-col items-end gap-2">
-                    <div className="flex gap-10 text-[13px]">
-                        <span className="text-[#7C7C7C]">Subtotal</span>
-                        <span className="font-bold text-[#181725] w-28 text-right">{formatPrice(order.subtotal)}</span>
-                    </div>
-                    {Number(order.taxAmount) > 0 && (
-                        <div className="flex gap-10 text-[13px]">
-                            <span className="text-[#7C7C7C]">GST / Tax</span>
-                            <span className="font-bold text-[#181725] w-28 text-right">{formatPrice(Number(order.taxAmount))}</span>
-                        </div>
+                    {isPending && isPartialAccept ? (
+                        <>
+                            <div className="flex gap-10 text-[13px]">
+                                <span className="text-[#AEAEAE] line-through">Original Total</span>
+                                <span className="text-[#AEAEAE] line-through w-28 text-right">{formatPrice(order.totalAmount)}</span>
+                            </div>
+                            <div className="flex gap-10 text-[15px] pt-2 border-t border-[#EEEEEE] mt-1">
+                                <span className="font-bold text-[#976538]">Adjusted Total</span>
+                                <span className="font-[900] text-[#976538] w-28 text-right">{formatPrice(adjustedTotal)}</span>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="flex gap-10 text-[13px]">
+                                <span className="text-[#7C7C7C]">Subtotal</span>
+                                <span className="font-bold text-[#181725] w-28 text-right">{formatPrice(order.subtotal)}</span>
+                            </div>
+                            {Number(order.taxAmount) > 0 && (
+                                <div className="flex gap-10 text-[13px]">
+                                    <span className="text-[#7C7C7C]">GST / Tax</span>
+                                    <span className="font-bold text-[#181725] w-28 text-right">{formatPrice(Number(order.taxAmount))}</span>
+                                </div>
+                            )}
+                            <div className="flex gap-10 text-[15px] pt-2 border-t border-[#EEEEEE] mt-1">
+                                <span className="font-bold text-[#181725]">Total</span>
+                                <span className="font-[900] text-[#299E60] w-28 text-right">{formatPrice(order.totalAmount)}</span>
+                            </div>
+                        </>
                     )}
-                    <div className="flex gap-10 text-[15px] pt-2 border-t border-[#EEEEEE] mt-1">
-                        <span className="font-bold text-[#181725]">Total</span>
-                        <span className="font-[900] text-[#299E60] w-28 text-right">{formatPrice(order.totalAmount)}</span>
-                    </div>
                 </div>
             </div>
 

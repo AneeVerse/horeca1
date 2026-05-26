@@ -240,6 +240,79 @@ export class OrderService {
     return order;
   }
 
+  // Partial accept: vendor ships a subset of items/quantities.
+  // Unfulfilled qty is released back to inventory; order total is recalculated.
+  async partialAccept(
+    orderId: string,
+    vendorId: string,
+    itemLines: Array<{ itemId: string; fulfilledQty: number }>,
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({
+        where: { id: orderId, vendorId, status: 'pending' },
+        include: { items: true },
+      });
+      if (!order) throw Errors.notFound('Order or order is not pending');
+
+      const orderItemMap = new Map(order.items.map(i => [i.id, i]));
+
+      // Validate each supplied line
+      for (const line of itemLines) {
+        const item = orderItemMap.get(line.itemId);
+        if (!item) throw Errors.badRequest(`Item ${line.itemId} does not belong to this order`);
+        if (line.fulfilledQty < 0) throw Errors.badRequest('Fulfilled qty cannot be negative');
+        if (line.fulfilledQty > item.quantity) {
+          throw Errors.badRequest(
+            `Fulfilled qty ${line.fulfilledQty} exceeds ordered qty ${item.quantity} for "${item.productName}"`,
+          );
+        }
+      }
+
+      // Build fulfilled map — items not in the list default to their full ordered qty
+      const fulfilledMap = new Map(itemLines.map(l => [l.itemId, l.fulfilledQty]));
+      for (const item of order.items) {
+        if (!fulfilledMap.has(item.id)) fulfilledMap.set(item.id, item.quantity);
+      }
+
+      // Must fulfil at least one unit in total
+      const totalFulfilled = Array.from(fulfilledMap.values()).reduce((s, q) => s + q, 0);
+      if (totalFulfilled === 0) {
+        throw Errors.badRequest('At least one item must be fulfilled. Use Reject to cancel entirely.');
+      }
+
+      const isPartial = order.items.some(i => (fulfilledMap.get(i.id) ?? i.quantity) < i.quantity);
+
+      // Release inventory for unfulfilled quantities
+      const toRelease = order.items
+        .map(i => ({ productId: i.productId, quantity: i.quantity - (fulfilledMap.get(i.id) ?? i.quantity) }))
+        .filter(r => r.quantity > 0);
+      if (toRelease.length > 0) await this.inventoryService.releaseStock(toRelease, tx);
+
+      // Recalculate order total proportionally & update each item's fulfilledQty
+      let newSubtotal = 0;
+      for (const item of order.items) {
+        const fulfilled = fulfilledMap.get(item.id) ?? item.quantity;
+        const itemTotal = Math.round(Number(item.totalPrice) * (fulfilled / item.quantity) * 100) / 100;
+        newSubtotal += itemTotal;
+        await tx.orderItem.update({ where: { id: item.id }, data: { fulfilledQty: fulfilled } });
+      }
+
+      const updated = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          status: 'confirmed',
+          isPartial,
+          subtotal: newSubtotal,
+          totalAmount: newSubtotal,
+          acceptedAt: new Date(),
+        },
+      });
+
+      emitEvent('OrderConfirmed', { orderId, userId: updated.userId, vendorId });
+      return updated;
+    });
+  }
+
   // Valid status transitions — any move not in this map is rejected.
   private static readonly VALID_TRANSITIONS: Readonly<Record<string, string[]>> = {
     pending:    ['confirmed', 'cancelled'],

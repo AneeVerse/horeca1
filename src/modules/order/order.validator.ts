@@ -32,6 +32,13 @@ export const updateStatusSchema = z.object({
   { message: 'A reason is required when cancelling an order', path: ['reason'] },
 );
 
+export const partialAcceptSchema = z.object({
+  items: z.array(z.object({
+    itemId: z.string().uuid(),
+    fulfilledQty: z.number().int().min(0),
+  })).min(1, 'At least one item line is required'),
+});
+
 export const saveAsListSchema = z.object({
   listName: z.string().min(1),
 });

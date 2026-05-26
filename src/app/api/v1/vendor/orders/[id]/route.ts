@@ -9,7 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { OrderService } from '@/modules/order/order.service';
-import { updateStatusSchema } from '@/modules/order/order.validator';
+import { updateStatusSchema, partialAcceptSchema } from '@/modules/order/order.validator';
 import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
 
@@ -90,9 +90,15 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   }
 });
 
-// PATCH — update order status through fulfillment lifecycle
-// Body: { status: "confirmed"|"processing"|"shipped"|"delivered"|"cancelled", reason?: string }
-// reason is required when status === "cancelled"
+// PATCH — update order status OR partially accept an order
+//
+// Full / status advance:
+//   { status: "confirmed"|"processing"|"shipped"|"delivered"|"cancelled", reason?: string }
+//   reason is required when status === "cancelled"
+//
+// Partial accept (accept with adjusted per-item quantities):
+//   { items: [{ itemId: uuid, fulfilledQty: number }, ...] }
+//   Items omitted from the array default to their full ordered quantity.
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
     const { vendorId } = await resolveVendorContext(ctx, req);
@@ -100,11 +106,18 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
 
     const orderId = extractId(req);
     const body = await req.json();
-    const { status, reason } = updateStatusSchema.parse(body);
-
     const orderService = new OrderService();
-    const updated = await orderService.updateStatus(orderId, vendorId, status, reason);
 
+    // Partial accept path — body contains an 'items' array
+    if (Array.isArray(body.items)) {
+      const { items } = partialAcceptSchema.parse(body);
+      const updated = await orderService.partialAccept(orderId, vendorId, items);
+      return NextResponse.json({ success: true, data: updated });
+    }
+
+    // Standard status transition path
+    const { status, reason } = updateStatusSchema.parse(body);
+    const updated = await orderService.updateStatus(orderId, vendorId, status, reason);
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {
     return errorResponse(error);
