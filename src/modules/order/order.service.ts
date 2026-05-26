@@ -240,15 +240,66 @@ export class OrderService {
     return order;
   }
 
-  async updateStatus(orderId: string, vendorId: string, status: string) {
-    const order = await prisma.order.update({
-      where: { id: orderId, vendorId },
-      data: { status: status as never },
+  // Valid status transitions — any move not in this map is rejected.
+  private static readonly VALID_TRANSITIONS: Readonly<Record<string, string[]>> = {
+    pending:    ['confirmed', 'cancelled'],
+    confirmed:  ['processing', 'cancelled'],
+    processing: ['shipped', 'cancelled'],
+    shipped:    ['delivered'],
+    delivered:  [],
+    cancelled:  [],
+  };
+
+  async updateStatus(orderId: string, vendorId: string, status: string, reason?: string) {
+    return prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({
+        where: { id: orderId, vendorId },
+        include: { items: { select: { productId: true, quantity: true } } },
+      });
+      if (!order) throw Errors.notFound('Order');
+
+      const validNext = OrderService.VALID_TRANSITIONS[order.status as string] ?? [];
+      if (!validNext.includes(status)) {
+        throw Errors.badRequest(
+          `Cannot move order from "${order.status}" to "${status}". ` +
+          `Allowed next states: ${validNext.length ? validNext.join(', ') : 'none'}.`
+        );
+      }
+
+      // Inventory side-effects
+      if (status === 'cancelled') {
+        // Release reserved stock so it becomes available for other orders
+        await this.inventoryService.releaseStock(
+          order.items.map(i => ({ productId: i.productId, quantity: i.quantity })),
+          tx,
+        );
+      }
+      if (status === 'delivered') {
+        // Goods have left the warehouse — deduct from physical available stock
+        await this.inventoryService.finalizeStock(
+          order.items.map(i => ({ productId: i.productId, quantity: i.quantity })),
+          tx,
+        );
+      }
+
+      // Timestamp fields
+      const now = new Date();
+      const extraData: Record<string, unknown> = {};
+      if (status === 'confirmed') extraData.acceptedAt = now;
+      if (status === 'cancelled') {
+        extraData.rejectedAt = now;
+        if (reason) extraData.rejectionReason = reason;
+      }
+
+      const updated = await tx.order.update({
+        where: { id: orderId },
+        data: { status: status as never, ...extraData },
+      });
+
+      const eventName = `Order${status.charAt(0).toUpperCase() + status.slice(1)}` as 'OrderConfirmed';
+      emitEvent(eventName, { orderId, userId: updated.userId, vendorId });
+
+      return updated;
     });
-
-    const eventName = `Order${status.charAt(0).toUpperCase() + status.slice(1)}` as 'OrderConfirmed';
-    emitEvent(eventName, { orderId, userId: order.userId, vendorId });
-
-    return order;
   }
 }

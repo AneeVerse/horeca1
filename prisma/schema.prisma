@@ -476,9 +476,13 @@ model Order {
   paymentStatus  PaymentState @default(unpaid) @map("payment_status")
   deliverySlotId String?      @map("delivery_slot_id") @db.Uuid
   deliveryDate   DateTime?    @map("delivery_date") @db.Date
-  notes          String?      @db.Text
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  notes              String?      @db.Text
+  rejectionReason    String?      @map("rejection_reason") @db.Text
+  acceptedAt         DateTime?    @map("accepted_at") @db.Timestamptz
+  rejectedAt         DateTime?    @map("rejected_at") @db.Timestamptz
+  isPartial          Boolean      @default(false) @map("is_partial")
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   user            User            @relation(fields: [userId], references: [id])
   vendor          Vendor          @relation(fields: [vendorId], references: [id])
@@ -520,10 +524,11 @@ model OrderItem {
   id          String  @id @default(uuid()) @db.Uuid
   orderId     String  @map("order_id") @db.Uuid
   productId   String  @map("product_id") @db.Uuid
-  productName String  @map("product_name") @db.VarChar(255)
-  quantity    Int
-  unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
-  totalPrice  Decimal @map("total_price") @db.Decimal(12, 2)
+  productName  String  @map("product_name") @db.VarChar(255)
+  quantity     Int
+  fulfilledQty Int     @default(0) @map("fulfilled_qty")
+  unitPrice    Decimal @map("unit_price") @db.Decimal(10, 2)
+  totalPrice   Decimal @map("total_price") @db.Decimal(12, 2)
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])

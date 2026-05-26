@@ -90,6 +90,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 });
 
 // PATCH — update order status through fulfillment lifecycle
+// Body: { status: "confirmed"|"processing"|"shipped"|"delivered"|"cancelled", reason?: string }
+// reason is required when status === "cancelled"
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   try {
     const { vendorId } = await resolveVendorContext(ctx, req);
@@ -97,10 +99,10 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
 
     const orderId = extractId(req);
     const body = await req.json();
-    const { status } = updateStatusSchema.parse(body);
+    const { status, reason } = updateStatusSchema.parse(body);
 
     const orderService = new OrderService();
-    const updated = await orderService.updateStatus(orderId, vendorId, status);
+    const updated = await orderService.updateStatus(orderId, vendorId, status, reason);
 
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {

@@ -78,4 +78,19 @@ export class InventoryService {
       });
     }
   }
+
+  // Called when an order is delivered: deduct the goods that left the warehouse
+  // from both the available pool and the reserved pool.
+  async finalizeStock(items: Array<{ productId: string; quantity: number }>, tx?: TxClient) {
+    const db = tx || prisma;
+    for (const item of items) {
+      await db.inventory.update({
+        where: { productId: item.productId },
+        data: {
+          qtyAvailable: { decrement: item.quantity },
+          qtyReserved: { decrement: item.quantity },
+        },
+      });
+    }
+  }
 }
