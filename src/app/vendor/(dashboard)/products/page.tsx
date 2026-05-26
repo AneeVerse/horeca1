@@ -95,6 +95,7 @@ interface ProductForm {
     minOrderQty: string;
     creditEligible: boolean;
     isFeatured: boolean;
+    substituteIds: string[];
     priceSlabs: PriceSlabRow[];
 }
 
@@ -130,6 +131,7 @@ const EMPTY_FORM: ProductForm = {
     minOrderQty: '1',
     creditEligible: false,
     isFeatured: false,
+    substituteIds: [],
     priceSlabs: [],
 };
 
@@ -260,6 +262,76 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[
                 className={inputCls}
                 placeholder="Type tags separated by commas, press Enter"
             />
+        </div>
+    );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Substitute Product Picker                                          */
+/* ------------------------------------------------------------------ */
+
+function SubstituteProductPicker({
+    selectedIds,
+    currentProductId,
+    products,
+    onChange,
+}: {
+    selectedIds: string[];
+    currentProductId?: string;
+    products: VendorProduct[];
+    onChange: (ids: string[]) => void;
+}) {
+    const [query, setQuery] = useState('');
+
+    const candidates = products.filter(p =>
+        p.id !== currentProductId &&
+        !selectedIds.includes(p.id) &&
+        (query.length === 0 || p.name.toLowerCase().includes(query.toLowerCase()))
+    ).slice(0, 6);
+
+    const selected = products.filter(p => selectedIds.includes(p.id));
+
+    const add = (id: string) => { onChange([...selectedIds, id]); setQuery(''); };
+    const remove = (id: string) => onChange(selectedIds.filter(s => s !== id));
+
+    return (
+        <div className="space-y-2">
+            {selected.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                    {selected.map(p => (
+                        <span key={p.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 text-[12px] font-bold rounded-[8px]">
+                            {p.name}
+                            <button type="button" onClick={() => remove(p.id)} className="hover:text-[#E74C3C]"><X size={12} /></button>
+                        </span>
+                    ))}
+                </div>
+            )}
+            <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search products to add as substitutes..."
+                className={inputCls}
+            />
+            {query.length > 0 && candidates.length > 0 && (
+                <div className="border border-[#EEEEEE] rounded-[10px] overflow-hidden">
+                    {candidates.map(p => (
+                        <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => add(p.id)}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F5F5F5] text-left transition-colors border-b border-[#F5F5F5] last:border-0"
+                        >
+                            <Package size={14} className="text-[#AEAEAE] shrink-0" />
+                            <span className="text-[13px] text-[#181725] truncate">{p.name}</span>
+                            {p.packSize && <span className="text-[11px] text-[#AEAEAE] ml-auto shrink-0">{p.packSize}</span>}
+                        </button>
+                    ))}
+                </div>
+            )}
+            {query.length > 0 && candidates.length === 0 && (
+                <p className="text-[12px] text-[#AEAEAE] py-2">No matching products found</p>
+            )}
         </div>
     );
 }
@@ -581,6 +653,7 @@ export default function VendorProductsPage() {
                 images: Array.isArray(p.images) ? p.images : [],
                 tags: Array.isArray(p.tags) ? p.tags : [],
                 aliasNames: Array.isArray(p.aliasNames) ? p.aliasNames : [],
+                substituteIds: Array.isArray((p as { substituteIds?: string[] }).substituteIds) ? (p as { substituteIds?: string[] }).substituteIds! : [],
                 vegNonVeg: (p.vegNonVeg as '' | 'veg' | 'nonveg' | 'egg') || '',
                 storageType: p.storageType || '',
                 shelfLifeDays: p.shelfLifeDays != null ? String(p.shelfLifeDays) : '',
@@ -628,6 +701,7 @@ export default function VendorProductsPage() {
                 minOrderQty: '1',
                 creditEligible: product.creditEligible,
                 isFeatured: product.isFeatured,
+                substituteIds: [],
                 priceSlabs: [],
             });
         } finally {
@@ -722,6 +796,7 @@ export default function VendorProductsPage() {
                 minOrderQty: form.minOrderQty ? parseInt(form.minOrderQty, 10) : 1,
                 tags: form.tags.length > 0 ? form.tags : undefined,
                 aliasNames: form.aliasNames.length > 0 ? form.aliasNames : undefined,
+                substituteIds: form.substituteIds.length > 0 ? form.substituteIds : undefined,
                 shelfLifeDays: form.shelfLifeDays ? parseInt(form.shelfLifeDays, 10) : undefined,
                 countryOfOrigin: form.countryOfOrigin || undefined,
                 vegNonVeg: form.vegNonVeg || undefined,
@@ -1946,6 +2021,18 @@ export default function VendorProductsPage() {
                                                 <p className="text-[11px] text-[#AEAEAE] font-medium">Highlighted in your store&apos;s featured section and search results</p>
                                             </div>
                                         </label>
+
+                                        {/* Substitute Products */}
+                                        <div>
+                                            <FieldLabel>Substitute Products</FieldLabel>
+                                            <SubstituteProductPicker
+                                                selectedIds={form.substituteIds}
+                                                currentProductId={editingProduct?.id}
+                                                products={products}
+                                                onChange={(ids) => updateField('substituteIds', ids)}
+                                            />
+                                            <p className="text-[11px] text-[#AEAEAE] font-medium mt-1">Products shown to buyers when this item is out of stock</p>
+                                        </div>
                                     </div>
                                 </div>
 
