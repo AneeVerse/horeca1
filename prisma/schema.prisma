@@ -198,6 +198,16 @@ model Vendor {
   priceLists         PriceList[]
   settlements        VendorSettlement[]
   promotions         Promotion[]
+  customerTasks      VendorCustomerTask[]
+  customerPrices     VendorCustomerPrice[]
+
+  // Ordering defaults applied to new products and checkout
+  defaultMOQ          Int?      @map("default_moq")
+  defaultTaxPercent   Decimal?  @map("default_tax_percent") @db.Decimal(5, 2)
+  deliveryFee         Decimal?  @map("delivery_fee") @db.Decimal(10, 2)
+  freeDeliveryAbove   Decimal?  @map("free_delivery_above") @db.Decimal(10, 2)
+  returnPolicy        String?   @map("return_policy") @db.Text
+  cancellationPolicy  String?   @map("cancellation_policy") @db.Text
 
   @@index([slug])
   @@index([isActive])
@@ -309,7 +319,11 @@ model Product {
   promoStartTime  String?  @map("promo_start_time") @db.VarChar(5)    // HH:mm format e.g. "18:00"
   promoEndTime    String?  @map("promo_end_time") @db.VarChar(5)      // HH:mm format e.g. "09:00"
   minOrderQty     Int      @default(1) @map("min_order_qty")
+  vegNonVeg       VegType?       @map("veg_non_veg")
+  storageType     String?        @map("storage_type") @db.VarChar(50)
+  substituteIds   String[]       @default([]) @map("substitute_ids") @db.Uuid
   creditEligible  Boolean        @default(false) @map("credit_eligible")
+  isFeatured      Boolean        @default(false) @map("is_featured")
   isActive        Boolean        @default(true) @map("is_active")
   approvalStatus  ApprovalStatus @default(pending) @map("approval_status")
   approvalNote    String?        @map("approval_note") @db.Text
@@ -336,6 +350,7 @@ model Product {
   priceListItems      PriceListItem[]
   promoBuyRules       Promotion[]     @relation("PromoBuyProduct")
   promoGetRules       Promotion[]     @relation("PromoGetProduct")
+  customerPrices      VendorCustomerPrice[]
 
   @@unique([vendorId, slug])
   @@index([vendorId])
@@ -1378,6 +1393,23 @@ model VendorCustomer {
   @@map("vendor_customers")
 }
 
+model VendorCustomerTask {
+  id         String    @id @default(uuid()) @db.Uuid
+  vendorId   String    @map("vendor_id") @db.Uuid
+  customerId String    @map("customer_id") @db.Uuid
+  title      String    @db.VarChar(255)
+  notes      String?   @db.Text
+  dueDate    DateTime? @map("due_date") @db.Timestamptz
+  isDone     Boolean   @default(false) @map("is_done")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId, customerId])
+  @@map("vendor_customer_tasks")
+}
+
 enum VendorCustomerStatus {
   active
   blocked
@@ -1463,4 +1495,28 @@ enum PromotionType {
   bxgy
 
   @@map("promotion_type")
+}
+
+model VendorCustomerPrice {
+  id          String   @id @default(uuid()) @db.Uuid
+  vendorId    String   @map("vendor_id") @db.Uuid
+  customerId  String   @map("customer_id") @db.Uuid
+  productId   String   @map("product_id") @db.Uuid
+  price       Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor  Vendor  @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, customerId, productId])
+  @@map("vendor_customer_prices")
+}
+
+enum VegType {
+  veg
+  nonveg
+  egg
+
+  @@map("veg_type")
 }
