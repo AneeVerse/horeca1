@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { vendorOnly } from '@/middleware/rbac';
 import { errorResponse } from '@/middleware/errorHandler';
 import { resolveVendorId } from '@/lib/resolveVendorId';
@@ -24,6 +25,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 
     const activeStatuses = ['confirmed', 'processing', 'shipped', 'delivered'] as const;
 
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
     const [
       totalOrders,
       revenueResult,
@@ -38,6 +41,9 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       vendorWallet,
       overdueResult,
       pendingSettlement,
+      fastMoversRaw,
+      allVendorOrders,
+      creditAggregate,
     ] = await Promise.all([
       prisma.order.count({ where: { vendorId } }),
 
@@ -136,6 +142,36 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         _sum: { netAmount: true },
         where: { vendorId, status: 'pending' },
       }),
+
+      // Fast movers — top 5 products by qty sold in delivered orders (last 30 days)
+      prisma.$queryRaw<{ productId: string; productName: string; totalQty: bigint; revenue: string }[]>(
+        Prisma.sql`
+          SELECT oi.product_id AS "productId",
+                 oi.product_name AS "productName",
+                 SUM(oi.quantity) AS "totalQty",
+                 SUM(oi.total_price) AS "revenue"
+          FROM order_items oi
+          INNER JOIN orders o ON o.id = oi.order_id
+          WHERE o.vendor_id = ${vendorId}::uuid
+            AND o.status = 'delivered'
+            AND o.created_at >= ${thirtyDaysAgo}
+          GROUP BY oi.product_id, oi.product_name
+          ORDER BY SUM(oi.quantity) DESC
+          LIMIT 5
+        `
+      ),
+
+      // All orders for this vendor — used to compute customer segments in JS
+      prisma.order.findMany({
+        where: { vendorId },
+        select: { userId: true, createdAt: true },
+      }),
+
+      // Credit utilization aggregate
+      prisma.creditAccount.aggregate({
+        where: { vendorId },
+        _sum: { creditLimit: true, creditUsed: true },
+      }),
     ]);
 
     const lowStockCount = inventoryRows.filter(
@@ -146,6 +182,46 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     for (const group of ordersByStatusRaw) {
       ordersByStatus[group.status] = group._count.id;
     }
+
+    // ── Fast movers: normalise BigInt/Decimal from raw query ──
+    const fastMovers = fastMoversRaw.map((row) => ({
+      productId: row.productId,
+      productName: row.productName,
+      totalQty: Number(row.totalQty),
+      revenue: Number(row.revenue),
+    }));
+
+    // ── Customer counts: computed from allVendorOrders in JS ──
+    const latestOrderByUser = new Map<string, Date>();
+    const earliestOrderByUser = new Map<string, Date>();
+    for (const order of allVendorOrders) {
+      const prev = latestOrderByUser.get(order.userId);
+      if (!prev || order.createdAt > prev) latestOrderByUser.set(order.userId, order.createdAt);
+      const earliest = earliestOrderByUser.get(order.userId);
+      if (!earliest || order.createdAt < earliest) earliestOrderByUser.set(order.userId, order.createdAt);
+    }
+    const totalCustomers = latestOrderByUser.size;
+    let newCustomers = 0;
+    let dormantCustomers = 0;
+    for (const [userId, lastOrder] of latestOrderByUser.entries()) {
+      const firstOrder = earliestOrderByUser.get(userId)!;
+      const isNew = firstOrder >= thirtyDaysAgo;
+      const isDormant = lastOrder < thirtyDaysAgo;
+      if (isNew) newCustomers++;
+      if (isDormant) dormantCustomers++;
+    }
+    const customerCounts = { total: totalCustomers, new: newCustomers, dormant: dormantCustomers };
+
+    // ── Credit utilization ──
+    const totalCreditLimit = Number(creditAggregate._sum.creditLimit ?? 0);
+    const totalCreditUsed = Number(creditAggregate._sum.creditUsed ?? 0);
+    const creditUtilizationPct =
+      totalCreditLimit > 0 ? Math.round((totalCreditUsed / totalCreditLimit) * 100) : 0;
+    const creditUtilization = {
+      totalLimit: totalCreditLimit,
+      totalUsed: totalCreditUsed,
+      pct: creditUtilizationPct,
+    };
 
     return NextResponse.json({
       success: true,
@@ -167,6 +243,9 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         ordersByStatus,
         pendingOrders,
         recentOrders,
+        fastMovers,
+        customerCounts,
+        creditUtilization,
       },
     });
   } catch (error) {

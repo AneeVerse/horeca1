@@ -6,13 +6,32 @@ import { useSession } from 'next-auth/react';
 import {
     ShoppingBag, Package, AlertTriangle, Loader2, Eye,
     CheckCircle2, Clock, TrendingUp, CreditCard, ChevronRight,
-    Bell, RefreshCw, Wallet, BookOpen,
+    Bell, RefreshCw, Wallet, BookOpen, Users, UserPlus, UserMinus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import { toast } from 'sonner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface FastMover {
+    productId: string;
+    productName: string;
+    totalQty: number;
+    revenue: number;
+}
+
+interface CustomerCounts {
+    total: number;
+    new: number;
+    dormant: number;
+}
+
+interface CreditUtilization {
+    totalLimit: number;
+    totalUsed: number;
+    pct: number;
+}
 
 interface PendingOrder {
     id: string;
@@ -53,6 +72,9 @@ interface DashboardData {
     ordersByStatus: Record<string, number>;
     pendingOrders: PendingOrder[];
     recentOrders: RecentOrder[];
+    fastMovers: FastMover[];
+    customerCounts: CustomerCounts;
+    creditUtilization: CreditUtilization;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -342,6 +364,32 @@ export default function VendorDashboardPage() {
             stripe: '#14B8A6',
             href: '/vendor/ledger',
         },
+        {
+            label: 'Total Customers',
+            value: data.customerCounts.total.toLocaleString('en-IN'),
+            icon: Users,
+            color: 'bg-indigo-50 text-indigo-600',
+            stripe: '#6366F1',
+            href: '/vendor/orders',
+        },
+        {
+            label: 'New Customers',
+            value: data.customerCounts.new.toLocaleString('en-IN'),
+            icon: UserPlus,
+            color: 'bg-[#EEF8F1] text-[#299E60]',
+            stripe: '#299E60',
+            href: '/vendor/orders',
+            sublabel: 'last 30 days',
+        },
+        {
+            label: 'Dormant',
+            value: data.customerCounts.dormant.toLocaleString('en-IN'),
+            icon: UserMinus,
+            color: 'bg-rose-50 text-rose-500',
+            stripe: '#F43F5E',
+            href: '/vendor/orders',
+            sublabel: 'no order 30d+',
+        },
     ] : [];
 
     return (
@@ -389,7 +437,7 @@ export default function VendorDashboardPage() {
                     />
 
                     {/* ── Stat Cards ────────────────────────────────── */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4">
                         {statCards.map((stat, idx) => (
                             <Link
                                 key={idx}
@@ -406,7 +454,12 @@ export default function VendorDashboardPage() {
                                             {stat.label}
                                         </span>
                                     </div>
-                                    <p className="text-[22px] font-[800] text-[#181725] leading-none">{stat.value}</p>
+                                    <div>
+                                        <p className="text-[22px] font-[800] text-[#181725] leading-none">{stat.value}</p>
+                                        {'sublabel' in stat && stat.sublabel && (
+                                            <p className="text-[11px] text-[#AEAEAE] mt-1">{stat.sublabel}</p>
+                                        )}
+                                    </div>
                                 </div>
                             </Link>
                         ))}
@@ -438,6 +491,77 @@ export default function VendorDashboardPage() {
                             </p>
                             <ChevronRight size={16} className="text-[#F59E0B] ml-auto" />
                         </Link>
+                    )}
+
+                    {/* ── Fast Movers (30d) ────────────────────────── */}
+                    {data.fastMovers.length > 0 && (
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                            <div className="px-6 py-4 border-b border-[#EEEEEE] flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-[#EEF8F1] flex items-center justify-center">
+                                    <TrendingUp size={16} className="text-[#299E60]" />
+                                </div>
+                                <h3 className="text-[16px] font-bold text-[#181725]">Fast Movers (30d)</h3>
+                            </div>
+                            <div className="divide-y divide-[#F5F5F5]">
+                                {data.fastMovers.map((item, idx) => (
+                                    <div key={item.productId} className="px-6 py-3 flex items-center gap-4">
+                                        <span className="text-[13px] font-extrabold text-[#AEAEAE] w-5 shrink-0">
+                                            {idx + 1}
+                                        </span>
+                                        <p className="flex-1 text-[13px] font-bold text-[#181725] truncate">
+                                            {item.productName}
+                                        </p>
+                                        <span className="text-[12px] text-[#7C7C7C] shrink-0">
+                                            {item.totalQty.toLocaleString('en-IN')} units
+                                        </span>
+                                        <span className="text-[13px] font-bold text-[#299E60] shrink-0 w-[80px] text-right">
+                                            {formatINR(item.revenue)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Credit Utilization ────────────────────────── */}
+                    {data.creditUtilization.totalLimit > 0 && (
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center">
+                                        <CreditCard size={16} className="text-purple-600" />
+                                    </div>
+                                    <h3 className="text-[15px] font-bold text-[#181725]">Credit Utilization</h3>
+                                </div>
+                                <span className={cn(
+                                    'text-[20px] font-[800]',
+                                    data.creditUtilization.pct >= 80
+                                        ? 'text-[#E74C3C]'
+                                        : data.creditUtilization.pct >= 60
+                                            ? 'text-[#F59E0B]'
+                                            : 'text-[#299E60]'
+                                )}>
+                                    {data.creditUtilization.pct}%
+                                </span>
+                            </div>
+                            <div className="h-2.5 bg-[#EEEEEE] rounded-full overflow-hidden">
+                                <div
+                                    className={cn(
+                                        'h-full rounded-full transition-all',
+                                        data.creditUtilization.pct >= 80
+                                            ? 'bg-[#E74C3C]'
+                                            : data.creditUtilization.pct >= 60
+                                                ? 'bg-[#F59E0B]'
+                                                : 'bg-[#299E60]'
+                                    )}
+                                    style={{ width: `${Math.min(data.creditUtilization.pct, 100)}%` }}
+                                />
+                            </div>
+                            <p className="text-[12px] text-[#7C7C7C] mt-2">
+                                {formatINR(data.creditUtilization.totalUsed)} used of{' '}
+                                {formatINR(data.creditUtilization.totalLimit)} total limit
+                            </p>
+                        </div>
                     )}
 
                     {/* ── Orders by Status ──────────────────────────── */}
