@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Users, Search, Loader2, MoreVertical, CheckCircle, XCircle,
-  PauseCircle, Tag, Bell, Trash2, Plus, CalendarDays,
+  PauseCircle, Tag, Bell, Trash2, Plus, CalendarDays, X, DollarSign,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
