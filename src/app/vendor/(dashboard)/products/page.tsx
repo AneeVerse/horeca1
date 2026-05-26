@@ -83,6 +83,9 @@ interface ProductForm {
     imageUrl: string;
     images: string[];
     tags: string[];
+    aliasNames: string[];
+    shelfLifeDays: string;
+    countryOfOrigin: string;
     taxPercent: string;
     minOrderQty: string;
     creditEligible: boolean;
@@ -112,6 +115,9 @@ const EMPTY_FORM: ProductForm = {
     imageUrl: '',
     images: [],
     tags: [],
+    aliasNames: [],
+    shelfLifeDays: '',
+    countryOfOrigin: '',
     taxPercent: '0',
     minOrderQty: '1',
     creditEligible: false,
@@ -557,6 +563,9 @@ export default function VendorProductsPage() {
                 imageUrl: p.imageUrl || '',
                 images: Array.isArray(p.images) ? p.images : [],
                 tags: Array.isArray(p.tags) ? p.tags : [],
+                aliasNames: Array.isArray(p.aliasNames) ? p.aliasNames : [],
+                shelfLifeDays: p.shelfLifeDays != null ? String(p.shelfLifeDays) : '',
+                countryOfOrigin: p.countryOfOrigin || '',
                 taxPercent: p.taxPercent != null ? String(p.taxPercent) : '0',
                 minOrderQty: p.minOrderQty != null ? String(p.minOrderQty) : '1',
                 creditEligible: !!p.creditEligible,
@@ -590,6 +599,9 @@ export default function VendorProductsPage() {
                 imageUrl: product.imageUrl || '',
                 images: [],
                 tags: [],
+                aliasNames: [],
+                shelfLifeDays: '',
+                countryOfOrigin: '',
                 taxPercent: '0',
                 minOrderQty: '1',
                 creditEligible: product.creditEligible,
@@ -685,6 +697,9 @@ export default function VendorProductsPage() {
                 taxPercent: form.taxPercent ? parseFloat(form.taxPercent) : 0,
                 minOrderQty: form.minOrderQty ? parseInt(form.minOrderQty, 10) : 1,
                 tags: form.tags.length > 0 ? form.tags : undefined,
+                aliasNames: form.aliasNames.length > 0 ? form.aliasNames : undefined,
+                shelfLifeDays: form.shelfLifeDays ? parseInt(form.shelfLifeDays, 10) : undefined,
+                countryOfOrigin: form.countryOfOrigin || undefined,
                 images: form.images.filter(Boolean).length > 0 ? form.images.filter(Boolean) : undefined,
             };
 
@@ -1737,6 +1752,42 @@ export default function VendorProductsPage() {
                                                 tags={form.tags}
                                                 onChange={(tags) => updateField('tags', tags)}
                                             />
+                                        </div>
+
+                                        {/* Alias Names */}
+                                        <div>
+                                            <FieldLabel>Alias / Search Names</FieldLabel>
+                                            <TagInput
+                                                tags={form.aliasNames}
+                                                onChange={(names) => updateField('aliasNames', names)}
+                                            />
+                                            <p className="text-[11px] text-[#AEAEAE] font-medium mt-1">Alternate names buyers may search by (e.g. local language variants)</p>
+                                        </div>
+
+                                        {/* Shelf Life & Country */}
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel>Shelf Life (days)</FieldLabel>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    value={form.shelfLifeDays}
+                                                    onChange={(e) => updateField('shelfLifeDays', e.target.value)}
+                                                    className={inputCls}
+                                                    placeholder="e.g. 180"
+                                                />
+                                            </div>
+                                            <div>
+                                                <FieldLabel>Country of Origin</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={form.countryOfOrigin}
+                                                    onChange={(e) => updateField('countryOfOrigin', e.target.value)}
+                                                    className={inputCls}
+                                                    placeholder="e.g. India"
+                                                    maxLength={100}
+                                                />
+                                            </div>
                                         </div>
 
                                         {/* Credit Eligible */}

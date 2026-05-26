@@ -161,6 +161,9 @@ export class CatalogService {
     brand?: string;
     barcode?: string;
     tags?: string[];
+    aliasNames?: string[];
+    shelfLifeDays?: number;
+    countryOfOrigin?: string;
     basePrice: number;
     originalPrice?: number;
     taxPercent?: number;
