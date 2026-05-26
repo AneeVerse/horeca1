@@ -3,9 +3,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, Search, Loader2, MoreVertical, CheckCircle, XCircle,
-  PauseCircle, Tag, ChevronDown, UserPlus
+  PauseCircle, Tag, Bell, Trash2, Plus, CalendarDays,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface PriceList {
   id: string;
@@ -38,6 +40,18 @@ interface VendorCustomer {
   lastOrderAt: string | null;
 }
 
+interface CustomerTask {
+  id: string;
+  customerId: string;
+  title: string;
+  notes: string | null;
+  dueDate: string | null;
+  isDone: boolean;
+  createdAt: string;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const STATUS_ICONS = {
   active: <CheckCircle size={13} className="text-[#299E60]" />,
   blocked: <XCircle size={13} className="text-[#E74C3C]" />,
@@ -45,6 +59,8 @@ const STATUS_ICONS = {
 };
 
 const STATUS_LABELS = { active: 'Active', blocked: 'Blocked', suspended: 'Suspended' };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function relativeTime(isoStr: string) {
   const diff = Date.now() - new Date(isoStr).getTime();
@@ -55,7 +71,232 @@ function relativeTime(isoStr: string) {
   return new Date(isoStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
 
-// ─── Edit Customer Modal ─────────────────────────────────────────────────────
+/** Return 'overdue' | 'today' | 'upcoming' | null */
+function dueDateState(dueDate: string | null): 'overdue' | 'today' | 'upcoming' | null {
+  if (!dueDate) return null;
+  const now = new Date();
+  const due = new Date(dueDate);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(todayStart.getTime() + 86400000);
+  if (due < todayStart) return 'overdue';
+  if (due < todayEnd) return 'today';
+  return 'upcoming';
+}
+
+function formatDue(dueDate: string): string {
+  return new Date(dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// ─── Tasks Section ────────────────────────────────────────────────────────────
+
+interface TasksSectionProps {
+  customerId: string;
+}
+
+function TasksSection({ customerId }: TasksSectionProps) {
+  const [tasks, setTasks] = useState<CustomerTask[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newTitle, setNewTitle] = useState('');
+  const [newDueDate, setNewDueDate] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  // Load tasks for this customer
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/v1/vendor/customer-tasks?customerId=${encodeURIComponent(customerId)}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (!cancelled && json.success) setTasks(json.data as CustomerTask[]);
+      })
+      .catch(() => { /* silently ignore */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [customerId]);
+
+  const handleAdd = async () => {
+    if (!newTitle.trim()) return;
+    setAdding(true);
+    try {
+      const res = await fetch('/api/v1/vendor/customer-tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId,
+          title: newTitle.trim(),
+          dueDate: newDueDate ? new Date(newDueDate).toISOString() : null,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setTasks((prev) => [json.data as CustomerTask, ...prev]);
+        setNewTitle('');
+        setNewDueDate('');
+      }
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleToggle = async (task: CustomerTask) => {
+    const updated = { ...task, isDone: !task.isDone };
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)));
+    const res = await fetch(`/api/v1/vendor/customer-tasks?id=${encodeURIComponent(task.id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isDone: updated.isDone }),
+    });
+    const json = await res.json();
+    if (!json.success) {
+      // Revert on failure
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+    }
+  };
+
+  const handleDelete = async (taskId: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    const res = await fetch(`/api/v1/vendor/customer-tasks?id=${encodeURIComponent(taskId)}`, {
+      method: 'DELETE',
+    });
+    const json = await res.json();
+    if (!json.success) {
+      // Revert: re-fetch
+      fetch(`/api/v1/vendor/customer-tasks?customerId=${encodeURIComponent(customerId)}`)
+        .then((r) => r.json())
+        .then((j) => { if (j.success) setTasks(j.data as CustomerTask[]); })
+        .catch(() => { /* ignore */ });
+    }
+  };
+
+  const dueBadge = (task: CustomerTask) => {
+    if (!task.dueDate) return null;
+    const state = dueDateState(task.dueDate);
+    const base = 'text-[10px] font-semibold px-1.5 py-0.5 rounded-[4px] flex items-center gap-0.5';
+    if (state === 'overdue')
+      return <span className={cn(base, 'bg-red-50 text-red-600')}><CalendarDays size={9} />{formatDue(task.dueDate)}</span>;
+    if (state === 'today')
+      return <span className={cn(base, 'bg-amber-50 text-amber-600')}><CalendarDays size={9} />Today</span>;
+    return <span className={cn(base, 'bg-[#F5F5F5] text-[#7C7C7C]')}><CalendarDays size={9} />{formatDue(task.dueDate)}</span>;
+  };
+
+  return (
+    <div className="pt-4 border-t border-[#F5F5F5]">
+      <p className="text-[12px] font-bold text-[#181725] mb-3 flex items-center gap-1.5">
+        <Bell size={13} className="text-[#299E60]" />
+        Tasks &amp; Reminders
+      </p>
+
+      {/* Add task form */}
+      <div className="flex gap-2 mb-3">
+        <input
+          type="text"
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void handleAdd(); }}
+          placeholder="e.g. Follow up on payment, Call to check stock needs"
+          className="flex-1 h-[36px] px-3 rounded-[8px] border border-[#EEEEEE] text-[12px] outline-none focus:border-[#299E60]/50 bg-white"
+        />
+        <input
+          type="date"
+          value={newDueDate}
+          onChange={(e) => setNewDueDate(e.target.value)}
+          className="h-[36px] px-2 rounded-[8px] border border-[#EEEEEE] text-[12px] outline-none focus:border-[#299E60]/50 bg-white text-[#7C7C7C]"
+        />
+        <button
+          onClick={() => void handleAdd()}
+          disabled={adding || !newTitle.trim()}
+          className="h-[36px] w-[36px] flex items-center justify-center rounded-[8px] bg-[#299E60] text-white hover:bg-[#238a54] transition-colors disabled:opacity-40"
+        >
+          {adding ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+        </button>
+      </div>
+
+      {/* Task list */}
+      {loading ? (
+        <div className="flex justify-center py-3">
+          <Loader2 size={16} className="animate-spin text-[#299E60]" />
+        </div>
+      ) : tasks.length === 0 ? (
+        <p className="text-[11px] text-[#AEAEAE] text-center py-2">No tasks yet — add one above</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {tasks.map((task) => (
+            <li
+              key={task.id}
+              className={cn(
+                'flex items-start gap-2 p-2 rounded-[8px] group transition-colors',
+                task.isDone ? 'bg-[#FAFAFA]' : 'bg-white border border-[#F5F5F5]'
+              )}
+            >
+              {/* Checkbox */}
+              <button
+                onClick={() => void handleToggle(task)}
+                className={cn(
+                  'mt-0.5 flex-shrink-0 w-[16px] h-[16px] rounded-[4px] border-2 flex items-center justify-center transition-colors',
+                  task.isDone
+                    ? 'bg-[#299E60] border-[#299E60]'
+                    : 'border-[#AEAEAE] hover:border-[#299E60]'
+                )}
+              >
+                {task.isDone && <CheckCircle size={10} className="text-white" />}
+              </button>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <p className={cn('text-[12px] leading-snug break-words', task.isDone ? 'line-through text-[#AEAEAE]' : 'text-[#181725]')}>
+                  {task.title}
+                </p>
+                {!task.isDone && dueBadge(task) && (
+                  <div className="mt-0.5">{dueBadge(task)}</div>
+                )}
+              </div>
+
+              {/* Delete */}
+              <button
+                onClick={() => void handleDelete(task.id)}
+                className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded-[4px] hover:bg-red-50 text-[#AEAEAE] hover:text-red-500 transition-all"
+              >
+                <Trash2 size={12} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── Bell Badge Helper ────────────────────────────────────────────────────────
+
+/**
+ * Fetches tasks for all customers in one parallel call per customer, then
+ * builds a Set of customerIds that have overdue or today-due tasks.
+ * Called once on page load — results memoised in the parent.
+ */
+async function fetchDueCustomerIds(customerIds: string[]): Promise<Set<string>> {
+  if (customerIds.length === 0) return new Set();
+  const results = await Promise.all(
+    customerIds.map((id) =>
+      fetch(`/api/v1/vendor/customer-tasks?customerId=${encodeURIComponent(id)}`)
+        .then((r) => r.json())
+        .then((j: { success: boolean; data?: CustomerTask[] }) => ({
+          id,
+          tasks: j.success ? (j.data ?? []) : [],
+        }))
+        .catch(() => ({ id, tasks: [] as CustomerTask[] }))
+    )
+  );
+  const dueIds = new Set<string>();
+  for (const { id, tasks } of results) {
+    const hasDue = tasks.some(
+      (t) => !t.isDone && t.dueDate && dueDateState(t.dueDate) !== 'upcoming'
+    );
+    if (hasDue) dueIds.add(id);
+  }
+  return dueIds;
+}
+
+// ─── Edit Customer Modal ──────────────────────────────────────────────────────
 
 interface EditModalProps {
   customer: VendorCustomer;
@@ -98,15 +339,17 @@ function EditModal({ customer, priceLists, onClose, onSave }: EditModalProps) {
 
   return (
     <div className="fixed inset-0 z-[10001] bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[16px] w-full max-w-[480px] shadow-2xl">
-        <div className="px-6 py-4 border-b border-[#EEEEEE]">
+      <div className="bg-white rounded-[16px] w-full max-w-[520px] shadow-2xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-[#EEEEEE] flex-shrink-0">
           <h2 className="text-[16px] font-bold text-[#181725]">Edit Customer</h2>
           <p className="text-[12px] text-[#AEAEAE]">
             {customer.user.businessName ?? customer.user.fullName}
           </p>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
+        {/* Scrollable body */}
+        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
           <div>
             <label className="block text-[12px] font-semibold text-[#7C7C7C] mb-1">Status</label>
             <select
@@ -168,9 +411,13 @@ function EditModal({ customer, priceLists, onClose, onSave }: EditModalProps) {
               className="w-full px-3 py-2 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white resize-none"
             />
           </div>
+
+          {/* Tasks & Reminders section */}
+          <TasksSection customerId={customer.id} />
         </div>
 
-        <div className="px-6 py-4 border-t border-[#EEEEEE] flex justify-end gap-3">
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-[#EEEEEE] flex justify-end gap-3 flex-shrink-0">
           <button
             onClick={onClose}
             className="px-5 h-[38px] rounded-[10px] border border-[#EEEEEE] text-[13px] font-semibold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-colors"
@@ -178,7 +425,7 @@ function EditModal({ customer, priceLists, onClose, onSave }: EditModalProps) {
             Cancel
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             disabled={saving}
             className="px-5 h-[38px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-colors disabled:opacity-50"
           >
@@ -201,6 +448,8 @@ export default function VendorCustomersPage() {
   const [editCustomer, setEditCustomer] = useState<VendorCustomer | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
+  // Set of VendorCustomer.id (not userId) that have overdue/today tasks
+  const [dueCustomerIds, setDueCustomerIds] = useState<Set<string>>(new Set());
 
   const fetchCustomers = useCallback(async (p = 1, q = '', s = '') => {
     setLoading(true);
@@ -214,8 +463,13 @@ export default function VendorCustomersPage() {
       ]);
       const [custJson, plJson] = await Promise.all([custRes.json(), plRes.json()]);
       if (custJson.success) {
-        setCustomers(custJson.data.customers);
+        const list: VendorCustomer[] = custJson.data.customers;
+        setCustomers(list);
         setHasMore(custJson.data.hasMore);
+        // Fetch due task indicators in background
+        fetchDueCustomerIds(list.map((c) => c.id))
+          .then((ids) => setDueCustomerIds(ids))
+          .catch(() => { /* ignore */ });
       }
       if (plJson.success) setPriceLists(plJson.data);
     } finally {
@@ -223,12 +477,12 @@ export default function VendorCustomersPage() {
     }
   }, []);
 
-  useEffect(() => { fetchCustomers(1, search, statusFilter); }, [fetchCustomers, statusFilter]);
+  useEffect(() => { void fetchCustomers(1, search, statusFilter); }, [fetchCustomers, statusFilter]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
-    fetchCustomers(1, search, statusFilter);
+    void fetchCustomers(1, search, statusFilter);
   };
 
   const handleCustomerSaved = (updated: VendorCustomer) => {
@@ -312,10 +566,21 @@ export default function VendorCustomersPage() {
                 {customers.map((c) => (
                   <tr key={c.id} className="hover:bg-[#FAFAFA] transition-colors">
                     <td className="px-5 py-3.5">
-                      <p className="font-semibold text-[#181725] truncate max-w-[160px]">
-                        {c.user.businessName ?? c.user.fullName}
-                      </p>
-                      <p className="text-[#AEAEAE] truncate">{c.user.email ?? c.user.phone ?? '—'}</p>
+                      <div className="flex items-center gap-1.5">
+                        <div>
+                          <p className="font-semibold text-[#181725] truncate max-w-[160px]">
+                            {c.user.businessName ?? c.user.fullName}
+                          </p>
+                          <p className="text-[#AEAEAE] truncate">{c.user.email ?? c.user.phone ?? '—'}</p>
+                        </div>
+                        {dueCustomerIds.has(c.id) && (
+                          <Bell
+                            size={12}
+                            className="text-amber-500 flex-shrink-0"
+                            aria-label="Has tasks due today or overdue"
+                          />
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-1.5">
