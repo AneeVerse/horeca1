@@ -27,6 +27,11 @@ export const listOrdersSchema = z.object({
 export const updateStatusSchema = z.object({
   status: z.enum(['confirmed', 'processing', 'shipped', 'delivered', 'cancelled']),
   reason: z.string().min(1).max(500).optional(),
+  proof: z.object({
+    proofType: z.enum(['otp', 'photo', 'signature', 'notes', 'none']).optional(),
+    proofUrl: z.string().url().optional().nullable(),
+    notes: z.string().max(500).optional(),
+  }).optional(),
 }).refine(
   (d) => d.status !== 'cancelled' || (d.reason && d.reason.trim().length > 0),
   { message: 'A reason is required when cancelling an order', path: ['reason'] },

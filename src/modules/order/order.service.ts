@@ -162,6 +162,37 @@ export class OrderService {
           throw Errors.belowMOV(vendor.businessName, Number(vendor.minOrderValue), subtotal);
         }
 
+        // 4a. Apply best active promotion (pct_discount or flat_discount)
+        let promoDiscount = 0;
+        let appliedPromoId: string | null = null;
+        const now = new Date();
+        const activePromos = await tx.promotion.findMany({
+          where: {
+            vendorId: vo.vendorId,
+            isActive: true,
+            type: { in: ['pct_discount', 'flat_discount'] },
+            AND: [
+              { OR: [{ startDate: null }, { startDate: { lte: now } }] },
+              { OR: [{ endDate: null }, { endDate: { gte: now } }] },
+            ],
+          },
+          orderBy: { discountPct: 'desc' },
+        });
+        for (const promo of activePromos) {
+          const minVal = promo.minOrderValue ? Number(promo.minOrderValue) : 0;
+          if (subtotal < minVal) continue;
+          if (promo.usageLimit !== null && promo.usageCount >= promo.usageLimit) continue;
+          if (promo.type === 'pct_discount' && promo.discountPct) {
+            promoDiscount = Math.round(subtotal * Number(promo.discountPct) / 100 * 100) / 100;
+          } else if (promo.type === 'flat_discount' && promo.discountFlat) {
+            promoDiscount = Math.min(Number(promo.discountFlat), subtotal);
+          }
+          appliedPromoId = promo.id;
+          await tx.promotion.update({ where: { id: promo.id }, data: { usageCount: { increment: 1 } } });
+          break;
+        }
+        const totalAmount = Math.max(0, subtotal - promoDiscount);
+
         // 4b. Credit check — only when paymentMethod is 'credit'
         if (input.paymentMethod === 'credit') {
           const creditAcc = await tx.creditAccount.findUnique({
@@ -198,9 +229,9 @@ export class OrderService {
           }
 
           const available = Number(creditAcc.creditLimit) - Number(creditAcc.creditUsed);
-          if (available < subtotal) {
+          if (available < totalAmount) {
             throw Errors.badRequest(
-              `Insufficient credit. Available: ₹${available.toFixed(2)}, required: ₹${subtotal.toFixed(2)}`
+              `Insufficient credit. Available: ₹${available.toFixed(2)}, required: ₹${totalAmount.toFixed(2)}`
             );
           }
         }
@@ -219,7 +250,9 @@ export class OrderService {
             deliveryAddressSnapshot,
             status: 'pending',
             subtotal,
-            totalAmount: subtotal,
+            promoDiscount,
+            promotionId: appliedPromoId,
+            totalAmount,
             paymentMethod: input.paymentMethod,
             deliverySlotId: vo.deliverySlotId,
             notes: vo.notes,
@@ -391,7 +424,13 @@ export class OrderService {
     cancelled:  [],
   };
 
-  async updateStatus(orderId: string, vendorId: string, status: string, reason?: string) {
+  async updateStatus(
+    orderId: string,
+    vendorId: string,
+    status: string,
+    reason?: string,
+    proof?: { proofType?: string; proofUrl?: string | null; notes?: string },
+  ) {
     return prisma.$transaction(async (tx) => {
       const order = await tx.order.findFirst({
         where: { id: orderId, vendorId },
@@ -430,6 +469,12 @@ export class OrderService {
       if (status === 'cancelled') {
         extraData.rejectedAt = now;
         if (reason) extraData.rejectionReason = reason;
+      }
+      if (status === 'delivered') {
+        extraData.deliveredAt = now;
+        if (proof?.proofType) extraData.deliveryProofType = proof.proofType;
+        if (proof?.proofUrl) extraData.deliveryProofUrl = proof.proofUrl;
+        if (proof?.notes) extraData.deliveryNotes = proof.notes;
       }
 
       const updated = await tx.order.update({

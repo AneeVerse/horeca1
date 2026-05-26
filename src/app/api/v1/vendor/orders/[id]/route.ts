@@ -116,8 +116,8 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     }
 
     // Standard status transition path
-    const { status, reason } = updateStatusSchema.parse(body);
-    const updated = await orderService.updateStatus(orderId, vendorId, status, reason);
+    const { status, reason, proof } = updateStatusSchema.parse(body);
+    const updated = await orderService.updateStatus(orderId, vendorId, status, reason, proof);
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {
     return errorResponse(error);
