@@ -163,8 +163,9 @@ export function NearbyVendors() {
                 {/* Header Container */}
                 <div className="flex items-center justify-between mb-6 px-6 md:px-[var(--container-padding)]">
                     <h2 className="text-[18px] md:text-[22px] lg:text-[24px] font-[900] text-[#181725] tracking-tight">Shop By Vendor</h2>
-                    <Link href="/vendors" className="text-[#53B175] font-black text-sm transition-all hover:translate-x-1 cursor-pointer">
+                    <Link href="/vendors" className="flex items-center gap-1 text-[#53B175] font-black text-sm hover:gap-2 transition-all cursor-pointer group">
                         See All
+                        <ChevronRight size={14} strokeWidth={3} className="group-hover:translate-x-0.5 transition-transform" />
                     </Link>
                 </div>
 

@@ -516,8 +516,9 @@ export function ContinueOrdering() {
             <div className="max-w-[var(--container-max)] mx-auto overflow-hidden">
                 <div className="flex items-center justify-between mb-6 px-6 md:px-[var(--container-padding)]">
                     <h2 className="text-[18px] md:text-[22px] lg:text-[24px] font-[900] text-[#181725] tracking-tight">Continue Ordering</h2>
-                    <Link href="/continue-ordering" className="text-[#53B175] font-black text-sm transition-all hover:translate-x-1 cursor-pointer">
-                        View All
+                    <Link href="/continue-ordering" className="flex items-center gap-1 text-[#53B175] font-black text-sm hover:gap-2 transition-all cursor-pointer group">
+                        See All
+                        <ChevronRight size={14} strokeWidth={3} className="group-hover:translate-x-0.5 transition-transform" />
                     </Link>
                 </div>
 

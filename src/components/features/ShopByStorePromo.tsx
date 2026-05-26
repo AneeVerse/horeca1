@@ -51,9 +51,9 @@ export function ShopByStorePromo() {
                     </h2>
                     <Link
                         href="/brands"
-                        className="flex items-center gap-1 text-[13px] font-bold text-[#53B175] hover:text-[#3d9e56] transition-colors"
+                        className="flex items-center gap-1 text-[#53B175] font-black text-sm hover:gap-2 transition-all cursor-pointer group"
                     >
-                        See all <ChevronRight size={14} />
+                        See All <ChevronRight size={14} strokeWidth={3} className="group-hover:translate-x-0.5 transition-transform" />
                     </Link>
                 </div>
 

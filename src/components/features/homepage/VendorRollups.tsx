@@ -127,7 +127,10 @@ export function FrequentlyOrderedVendors() {
                         <TrendingUp size={22} className="text-[#53B175]" />
                         Frequently Ordered
                     </h2>
-                    <Link href="/vendors?sort=frequent" className="text-[#53B175] font-black text-sm transition-all hover:translate-x-1 cursor-pointer">See All</Link>
+                    <Link href="/vendors?sort=frequent" className="flex items-center gap-1 text-[#53B175] font-black text-sm hover:gap-2 transition-all cursor-pointer group">
+                        See All
+                        <ChevronRight size={14} strokeWidth={3} className="group-hover:translate-x-0.5 transition-transform" />
+                    </Link>
                 </div>
                 <div className="relative w-full">
                     <button onClick={() => scroll('left')} disabled={!canScrollLeft}

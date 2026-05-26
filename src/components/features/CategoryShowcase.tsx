@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { ChevronRight, ChevronUp } from 'lucide-react';
 
 
 import { dal } from '@/lib/dal';
@@ -112,18 +113,25 @@ export function CategoryShowcase({ filterByProducts, title = "Shop By Category",
                             {categories.length > 9 && (
                                 <button
                                     onClick={() => setIsDesktopExpanded(!isDesktopExpanded)}
-                                    className="hidden md:block text-[#53B175] font-black text-sm transition-all hover:translate-x-1 cursor-pointer"
+                                    className="hidden md:flex items-center gap-1 text-[#53B175] font-black text-sm hover:gap-2 transition-all cursor-pointer group"
                                 >
-                                    {isDesktopExpanded ? "Show Less" : "See All"}
+                                    {isDesktopExpanded ? (
+                                        <>Show Less <ChevronUp size={14} strokeWidth={3} /></>
+                                    ) : (
+                                        <>See All <ChevronRight size={14} strokeWidth={3} className="group-hover:translate-x-0.5 transition-transform" /></>
+                                    )}
                                 </button>
                             )}
 
                             <button
                                 onClick={() => setIsMobileExpanded(!isMobileExpanded)}
-                                className="text-[#53B175] font-black text-sm transition-opacity hover:opacity-80 md:hidden"
+                                className="flex items-center gap-1 text-[#53B175] font-black text-sm hover:gap-2 transition-all cursor-pointer group md:hidden"
                             >
-                                {isMobileExpanded ? "Show Less" : "See All"}
-                            </button>
+                                {isMobileExpanded ? (
+                                    <>Show Less <ChevronUp size={14} strokeWidth={3} /></>
+                                ) : (
+                                    <>See All <ChevronRight size={14} strokeWidth={3} className="group-hover:translate-x-0.5 transition-transform" /></>
+                                )}</button>
                         </div>
                     </div>
                 )}
