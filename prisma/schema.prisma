@@ -514,6 +514,7 @@ model Order {
   deliveryProofUrl   String?      @map("delivery_proof_url") @db.Text
   deliveryNotes      String?      @map("delivery_notes") @db.Text
   deliveredAt        DateTime?    @map("delivered_at") @db.Timestamptz
+  ewayBillNo         String?      @map("eway_bill_no") @db.VarChar(30)
   createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 

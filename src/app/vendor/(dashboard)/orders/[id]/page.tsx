@@ -68,6 +68,7 @@ interface OrderData {
     deliveryProofType: string | null;
     deliveryProofUrl: string | null;
     deliveryNotes: string | null;
+    ewayBillNo: string | null;
     isPartial: boolean;
     user: OrderUser;
     items: OrderItem[];
@@ -506,8 +507,9 @@ export default function VendorOrderDetailPage() {
     const [order, setOrder] = useState<OrderData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    // Fulfilled quantity per order item — only active when order is pending
     const [fulfilledQtys, setFulfilledQtys] = useState<Record<string, number>>({});
+    const [ewayBill, setEwayBill] = useState('');
+    const [ewaySaving, setEwaySaving] = useState(false);
 
     const fetchOrder = useCallback(async () => {
         try {
@@ -516,7 +518,7 @@ export default function VendorOrderDetailPage() {
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Failed to load order');
             setOrder(json.data);
-            // Initialise fulfilled qtys to full ordered quantities
+            setEwayBill(json.data.ewayBillNo ?? '');
             const init: Record<string, number> = {};
             for (const item of json.data.items as OrderItem[]) {
                 init[item.id] = item.quantity;
@@ -593,6 +595,26 @@ export default function VendorOrderDetailPage() {
             throw err;
         }
     }, [order, orderId, isPartialAccept]);
+
+    const saveEwayBill = async () => {
+        if (!ewayBill.trim()) return;
+        setEwaySaving(true);
+        try {
+            const res = await fetch(`/api/v1/vendor/orders/${orderId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ewayBillNo: ewayBill.trim() }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Save failed');
+            setOrder(prev => prev ? { ...prev, ewayBillNo: ewayBill.trim() } : prev);
+            toast.success('E-Way Bill number saved.');
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Failed to save');
+        } finally {
+            setEwaySaving(false);
+        }
+    };
 
     const setFulfilledQty = (itemId: string, qty: number, max: number) => {
         setFulfilledQtys(prev => ({ ...prev, [itemId]: Math.max(0, Math.min(qty, max)) }));
@@ -752,6 +774,35 @@ export default function VendorOrderDetailPage() {
                         )}
                         {order.paymentMethod && (
                             <p className="text-[#7C7C7C]">Payment: <span className="capitalize font-bold text-[#181725]">{order.paymentMethod}</span></p>
+                        )}
+                        {/* E-Way Bill */}
+                        {(order.status === 'processing' || order.status === 'shipped') && (
+                            <div className="mt-2 pt-2 border-t border-[#F5F5F5]">
+                                <p className="text-[11px] font-bold text-[#7C7C7C] uppercase mb-1">E-Way Bill No.</p>
+                                {order.ewayBillNo && !['processing'].includes(order.status) ? (
+                                    <p className="text-[13px] font-bold text-[#181725]">{order.ewayBillNo}</p>
+                                ) : (
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={ewayBill}
+                                            onChange={e => setEwayBill(e.target.value)}
+                                            placeholder="Enter E-Way Bill no."
+                                            className="flex-1 h-[32px] px-2.5 rounded-[8px] border border-[#EEEEEE] text-[12px] outline-none focus:border-[#299E60]/50"
+                                        />
+                                        <button
+                                            onClick={saveEwayBill}
+                                            disabled={ewaySaving || !ewayBill.trim()}
+                                            className="h-[32px] px-3 rounded-[8px] bg-[#299E60] text-white text-[11px] font-bold disabled:opacity-40"
+                                        >
+                                            {ewaySaving ? '...' : 'Save'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {order.ewayBillNo && order.status === 'delivered' && (
+                            <p className="text-[#7C7C7C]">E-Way Bill: <span className="font-bold text-[#181725]">{order.ewayBillNo}</span></p>
                         )}
                         {!order.deliverySlot && !order.deliveryDate && <p className="text-[#AEAEAE]">No delivery details set</p>}
                     </div>

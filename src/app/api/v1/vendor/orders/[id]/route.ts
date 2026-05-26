@@ -9,7 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { OrderService } from '@/modules/order/order.service';
-import { updateStatusSchema, partialAcceptSchema } from '@/modules/order/order.validator';
+import { updateStatusSchema, partialAcceptSchema, ewayBillSchema } from '@/modules/order/order.validator';
 import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
 
@@ -112,6 +112,19 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     if (Array.isArray(body.items)) {
       const { items } = partialAcceptSchema.parse(body);
       const updated = await orderService.partialAccept(orderId, vendorId, items);
+      return NextResponse.json({ success: true, data: updated });
+    }
+
+    // E-Way Bill save — body contains ewayBillNo only
+    if ('ewayBillNo' in body && !('status' in body)) {
+      const { ewayBillNo } = ewayBillSchema.parse(body);
+      const order = await prisma.order.findFirst({ where: { id: orderId, vendorId } });
+      if (!order) throw Errors.notFound('Order');
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { ewayBillNo },
+        select: { id: true, ewayBillNo: true },
+      });
       return NextResponse.json({ success: true, data: updated });
     }
 

@@ -47,3 +47,7 @@ export const partialAcceptSchema = z.object({
 export const saveAsListSchema = z.object({
   listName: z.string().min(1),
 });
+
+export const ewayBillSchema = z.object({
+  ewayBillNo: z.string().min(1).max(30),
+});
