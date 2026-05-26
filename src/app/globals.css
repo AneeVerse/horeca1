@@ -339,3 +339,9 @@
 .animate-float-fast {
   animation: float-fast 2.5s ease-in-out infinite 1s;
 }
+
+/* Hide browser-native password reveal button (Edge/IE) to avoid double eye icon */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
