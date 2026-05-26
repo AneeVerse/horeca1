@@ -36,6 +36,8 @@ const updateProductSchema = z.object({
   isActive: z.boolean().optional(),
   creditEligible: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
+  vegNonVeg: z.enum(['veg', 'nonveg', 'egg']).optional(),
+  storageType: z.string().max(50).optional(),
   categoryId: z.string().uuid().optional(),
   // Multi-category — when provided, replaces the existing category set. First
   // entry becomes the new primary (mirrored into Product.categoryId).

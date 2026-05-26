@@ -164,6 +164,8 @@ export class CatalogService {
     aliasNames?: string[];
     shelfLifeDays?: number;
     countryOfOrigin?: string;
+    vegNonVeg?: 'veg' | 'nonveg' | 'egg';
+    storageType?: string;
     basePrice: number;
     originalPrice?: number;
     taxPercent?: number;

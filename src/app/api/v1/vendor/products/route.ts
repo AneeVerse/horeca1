@@ -36,6 +36,8 @@ const createProductSchema = z.object({
   aliasNames: z.array(z.string()).optional(),
   shelfLifeDays: z.number().int().min(0).optional(),
   countryOfOrigin: z.string().max(100).optional(),
+  vegNonVeg: z.enum(['veg', 'nonveg', 'egg']).optional(),
+  storageType: z.string().max(50).optional(),
   images: z.array(z.string().url()).optional(),
   taxPercent: z.number().min(0).max(100).optional(),
   promoPrice: z.number().positive().optional(),

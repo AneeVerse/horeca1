@@ -45,6 +45,8 @@ interface VendorProduct {
     priceSlabs?: { minQty: number; maxQty?: number | null; price: number }[];
     approvalStatus?: 'pending' | 'approved' | 'rejected';
     approvalNote?: string | null;
+    vegNonVeg?: 'veg' | 'nonveg' | 'egg' | null;
+    storageType?: string | null;
 }
 
 interface Category {
@@ -85,6 +87,8 @@ interface ProductForm {
     images: string[];
     tags: string[];
     aliasNames: string[];
+    vegNonVeg: '' | 'veg' | 'nonveg' | 'egg';
+    storageType: string;
     shelfLifeDays: string;
     countryOfOrigin: string;
     taxPercent: string;
@@ -118,6 +122,8 @@ const EMPTY_FORM: ProductForm = {
     images: [],
     tags: [],
     aliasNames: [],
+    vegNonVeg: '',
+    storageType: '',
     shelfLifeDays: '',
     countryOfOrigin: '',
     taxPercent: '0',
@@ -575,6 +581,8 @@ export default function VendorProductsPage() {
                 images: Array.isArray(p.images) ? p.images : [],
                 tags: Array.isArray(p.tags) ? p.tags : [],
                 aliasNames: Array.isArray(p.aliasNames) ? p.aliasNames : [],
+                vegNonVeg: (p.vegNonVeg as '' | 'veg' | 'nonveg' | 'egg') || '',
+                storageType: p.storageType || '',
                 shelfLifeDays: p.shelfLifeDays != null ? String(p.shelfLifeDays) : '',
                 countryOfOrigin: p.countryOfOrigin || '',
                 taxPercent: p.taxPercent != null ? String(p.taxPercent) : '0',
@@ -612,6 +620,8 @@ export default function VendorProductsPage() {
                 images: [],
                 tags: [],
                 aliasNames: [],
+                vegNonVeg: '',
+                storageType: '',
                 shelfLifeDays: '',
                 countryOfOrigin: '',
                 taxPercent: '0',
@@ -714,6 +724,8 @@ export default function VendorProductsPage() {
                 aliasNames: form.aliasNames.length > 0 ? form.aliasNames : undefined,
                 shelfLifeDays: form.shelfLifeDays ? parseInt(form.shelfLifeDays, 10) : undefined,
                 countryOfOrigin: form.countryOfOrigin || undefined,
+                vegNonVeg: form.vegNonVeg || undefined,
+                storageType: form.storageType || undefined,
                 images: form.images.filter(Boolean).length > 0 ? form.images.filter(Boolean) : undefined,
             };
 
@@ -1835,6 +1847,45 @@ export default function VendorProductsPage() {
                                                 tags={form.tags}
                                                 onChange={(tags) => updateField('tags', tags)}
                                             />
+                                        </div>
+
+                                        {/* Veg / Non-Veg */}
+                                        <div>
+                                            <FieldLabel>Veg / Non-Veg</FieldLabel>
+                                            <div className="flex gap-2">
+                                                {([['', 'Not Set'], ['veg', '🟢 Veg'], ['nonveg', '🔴 Non-Veg'], ['egg', '🟡 Egg']] as ['' | 'veg' | 'nonveg' | 'egg', string][]).map(([v, label]) => (
+                                                    <button
+                                                        key={v}
+                                                        type="button"
+                                                        onClick={() => updateField('vegNonVeg', v)}
+                                                        className={cn(
+                                                            'flex-1 h-[40px] rounded-[10px] text-[12px] font-bold border transition-colors',
+                                                            form.vegNonVeg === v
+                                                                ? 'bg-[#299E60] text-white border-[#299E60]'
+                                                                : 'bg-white text-[#7C7C7C] border-[#EEEEEE] hover:border-[#299E60]/40'
+                                                        )}
+                                                    >
+                                                        {label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Storage Type */}
+                                        <div>
+                                            <FieldLabel>Storage Type</FieldLabel>
+                                            <select
+                                                value={form.storageType}
+                                                onChange={(e) => updateField('storageType', e.target.value)}
+                                                className={selectCls}
+                                            >
+                                                <option value="">Not specified</option>
+                                                <option value="ambient">Ambient (Room Temp)</option>
+                                                <option value="refrigerated">Refrigerated (2–8°C)</option>
+                                                <option value="frozen">Frozen (−18°C)</option>
+                                                <option value="dry">Dry Storage</option>
+                                                <option value="cool">Cool / Dark (10–15°C)</option>
+                                            </select>
                                         </div>
 
                                         {/* Alias Names */}
