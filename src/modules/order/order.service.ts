@@ -137,6 +137,22 @@ export class OrderService {
           throw Errors.belowMOV(vendor.businessName, Number(vendor.minOrderValue), subtotal);
         }
 
+        // 3b. Credit check — only when paymentMethod is 'credit'
+        if (input.paymentMethod === 'credit') {
+          const creditAcc = await tx.creditAccount.findUnique({
+            where: { userId_vendorId: { userId, vendorId: vo.vendorId } },
+          });
+          if (!creditAcc || creditAcc.status !== 'active') {
+            throw Errors.badRequest('No active credit account with this vendor');
+          }
+          const available = Number(creditAcc.creditLimit) - Number(creditAcc.creditUsed);
+          if (available < subtotal) {
+            throw Errors.badRequest(
+              `Insufficient credit. Available: ₹${available.toFixed(2)}, required: ₹${subtotal.toFixed(2)}`
+            );
+          }
+        }
+
         // 4. Generate order number
         const orderNumber = `PO-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
 
@@ -368,6 +384,57 @@ export class OrderService {
         where: { id: orderId },
         data: { status: status as never, ...extraData },
       });
+
+      // Credit side-effects — debit when confirmed, release when cancelled
+      if (order.paymentMethod === 'credit') {
+        const creditAcc = await tx.creditAccount.findUnique({
+          where: { userId_vendorId: { userId: order.userId, vendorId } },
+        });
+        if (creditAcc) {
+          const orderTotal = Number(order.totalAmount);
+          if (status === 'confirmed') {
+            const newUsed = Number(creditAcc.creditUsed) + orderTotal;
+            await tx.creditAccount.update({
+              where: { id: creditAcc.id },
+              data: { creditUsed: newUsed },
+            });
+            // Default payment due 30 days from confirmation
+            const dueDate = new Date(now);
+            dueDate.setDate(dueDate.getDate() + 30);
+            await tx.creditTransaction.create({
+              data: {
+                creditAccountId: creditAcc.id,
+                orderId,
+                vendorId,
+                type: 'debit',
+                amount: orderTotal,
+                balanceAfter: newUsed,
+                dueDate,
+              },
+            });
+          } else if (status === 'cancelled') {
+            // Reverse any debit written when order was confirmed
+            const debit = await tx.creditTransaction.findFirst({
+              where: { orderId, type: 'debit', vendorId },
+            });
+            if (debit) {
+              const newUsed = Math.max(0, Number(creditAcc.creditUsed) - Number(debit.amount));
+              await tx.creditAccount.update({ where: { id: creditAcc.id }, data: { creditUsed: newUsed } });
+              await tx.creditTransaction.create({
+                data: {
+                  creditAccountId: creditAcc.id,
+                  orderId,
+                  vendorId,
+                  type: 'credit',
+                  amount: Number(debit.amount),
+                  balanceAfter: newUsed,
+                  notes: `Reversal — order ${orderId} cancelled`,
+                },
+              });
+            }
+          }
+        }
+      }
 
       const eventName = `Order${status.charAt(0).toUpperCase() + status.slice(1)}` as 'OrderConfirmed';
       emitEvent(eventName, { orderId, userId: updated.userId, vendorId });

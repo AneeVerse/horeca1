@@ -1,0 +1,98 @@
+// PATCH /api/v1/vendor/collections/:id — Update credit limit or status
+// POST  /api/v1/vendor/collections/:id/payment — Record offline payment (credit entry)
+// WHY: Vendor operations: freeze a customer's credit, update limit, or log a
+//      cheque/NEFT payment to reduce outstanding balance.
+// PROTECTED: Vendor only
+
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { prisma } from '@/lib/prisma';
+import { vendorOnly } from '@/middleware/rbac';
+import { Errors, errorResponse } from '@/middleware/errorHandler';
+import { resolveVendorContext } from '@/lib/resolveVendorId';
+import { requirePermission } from '@/lib/permissions/engine';
+
+function extractId(req: NextRequest) {
+  return new URL(req.url).pathname.split('/').at(-1) ?? '';
+}
+
+// ─── PATCH: update credit limit or status ─────────────────────────────────────
+
+const updateAccountSchema = z.object({
+  creditLimit: z.number().positive().optional(),
+  status: z.enum(['active', 'suspended', 'closed']).optional(),
+});
+
+export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
+  try {
+    const { vendorId } = await resolveVendorContext(ctx, req);
+    requirePermission(ctx, 'orders.edit');
+
+    const accountId = extractId(req);
+    const body = updateAccountSchema.parse(await req.json());
+
+    const account = await prisma.creditAccount.findFirst({
+      where: { id: accountId, vendorId },
+    });
+    if (!account) throw Errors.notFound('Credit account');
+
+    const updated = await prisma.creditAccount.update({
+      where: { id: accountId },
+      data: {
+        ...(body.creditLimit !== undefined && { creditLimit: body.creditLimit }),
+        ...(body.status !== undefined && { status: body.status }),
+      },
+    });
+
+    return NextResponse.json({ success: true, data: updated });
+  } catch (error) {
+    return errorResponse(error);
+  }
+});
+
+// ─── POST: record offline payment ─────────────────────────────────────────────
+
+const recordPaymentSchema = z.object({
+  amount: z.number().positive(),
+  notes: z.string().max(500).optional(),
+});
+
+export const POST = vendorOnly(async (req: NextRequest, ctx) => {
+  try {
+    const { vendorId } = await resolveVendorContext(ctx, req);
+    requirePermission(ctx, 'orders.edit');
+
+    const accountId = extractId(req);
+    const { amount, notes } = recordPaymentSchema.parse(await req.json());
+
+    const account = await prisma.creditAccount.findFirst({
+      where: { id: accountId, vendorId },
+    });
+    if (!account) throw Errors.notFound('Credit account');
+    if (Number(account.creditUsed) <= 0) throw Errors.badRequest('No outstanding balance to settle');
+
+    const payment = Math.min(amount, Number(account.creditUsed));
+    const newCreditUsed = Math.max(0, Number(account.creditUsed) - payment);
+
+    await prisma.$transaction([
+      prisma.creditAccount.update({
+        where: { id: accountId },
+        data: { creditUsed: newCreditUsed },
+      }),
+      prisma.creditTransaction.create({
+        data: {
+          creditAccountId: accountId,
+          vendorId,
+          type: 'credit',
+          amount: payment,
+          balanceAfter: newCreditUsed,
+          notes: notes ?? 'Offline payment recorded by vendor',
+        },
+      }),
+    ]);
+
+    return NextResponse.json({ success: true, data: { paid: payment, balanceAfter: newCreditUsed } });
+  } catch (error) {
+    return errorResponse(error);
+  }
+});
