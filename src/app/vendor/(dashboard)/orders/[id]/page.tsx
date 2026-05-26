@@ -54,6 +54,7 @@ interface OrderData {
     subtotal: number;
     taxAmount: number;
     totalAmount: number;
+    promoDiscount: number;
     paymentMethod: string | null;
     paymentStatus: string;
     deliveryDate: string | null;
@@ -63,6 +64,10 @@ interface OrderData {
     acceptedAt: string | null;
     rejectedAt: string | null;
     rejectionReason: string | null;
+    deliveredAt: string | null;
+    deliveryProofType: string | null;
+    deliveryProofUrl: string | null;
+    deliveryNotes: string | null;
     isPartial: boolean;
     user: OrderUser;
     items: OrderItem[];
@@ -167,17 +172,20 @@ function ActionPanel({ order, fulfilledQtys, adjustedTotal, isPartialAccept, onA
     fulfilledQtys: Record<string, number>;
     adjustedTotal: number;
     isPartialAccept: boolean;
-    onAction: (status: string, reason?: string) => Promise<void>;
+    onAction: (status: string, reason?: string, proof?: { proofType?: string; proofUrl?: string; notes?: string }) => Promise<void>;
     onAccept: (qtys: Record<string, number>) => Promise<void>;
 }) {
     const [rejecting, setRejecting] = useState(false);
     const [rejectReason, setRejectReason] = useState('');
+    const [showProofModal, setShowProofModal] = useState(false);
+    const [proofType, setProofType] = useState<'otp' | 'photo' | 'notes' | 'none'>('none');
+    const [proofNotes, setProofNotes] = useState('');
     const [busy, setBusy] = useState(false);
     const reasonRef = useRef<HTMLTextAreaElement>(null);
 
-    const run = async (status: string, reason?: string) => {
+    const run = async (status: string, reason?: string, proof?: { proofType?: string; proofUrl?: string; notes?: string }) => {
         setBusy(true);
-        try { await onAction(status, reason); }
+        try { await onAction(status, reason, proof); }
         finally { setBusy(false); }
     };
     const runAccept = async () => {
@@ -288,16 +296,71 @@ function ActionPanel({ order, fulfilledQtys, adjustedTotal, isPartialAccept, onA
                                 Mark as Dispatched
                             </button>
                         )}
-                        {/* Confirm Delivery (shipped) */}
+                        {/* Confirm Delivery (shipped) — opens proof modal */}
                         {order.status === 'shipped' && (
-                            <button
-                                onClick={() => run('delivered')}
-                                disabled={busy}
-                                className="h-[48px] px-8 rounded-[12px] bg-[#299E60] text-white text-[15px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 disabled:opacity-60"
-                            >
-                                {busy ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-                                Confirm Delivery
-                            </button>
+                            <>
+                                <button
+                                    onClick={() => setShowProofModal(true)}
+                                    disabled={busy}
+                                    className="h-[48px] px-8 rounded-[12px] bg-[#299E60] text-white text-[15px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 disabled:opacity-60"
+                                >
+                                    {busy ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                                    Confirm Delivery
+                                </button>
+                                {showProofModal && (
+                                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                                        <div className="bg-white rounded-[16px] shadow-2xl w-full max-w-[420px]">
+                                            <div className="px-6 py-4 border-b border-[#F5F5F5]">
+                                                <p className="text-[15px] font-bold text-[#181725]">Delivery Proof</p>
+                                                <p className="text-[12px] text-[#AEAEAE]">Optional — record how delivery was confirmed</p>
+                                            </div>
+                                            <div className="p-6 space-y-4">
+                                                <div>
+                                                    <p className="text-[11px] font-bold text-[#7C7C7C] uppercase mb-2">Proof Type</p>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {(['none', 'otp', 'photo', 'notes'] as const).map(t => (
+                                                            <button key={t} onClick={() => setProofType(t)}
+                                                                className={cn('py-2.5 rounded-[10px] border text-[12px] font-semibold transition-colors',
+                                                                    proofType === t ? 'border-[#299E60] bg-[#EEF8F1] text-[#299E60]' : 'border-[#EEEEEE] text-[#7C7C7C] hover:bg-[#F5F5F5]')}>
+                                                                {t === 'none' ? 'No Proof' : t === 'otp' ? 'OTP Verified' : t === 'photo' ? 'Photo Taken' : 'Notes Only'}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                {(proofType === 'notes' || proofType === 'otp') && (
+                                                    <div>
+                                                        <label className="block text-[11px] font-bold text-[#7C7C7C] uppercase mb-1">
+                                                            {proofType === 'otp' ? 'OTP Code / Reference' : 'Delivery Notes'}
+                                                        </label>
+                                                        <input type="text" value={proofNotes} onChange={e => setProofNotes(e.target.value)}
+                                                            placeholder={proofType === 'otp' ? 'Enter OTP used' : 'e.g. Left at reception'}
+                                                            className="w-full h-[38px] px-3 rounded-[10px] border border-[#EEEEEE] text-[12px] outline-none focus:border-[#299E60]/50" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="px-6 py-4 border-t border-[#F5F5F5] flex gap-3 justify-end">
+                                                <button onClick={() => setShowProofModal(false)}
+                                                    className="h-[38px] px-4 rounded-[10px] border border-[#EEEEEE] text-[13px] text-[#7C7C7C] hover:bg-[#F5F5F5]">
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setShowProofModal(false);
+                                                        run('delivered', undefined, {
+                                                            proofType: proofType !== 'none' ? proofType : undefined,
+                                                            notes: proofNotes.trim() || undefined,
+                                                        });
+                                                    }}
+                                                    disabled={busy}
+                                                    className="h-[38px] px-5 rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] disabled:opacity-50 flex items-center gap-2">
+                                                    {busy && <Loader2 size={12} className="animate-spin" />}
+                                                    Confirm Delivery
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
                         {/* Reject / Cancel */}
                         {(order.status === 'pending' || order.status === 'confirmed' || order.status === 'processing') && (
@@ -367,13 +430,17 @@ export default function VendorOrderDetailPage() {
         return sum + Number(item.totalPrice) * proportion;
     }, 0) ?? 0;
 
-    const handleAction = useCallback(async (status: string, reason?: string) => {
+    const handleAction = useCallback(async (
+        status: string,
+        reason?: string,
+        proof?: { proofType?: string; proofUrl?: string; notes?: string }
+    ) => {
         if (!order) return;
         try {
             const res = await fetch(`/api/v1/vendor/orders/${orderId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status, reason }),
+                body: JSON.stringify({ status, reason, proof }),
             });
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Update failed');
@@ -509,6 +576,27 @@ export default function VendorOrderDetailPage() {
                 />
             </div>
 
+            {/* ── Delivery proof ────────────────────────────────── */}
+            {order.status === 'delivered' && (order.deliveryProofType || order.deliveredAt) && (
+                <div className="bg-[#EEF8F1] border border-[#299E60]/20 rounded-[14px] p-5 flex gap-3 print:hidden">
+                    <CheckCircle2 size={18} className="text-[#299E60] shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                        <p className="text-[13px] font-bold text-[#181725]">Delivery Confirmed</p>
+                        {order.deliveredAt && (
+                            <p className="text-[12px] text-[#7C7C7C]">
+                                {new Date(order.deliveredAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                        )}
+                        {order.deliveryProofType && (
+                            <p className="text-[12px] text-[#7C7C7C]">Proof: <span className="font-semibold capitalize">{order.deliveryProofType.replace('_', ' ')}</span></p>
+                        )}
+                        {order.deliveryNotes && (
+                            <p className="text-[12px] text-[#7C7C7C]">{order.deliveryNotes}</p>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* ── Rejection reason ──────────────────────────────── */}
             {order.status === 'cancelled' && order.rejectionReason && (
                 <div className="bg-[#FFF8ED] border border-[#FFDCB3] rounded-[14px] p-5 flex gap-3 print:hidden">
@@ -572,6 +660,18 @@ export default function VendorOrderDetailPage() {
                                 {order.paymentStatus}
                             </span>
                         </div>
+                        {order.promoDiscount > 0 && (
+                            <>
+                                <div className="flex justify-between">
+                                    <span className="text-[#7C7C7C]">Subtotal</span>
+                                    <span className="font-semibold text-[#181725]">{formatPrice(order.subtotal)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-[#299E60]">Promo Discount</span>
+                                    <span className="font-bold text-[#299E60]">−{formatPrice(order.promoDiscount)}</span>
+                                </div>
+                            </>
+                        )}
                         <div className="flex justify-between">
                             <span className="text-[#7C7C7C]">Order Total</span>
                             <span className="font-bold text-[#181725]">{formatPrice(order.totalAmount)}</span>
