@@ -46,6 +46,8 @@ import {
     Wallet,
     BookOpen,
     Tag,
+    Gift,
+    Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
@@ -56,12 +58,14 @@ const SIDEBAR_LINKS = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/vendor/dashboard' },
     { name: 'Orders', icon: ShoppingBag, href: '/vendor/orders' },
     { name: 'Products', icon: Package, href: '/vendor/products' },
+    { name: 'Bulk Upload', icon: Upload, href: '/vendor/bulk-upload' },
     { name: 'Brand Mappings', icon: GitMerge, href: '/vendor/brand-mappings' },
     { name: 'Inventory', icon: Warehouse, href: '/vendor/inventory' },
     { name: 'Collections', icon: Landmark, href: '/vendor/collections' },
     { name: 'Returns', icon: RotateCcw, href: '/vendor/returns' },
     { name: 'Customers', icon: UserCircle, href: '/vendor/customers' },
     { name: 'Price Lists', icon: Tag, href: '/vendor/price-lists' },
+    { name: 'Promotions', icon: Gift, href: '/vendor/promotions' },
     { name: 'Wallet', icon: Wallet, href: '/vendor/wallet' },
     { name: 'Ledger', icon: BookOpen, href: '/vendor/ledger' },
     { name: 'Reports', icon: BarChart3, href: '/vendor/reports' },
