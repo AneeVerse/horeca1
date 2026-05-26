@@ -26,6 +26,12 @@ const updateSettingsSchema = z.object({
   state: z.string().max(100).optional(),
   addressPincode: z.string().regex(/^\d{6}$/, 'Invalid pincode').optional().or(z.literal('')),
   gstNumber: z.string().max(20).optional().or(z.literal('')),
+  defaultMOQ: z.number().int().min(1).optional(),
+  defaultTaxPercent: z.number().min(0).max(100).optional(),
+  deliveryFee: z.number().min(0).optional(),
+  freeDeliveryAbove: z.number().min(0).optional(),
+  returnPolicy: z.string().max(2000).optional(),
+  cancellationPolicy: z.string().max(2000).optional(),
 });
 
 // GET — full vendor profile with service areas, delivery slots, and account info
