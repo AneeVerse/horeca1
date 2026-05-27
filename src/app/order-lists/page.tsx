@@ -12,7 +12,6 @@ import { useWishlist } from '@/context/WishlistContext';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
 import { CreateListOverlay } from '@/components/features/order-lists/CreateListOverlay';
-import { AuthScreen } from '@/components/auth/AuthScreen';
 
 export default function OrderListsPage() {
     const router = useRouter();
@@ -26,7 +25,6 @@ export default function OrderListsPage() {
     const [isCreateOverlayOpen, setIsCreateOverlayOpen] = React.useState(false);
     const [editingList, setEditingList] = React.useState<OrderList | null>(null);
     const [listToDelete, setListToDelete] = React.useState<string | null>(null);
-    const [isLoginOpen, setIsLoginOpen] = React.useState(false);
     const [vendorsList, setVendorsList] = React.useState<Vendor[]>([]);
     const [vendorProductsMap, setVendorProductsMap] = React.useState<Record<string, VendorProduct[]>>({});
 
@@ -269,18 +267,13 @@ export default function OrderListsPage() {
                     >
                         Back to home
                     </Link>
-                    <button
-                        onClick={() => setIsLoginOpen(true)}
+                    <Link
+                        href="/login?redirect=/order-lists"
                         className="px-6 py-3 rounded-2xl bg-[#53B175] text-white font-black text-[14px] shadow-md hover:bg-[#469E66] transition-colors cursor-pointer"
                     >
                         Log in
-                    </button>
+                    </Link>
                 </div>
-                <AuthScreen
-                    isOpen={isLoginOpen}
-                    onClose={() => setIsLoginOpen(false)}
-                    onLoginSuccess={() => setIsLoginOpen(false)}
-                />
             </div>
         );
     }

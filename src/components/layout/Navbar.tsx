@@ -22,7 +22,6 @@ import { LocationSelectionOverlay } from './LocationSelectionOverlay';
 import { useSession } from 'next-auth/react';
 import { useCart } from '@/context/CartContext';
 import { useAddress } from '@/context/AddressContext';
-import { AuthScreen } from '../auth/AuthScreen';
 import { InitialPincodeOverlay } from './InitialPincodeOverlay';
 import { PushBell } from '../features/PushBell';
 import { dal } from '@/lib/dal';
@@ -56,7 +55,6 @@ export function Navbar() {
     const [isCategoriesExpanded, setIsCategoriesExpanded] = React.useState(false);
     const [isSearchOverlayOpen, setIsSearchOverlayOpen] = React.useState(false);
     const [isLocationOverlayOpen, setIsLocationOverlayOpen] = React.useState(false);
-    const [isLoginOverlayOpen, setIsLoginOverlayOpen] = React.useState(false);
     const { data: session, status: sessionStatus } = useSession();
     const isLoggedIn = sessionStatus === 'authenticated';
     const userRole = (session?.user as { role?: string })?.role;
@@ -158,24 +156,6 @@ export function Navbar() {
                     }}
                 />
             )}
-            <AuthScreen
-                isOpen={isLoginOverlayOpen}
-                onClose={() => setIsLoginOverlayOpen(false)}
-                onLoginSuccess={async () => {
-                    setIsLoginOverlayOpen(false);
-                    try {
-                        const res = await fetch('/api/v1/auth/me');
-                        const json = await res.json();
-                        const role = json?.data?.role;
-                        if (role === 'vendor') router.push('/vendor/dashboard');
-                        else if (role === 'admin') router.push('/admin/dashboard');
-                        else router.push('/');
-                    } catch {
-                        router.push('/');
-                    }
-                    setTimeout(() => window.location.reload(), 200);
-                }}
-            />
 
             {/* ── Mobile Header ── */}
             <header className="md:hidden w-full bg-white relative z-[10000] sticky top-0 border-b border-gray-100">
@@ -320,7 +300,7 @@ export function Navbar() {
                                 <button
                                     onClick={() => {
                                         if (isLoggedIn) router.push('/profile');
-                                        else setIsLoginOverlayOpen(true);
+                                        else router.push('/login');
                                     }}
                                     className="p-2.5 hover:bg-gray-50 rounded-full transition-all group cursor-pointer"
                                 >
@@ -405,7 +385,7 @@ export function Navbar() {
                 onStoreClick={() => openSearch('stores')}
                 onAccountClick={() => {
                     if (isLoggedIn) router.push('/profile');
-                    else setIsLoginOverlayOpen(true);
+                    else router.push('/login');
                 }}
             />
             <MobileSearchOverlay

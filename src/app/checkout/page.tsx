@@ -8,7 +8,6 @@ import { CreditCard, Smartphone, Building2, FileText, Wallet as WalletIcon } fro
 import { useCart } from '@/context/CartContext';
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { useSession } from 'next-auth/react';
-import { AuthScreen } from '@/components/auth/AuthScreen';
 import { dal } from '@/lib/dal';
 import { DeliverySlotPicker } from '@/components/features/checkout/DeliverySlotPicker';
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
@@ -241,7 +240,6 @@ export default function CheckoutPage() {
     const [step, setStep] = useState<CheckoutStep>('review');
     const [selectedPayment, setSelectedPayment] = useState('');
     const [orderSnapshot, setOrderSnapshot] = useState<{ groups: VendorCartGroup[], total: number, count: number } | null>(null);
-    const [showAuthScreen, setShowAuthScreen] = useState(false);
 const [availableCredit, setAvailableCredit] = useState<number | null>(null);
     const [creditDueDate, setCreditDueDate] = useState<string | null>(null);
     const [creditUpcomingDates, setCreditUpcomingDates] = useState<string[]>([]);
@@ -422,21 +420,16 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
                     <p className="text-gray-400 text-[14px] font-medium mb-8 leading-relaxed">
                         Create a free account or log in to place your order, track deliveries, and access order lists.
                     </p>
-                    <button
-                        onClick={() => setShowAuthScreen(true)}
-                        className="w-full bg-[#53B175] text-white font-black py-4 rounded-2xl shadow-lg shadow-green-500/20 mb-3 hover:bg-[#48a068] transition-all"
+                    <Link
+                        href="/login?redirect=/checkout"
+                        className="w-full block text-center bg-[#53B175] text-white font-black py-4 rounded-2xl shadow-lg shadow-green-500/20 mb-3 hover:bg-[#48a068] transition-all"
                     >
                         Log In / Sign Up
-                    </button>
+                    </Link>
                     <Link href="/" className="text-[13px] text-gray-400 font-bold hover:text-gray-600 transition-colors">
                         Continue browsing
                     </Link>
                 </div>
-                <AuthScreen
-                    isOpen={showAuthScreen}
-                    onClose={() => setShowAuthScreen(false)}
-                    onLoginSuccess={() => { setShowAuthScreen(false); }}
-                />
             </div>
         );
     }

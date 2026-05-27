@@ -222,6 +222,22 @@ model Vendor {
   // Per-event per-channel notification preferences JSON
   notificationPrefs Json     @default("{}") @map("notification_prefs")
 
+  // Onboarding wizard fields (collected at /vendor/register)
+  tradeName             String?  @map("trade_name") @db.VarChar(255)
+  vendorType            String?  @map("vendor_type") @db.VarChar(50)
+  panNumber             String?  @map("pan_number") @db.VarChar(20)
+  authorizedPersonName  String?  @map("authorized_person_name") @db.VarChar(255)
+  authorizedPersonPhone String?  @map("authorized_person_phone") @db.VarChar(20)
+  authorizedPersonEmail String?  @map("authorized_person_email") @db.VarChar(255)
+  pickupAddressLine     String?  @map("pickup_address_line") @db.Text
+  pickupCity            String?  @map("pickup_city") @db.VarChar(100)
+  pickupState           String?  @map("pickup_state") @db.VarChar(100)
+  pickupPincode         String?  @map("pickup_pincode") @db.VarChar(10)
+  deliveryCapability    String?  @map("delivery_capability") @db.VarChar(20)
+  fssaiNumber           String?  @map("fssai_number") @db.VarChar(50)
+  udyamNumber           String?  @map("udyam_number") @db.VarChar(50)
+  cinNumber             String?  @map("cin_number") @db.VarChar(50)
+
   @@index([slug])
   @@index([isActive])
   @@map("vendors")
