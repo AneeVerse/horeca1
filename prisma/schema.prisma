@@ -209,6 +209,19 @@ model Vendor {
   returnPolicy        String?   @map("return_policy") @db.Text
   cancellationPolicy  String?   @map("cancellation_policy") @db.Text
 
+  // Bank account details for settlements
+  bankAccountName   String?  @map("bank_account_name") @db.VarChar(100)
+  bankAccountNumber String?  @map("bank_account_number") @db.VarChar(30)
+  bankIfsc          String?  @map("bank_ifsc") @db.VarChar(15)
+  bankName          String?  @map("bank_name") @db.VarChar(100)
+  bankAccountType   String?  @map("bank_account_type") @db.VarChar(20)
+
+  // Enabled payment modes: cod, prepaid, credit, cheque, discco
+  paymentModes      String[] @default([]) @map("payment_modes")
+
+  // Per-event per-channel notification preferences JSON
+  notificationPrefs Json     @default("{}") @map("notification_prefs")
+
   @@index([slug])
   @@index([isActive])
   @@map("vendors")
@@ -306,6 +319,7 @@ model Product {
   unit            String?  @db.VarChar(50)
   sku             String?  @db.VarChar(100)
   hsn             String?  @db.VarChar(50)
+  fssaiRef        String?  @map("fssai_ref") @db.VarChar(50)
   brand           String?  @db.VarChar(150)
   barcode         String?  @db.VarChar(100)
   tags            String[] @default([]) @map("tags")
@@ -1051,11 +1065,14 @@ model ReturnRequest {
   id           String   @id @default(uuid()) @db.Uuid
   orderId      String   @map("order_id") @db.Uuid
   customerId   String   @map("customer_id") @db.Uuid
-  reason       String   @db.Text
-  status       String   @default("pending") @db.VarChar(20)
-  adminNote    String?  @map("admin_note") @db.Text
-  refundAmount Decimal? @map("refund_amount") @db.Decimal(12, 2)
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  reason            String   @db.Text
+  status            String   @default("pending") @db.VarChar(20)
+  adminNote         String?  @map("admin_note") @db.Text
+  refundAmount      Decimal? @map("refund_amount") @db.Decimal(12, 2)
+  resolutionType    String?  @map("resolution_type") @db.VarChar(20)
+  creditNoteNumber  String?  @map("credit_note_number") @db.VarChar(50)
+  creditNoteAmount  Decimal? @map("credit_note_amount") @db.Decimal(12, 2)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   order    Order @relation(fields: [orderId], references: [id])
@@ -1525,4 +1542,21 @@ enum VegType {
   egg
 
   @@map("veg_type")
+}
+
+// Audit trail for inventory quantity changes
+model InventoryLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  inventoryId String   @map("inventory_id") @db.Uuid
+  vendorId    String   @map("vendor_id") @db.Uuid
+  field       String   @db.VarChar(30)
+  oldValue    Int
+  newValue    Int
+  reason      String?  @db.VarChar(200)
+  changedBy   String?  @map("changed_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([inventoryId])
+  @@index([vendorId])
+  @@map("inventory_logs")
 }
