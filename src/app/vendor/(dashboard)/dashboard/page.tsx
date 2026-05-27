@@ -68,6 +68,8 @@ interface DashboardData {
         pendingSettlement: number;
         overdueAmount: number;
         pendingWalletAmount: number;
+        upcomingDue: number;
+        creditCustomersCount: number;
     };
     ordersByStatus: Record<string, number>;
     pendingOrders: PendingOrder[];
@@ -608,6 +610,57 @@ export default function VendorDashboardPage() {
                                 {formatINR(data.creditUtilization.totalUsed)} used of{' '}
                                 {formatINR(data.creditUtilization.totalLimit)} total limit
                             </p>
+                        </div>
+                    )}
+
+                    {/* ── Due This Week + Credit Customers ─────────── */}
+                    {(data.stats.upcomingDue > 0 || data.stats.creditCustomersCount > 0) && (
+                        <div className="grid grid-cols-2 gap-4">
+                            {data.stats.upcomingDue > 0 && (
+                                <Link
+                                    href="/vendor/collections"
+                                    className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm hover:shadow-md transition-all overflow-hidden group"
+                                >
+                                    <div className="h-[3px] bg-[#F59E0B]" />
+                                    <div className="p-5 flex flex-col gap-3">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-amber-50 text-amber-600">
+                                                <CreditCard size={18} />
+                                            </div>
+                                            <span className="text-[13px] font-bold text-[#7C7C7C] group-hover:text-[#181725] transition-colors">
+                                                Due This Week
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <p className="text-[22px] font-[800] text-[#181725] leading-none">
+                                                {formatINR(Number(data.stats.upcomingDue))}
+                                            </p>
+                                            <p className="text-[11px] text-[#AEAEAE] mt-1">outstanding credit</p>
+                                        </div>
+                                    </div>
+                                </Link>
+                            )}
+                            {data.stats.creditCustomersCount > 0 && (
+                                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                                    <div className="h-[3px] bg-[#3B82F6]" />
+                                    <div className="p-5 flex flex-col gap-3">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-blue-50 text-blue-600">
+                                                <Users size={18} />
+                                            </div>
+                                            <span className="text-[13px] font-bold text-[#7C7C7C]">
+                                                Credit Customers
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <p className="text-[22px] font-[800] text-[#181725] leading-none">
+                                                {data.stats.creditCustomersCount.toLocaleString('en-IN')}
+                                            </p>
+                                            <p className="text-[11px] text-[#AEAEAE] mt-1">with balance outstanding</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 

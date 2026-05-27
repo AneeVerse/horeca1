@@ -95,6 +95,7 @@ interface ProductForm {
     minOrderQty: string;
     creditEligible: boolean;
     isFeatured: boolean;
+    fssaiRef: string;
     substituteIds: string[];
     priceSlabs: PriceSlabRow[];
 }
@@ -131,6 +132,7 @@ const EMPTY_FORM: ProductForm = {
     minOrderQty: '1',
     creditEligible: false,
     isFeatured: false,
+    fssaiRef: '',
     substituteIds: [],
     priceSlabs: [],
 };
@@ -409,11 +411,13 @@ export default function VendorProductsPage() {
 
     // Bulk price update
     const [showBulkPrice, setShowBulkPrice] = useState(false);
+    const [bulkUpdateType, setBulkUpdateType] = useState<'price' | 'status'>('price');
     const [bulkPriceCategoryId, setBulkPriceCategoryId] = useState<string | null>(null);
     const [bulkPriceType, setBulkPriceType] = useState<'percent' | 'fixed'>('percent');
     const [bulkPriceValue, setBulkPriceValue] = useState('');
     const [bulkPriceApplySlabs, setBulkPriceApplySlabs] = useState(true);
     const [bulkPriceSaving, setBulkPriceSaving] = useState(false);
+    const [bulkStatus, setBulkStatus] = useState<boolean>(true);
 
     // Bulk import
     const [showBulkImport, setShowBulkImport] = useState(false);
@@ -646,6 +650,7 @@ export default function VendorProductsPage() {
                 unit: p.unit || '',
                 sku: p.sku || '',
                 hsn: p.hsn || '',
+                fssaiRef: p.fssaiRef || '',
                 brand: p.brand || '',
                 barcode: p.barcode || '',
                 description: p.description || '',
@@ -686,6 +691,7 @@ export default function VendorProductsPage() {
                 unit: product.unit || '',
                 sku: '',
                 hsn: '',
+                fssaiRef: '',
                 brand: '',
                 barcode: '',
                 description: product.description || '',
@@ -790,6 +796,7 @@ export default function VendorProductsPage() {
                 isFeatured: form.isFeatured,
                 sku: form.sku || undefined,
                 hsn: form.hsn || undefined,
+                fssaiRef: form.fssaiRef || undefined,
                 brand: form.brand || undefined,
                 barcode: form.barcode || undefined,
                 taxPercent: form.taxPercent ? parseFloat(form.taxPercent) : 0,
@@ -1005,6 +1012,34 @@ export default function VendorProductsPage() {
         } finally {
             setDeleting(false);
             setDeleteTarget(null);
+        }
+    };
+
+    /* ---- Bulk status update ---- */
+
+    const handleBulkStatusUpdate = async () => {
+        const filtered = bulkPriceCategoryId
+            ? products.filter(p => p.category?.id === bulkPriceCategoryId)
+            : products;
+        if (filtered.length === 0) { toast.error('No products match the selected filter'); return; }
+        setBulkPriceSaving(true);
+        try {
+            await Promise.all(
+                filtered.map(p =>
+                    fetch(`/api/v1/vendor/products/${p.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ isActive: bulkStatus }),
+                    })
+                )
+            );
+            toast.success(`Set ${filtered.length} product${filtered.length !== 1 ? 's' : ''} to ${bulkStatus ? 'Active' : 'Inactive'}`);
+            setShowBulkPrice(false);
+            fetchProducts(false);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed');
+        } finally {
+            setBulkPriceSaving(false);
         }
     };
 
@@ -1621,6 +1656,17 @@ export default function VendorProductsPage() {
                                                 />
                                             </div>
                                             <div>
+                                                <FieldLabel>FSSAI Reference</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    maxLength={50}
+                                                    placeholder="e.g. 10016011000015"
+                                                    value={form.fssaiRef}
+                                                    onChange={e => setForm(f => ({ ...f, fssaiRef: e.target.value }))}
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                            <div>
                                                 <FieldLabel>Brand</FieldLabel>
                                                 <div className="relative">
                                                     <input
@@ -2097,7 +2143,7 @@ export default function VendorProductsPage() {
                 </>
             )}
 
-            {/* ── Bulk Price Update Modal ──────────────────────────────── */}
+            {/* ── Bulk Update Modal ──────────────────────────────── */}
             {showBulkPrice && (
                 <>
                     <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => !bulkPriceSaving && setShowBulkPrice(false)} />
@@ -2105,12 +2151,24 @@ export default function VendorProductsPage() {
                         <div className="bg-white rounded-[16px] shadow-xl max-w-[460px] w-full">
                             <div className="flex items-center justify-between px-6 py-4 border-b border-[#F5F5F5]">
                                 <div>
-                                    <p className="text-[16px] font-bold text-[#181725]">Bulk Price Update</p>
-                                    <p className="text-[12px] text-[#AEAEAE]">Apply a % or ₹ adjustment to all products (or by category)</p>
+                                    <p className="text-[16px] font-bold text-[#181725]">Bulk Update</p>
+                                    <p className="text-[12px] text-[#AEAEAE]">Apply changes to all products (or by category)</p>
                                 </div>
                                 <button onClick={() => setShowBulkPrice(false)} className="p-1.5 rounded-[8px] hover:bg-[#F5F5F5]"><X size={16} className="text-[#7C7C7C]" /></button>
                             </div>
                             <div className="p-6 space-y-4">
+                                {/* Update type toggle */}
+                                <div className="flex gap-2 mb-4">
+                                    {(['price', 'status'] as const).map(t => (
+                                        <button
+                                            key={t}
+                                            onClick={() => setBulkUpdateType(t)}
+                                            className={`px-4 py-2 rounded-lg text-sm font-medium ${bulkUpdateType === t ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'}`}
+                                        >
+                                            {t === 'price' ? 'Update Price' : 'Update Status'}
+                                        </button>
+                                    ))}
+                                </div>
                                 {/* Category filter */}
                                 <div>
                                     <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">Apply to category</label>
@@ -2125,50 +2183,94 @@ export default function VendorProductsPage() {
                                         ))}
                                     </select>
                                 </div>
-                                {/* Type */}
-                                <div>
-                                    <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">Adjustment type</label>
-                                    <div className="mt-1.5 flex gap-2">
-                                        {(['percent', 'fixed'] as const).map(t => (
-                                            <button key={t} onClick={() => setBulkPriceType(t)}
-                                                className={cn('flex-1 h-[36px] rounded-[8px] text-[12px] font-bold border transition-all',
-                                                    bulkPriceType === t ? 'bg-[#181725] text-white border-[#181725]' : 'bg-white text-[#7C7C7C] border-[#EEEEEE] hover:bg-[#F5F5F5]'
-                                                )}>
-                                                {t === 'percent' ? '% Percent' : '₹ Fixed amount'}
+                                {bulkUpdateType === 'price' ? (
+                                    <>
+                                        {/* Type */}
+                                        <div>
+                                            <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">Adjustment type</label>
+                                            <div className="mt-1.5 flex gap-2">
+                                                {(['percent', 'fixed'] as const).map(t => (
+                                                    <button key={t} onClick={() => setBulkPriceType(t)}
+                                                        className={cn('flex-1 h-[36px] rounded-[8px] text-[12px] font-bold border transition-all',
+                                                            bulkPriceType === t ? 'bg-[#181725] text-white border-[#181725]' : 'bg-white text-[#7C7C7C] border-[#EEEEEE] hover:bg-[#F5F5F5]'
+                                                        )}>
+                                                        {t === 'percent' ? '% Percent' : '₹ Fixed amount'}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        {/* Value */}
+                                        <div>
+                                            <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">
+                                                Value {bulkPriceType === 'percent' ? '(negative to reduce, e.g. -5 for -5%)' : '(₹ delta, can be negative)'}
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={bulkPriceValue}
+                                                onChange={e => setBulkPriceValue(e.target.value)}
+                                                placeholder={bulkPriceType === 'percent' ? 'e.g. 5 or -10' : 'e.g. 10 or -5'}
+                                                className="mt-1.5 w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-bold outline-none focus:border-[#299E60]/50"
+                                            />
+                                        </div>
+                                        {/* Slabs toggle */}
+                                        <label className="flex items-center gap-2.5 cursor-pointer">
+                                            <input type="checkbox" checked={bulkPriceApplySlabs} onChange={e => setBulkPriceApplySlabs(e.target.checked)}
+                                                className="w-4 h-4 accent-[#299E60] rounded" />
+                                            <span className="text-[13px] font-medium text-[#181725]">Also adjust bulk price slabs</span>
+                                        </label>
+                                        <div className="flex gap-3 pt-1">
+                                            <button onClick={() => setShowBulkPrice(false)}
+                                                className="flex-1 h-[42px] rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all">
+                                                Cancel
                                             </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                {/* Value */}
-                                <div>
-                                    <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">
-                                        Value {bulkPriceType === 'percent' ? '(negative to reduce, e.g. -5 for -5%)' : '(₹ delta, can be negative)'}
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={bulkPriceValue}
-                                        onChange={e => setBulkPriceValue(e.target.value)}
-                                        placeholder={bulkPriceType === 'percent' ? 'e.g. 5 or -10' : 'e.g. 10 or -5'}
-                                        className="mt-1.5 w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-bold outline-none focus:border-[#299E60]/50"
-                                    />
-                                </div>
-                                {/* Slabs toggle */}
-                                <label className="flex items-center gap-2.5 cursor-pointer">
-                                    <input type="checkbox" checked={bulkPriceApplySlabs} onChange={e => setBulkPriceApplySlabs(e.target.checked)}
-                                        className="w-4 h-4 accent-[#299E60] rounded" />
-                                    <span className="text-[13px] font-medium text-[#181725]">Also adjust bulk price slabs</span>
-                                </label>
-                                <div className="flex gap-3 pt-1">
-                                    <button onClick={() => setShowBulkPrice(false)}
-                                        className="flex-1 h-[42px] rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all">
-                                        Cancel
-                                    </button>
-                                    <button onClick={handleBulkPriceUpdate} disabled={bulkPriceSaving || !bulkPriceValue}
-                                        className="flex-1 h-[42px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                        {bulkPriceSaving ? <Loader2 size={14} className="animate-spin" /> : <Percent size={14} />}
-                                        Update Prices
-                                    </button>
-                                </div>
+                                            <button onClick={handleBulkPriceUpdate} disabled={bulkPriceSaving || !bulkPriceValue}
+                                                className="flex-1 h-[42px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                                                {bulkPriceSaving ? <Loader2 size={14} className="animate-spin" /> : <Percent size={14} />}
+                                                Update Prices
+                                            </button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        {/* Status selector */}
+                                        <div>
+                                            <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">Set all matching products to:</label>
+                                            <div className="mt-2 flex flex-col gap-2">
+                                                <label className="flex items-center gap-2.5 cursor-pointer">
+                                                    <input
+                                                        type="radio"
+                                                        name="bulkStatus"
+                                                        checked={bulkStatus === true}
+                                                        onChange={() => setBulkStatus(true)}
+                                                        className="w-4 h-4 accent-[#299E60]"
+                                                    />
+                                                    <span className="text-[13px] font-medium text-[#181725]">Active</span>
+                                                </label>
+                                                <label className="flex items-center gap-2.5 cursor-pointer">
+                                                    <input
+                                                        type="radio"
+                                                        name="bulkStatus"
+                                                        checked={bulkStatus === false}
+                                                        onChange={() => setBulkStatus(false)}
+                                                        className="w-4 h-4 accent-[#299E60]"
+                                                    />
+                                                    <span className="text-[13px] font-medium text-[#181725]">Inactive</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-3 pt-1">
+                                            <button onClick={() => setShowBulkPrice(false)}
+                                                className="flex-1 h-[42px] rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all">
+                                                Cancel
+                                            </button>
+                                            <button onClick={handleBulkStatusUpdate} disabled={bulkPriceSaving}
+                                                className="flex-1 h-[42px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                                                {bulkPriceSaving ? <Loader2 size={14} className="animate-spin" /> : null}
+                                                Apply Status
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>

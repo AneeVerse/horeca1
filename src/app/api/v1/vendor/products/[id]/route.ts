@@ -25,6 +25,7 @@ const updateProductSchema = z.object({
   unit: z.string().optional(),
   sku: z.string().optional(),
   hsn: z.string().optional(),
+  fssaiRef: z.string().max(50).optional(),
   brand: z.string().optional(),
   barcode: z.string().optional(),
   tags: z.array(z.string()).optional(),

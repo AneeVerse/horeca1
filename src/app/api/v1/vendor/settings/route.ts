@@ -32,6 +32,16 @@ const updateSettingsSchema = z.object({
   freeDeliveryAbove: z.number().min(0).optional(),
   returnPolicy: z.string().max(2000).optional(),
   cancellationPolicy: z.string().max(2000).optional(),
+  // Bank account details — used for settlement payouts
+  bankAccountName: z.string().max(100).optional().nullable(),
+  bankAccountNumber: z.string().max(30).optional().nullable(),
+  bankIfsc: z.string().max(15).optional().nullable(),
+  bankName: z.string().max(100).optional().nullable(),
+  bankAccountType: z.enum(['current', 'savings']).optional().nullable(),
+  // Payment modes accepted by vendor
+  paymentModes: z.array(z.enum(['cod', 'prepaid', 'credit', 'cheque', 'discco'])).optional(),
+  // Notification preferences — map of event key → array of channels
+  notificationPrefs: z.record(z.string(), z.array(z.string())).optional(),
 });
 
 // GET — full vendor profile with service areas, delivery slots, and account info
@@ -79,9 +89,15 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     const body = await req.json();
     const allowedFields = updateSettingsSchema.parse(body);
 
+    const { paymentModes, notificationPrefs, ...scalarFields } = allowedFields;
+
     const updated = await prisma.vendor.update({
       where: { id: vendorId },
-      data: allowedFields,
+      data: {
+        ...scalarFields,
+        ...(paymentModes !== undefined && { paymentModes }),
+        ...(notificationPrefs !== undefined && { notificationPrefs: notificationPrefs as Record<string, string[]> }),
+      },
     });
 
     return NextResponse.json({ success: true, data: updated });

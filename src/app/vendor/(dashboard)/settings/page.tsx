@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil, Users, Crown, Shield, Eye, Edit3, FileText, CheckCircle2, AlertCircle, Settings2 } from 'lucide-react';
+import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil, Users, Crown, Shield, Eye, Edit3, FileText, CheckCircle2, AlertCircle, Settings2, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImageUploadField } from '@/components/ui/ImageUploadField';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -41,6 +41,11 @@ interface VendorSettings {
     serviceAreas: ServiceArea[];
     deliverySlots: DeliverySlot[];
     user: { email: string; phone: string | null; fullName: string };
+    bankAccountName: string | null;
+    bankAccountNumber: string | null;
+    bankIfsc: string | null;
+    bankName: string | null;
+    bankAccountType: string | null;
 }
 
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -123,6 +128,17 @@ export default function VendorSettingsPage() {
     const [slotCutoff, setSlotCutoff] = useState('');
     const [savingSlot, setSavingSlot] = useState(false);
 
+    // Payment modes
+    const [paymentModes, setPaymentModes] = useState<string[]>(['cod', 'prepaid']);
+
+    // Bank account details
+    const [bankAccountName, setBankAccountName] = useState('');
+    const [bankAccountNumber, setBankAccountNumber] = useState('');
+    const [bankShowNumber, setBankShowNumber] = useState(false);
+    const [bankIfsc, setBankIfsc] = useState('');
+    const [bankName, setBankName] = useState('');
+    const [bankAccountType, setBankAccountType] = useState<'current' | 'savings' | ''>('');
+
     // Ordering defaults + policies
     const [defaultMOQ, setDefaultMOQ] = useState('');
     const [defaultTaxPercent, setDefaultTaxPercent] = useState('');
@@ -170,6 +186,14 @@ export default function VendorSettingsPage() {
                 setFreeDeliveryAbove(data.freeDeliveryAbove != null ? String(data.freeDeliveryAbove) : '');
                 setReturnPolicy(data.returnPolicy || '');
                 setCancellationPolicy(data.cancellationPolicy || '');
+                if (Array.isArray(data.paymentModes) && data.paymentModes.length > 0) {
+                    setPaymentModes(data.paymentModes);
+                }
+                setBankAccountName(data.bankAccountName || '');
+                setBankAccountNumber(data.bankAccountNumber || '');
+                setBankIfsc(data.bankIfsc || '');
+                setBankName(data.bankName || '');
+                setBankAccountType((data.bankAccountType as 'current' | 'savings' | '') || '');
             }
         } catch (err) {
             console.error('Failed to load settings:', err);
@@ -258,6 +282,12 @@ export default function VendorSettingsPage() {
                     freeDeliveryAbove: freeDeliveryAbove ? parseFloat(freeDeliveryAbove) : undefined,
                     returnPolicy: returnPolicy || undefined,
                     cancellationPolicy: cancellationPolicy || undefined,
+                    bankAccountName: bankAccountName || null,
+                    bankAccountNumber: bankAccountNumber || null,
+                    bankIfsc: bankIfsc || null,
+                    bankName: bankName || null,
+                    bankAccountType: bankAccountType || null,
+                    paymentModes,
                 }),
             });
             const json = await res.json();
@@ -821,6 +851,51 @@ export default function VendorSettingsPage() {
                 </Link>
             </div>
 
+            {/* Payment Modes */}
+            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-[#EEEEEE] flex items-center gap-2">
+                    <div className="w-[32px] h-[32px] rounded-[8px] bg-orange-50 flex items-center justify-center text-orange-500"><Settings2 size={16} /></div>
+                    <h2 className="text-[18px] font-bold text-[#181725]">Accepted Payment Modes</h2>
+                </div>
+                <div className="p-6 space-y-4">
+                    {[
+                        { value: 'cod',     label: 'COD',           description: 'Cash on Delivery' },
+                        { value: 'prepaid', label: 'Prepaid',       description: 'Online payment (UPI, card, net banking)' },
+                        { value: 'credit',  label: 'Vendor Credit', description: 'Allow customers to purchase on credit' },
+                        { value: 'cheque',  label: 'Cheque',        description: 'Accept cheque payments' },
+                    ].map(({ value, label, description }) => {
+                        const enabled = paymentModes.includes(value);
+                        return (
+                            <div key={value} className="flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="text-[14px] font-bold text-[#181725]">{label}</p>
+                                    <p className="text-[12px] text-[#7C7C7C]">{description}</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setPaymentModes(prev =>
+                                        prev.includes(value) ? prev.filter(m => m !== value) : [...prev, value]
+                                    )}
+                                    className={`relative inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ${enabled ? 'bg-orange-500' : 'bg-gray-200'}`}
+                                >
+                                    <span className={`inline-block h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform duration-200 ${enabled ? 'translate-x-[22px]' : 'translate-x-[3px]'}`} />
+                                </button>
+                            </div>
+                        );
+                    })}
+                    {/* DiSCCO — coming soon */}
+                    <div className="flex items-center justify-between gap-4 opacity-40">
+                        <div>
+                            <p className="text-[14px] font-bold text-[#181725]">DiSCCO <span className="text-[11px] font-normal text-[#AEAEAE] ml-1">coming soon</span></p>
+                            <p className="text-[12px] text-[#7C7C7C]">B2B credit via DiSCCO platform</p>
+                        </div>
+                        <div className="relative inline-flex h-[24px] w-[44px] shrink-0 items-center rounded-full bg-gray-200 cursor-not-allowed">
+                            <span className="inline-block h-[18px] w-[18px] rounded-full bg-white shadow-sm translate-x-[3px]" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {/* Ordering Defaults */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
                 <div className="flex items-center gap-2.5 mb-5">
@@ -869,6 +944,98 @@ export default function VendorSettingsPage() {
                     <div>
                         <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Cancellation Policy</label>
                         <textarea rows={3} value={cancellationPolicy} onChange={e => setCancellationPolicy(e.target.value)} maxLength={2000} placeholder="e.g. Orders can be cancelled before they are accepted. No cancellations after dispatch." className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors resize-none bg-white" />
+                    </div>
+                </div>
+            </div>
+
+            {/* Bank Account Details */}
+            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-[#EEEEEE] flex items-center gap-2">
+                    <Building2 size={20} className="text-[#299E60]" />
+                    <h2 className="text-[18px] font-bold text-[#181725]">Bank Account Details</h2>
+                </div>
+                <div className="p-6 space-y-4">
+                    <p className="text-[13px] text-[#7C7C7C]">Used for settlement payouts. Ensure the details match your registered business bank account.</p>
+                    <div>
+                        <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Account Holder Name</label>
+                        <input
+                            type="text"
+                            value={bankAccountName}
+                            onChange={e => setBankAccountName(e.target.value)}
+                            placeholder="e.g. Sharma Foods Pvt Ltd"
+                            className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Account Number</label>
+                        <div className="relative">
+                            <input
+                                type={bankShowNumber ? 'text' : 'password'}
+                                value={bankAccountNumber}
+                                onChange={e => setBankAccountNumber(e.target.value)}
+                                placeholder="Enter account number"
+                                maxLength={30}
+                                className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 pr-12 text-[14px] font-mono outline-none focus:border-[#299E60]/40"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setBankShowNumber(v => !v)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] hover:text-[#181725] transition-colors"
+                                tabIndex={-1}
+                            >
+                                <Eye size={16} />
+                            </button>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-[13px] font-bold text-[#181725] mb-1.5">IFSC Code</label>
+                            <input
+                                type="text"
+                                value={bankIfsc}
+                                onChange={e => setBankIfsc(e.target.value.toUpperCase())}
+                                placeholder="e.g. HDFC0001234"
+                                maxLength={11}
+                                className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-mono outline-none focus:border-[#299E60]/40"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Bank Name</label>
+                            <input
+                                type="text"
+                                value={bankName}
+                                onChange={e => setBankName(e.target.value)}
+                                placeholder="e.g. HDFC Bank"
+                                className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-[13px] font-bold text-[#181725] mb-2">Account Type</label>
+                        <div className="flex items-center gap-6">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="bankAccountType"
+                                    value="current"
+                                    checked={bankAccountType === 'current'}
+                                    onChange={() => setBankAccountType('current')}
+                                    className="accent-[#299E60] w-4 h-4"
+                                />
+                                <span className="text-[14px] font-medium text-[#181725]">Current</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="bankAccountType"
+                                    value="savings"
+                                    checked={bankAccountType === 'savings'}
+                                    onChange={() => setBankAccountType('savings')}
+                                    className="accent-[#299E60] w-4 h-4"
+                                />
+                                <span className="text-[14px] font-medium text-[#181725]">Savings</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>

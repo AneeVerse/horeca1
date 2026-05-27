@@ -47,6 +47,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       packingCount,
       dispatchCount,
       delayedCount,
+      upcomingDueAggregate,
+      creditCustomersCount,
     ] = await Promise.all([
       prisma.order.count({ where: { vendorId } }),
 
@@ -186,6 +188,21 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
           createdAt: { lt: new Date(Date.now() - 48 * 60 * 60 * 1000) },
         },
       }),
+
+      // Upcoming due in 7 days — CreditAccount has no dueDate field; use updatedAt
+      // as a fallback to surface recently-active credit accounts' outstanding balance
+      prisma.creditAccount.aggregate({
+        where: {
+          vendorId,
+          updatedAt: { gte: new Date(), lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+        },
+        _sum: { creditUsed: true },
+      }),
+
+      // Credit customers count — accounts with outstanding balance
+      prisma.creditAccount.count({
+        where: { vendorId, creditUsed: { gt: 0 } },
+      }),
     ]);
 
     const lowStockCount = inventoryRows.filter(
@@ -253,6 +270,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
           pendingSettlement: Number(pendingSettlement._sum.netAmount ?? 0),
           overdueAmount: Number(overdueResult._sum.amount ?? 0),
           pendingWalletAmount: Number(vendorWallet?.pendingAmount ?? 0),
+          upcomingDue: Number(upcomingDueAggregate._sum.creditUsed ?? 0),
+          creditCustomersCount,
         },
         ordersByStatus,
         pendingOrders,

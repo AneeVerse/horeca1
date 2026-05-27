@@ -12,8 +12,16 @@ import {
   Building2,
   ChevronRight,
   CalendarClock,
+  Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+interface BankSettings {
+  bankName: string | null;
+  bankAccountNumber: string | null;
+  bankIfsc: string | null;
+  bankAccountType: string | null;
+}
 
 interface WalletInfo {
   balance: number;
@@ -106,6 +114,27 @@ export default function VendorWalletPage() {
   const [loading, setLoading] = useState(true);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [bankSettings, setBankSettings] = useState<BankSettings | null>(null);
+
+  useEffect(() => {
+    const loadBankSettings = async () => {
+      try {
+        const res = await fetch('/api/v1/vendor/settings');
+        const json = await res.json() as { success: boolean; data: BankSettings };
+        if (json.success) {
+          setBankSettings({
+            bankName: json.data.bankName,
+            bankAccountNumber: json.data.bankAccountNumber,
+            bankIfsc: json.data.bankIfsc,
+            bankAccountType: json.data.bankAccountType,
+          });
+        }
+      } catch {
+        // non-critical — wallet can render without bank info
+      }
+    };
+    loadBankSettings();
+  }, []);
 
   const fetchWallet = useCallback(async (cursor?: string) => {
     if (!cursor) setLoading(true);
@@ -222,41 +251,74 @@ export default function VendorWalletPage() {
       )}
 
       {/* Bank Account Card */}
-      <div className="bg-white rounded-[14px] border border-[#EEEEEE] p-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#F0FDF4] flex items-center justify-center shrink-0">
-              <Building2 size={16} className="text-[#299E60]" />
+      {bankSettings && (bankSettings.bankName || bankSettings.bankAccountNumber) ? (
+        <div className="bg-white rounded-[14px] border border-[#EEEEEE] p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-[#F0FDF4] flex items-center justify-center shrink-0">
+                <Building2 size={16} className="text-[#299E60]" />
+              </div>
+              <div>
+                <p className="text-[13px] font-bold text-[#181725]">Bank Account (for settlements)</p>
+                <p className="text-[11px] text-[#AEAEAE] mt-0.5">Payouts are transferred to your registered bank account</p>
+              </div>
             </div>
-            <div>
-              <p className="text-[13px] font-bold text-[#181725]">Bank Account (for settlements)</p>
-              <p className="text-[11px] text-[#AEAEAE] mt-0.5">Payouts are transferred to your registered bank account</p>
+            <Link
+              href="/vendor/settings"
+              className="flex items-center gap-1 text-[12px] font-semibold text-[#7C7C7C] hover:text-[#181725] transition-colors shrink-0"
+            >
+              Edit in Settings
+              <ChevronRight size={14} />
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-[#F9FAFB] rounded-[10px] px-4 py-3">
+              <p className="text-[10px] font-semibold text-[#AEAEAE] uppercase tracking-wide">Bank</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-[13px] font-bold text-[#181725]">{bankSettings.bankName ?? '—'}</p>
+                {bankSettings.bankAccountType && (
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-[4px] bg-[#EEF8F1] text-[#299E60] uppercase">
+                    {bankSettings.bankAccountType}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="bg-[#F9FAFB] rounded-[10px] px-4 py-3">
+              <p className="text-[10px] font-semibold text-[#AEAEAE] uppercase tracking-wide">Account Number</p>
+              <p className="text-[13px] font-bold text-[#181725] mt-0.5 font-mono tracking-wide">
+                {bankSettings.bankAccountNumber && bankSettings.bankAccountNumber.length > 4
+                  ? `•••• •••• ${bankSettings.bankAccountNumber.slice(-4)}`
+                  : (bankSettings.bankAccountNumber ?? '—')}
+              </p>
+            </div>
+            <div className="bg-[#F9FAFB] rounded-[10px] px-4 py-3">
+              <p className="text-[10px] font-semibold text-[#AEAEAE] uppercase tracking-wide">IFSC Code</p>
+              <p className="text-[13px] font-bold text-[#181725] mt-0.5 font-mono">{bankSettings.bankIfsc ?? '—'}</p>
             </div>
           </div>
-          <Link
-            href="/vendor/settings"
-            className="flex items-center gap-1 text-[12px] font-semibold text-[#299E60] hover:text-[#238a54] transition-colors shrink-0"
-          >
-            Configure
-            <ChevronRight size={14} />
-          </Link>
         </div>
-
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-[#F9FAFB] rounded-[10px] px-4 py-3">
-            <p className="text-[10px] font-semibold text-[#AEAEAE] uppercase tracking-wide">Bank</p>
-            <p className="text-[13px] font-bold text-[#181725] mt-0.5">Not configured</p>
-          </div>
-          <div className="bg-[#F9FAFB] rounded-[10px] px-4 py-3">
-            <p className="text-[10px] font-semibold text-[#AEAEAE] uppercase tracking-wide">Account Number</p>
-            <p className="text-[13px] font-bold text-[#181725] mt-0.5">—</p>
-          </div>
-          <div className="bg-[#F9FAFB] rounded-[10px] px-4 py-3">
-            <p className="text-[10px] font-semibold text-[#AEAEAE] uppercase tracking-wide">IFSC Code</p>
-            <p className="text-[13px] font-bold text-[#181725] mt-0.5">—</p>
+      ) : (
+        <div className="bg-white rounded-[14px] border border-[#EEEEEE] p-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-[#F9FAFB] flex items-center justify-center shrink-0">
+                <Building2 size={16} className="text-[#AEAEAE]" />
+              </div>
+              <div>
+                <p className="text-[13px] font-bold text-[#181725]">Bank Account (for settlements)</p>
+                <p className="text-[11px] text-[#AEAEAE] mt-0.5">No bank account configured yet. Add one to receive payouts.</p>
+              </div>
+            </div>
+            <Link
+              href="/vendor/settings"
+              className="h-[34px] px-4 bg-[#299E60] text-white rounded-[10px] text-[12px] font-bold hover:bg-[#238a54] transition-colors flex items-center gap-1.5 shrink-0"
+            >
+              <Settings size={13} />
+              Configure Bank Account
+            </Link>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Transaction history */}
       <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">

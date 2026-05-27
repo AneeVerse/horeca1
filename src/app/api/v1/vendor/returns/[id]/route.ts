@@ -21,6 +21,8 @@ const reviewSchema = z.object({
   status: z.enum(['approved', 'rejected']),
   adminNote: z.string().max(1000).optional(),
   refundAmount: z.number().min(0).optional(),
+  resolutionType: z.enum(['refund', 'credit_note', 'replacement']).optional().default('refund'),
+  creditNoteAmount: z.number().positive().optional(),
 });
 
 export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
@@ -46,19 +48,42 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      // Build resolution-specific data
+      const resolutionData: {
+        resolutionType?: string;
+        creditNoteNumber?: string;
+        creditNoteAmount?: number;
+        refundAmount?: number;
+      } = {};
+
+      if (body.status === 'approved') {
+        resolutionData.resolutionType = body.resolutionType;
+
+        if (body.resolutionType === 'credit_note') {
+          const creditNoteNumber = `CN-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+          resolutionData.creditNoteNumber = creditNoteNumber;
+          if (body.creditNoteAmount !== undefined) {
+            resolutionData.creditNoteAmount = body.creditNoteAmount;
+          }
+        } else if (body.resolutionType === 'refund' && body.refundAmount !== undefined) {
+          resolutionData.refundAmount = body.refundAmount;
+        }
+        // replacement: only store resolutionType, no financial data
+      }
+
       const result = await tx.returnRequest.update({
         where: { id: returnId },
         data: {
           status: body.status,
           adminNote: body.adminNote,
-          ...(body.refundAmount !== undefined && { refundAmount: body.refundAmount }),
+          ...resolutionData,
         },
       });
 
-      // Ledger adjustment: if approved with a refundAmount on a credit order,
-      // reduce the customer's outstanding credit balance.
+      // Ledger adjustment for refund on a credit order
       if (
         body.status === 'approved' &&
+        body.resolutionType === 'refund' &&
         body.refundAmount &&
         body.refundAmount > 0 &&
         returnReq.order.paymentMethod === 'credit'
@@ -84,6 +109,39 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
               amount: refund,
               balanceAfter: newUsed,
               notes: `Return approved — refund of ₹${refund.toFixed(2)} applied`,
+            },
+          });
+        }
+      }
+
+      // Credit note: issue a credit transaction on the customer's credit account
+      if (
+        body.status === 'approved' &&
+        body.resolutionType === 'credit_note' &&
+        body.creditNoteAmount &&
+        body.creditNoteAmount > 0
+      ) {
+        const creditNoteNumber = resolutionData.creditNoteNumber!;
+        const creditAcc = await tx.creditAccount.findUnique({
+          where: {
+            userId_vendorId: { userId: returnReq.order.userId, vendorId },
+          },
+        });
+        if (creditAcc) {
+          const newUsed = Math.max(0, Number(creditAcc.creditUsed) - body.creditNoteAmount);
+          await tx.creditAccount.update({
+            where: { id: creditAcc.id },
+            data: { creditUsed: newUsed },
+          });
+          await tx.creditTransaction.create({
+            data: {
+              creditAccountId: creditAcc.id,
+              orderId: returnReq.order.id,
+              vendorId,
+              type: 'credit',
+              amount: body.creditNoteAmount,
+              balanceAfter: newUsed,
+              notes: `Credit note ${creditNoteNumber}`,
             },
           });
         }

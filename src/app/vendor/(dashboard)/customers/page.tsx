@@ -315,7 +315,24 @@ function EditModal({ customer, priceLists, onClose, onSave }: EditModalProps) {
   const [deliveryRoute, setDeliveryRoute] = useState(customer.deliveryRoute ?? '');
   const [paymentTerms, setPaymentTerms] = useState(customer.paymentTerms ?? '');
   const [notes, setNotes] = useState(customer.notes ?? '');
+  const [tags, setTags] = useState<string[]>(customer.tags ?? []);
+  const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const value = tagInput.trim().replace(/,$/, '');
+      if (value && !tags.includes(value)) {
+        setTags((prev) => [...prev, value]);
+      }
+      setTagInput('');
+    }
+  };
+
+  const removeTag = (tag: string) => {
+    setTags((prev) => prev.filter((t) => t !== tag));
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -331,6 +348,7 @@ function EditModal({ customer, priceLists, onClose, onSave }: EditModalProps) {
           deliveryRoute: deliveryRoute || null,
           paymentTerms: paymentTerms || null,
           notes: notes || null,
+          tags,
         }),
       });
       const json = await res.json();
@@ -436,6 +454,37 @@ function EditModal({ customer, priceLists, onClose, onSave }: EditModalProps) {
               rows={3}
               className="w-full px-3 py-2 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white resize-none"
             />
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-semibold text-[#7C7C7C] mb-1">Customer Tags</label>
+            <div className="w-full min-h-[40px] px-3 py-2 rounded-[10px] border border-[#EEEEEE] bg-white flex flex-wrap gap-1.5 items-center focus-within:border-[#299E60]/50">
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full"
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => removeTag(tag)}
+                    className="hover:text-blue-900 transition-colors"
+                    aria-label={`Remove tag ${tag}`}
+                  >
+                    <X size={10} />
+                  </button>
+                </span>
+              ))}
+              <input
+                type="text"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={handleTagKeyDown}
+                placeholder={tags.length === 0 ? 'Type and press Enter…' : ''}
+                className="flex-1 min-w-[120px] text-[13px] outline-none bg-transparent placeholder:text-[#AEAEAE]"
+              />
+            </div>
+            <p className="text-[11px] text-[#AEAEAE] mt-1">Press Enter or comma to add a tag</p>
           </div>
 
           {/* Tasks & Reminders section */}
@@ -598,6 +647,18 @@ export default function VendorCustomersPage() {
                             {c.user.businessName ?? c.user.fullName}
                           </p>
                           <p className="text-[#AEAEAE] truncate">{c.user.email ?? c.user.phone ?? '—'}</p>
+                          {c.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {c.tags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         {dueCustomerIds.has(c.id) && (
                           <Bell

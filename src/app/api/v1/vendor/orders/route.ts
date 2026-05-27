@@ -20,12 +20,29 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     const search = params.get('search') || undefined;
     const cursor = params.get('cursor') || undefined;
     const limit = Math.min(Number(params.get('limit')) || 20, 50);
+    const dateFrom = params.get('dateFrom') || undefined;
+    const dateTo = params.get('dateTo') || undefined;
+    const paymentStatus = params.get('paymentStatus') || undefined;
+
+    // Build createdAt filter — merge dateFrom + dateTo into one object
+    const createdAtFilter: { gte?: Date; lte?: Date } = {};
+    if (dateFrom) createdAtFilter.gte = new Date(dateFrom);
+    if (dateTo) createdAtFilter.lte = new Date(dateTo + 'T23:59:59Z');
+    const hasDateFilter = dateFrom || dateTo;
 
     // Build where clause
     const where: Record<string, unknown> = {
       vendorId,
       ...(status && { status }),
-      ...(search && { orderNumber: { contains: search, mode: 'insensitive' } }),
+      ...(search && {
+        OR: [
+          { orderNumber: { contains: search, mode: 'insensitive' } },
+          { user: { fullName: { contains: search, mode: 'insensitive' } } },
+          { user: { phone: { contains: search, mode: 'insensitive' } } },
+        ],
+      }),
+      ...(hasDateFilter && { createdAt: createdAtFilter }),
+      ...(paymentStatus && { paymentStatus }),
     };
 
     const orders = await prisma.order.findMany({

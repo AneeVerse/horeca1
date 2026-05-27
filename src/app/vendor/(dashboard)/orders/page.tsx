@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Search, Loader2, Eye, CheckCircle2, ChevronRight, ChevronLeft, AlertTriangle, Download } from 'lucide-react';
+import { Search, Loader2, Eye, CheckCircle2, ChevronRight, ChevronLeft, AlertTriangle, Download, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -65,19 +65,25 @@ export default function VendorOrdersPage() {
     const [cursor, setCursor] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(false);
     const [accepting, setAccepting] = useState<string | null>(null);
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+    const [paymentStatusFilter, setPaymentStatusFilter] = useState('');
 
     // Cursors stack for "back" pagination
     const [cursorStack, setCursorStack] = useState<string[]>([]);
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const fetchOrders = useCallback((opts: { tab: string; q: string; cur?: string | null; silent?: boolean }) => {
+    const fetchOrders = useCallback((opts: { tab: string; q: string; cur?: string | null; silent?: boolean; from?: string; to?: string; payment?: string }) => {
         if (!opts.silent) setLoading(true);
         const url = new URL('/api/v1/vendor/orders', window.location.origin);
         url.searchParams.set('limit', String(PAGE_SIZE));
         if (opts.tab !== 'all') url.searchParams.set('status', opts.tab);
         if (opts.q.trim()) url.searchParams.set('search', opts.q.trim());
         if (opts.cur) url.searchParams.set('cursor', opts.cur);
+        if (opts.from) url.searchParams.set('dateFrom', opts.from);
+        if (opts.to) url.searchParams.set('dateTo', opts.to);
+        if (opts.payment) url.searchParams.set('paymentStatus', opts.payment);
 
         fetch(url.toString())
             .then(res => res.json())
@@ -95,7 +101,7 @@ export default function VendorOrdersPage() {
     // Re-fetch when tab changes (immediate)
     useEffect(() => {
         setCursorStack([]);
-        fetchOrders({ tab: activeTab, q: searchQuery });
+        fetchOrders({ tab: activeTab, q: searchQuery, from: dateFrom, to: dateTo, payment: paymentStatusFilter });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab]);
 
@@ -104,11 +110,18 @@ export default function VendorOrdersPage() {
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
             setCursorStack([]);
-            fetchOrders({ tab: activeTab, q: searchQuery });
+            fetchOrders({ tab: activeTab, q: searchQuery, from: dateFrom, to: dateTo, payment: paymentStatusFilter });
         }, 300);
         return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchQuery]);
+
+    // Re-fetch when date/payment filters change
+    useEffect(() => {
+        setCursorStack([]);
+        fetchOrders({ tab: activeTab, q: searchQuery, from: dateFrom, to: dateTo, payment: paymentStatusFilter });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dateFrom, dateTo, paymentStatusFilter]);
 
     const handleTabChange = (tab: string) => {
         setActiveTab(tab);
@@ -123,14 +136,14 @@ export default function VendorOrdersPage() {
     const handleNextPage = () => {
         if (!cursor) return;
         setCursorStack(prev => [...prev, orders[0]?.id ?? '']);
-        fetchOrders({ tab: activeTab, q: searchQuery, cur: cursor });
+        fetchOrders({ tab: activeTab, q: searchQuery, cur: cursor, from: dateFrom, to: dateTo, payment: paymentStatusFilter });
     };
 
     const handlePrevPage = () => {
         const stack = [...cursorStack];
         stack.pop();
         setCursorStack(stack);
-        fetchOrders({ tab: activeTab, q: searchQuery, cur: stack[stack.length - 1] ?? null });
+        fetchOrders({ tab: activeTab, q: searchQuery, cur: stack[stack.length - 1] ?? null, from: dateFrom, to: dateTo, payment: paymentStatusFilter });
     };
 
     const handleAccept = async (order: VendorOrder) => {
@@ -155,6 +168,14 @@ export default function VendorOrdersPage() {
     };
 
     const isFirstPage = cursorStack.length === 0;
+    const today = new Date().toISOString().slice(0, 10);
+    const hasActiveFilters = dateFrom || dateTo || paymentStatusFilter;
+
+    const clearFilters = () => {
+        setDateFrom('');
+        setDateTo('');
+        setPaymentStatusFilter('');
+    };
 
     const exportCsv = () => {
         if (orders.length === 0) return;
@@ -194,7 +215,7 @@ export default function VendorOrdersPage() {
                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={15} />
                         <input
                             type="text"
-                            placeholder="Search by order number..."
+                            placeholder="Search order / customer..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="h-[40px] w-full bg-white border border-[#EEEEEE] rounded-[10px] pl-10 pr-4 text-[13px] outline-none placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 shadow-sm"
@@ -228,6 +249,47 @@ export default function VendorOrdersPage() {
                         {tab}
                     </button>
                 ))}
+            </div>
+
+            {/* Filter controls */}
+            <div className="flex items-center gap-3 flex-wrap">
+                <input
+                    type="date"
+                    value={dateFrom}
+                    max={today}
+                    onChange={e => setDateFrom(e.target.value)}
+                    title="From date"
+                    className="h-[36px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] text-[#181725] outline-none focus:border-[#299E60]/40 bg-white shadow-sm"
+                />
+                <input
+                    type="date"
+                    value={dateTo}
+                    min={dateFrom || undefined}
+                    max={today}
+                    onChange={e => setDateTo(e.target.value)}
+                    title="To date"
+                    className="h-[36px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] text-[#181725] outline-none focus:border-[#299E60]/40 bg-white shadow-sm"
+                />
+                <select
+                    value={paymentStatusFilter}
+                    onChange={e => setPaymentStatusFilter(e.target.value)}
+                    className="h-[36px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] text-[#7C7C7C] outline-none focus:border-[#299E60]/40 bg-white shadow-sm"
+                >
+                    <option value="">All Payments</option>
+                    <option value="paid">Paid</option>
+                    <option value="unpaid">Unpaid</option>
+                    <option value="partial">Partial</option>
+                    <option value="refunded">Refunded</option>
+                </select>
+                {hasActiveFilters && (
+                    <button
+                        onClick={clearFilters}
+                        className="h-[36px] px-3 rounded-[10px] border border-[#EEEEEE] bg-white text-[12px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] flex items-center gap-1.5 transition-all"
+                    >
+                        <X size={12} />
+                        Clear
+                    </button>
+                )}
             </div>
 
             {/* Table */}

@@ -13,6 +13,9 @@ interface ReturnRequest {
     reason: string;
     adminNote: string | null;
     refundAmount: string | null;
+    resolutionType: 'refund' | 'credit_note' | 'replacement' | null;
+    creditNoteNumber: string | null;
+    creditNoteAmount: string | null;
     createdAt: string;
     order: { id: string; orderNumber: string; totalAmount: string };
     customer: { id: string; fullName: string; email: string; businessName?: string | null };
@@ -31,6 +34,9 @@ function ReviewModal({
 }) {
     const [note, setNote] = useState('');
     const [refundAmount, setRefundAmount] = useState(String(Number(request.order.totalAmount)));
+    const [creditNoteAmount, setCreditNoteAmount] = useState(String(Number(request.order.totalAmount)));
+    const [replacementNotes, setReplacementNotes] = useState('');
+    const [resolutionType, setResolutionType] = useState<'refund' | 'credit_note' | 'replacement'>('refund');
     const [action, setAction] = useState<'approved' | 'rejected' | null>(null);
     const [saving, setSaving] = useState(false);
 
@@ -39,7 +45,16 @@ function ReviewModal({
         setSaving(true);
         try {
             const body: Record<string, unknown> = { status: action, adminNote: note.trim() || undefined };
-            if (action === 'approved') body.refundAmount = parseFloat(refundAmount) || 0;
+            if (action === 'approved') {
+                body.resolutionType = resolutionType;
+                if (resolutionType === 'refund') {
+                    body.refundAmount = parseFloat(refundAmount) || 0;
+                } else if (resolutionType === 'credit_note') {
+                    body.creditNoteAmount = parseFloat(creditNoteAmount) || 0;
+                } else if (resolutionType === 'replacement' && replacementNotes.trim()) {
+                    body.adminNote = replacementNotes.trim();
+                }
+            }
             const res = await fetch(`/api/v1/vendor/returns/${request.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
@@ -92,18 +107,73 @@ function ReviewModal({
                         </div>
                     </div>
 
-                    {/* Refund amount — only when approving */}
+                    {/* Resolution type + conditional inputs — only when approving */}
                     {action === 'approved' && (
-                        <div>
-                            <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">Refund Amount (₹)</label>
-                            <input
-                                type="number"
-                                value={refundAmount}
-                                onChange={e => setRefundAmount(e.target.value)}
-                                className="mt-1.5 w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-bold outline-none focus:border-[#299E60]/50"
-                            />
-                            <p className="text-[11px] text-[#AEAEAE] mt-1">Order total: ₹{Number(request.order.totalAmount).toLocaleString('en-IN')}</p>
-                        </div>
+                        <>
+                            {/* Resolution type selector */}
+                            <div>
+                                <p className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide mb-2">Resolution Type</p>
+                                <div className="flex gap-2">
+                                    {(['refund', 'credit_note', 'replacement'] as const).map(type => (
+                                        <button
+                                            key={type}
+                                            type="button"
+                                            onClick={() => setResolutionType(type)}
+                                            className={cn(
+                                                'flex-1 h-[36px] rounded-[10px] text-[12px] font-bold border transition-all',
+                                                resolutionType === type
+                                                    ? 'bg-[#299E60] text-white border-[#299E60]'
+                                                    : 'bg-white text-[#7C7C7C] border-[#EEEEEE] hover:bg-[#EEF8F1]'
+                                            )}
+                                        >
+                                            {type === 'refund' ? 'Refund' : type === 'credit_note' ? 'Credit Note' : 'Replacement'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Refund amount */}
+                            {resolutionType === 'refund' && (
+                                <div>
+                                    <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">Refund Amount (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={refundAmount}
+                                        onChange={e => setRefundAmount(e.target.value)}
+                                        className="mt-1.5 w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-bold outline-none focus:border-[#299E60]/50"
+                                    />
+                                    <p className="text-[11px] text-[#AEAEAE] mt-1">Order total: ₹{Number(request.order.totalAmount).toLocaleString('en-IN')}</p>
+                                </div>
+                            )}
+
+                            {/* Credit note amount */}
+                            {resolutionType === 'credit_note' && (
+                                <div>
+                                    <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">Credit Note Amount (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={creditNoteAmount}
+                                        onChange={e => setCreditNoteAmount(e.target.value)}
+                                        className="mt-1.5 w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-bold outline-none focus:border-[#299E60]/50"
+                                    />
+                                    <p className="text-[11px] text-[#AEAEAE] mt-1">Pre-filled from order total: ₹{Number(request.order.totalAmount).toLocaleString('en-IN')}</p>
+                                </div>
+                            )}
+
+                            {/* Replacement dispatch notes */}
+                            {resolutionType === 'replacement' && (
+                                <div>
+                                    <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">Replacement Dispatch Notes</label>
+                                    <textarea
+                                        value={replacementNotes}
+                                        onChange={e => setReplacementNotes(e.target.value)}
+                                        rows={2}
+                                        placeholder="e.g. Replacement to be dispatched within 2 days..."
+                                        className="mt-1.5 w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[13px] outline-none focus:border-[#299E60]/50 resize-none"
+                                    />
+                                </div>
+                            )}
+                        </>
                     )}
 
                     {/* Note */}
@@ -129,7 +199,11 @@ function ReviewModal({
                             )}
                         >
                             {saving ? <Loader2 size={14} className="animate-spin" /> : null}
-                            {action === 'approved' ? 'Approve & Set Refund' : action === 'rejected' ? 'Reject Return' : 'Select Decision'}
+                            {action === 'approved'
+                                ? resolutionType === 'credit_note' ? 'Approve & Issue Credit Note'
+                                : resolutionType === 'replacement' ? 'Approve & Dispatch Replacement'
+                                : 'Approve & Set Refund'
+                                : action === 'rejected' ? 'Reject Return' : 'Select Decision'}
                         </button>
                     </div>
                 </div>
@@ -248,7 +322,7 @@ export default function VendorReturnsPage() {
                                     <th className="px-5 py-3 text-left text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Customer</th>
                                     <th className="px-5 py-3 text-left text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Reason</th>
                                     <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Date</th>
-                                    <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Refund</th>
+                                    <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Resolution</th>
                                     <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Status</th>
                                     <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Actions</th>
                                 </tr>
@@ -275,8 +349,32 @@ export default function VendorReturnsPage() {
                                         <td className="px-5 py-4 text-center text-[12px] text-[#AEAEAE]">
                                             {new Date(req.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                                         </td>
-                                        <td className="px-5 py-4 text-center text-[13px] font-bold text-[#181725]">
-                                            {req.refundAmount ? `₹${Number(req.refundAmount).toLocaleString('en-IN')}` : '—'}
+                                        <td className="px-5 py-4 text-center">
+                                            {req.status === 'approved' && req.resolutionType ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <span className={cn(
+                                                        'text-[10px] font-bold px-2 py-0.5 rounded-[5px] uppercase tracking-wide',
+                                                        req.resolutionType === 'refund' ? 'bg-[#EEF8F1] text-[#299E60]'
+                                                        : req.resolutionType === 'credit_note' ? 'bg-blue-50 text-blue-600'
+                                                        : 'bg-amber-50 text-amber-600'
+                                                    )}>
+                                                        {req.resolutionType === 'credit_note' ? 'Credit Note' : req.resolutionType === 'replacement' ? 'Replacement' : 'Refund'}
+                                                    </span>
+                                                    {req.resolutionType === 'refund' && req.refundAmount && (
+                                                        <span className="text-[12px] font-bold text-[#181725]">₹{Number(req.refundAmount).toLocaleString('en-IN')}</span>
+                                                    )}
+                                                    {req.resolutionType === 'credit_note' && req.creditNoteNumber && (
+                                                        <span className="text-[10px] text-[#AEAEAE] font-mono">{req.creditNoteNumber}</span>
+                                                    )}
+                                                    {req.resolutionType === 'credit_note' && req.creditNoteAmount && (
+                                                        <span className="text-[12px] font-bold text-blue-600">₹{Number(req.creditNoteAmount).toLocaleString('en-IN')}</span>
+                                                    )}
+                                                </div>
+                                            ) : req.refundAmount ? (
+                                                <span className="text-[13px] font-bold text-[#181725]">₹{Number(req.refundAmount).toLocaleString('en-IN')}</span>
+                                            ) : (
+                                                <span className="text-[13px] text-[#AEAEAE]">—</span>
+                                            )}
                                         </td>
                                         <td className="px-5 py-4 text-center">
                                             <span className={cn('inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-[6px] capitalize', STATUS_STYLE[req.status])}>

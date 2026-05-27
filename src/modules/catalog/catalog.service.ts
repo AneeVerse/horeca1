@@ -158,6 +158,7 @@ export class CatalogService {
     unit?: string;
     sku?: string;
     hsn?: string;
+    fssaiRef?: string;
     brand?: string;
     barcode?: string;
     tags?: string[];
