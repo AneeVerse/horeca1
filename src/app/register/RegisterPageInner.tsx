@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { signIn } from 'next-auth/react';
+import { signIn, useSession } from 'next-auth/react';
 import {
   User, Store, Mail, Lock, Eye, EyeOff, Loader2, ArrowLeft, ArrowRight,
 } from 'lucide-react';
@@ -15,9 +15,19 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 type Step = 'form' | 'otp' | 'success';
 
 export default function RegisterPageInner() {
-  const router = useRouter();
   const params = useSearchParams();
   const redirectTo = params?.get('redirect') || null;
+  const { status: sessionStatus, data: session } = useSession();
+
+  // Already-logged-in users shouldn't see the register form.
+  useEffect(() => {
+    if (sessionStatus !== 'authenticated') return;
+    if (redirectTo) { window.location.href = redirectTo; return; }
+    const role = (session?.user as { role?: string } | undefined)?.role;
+    if (role === 'vendor') window.location.href = '/vendor/dashboard';
+    else if (role === 'admin') window.location.href = '/admin/dashboard';
+    else window.location.href = '/';
+  }, [sessionStatus, session, redirectTo]);
 
   const [step, setStep] = useState<Step>('form');
   const [isLoading, setIsLoading] = useState(false);
@@ -48,11 +58,10 @@ export default function RegisterPageInner() {
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
+  // Hard-navigate so SSR sees the new session cookie.
   const goPostLogin = useCallback(() => {
-    if (redirectTo) { router.replace(redirectTo); setTimeout(() => window.location.reload(), 150); return; }
-    router.replace('/');
-    setTimeout(() => window.location.reload(), 150);
-  }, [redirectTo, router]);
+    window.location.href = redirectTo || '/';
+  }, [redirectTo]);
 
   const handleSendOtp = async () => {
     setApiError('');

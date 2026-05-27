@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { signIn } from 'next-auth/react';
+import { signIn, useSession } from 'next-auth/react';
 import {
   AtSign, Mail, Lock, Eye, EyeOff, Loader2, ArrowLeft,
 } from 'lucide-react';
@@ -19,13 +19,25 @@ function looksLikeEmail(s: string) {
 type Step = 'form' | 'otp';
 
 export default function LoginPageInner() {
-  const router = useRouter();
   const params = useSearchParams();
   const redirectTo = params?.get('redirect') || null;
+  const { status: sessionStatus, data: session } = useSession();
 
   const [step, setStep] = useState<Step>('form');
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+
+  // If the user is already logged in, bounce them off the login page.
+  // Without this, navigating to /login while authenticated leaves you
+  // staring at a login form even though the navbar shows you're signed in.
+  useEffect(() => {
+    if (sessionStatus !== 'authenticated') return;
+    if (redirectTo) { window.location.href = redirectTo; return; }
+    const role = (session?.user as { role?: string } | undefined)?.role;
+    if (role === 'vendor') window.location.href = '/vendor/dashboard';
+    else if (role === 'admin') window.location.href = '/admin/dashboard';
+    else window.location.href = '/';
+  }, [sessionStatus, session, redirectTo]);
 
   const [identifier, setIdentifier] = useState('');
   const [usePassword, setUsePassword] = useState(false);
@@ -56,18 +68,20 @@ export default function LoginPageInner() {
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
+  // Hard-navigate so the new session cookie + role-based destination
+  // are picked up by SSR. router.replace + setTimeout(reload) was racing —
+  // half the time we'd land back on /login.
   const goPostLogin = useCallback(async () => {
-    if (redirectTo) { router.replace(redirectTo); setTimeout(() => window.location.reload(), 150); return; }
+    if (redirectTo) { window.location.href = redirectTo; return; }
     try {
       const res = await fetch('/api/v1/auth/me');
       const json = await res.json();
       const role = json?.data?.role;
-      if (role === 'vendor') router.replace('/vendor/dashboard');
-      else if (role === 'admin') router.replace('/admin/dashboard');
-      else router.replace('/');
-    } catch { router.replace('/'); }
-    setTimeout(() => window.location.reload(), 150);
-  }, [redirectTo, router]);
+      if (role === 'vendor') window.location.href = '/vendor/dashboard';
+      else if (role === 'admin') window.location.href = '/admin/dashboard';
+      else window.location.href = '/';
+    } catch { window.location.href = '/'; }
+  }, [redirectTo]);
 
   const handleSendOtp = async () => {
     setApiError('');
