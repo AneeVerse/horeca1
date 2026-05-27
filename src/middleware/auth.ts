@@ -19,6 +19,8 @@ export interface AuthContext {
   activeBusinessAccountId: string | null;
   activeBusinessAccountType: { isCustomer: boolean; isVendor: boolean; isBrand: boolean } | null;
   activeOutletId: string | null;
+  /** Empty = account-wide access. Non-empty = only these outlet IDs are accessible. */
+  accessibleOutletIds: string[];
   permissions: readonly PermissionKey[];
 }
 
@@ -44,6 +46,7 @@ export async function getAuthContext(req: NextRequest): Promise<AuthContext> {
     activeBusinessAccountType:
       (u.activeBusinessAccountType as { isCustomer: boolean; isVendor: boolean; isBrand: boolean }) ?? null,
     activeOutletId: (u.activeOutletId as string) ?? null,
+    accessibleOutletIds: Array.isArray(u.accessibleOutletIds) ? (u.accessibleOutletIds as string[]) : [],
     permissions: (u.permissions as PermissionKey[]) ?? [],
   };
 }

@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CartService, resolveCartContext } from '@/modules/cart/cart.service';
 import { addToCartSchema } from '@/modules/cart/cart.validator';
 import { withAuth } from '@/middleware/auth';
+import { requirePermission } from '@/lib/permissions/engine';
 import { errorResponse } from '@/middleware/errorHandler';
 
 const cartService = new CartService();
@@ -25,6 +26,9 @@ export const GET = withAuth(async (_req, ctx) => {
 
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
+    // Vendor/admin team members need explicit storefront.order permission to buy.
+    // Regular customers (role === 'customer') have unrestricted cart access.
+    if (ctx.role !== 'customer') requirePermission(ctx, 'storefront.order');
     const cartCtx = resolveCartContext(ctx);
     const body = await req.json();
     const { productId, vendorId, quantity } = addToCartSchema.parse(body);

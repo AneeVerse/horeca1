@@ -32,6 +32,7 @@ export const MODULES = {
   logistics:    ['view', 'edit'],
   auditLogs:    ['view'],
   settings:     ['view', 'edit'],
+  storefront:   ['view', 'order', 'pay'],
 } as const satisfies Record<string, readonly string[]>;
 
 export type Module = keyof typeof MODULES;

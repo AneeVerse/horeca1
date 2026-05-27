@@ -6,6 +6,7 @@ import {
   ChevronDown, LogOut, Loader2, ShieldCheck, Store, User,
   Sparkles, MapPin, Check, ChevronRight, AlertCircle, Plus,
 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { useBusinessAccountSwitcher, type AccountSummary } from '@/hooks/useBusinessAccountSwitcher';
 import { CreateBusinessAccountModal } from '@/components/auth/CreateBusinessAccountModal';
 
@@ -40,6 +41,22 @@ export function BusinessAccountSwitcherDropdown() {
     hcidDisplay, totalAccountCount, availableAccountsTruncated,
     switchAccount, switchOutlet, signOut,
   } = useBusinessAccountSwitcher();
+
+  // Per-outlet scoped users can only see their assigned outlets.
+  const { data: session } = useSession();
+  const sessionUser = (session?.user ?? {}) as Record<string, unknown>;
+  const accessibleOutletIds = Array.isArray(sessionUser.accessibleOutletIds)
+    ? (sessionUser.accessibleOutletIds as string[])
+    : [];
+
+  function filterOutlets(outlets: AccountSummary['outlets']) {
+    if (accessibleOutletIds.length === 0) return outlets;
+    return outlets.filter((o) => accessibleOutletIds.includes(o.id));
+  }
+
+  const visibleOutlets = filterOutlets(currentAccount?.outlets ?? []);
+  // Only show the outlet switcher if the user can switch between 2+ outlets.
+  const canSwitchOutlets = visibleOutlets.length > 1;
 
   const [isOpen, setIsOpen] = useState(false);
   const [showOutletPicker, setShowOutletPicker] = useState(false);
@@ -157,26 +174,41 @@ export function BusinessAccountSwitcherDropdown() {
           </div>
 
           {/* ── Outlet sub-section ── */}
-          {currentAccount && currentAccount.outlets.length > 0 && !showOutletPicker && (
-            <button
-              onClick={() => setShowOutletPicker(true)}
-              className="w-full px-4 py-3 border-b border-[#F0F0F0] hover:bg-[#F8F8F8] flex items-center gap-3 text-left transition-colors"
-            >
-              <div className="w-[32px] h-[32px] rounded-full bg-[#F5F5F5] flex items-center justify-center shrink-0">
-                <MapPin size={14} className="text-[#666]" />
+          {visibleOutlets.length > 0 && !showOutletPicker && (
+            canSwitchOutlets ? (
+              <button
+                onClick={() => setShowOutletPicker(true)}
+                className="w-full px-4 py-3 border-b border-[#F0F0F0] hover:bg-[#F8F8F8] flex items-center gap-3 text-left transition-colors"
+              >
+                <div className="w-[32px] h-[32px] rounded-full bg-[#F5F5F5] flex items-center justify-center shrink-0">
+                  <MapPin size={14} className="text-[#666]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wider">Active Outlet</p>
+                  <p className="text-[13px] font-semibold text-[#181725] truncate">
+                    {currentOutlet?.name ?? 'No outlet selected'}
+                  </p>
+                </div>
+                <ChevronRight size={14} className="text-[#AEAEAE] shrink-0" />
+              </button>
+            ) : (
+              /* Single accessible outlet — show read-only, no switcher arrow */
+              <div className="w-full px-4 py-3 border-b border-[#F0F0F0] flex items-center gap-3">
+                <div className="w-[32px] h-[32px] rounded-full bg-[#F5F5F5] flex items-center justify-center shrink-0">
+                  <MapPin size={14} className="text-[#666]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wider">Active Outlet</p>
+                  <p className="text-[13px] font-semibold text-[#181725] truncate">
+                    {currentOutlet?.name ?? visibleOutlets[0]?.name ?? 'No outlet selected'}
+                  </p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wider">Active Outlet</p>
-                <p className="text-[13px] font-semibold text-[#181725] truncate">
-                  {currentOutlet?.name ?? 'No outlet selected'}
-                </p>
-              </div>
-              <ChevronRight size={14} className="text-[#AEAEAE] shrink-0" />
-            </button>
+            )
           )}
 
           {/* ── Outlet picker ── */}
-          {showOutletPicker && currentAccount && (
+          {showOutletPicker && canSwitchOutlets && (
             <div className="border-b border-[#F0F0F0]">
               <div className="px-4 py-2 flex items-center justify-between">
                 <p className="text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wider">Select Outlet</p>
@@ -188,7 +220,7 @@ export function BusinessAccountSwitcherDropdown() {
                 </button>
               </div>
               <div className="max-h-[200px] overflow-y-auto">
-                {currentAccount.outlets.map((o) => (
+                {visibleOutlets.map((o) => (
                   <button
                     key={o.id}
                     onClick={() => handleOutletClick(o.id)}
@@ -249,9 +281,9 @@ export function BusinessAccountSwitcherDropdown() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-semibold text-[#181725] truncate">{name}</p>
-                        {a.outlets.length > 0 && (
+                        {filterOutlets(a.outlets).length > 0 && (
                           <p className="text-[11px] text-[#AEAEAE] truncate">
-                            {a.outlets.length} outlet{a.outlets.length === 1 ? '' : 's'}
+                            {filterOutlets(a.outlets).length} outlet{filterOutlets(a.outlets).length === 1 ? '' : 's'}
                           </p>
                         )}
                       </div>

@@ -4,6 +4,7 @@ import { PrismaAdapter } from '@auth/prisma-adapter';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { loadActiveContext, type ActiveContext } from '@/lib/activeContext';
+import { redis } from '@/lib/redis';
 import { provisionDefaultAccount } from '@/lib/provisionAccount';
 import { uniqueHcid } from '@/lib/hcid';
 import { flatten } from '@/lib/permissions/engine';
@@ -211,6 +212,29 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
       }
 
+      // Stale-session check: after any permission change the write path sets
+      // a short-lived Redis key for this user. On the next auth() call (including
+      // periodic updateSession() calls from the layout) we detect it and reload
+      // permissions immediately — no logout/login required.
+      if (token.id && !user) {
+        try {
+          const staleKey = `session:stale:${token.id as string}`;
+          const isStale = await redis.get(staleKey);
+          if (isStale) {
+            await redis.del(staleKey);
+            const active = await loadActiveContext(
+              token.id as string,
+              (token.activeBusinessAccountId as string | null) ?? null,
+              (token.activeOutletId as string | null) ?? null,
+            );
+            applyActiveContext(token, active);
+            if (token.role === 'admin') await applyAdminPermissions(token);
+          }
+        } catch (err) {
+          console.error('[auth.jwt] stale-session check failed:', err);
+        }
+      }
+
       // Session.update({ activeBusinessAccountId, activeOutletId }) — used by switch endpoints
       // AND by the generic updateSession() refresh path (e.g. after "Become a vendor",
       // after admin approval, etc). The role refresh below MUST run independently of
@@ -272,6 +296,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (token.activeBusinessAccountId) u.activeBusinessAccountId = token.activeBusinessAccountId as string;
         if (token.activeBusinessAccountType) u.activeBusinessAccountType = token.activeBusinessAccountType as Record<string, boolean>;
         if (token.activeOutletId) u.activeOutletId = token.activeOutletId as string;
+        if (Array.isArray(token.accessibleOutletIds)) u.accessibleOutletIds = token.accessibleOutletIds as string[];
         if (token.permissions) u.permissions = token.permissions as string[];
         if (token.availableAccounts) u.availableAccounts = token.availableAccounts as unknown[];
         if (typeof token.availableAccountsTruncated === 'boolean') u.availableAccountsTruncated = token.availableAccountsTruncated;
@@ -338,6 +363,7 @@ function applyActiveContext(token: Record<string, unknown>, active: ActiveContex
     delete token.activeBusinessAccountId;
     delete token.activeBusinessAccountType;
     delete token.activeOutletId;
+    delete token.accessibleOutletIds;
     delete token.permissions;
     delete token.availableAccounts;
     delete token.availableAccountsTruncated;
@@ -348,6 +374,7 @@ function applyActiveContext(token: Record<string, unknown>, active: ActiveContex
   token.activeBusinessAccountId = active.activeBusinessAccountId;
   token.activeBusinessAccountType = active.activeBusinessAccountType;
   token.activeOutletId = active.activeOutletId;
+  token.accessibleOutletIds = active.accessibleOutletIds;
   token.permissions = active.permissions;
   token.availableAccounts = active.availableAccounts;
   token.availableAccountsTruncated = active.availableAccountsTruncated;

@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { OrderService } from '@/modules/order/order.service';
 import { createOrderSchema, listOrdersSchema } from '@/modules/order/order.validator';
 import { withAuth } from '@/middleware/auth';
+import { requirePermission } from '@/lib/permissions/engine';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { checkRateLimit } from '@/lib/rateLimit';
 
@@ -38,6 +39,8 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
 // POST — create purchase order (the checkout action)
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
+    // Vendor/admin team members need explicit storefront.order to place orders.
+    if (ctx.role !== 'customer') requirePermission(ctx, 'storefront.order');
     // Rate limit: 10 orders per user per minute (prevents checkout spam)
     const { allowed } = await checkRateLimit(`order:${ctx.userId}`, 10, 60000);
     if (!allowed) {

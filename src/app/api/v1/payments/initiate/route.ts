@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { PaymentService } from '@/modules/payment/payment.service';
 import { withAuth } from '@/middleware/auth';
+import { requirePermission } from '@/lib/permissions/engine';
 import { errorResponse } from '@/middleware/errorHandler';
 import { checkRateLimit } from '@/lib/rateLimit';
 
@@ -22,6 +23,8 @@ const paymentService = new PaymentService();
 
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
+    // Vendor/admin team members need explicit storefront.pay to initiate payments.
+    if (ctx.role !== 'customer') requirePermission(ctx, 'storefront.pay');
     // Rate limit: 10 payment initiations per user per minute
     const { allowed } = await checkRateLimit(`payment:${ctx.userId}`, 10, 60000);
     if (!allowed) {

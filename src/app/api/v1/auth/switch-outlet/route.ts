@@ -18,6 +18,11 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     if (!ctx.activeBusinessAccountId) throw Errors.forbidden('No active business account on the session');
     const { outletId } = Body.parse(await req.json().catch(() => ({})));
 
+    // Per-outlet scoped users may only switch to outlets they have a UserRole for.
+    if (ctx.accessibleOutletIds.length > 0 && !ctx.accessibleOutletIds.includes(outletId)) {
+      throw Errors.forbidden('You do not have access to that outlet');
+    }
+
     const outlet = await prisma.outlet.findFirst({
       where: { id: outletId, businessAccountId: ctx.activeBusinessAccountId },
       select: { id: true, requiresAddressUpdate: true },

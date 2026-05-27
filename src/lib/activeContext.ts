@@ -24,6 +24,9 @@ export interface ActiveContext {
   activeBusinessAccountId: string;
   activeBusinessAccountType: { isCustomer: boolean; isVendor: boolean; isBrand: boolean };
   activeOutletId: string | null;
+  /** Non-empty only when the user has per-outlet UserRole scoping (no account-wide null outletId role).
+   * Empty array means the user has account-wide access and can switch to any outlet. */
+  accessibleOutletIds: string[];
   permissions: PermissionKey[];
   availableAccounts: AvailableAccountSummary[];
   availableAccountsTruncated: boolean;
@@ -87,24 +90,56 @@ export async function loadActiveContext(
     if (!chosen) chosen = memberships[0];
     const account = chosen.businessAccount;
 
+    // Determine which outlets this user can actually access by inspecting their
+    // UserRole rows for this account. Storefront-access roles (named "Storefront (*)")
+    // are intentionally excluded — they grant buyer privileges, not outlet scope.
+    const allUserRoles = await prisma.userRole.findMany({
+      where: { userId, businessAccountId: account.id, role: { name: { not: { startsWith: 'Storefront' } } } },
+      select: { outletId: true },
+    });
+    const hasAccountWideRole = allUserRoles.some(r => r.outletId === null);
+    const outletScopedIds = [...new Set(
+      allUserRoles.filter(r => r.outletId !== null).map(r => r.outletId!)
+    )];
+    // accessibleOutletIds is empty when user has account-wide access.
+    const accessibleOutletIds = hasAccountWideRole ? [] : outletScopedIds;
+
     // Pick the active outlet within the chosen account.
-    // Validate targetOutletId belongs to the account; else fall back to primary.
-    let activeOutletId: string | null = account.primaryOutletId;
+    // For per-outlet users: auto-pick their accessible outlet, validate targets against it.
+    let activeOutletId: string | null = null;
+
     if (targetOutletId) {
-      const ok = await prisma.outlet.findFirst({
-        where: { id: targetOutletId, businessAccountId: account.id },
-        select: { id: true },
-      });
-      if (ok) activeOutletId = ok.id;
+      const canUse = accessibleOutletIds.length === 0 || accessibleOutletIds.includes(targetOutletId);
+      if (canUse) {
+        const ok = await prisma.outlet.findFirst({
+          where: { id: targetOutletId, businessAccountId: account.id },
+          select: { id: true },
+        });
+        if (ok) activeOutletId = ok.id;
+      }
     }
-    // If no primary set and no valid target, pick the first outlet of the account.
+
     if (!activeOutletId) {
-      const first = await prisma.outlet.findFirst({
-        where: { businessAccountId: account.id },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true },
-      });
-      activeOutletId = first?.id ?? null;
+      if (accessibleOutletIds.length > 0) {
+        // Per-outlet user: pick their first accessible outlet (ignore account primaryOutletId).
+        const ok = await prisma.outlet.findFirst({
+          where: { id: { in: accessibleOutletIds }, businessAccountId: account.id, isActive: true },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        });
+        activeOutletId = ok?.id ?? null;
+      } else {
+        // Account-wide user: pick primary or first outlet.
+        activeOutletId = account.primaryOutletId;
+        if (!activeOutletId) {
+          const first = await prisma.outlet.findFirst({
+            where: { businessAccountId: account.id },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true },
+          });
+          activeOutletId = first?.id ?? null;
+        }
+      }
     }
 
     // Compute the flattened permission set: union of every UserRole row that applies.
@@ -147,6 +182,7 @@ export async function loadActiveContext(
         isBrand: account.isBrand,
       },
       activeOutletId,
+      accessibleOutletIds,
       permissions,
       availableAccounts,
       availableAccountsTruncated,

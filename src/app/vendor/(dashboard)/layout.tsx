@@ -55,23 +55,23 @@ import { VendorOutletStrip } from '@/components/vendor/VendorOutletStrip';
 import { PostLoginAccountSelector } from '@/components/auth/PostLoginAccountSelector';
 
 const SIDEBAR_LINKS = [
-    { name: 'Dashboard', icon: LayoutDashboard, href: '/vendor/dashboard' },
-    { name: 'Orders', icon: ShoppingBag, href: '/vendor/orders' },
-    { name: 'Products', icon: Package, href: '/vendor/products' },
-    { name: 'Bulk Upload', icon: Upload, href: '/vendor/bulk-upload' },
-    { name: 'Brand Mappings', icon: GitMerge, href: '/vendor/brand-mappings' },
-    { name: 'Inventory', icon: Warehouse, href: '/vendor/inventory' },
-    { name: 'Collections', icon: Landmark, href: '/vendor/collections' },
-    { name: 'Returns', icon: RotateCcw, href: '/vendor/returns' },
-    { name: 'Customers', icon: UserCircle, href: '/vendor/customers' },
-    { name: 'Price Lists', icon: Tag, href: '/vendor/price-lists' },
-    { name: 'Promotions', icon: Gift, href: '/vendor/promotions' },
-    { name: 'Wallet', icon: Wallet, href: '/vendor/wallet' },
-    { name: 'Ledger', icon: BookOpen, href: '/vendor/ledger' },
-    { name: 'Reports', icon: BarChart3, href: '/vendor/reports' },
-    { name: 'Notifications', icon: Bell, href: '/vendor/notifications' },
-    { name: 'Team', icon: Users, href: '/vendor/team' },
-    { name: 'Settings', icon: Settings, href: '/vendor/settings' },
+    { name: 'Dashboard',     icon: LayoutDashboard, href: '/vendor/dashboard',      perm: 'dashboard.view' },
+    { name: 'Orders',        icon: ShoppingBag,     href: '/vendor/orders',         perm: 'orders.view' },
+    { name: 'Products',      icon: Package,         href: '/vendor/products',       perm: 'products.view' },
+    { name: 'Bulk Upload',   icon: Upload,          href: '/vendor/bulk-upload',    perm: 'products.create' },
+    { name: 'Brand Mappings',icon: GitMerge,        href: '/vendor/brand-mappings', perm: 'products.view' },
+    { name: 'Inventory',     icon: Warehouse,       href: '/vendor/inventory',      perm: 'inventory.view' },
+    { name: 'Collections',   icon: Landmark,        href: '/vendor/collections',    perm: 'products.view' },
+    { name: 'Returns',       icon: RotateCcw,       href: '/vendor/returns',        perm: 'orders.view' },
+    { name: 'Customers',     icon: UserCircle,      href: '/vendor/customers',      perm: 'customers.view' },
+    { name: 'Price Lists',   icon: Tag,             href: '/vendor/price-lists',    perm: 'products.view' },
+    { name: 'Promotions',    icon: Gift,            href: '/vendor/promotions',     perm: 'promotions.view' },
+    { name: 'Wallet',        icon: Wallet,          href: '/vendor/wallet',         perm: 'payments.view' },
+    { name: 'Ledger',        icon: BookOpen,        href: '/vendor/ledger',         perm: 'payments.view' },
+    { name: 'Reports',       icon: BarChart3,       href: '/vendor/reports',        perm: 'analytics.view' },
+    { name: 'Notifications', icon: Bell,            href: '/vendor/notifications',  perm: null },
+    { name: 'Team',          icon: Users,           href: '/vendor/team',           perm: 'users.view' },
+    { name: 'Settings',      icon: Settings,        href: '/vendor/settings',       perm: 'settings.view' },
 ];
 
 export default function VendorLayout({
@@ -81,14 +81,36 @@ export default function VendorLayout({
 }) {
     const pathname = usePathname();
     const router = useRouter();
-    const { data: session, status } = useSession();
+    const { data: session, status, update: updateSession } = useSession();
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [adminVendorName, setAdminVendorName] = useState<string | null>(null);
+
+    // Filter sidebar links by the user's permission set.
+    // Empty array means no restrictions yet (owner/legacy) — show all.
+    const sessionPerms = ((session?.user as Record<string, unknown>)?.permissions as string[] | undefined) ?? [];
+    const visibleLinks = sessionPerms.length === 0
+        ? SIDEBAR_LINKS
+        : SIDEBAR_LINKS.filter(link => !link.perm || sessionPerms.includes(link.perm));
 
     React.useEffect(() => {
         const match = document.cookie.match(/(?:^|;\s*)admin_impersonate_vendor_name=([^;]+)/);
         setAdminVendorName(match ? decodeURIComponent(match[1]) : null);
     }, []);
+
+    // Refresh permissions automatically so role/outlet changes by an admin
+    // propagate to the browser without requiring logout/login.
+    React.useEffect(() => {
+        if (status !== 'authenticated') return;
+        const lastRef = { t: Date.now() };
+        const refresh = () => {
+            if (Date.now() - lastRef.t < 30_000) return; // debounce
+            lastRef.t = Date.now();
+            updateSession();
+        };
+        window.addEventListener('focus', refresh);
+        const interval = setInterval(() => { lastRef.t = Date.now(); updateSession(); }, 60_000);
+        return () => { window.removeEventListener('focus', refresh); clearInterval(interval); };
+    }, [status, updateSession]);
 
     const handleExitAdminView = async () => {
         await fetch('/api/v1/admin/impersonate', { method: 'DELETE' });
@@ -218,7 +240,7 @@ export default function VendorLayout({
                                 )}
                             </div>
                         )}
-                        {SIDEBAR_LINKS.map((link) => {
+                        {visibleLinks.map((link) => {
                             const isActive = pathname === link.href;
                             return (
                                 <Link

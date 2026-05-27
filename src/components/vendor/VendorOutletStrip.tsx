@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Warehouse, MapPin, Check, AlertCircle, ChevronDown, Loader2 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import { cn } from '@/lib/utils';
 
@@ -28,6 +29,13 @@ export function VendorOutletStrip() {
         currentOutlet,
         switchOutlet,
     } = useBusinessAccountSwitcher();
+
+    // Per-outlet scoped users only see their assigned outlets.
+    const { data: session } = useSession();
+    const sessionUser = (session?.user ?? {}) as Record<string, unknown>;
+    const accessibleOutletIds = Array.isArray(sessionUser.accessibleOutletIds)
+        ? (sessionUser.accessibleOutletIds as string[])
+        : [];
 
     const [isPickerOpen, setIsPickerOpen] = useState(false);
     const pickerRef = useRef<HTMLDivElement>(null);
@@ -59,7 +67,10 @@ export function VendorOutletStrip() {
         return null;
     }
 
-    const outlets = currentAccount.outlets;
+    // Filter to only the outlets the user actually has access to.
+    const outlets = accessibleOutletIds.length > 0
+        ? currentAccount.outlets.filter((o) => accessibleOutletIds.includes(o.id))
+        : currentAccount.outlets;
     const hasMultipleOutlets = outlets.length > 1;
     const requiresAddressUpdate = currentOutlet?.requiresAddressUpdate ?? false;
 

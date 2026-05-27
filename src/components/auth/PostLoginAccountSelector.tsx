@@ -41,16 +41,26 @@ export function PostLoginAccountSelector() {
   const [pickingId, setPickingId] = useState<string | null>(null);
   const [outletStep, setOutletStep] = useState<AccountSummary | null>(null);
 
+  // Per-outlet scoped users only see their assigned outlets.
+  const u = (session?.user ?? {}) as Record<string, unknown>;
+  const accessibleOutletIds = Array.isArray(u.accessibleOutletIds) ? (u.accessibleOutletIds as string[]) : [];
+
+  function filterOutlets(a: AccountSummary) {
+    if (accessibleOutletIds.length === 0) return a.outlets;
+    return a.outlets.filter((o) => accessibleOutletIds.includes(o.id));
+  }
+
   useEffect(() => {
     if (status !== 'authenticated') return;
     if (accounts.length === 0) return;
     let dismissed = false;
     try { dismissed = sessionStorage.getItem(DISMISS_KEY) === '1'; } catch { /* ignore */ }
     if (dismissed) return;
-    // 1 account, 1 outlet → nothing to pick
-    if (accounts.length === 1 && accounts[0].outlets.length <= 1) return;
-    // 1 account, multiple outlets → jump straight to outlet step
-    if (accounts.length === 1 && accounts[0].outlets.length > 1) {
+    const visibleOutlets = filterOutlets(accounts[0]);
+    // 1 account, 0-1 accessible outlets → nothing to pick (loadActiveContext already set the right one)
+    if (accounts.length === 1 && visibleOutlets.length <= 1) return;
+    // 1 account, multiple accessible outlets → jump straight to outlet step
+    if (accounts.length === 1 && visibleOutlets.length > 1) {
       Promise.resolve().then(() => {
         setOutletStep(accounts[0]);
         setOpen(true);
@@ -59,7 +69,8 @@ export function PostLoginAccountSelector() {
     }
     // 2+ accounts → show account picker
     Promise.resolve().then(() => setOpen(true));
-  }, [status, accounts, session?.user?.id]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, accounts, session?.user?.id, accessibleOutletIds.join(',')]);
 
   if (!open) return null;
 
@@ -69,7 +80,7 @@ export function PostLoginAccountSelector() {
     if (a.id !== currentAccount?.id) {
       await switchAccount(a.id);
     }
-    if (a.outlets.length > 1) {
+    if (filterOutlets(a).length > 1) {
       // Move to outlet selection step instead of closing
       setOutletStep(a);
       setPickingId(null);
@@ -116,7 +127,7 @@ export function PostLoginAccountSelector() {
           </div>
 
           <ul className="p-2 overflow-y-auto flex-1">
-            {outletStep.outlets.map((o) => {
+            {filterOutlets(outletStep).map((o) => {
               const isCurrent = o.id === activeOutletId;
               const isPicking = pickingId === o.id;
               return (
@@ -225,8 +236,8 @@ export function PostLoginAccountSelector() {
                     </div>
                     <p className="text-[11px] text-[#AEAEAE] flex items-center gap-1">
                       <MapPin size={10} />
-                      {a.outlets.length} outlet{a.outlets.length === 1 ? '' : 's'}
-                      {a.outlets.some((o) => o.requiresAddressUpdate) && (
+                      {filterOutlets(a).length} outlet{filterOutlets(a).length === 1 ? '' : 's'}
+                      {filterOutlets(a).some((o) => o.requiresAddressUpdate) && (
                         <span className="ml-1 text-amber-600 font-semibold">· address needed</span>
                       )}
                     </p>
