@@ -2,9 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Users, Plus, Trash2, Loader2, Crown, Shield, Edit3, Eye, AlertCircle, X, UserPlus, Settings2 } from 'lucide-react';
+import { Users, Plus, Trash2, Loader2, Crown, Shield, Edit3, Eye, AlertCircle, Settings2, Pencil, KeyRound } from 'lucide-react';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { TeamRolesEditor } from '@/components/features/team/TeamRolesEditor';
+import { AddMemberWizard } from '@/components/features/team/AddMemberWizard';
+import { EditMemberModal } from '@/components/features/team/EditMemberModal';
+import { ResetPasswordModal } from '@/app/admin/team/page';
 import { toast } from 'sonner';
 
 interface TeamMember {
@@ -22,7 +25,7 @@ interface TeamMember {
     role: {
         id: string | null;
         name: string;
-        scope: 'admin' | 'vendor' | 'brand';
+        scope: string;
         description: string | null;
     };
 }
@@ -30,8 +33,10 @@ interface TeamMember {
 interface VendorRole {
     id: string;
     name: string;
-    scope: 'admin' | 'vendor' | 'brand';
+    scope: string;
     description: string | null;
+    isTemplate: boolean;
+    permissions: Record<string, Record<string, boolean>>;
 }
 
 const ROLE_LOOK: Record<string, { color: string; bg: string; Icon: React.ComponentType<{ size?: number; className?: string }> }> = {
@@ -50,7 +55,7 @@ function initials(name: string) {
 }
 
 export default function VendorTeamPage() {
-    const { data: session, status: sessionStatus, update: updateSession } = useSession();
+    const { data: session, status: sessionStatus } = useSession();
     const currentUserId = (session?.user as { id?: string })?.id;
     const sessionPerms = (session?.user as { permissions?: string[] })?.permissions ?? [];
     const canManage = sessionPerms.includes('users.create');
@@ -61,6 +66,8 @@ export default function VendorTeamPage() {
     const [loading, setLoading] = useState(true);
     const [showInvite, setShowInvite] = useState(false);
     const [showRolesEditor, setShowRolesEditor] = useState(false);
+    const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
+    const [passwordMember, setPasswordMember] = useState<TeamMember | null>(null);
 
     const fetchTeam = useCallback(async () => {
         try {
@@ -76,28 +83,6 @@ export default function VendorTeamPage() {
     }, []);
 
     useEffect(() => { fetchTeam(); }, [fetchTeam]);
-
-    const handleRoleChange = async (member: TeamMember, newRoleId: string) => {
-        try {
-            const res = await fetch(`/api/v1/vendor/team/${member.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ roleId: newRoleId }),
-            });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed to update role');
-            const nextRole = roles.find(r => r.id === newRoleId);
-            setTeam(prev => prev.map(m => m.id === member.id && nextRole
-                ? { ...m, role: { id: nextRole.id, name: nextRole.name, scope: nextRole.scope, description: nextRole.description } }
-                : m));
-            if (member.user.id === currentUserId) {
-                await updateSession();
-            }
-            toast.success(`Role updated to ${nextRole?.name ?? 'new role'}`);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : 'Failed to update role');
-        }
-    };
 
     const handleRemove = async (member: TeamMember) => {
         const ok = await confirm({
@@ -147,9 +132,9 @@ export default function VendorTeamPage() {
                 )}
             </div>
 
-            {roles.length > 0 && (
+            {roles.some(r => r.isTemplate && !r.name.startsWith('Storefront')) && (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    {roles.map((role) => {
+                    {roles.filter(r => r.isTemplate && !r.name.startsWith('Storefront')).map((role) => {
                         const look = lookFor(role.name);
                         return (
                             <div key={role.id} className="bg-white rounded-[14px] border border-[#EEEEEE] p-4 shadow-sm">
@@ -187,58 +172,65 @@ export default function VendorTeamPage() {
                             const isSelf = member.user.id === currentUserId;
                             const isOwnerRow = member.isOwner;
                             return (
-                                <li key={member.id} className="px-6 py-4 flex items-center gap-4">
+                                <li key={member.id} className="px-5 py-4 flex items-center gap-4">
+                                    {/* Avatar */}
                                     <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center text-[13px] font-[900] shrink-0"
                                         style={{ backgroundColor: look.bg, color: look.color }}>
                                         {initials(member.user.fullName)}
                                     </div>
+
+                                    {/* Name + email */}
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <p className="text-[14px] font-bold text-[#181725] truncate">{member.user.fullName}</p>
-                                            <span className="text-[11px] font-[900] px-2 py-0.5 rounded-[5px] inline-flex items-center gap-1"
-                                                style={{ color: look.color, backgroundColor: look.bg }}>
-                                                <look.Icon size={11} /> {member.role.name}
-                                            </span>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            <p className="text-[13px] font-bold text-[#181725] truncate">{member.user.fullName}</p>
                                             {isOwnerRow && (
-                                                <span className="text-[11px] font-bold text-[#F59E0B] bg-[#FFF7E6] px-2 py-0.5 rounded-[5px]">Primary</span>
+                                                <span className="text-[10px] font-bold text-[#F59E0B] bg-[#FFF7E6] px-1.5 py-0.5 rounded-[4px] shrink-0">Primary</span>
                                             )}
                                             {!member.user.isActive && (
-                                                <span className="text-[11px] font-bold text-[#AEAEAE] bg-[#F5F5F5] px-2 py-0.5 rounded-[5px]">Inactive</span>
-                                            )}
-                                            {member.user.hcidDisplay && (
-                                                <span className="text-[11px] text-[#AEAEAE] font-mono">{member.user.hcidDisplay}</span>
+                                                <span className="text-[10px] font-bold text-[#AEAEAE] bg-[#F5F5F5] px-1.5 py-0.5 rounded-[4px] shrink-0">Inactive</span>
                                             )}
                                         </div>
-                                        <p className="text-[12px] text-[#7C7C7C] truncate">
+                                        <p className="text-[11px] text-[#AEAEAE] truncate">
                                             {member.user.email ?? member.user.phone ?? '—'}
+                                            {member.user.hcidDisplay && <span className="ml-2 font-mono">{member.user.hcidDisplay}</span>}
                                         </p>
                                     </div>
-                                    <span className="text-[12px] text-[#AEAEAE] hidden md:block shrink-0">
-                                        {new Date(member.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+
+                                    {/* Role badge */}
+                                    <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] shrink-0"
+                                        style={{ backgroundColor: look.bg, color: look.color }}>
+                                        <look.Icon size={13} />
+                                        <span className="text-[12px] font-bold">{member.role.name}</span>
+                                    </div>
+
+                                    {/* Joined date */}
+                                    <span className="text-[11px] text-[#AEAEAE] hidden lg:block shrink-0 w-[80px] text-right">
+                                        {new Date(member.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
                                     </span>
-                                    {!canManage ? <span className="shrink-0" /> : isOwnerRow ? (
-                                        <span className="text-[11px] text-[#AEAEAE] shrink-0">Owner</span>
-                                    ) : isSelf ? (
-                                        <span className="text-[11px] text-[#AEAEAE] shrink-0">You</span>
-                                    ) : (
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <select
-                                                value={member.role.id ?? ''}
-                                                onChange={(e) => handleRoleChange(member, e.target.value)}
-                                                disabled={!member.role.id}
-                                                className="h-[32px] text-[12px] border border-[#EEEEEE] rounded-[8px] px-2 outline-none bg-white"
-                                            >
-                                                {!member.role.id && <option value="">{member.role.name}</option>}
-                                                {roles.map((r) => (
-                                                    <option key={r.id} value={r.id}>{r.name}</option>
-                                                ))}
-                                            </select>
-                                            <button onClick={() => handleRemove(member)}
-                                                className="p-1.5 rounded-[6px] hover:bg-red-50 transition-colors" title="Remove">
-                                                <Trash2 size={14} className="text-[#E74C3C]" />
-                                            </button>
-                                        </div>
-                                    )}
+
+                                    {/* Actions */}
+                                    <div className="shrink-0 flex items-center gap-1 ml-1">
+                                        {isOwnerRow ? (
+                                            <span className="text-[11px] text-[#AEAEAE] px-2">Owner</span>
+                                        ) : isSelf ? (
+                                            <span className="text-[11px] text-[#AEAEAE] px-2">You</span>
+                                        ) : canManage ? (
+                                            <>
+                                                <button onClick={() => setEditingMember(member)}
+                                                    className="p-2 rounded-[8px] hover:bg-amber-50 transition-colors" title="Edit permissions & outlets">
+                                                    <Pencil size={14} className="text-[#F59E0B]" />
+                                                </button>
+                                                <button onClick={() => setPasswordMember(member)}
+                                                    className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
+                                                    <KeyRound size={14} className="text-[#AEAEAE]" />
+                                                </button>
+                                                <button onClick={() => handleRemove(member)}
+                                                    className="p-2 rounded-[8px] hover:bg-red-50 transition-colors" title="Remove member">
+                                                    <Trash2 size={14} className="text-[#E74C3C]" />
+                                                </button>
+                                            </>
+                                        ) : null}
+                                    </div>
                                 </li>
                             );
                         })}
@@ -257,13 +249,37 @@ export default function VendorTeamPage() {
             )}
 
             {showInvite && (
-                <InviteModal
+                <AddMemberWizard
                     roles={roles}
                     onClose={() => setShowInvite(false)}
                     onInvited={(newMember) => {
                         setTeam((prev) => [...prev, newMember]);
                         setShowInvite(false);
+                        toast.success(`${newMember.user.fullName} added to team`);
                     }}
+                />
+            )}
+
+            {editingMember && (
+                <EditMemberModal
+                    memberId={editingMember.id}
+                    memberName={editingMember.user.fullName}
+                    roles={roles}
+                    onClose={() => setEditingMember(null)}
+                    onSaved={() => {
+                        setEditingMember(null);
+                        toast.success('Member access updated');
+                        fetchTeam();
+                    }}
+                />
+            )}
+
+            {passwordMember && (
+                <ResetPasswordModal
+                    member={passwordMember}
+                    passwordEndpoint={`/api/v1/vendor/team/${passwordMember.id}/password`}
+                    accent="#299E60"
+                    onClose={() => setPasswordMember(null)}
                 />
             )}
 
@@ -278,94 +294,3 @@ export default function VendorTeamPage() {
     );
 }
 
-function InviteModal({ roles, onClose, onInvited }: { roles: VendorRole[]; onClose: () => void; onInvited: (m: TeamMember) => void }) {
-    const [identifier, setIdentifier] = useState('');
-    const [fullName, setFullName] = useState('');
-    const [password, setPassword] = useState('');
-    const [roleId, setRoleId] = useState(roles[0]?.id ?? '');
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const handleSubmit = async () => {
-        if (!identifier.trim() || !roleId) { setError('Identifier and role are required'); return; }
-        try {
-            setSubmitting(true); setError(null);
-            const res = await fetch('/api/v1/vendor/team', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    identifier: identifier.trim(),
-                    fullName: fullName.trim() || undefined,
-                    password: password || undefined,
-                    roleId,
-                }),
-            });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed to invite');
-            onInvited(json.data);
-        } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed to invite');
-        } finally { setSubmitting(false); }
-    };
-
-    return (
-        <div className="fixed inset-0 z-[15000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-[16px] w-full max-w-[480px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-                <div className="flex items-center justify-between mb-5">
-                    <div className="flex items-center gap-2">
-                        <UserPlus size={18} className="text-[#299E60]" />
-                        <h3 className="text-[16px] font-bold text-[#181725]">Add Team Member</h3>
-                    </div>
-                    <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={16} className="text-[#7C7C7C]" /></button>
-                </div>
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Email or phone</label>
-                        <input type="text" autoComplete="off" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
-                            placeholder="rahul@vendor.com or 9876543210"
-                            className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 bg-[#FAFAFA] focus:bg-white transition-colors" />
-                        <p className="text-[11px] text-[#AEAEAE] mt-1">Existing accounts get added to this vendor. For new accounts (email only), fill in the fields below.</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Full Name (new accounts)</label>
-                            <input type="text" autoComplete="off" value={fullName} onChange={(e) => setFullName(e.target.value)}
-                                placeholder="e.g. Rahul Sharma"
-                                className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 bg-[#FAFAFA] focus:bg-white transition-colors" />
-                        </div>
-                        <div>
-                            <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Password (new accounts)</label>
-                            <input type="password" name="newPassword" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Min. 6 characters"
-                                className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 bg-[#FAFAFA] focus:bg-white transition-colors" />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Role</label>
-                        <select value={roleId} onChange={(e) => setRoleId(e.target.value)}
-                            className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 bg-white transition-colors">
-                            {roles.map((r) => (
-                                <option key={r.id} value={r.id}>{r.name}{r.description ? ` — ${r.description}` : ''}</option>
-                            ))}
-                        </select>
-                    </div>
-                    {error && (
-                        <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-[8px] p-2.5">
-                            <AlertCircle size={14} /> {error}
-                        </div>
-                    )}
-                    <div className="flex gap-3 pt-2">
-                        <button onClick={handleSubmit} disabled={submitting || !identifier.trim() || !roleId}
-                            className="flex-1 h-[44px] bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
-                            {submitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                            {submitting ? 'Inviting…' : 'Invite Member'}
-                        </button>
-                        <button onClick={onClose} className="h-[44px] px-6 bg-gray-100 text-[#7C7C7C] rounded-[10px] text-[13px] font-bold hover:bg-gray-200 transition-colors">
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}

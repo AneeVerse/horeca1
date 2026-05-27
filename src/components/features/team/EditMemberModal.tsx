@@ -1,0 +1,413 @@
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  X, Check, Loader2, AlertCircle, Store, ShoppingCart,
+  CreditCard, Eye, Crown, Shield, Users, DollarSign, Package, Archive, Edit3, Pencil,
+} from 'lucide-react';
+import type { RoleItem } from './AddMemberWizard';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface OutletItem {
+  id: string;
+  name: string;
+  code: string | null;
+  addressLine: string;
+  city: string | null;
+  pincode: string | null;
+}
+
+interface MemberDetails {
+  user: { fullName: string; email: string | null; phone: string | null };
+  role: { id: string | null; name: string };
+  outletIds: string[];
+  storefrontAccess: { view: boolean; order: boolean; pay: boolean };
+}
+
+interface EditMemberModalProps {
+  memberId: string;
+  memberName: string;
+  roles: RoleItem[];
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+type PermissionsMap = Record<string, Record<string, boolean>>;
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const VENDOR_MODULES = [
+  { key: 'dashboard',    label: 'Dashboard' },
+  { key: 'products',     label: 'Products' },
+  { key: 'orders',       label: 'Orders' },
+  { key: 'repeatOrders', label: 'Repeat Orders' },
+  { key: 'inventory',    label: 'Inventory' },
+  { key: 'grn',          label: 'GRN' },
+  { key: 'dispatch',     label: 'Dispatch' },
+  { key: 'payments',     label: 'Payments' },
+  { key: 'creditLine',   label: 'Credit Line' },
+  { key: 'customers',    label: 'Customers' },
+  { key: 'users',        label: 'Team' },
+  { key: 'analytics',    label: 'Analytics' },
+  { key: 'promotions',   label: 'Promotions' },
+  { key: 'settings',     label: 'Settings' },
+] as const;
+
+const ACTIONS = ['view', 'create', 'edit', 'delete', 'approve'] as const;
+
+const ROLE_STYLES: Record<string, { color: string; bg: string; border: string; Icon: React.ComponentType<{ size?: number; className?: string }> }> = {
+  'Vendor Admin':      { color: '#D97706', bg: '#FFF7E6', border: '#F59E0B', Icon: Crown },
+  'Vendor Manager':    { color: '#2563EB', bg: '#EFF6FF', border: '#3B82F6', Icon: Shield },
+  'Sales Rep':         { color: '#059669', bg: '#ECFDF5', border: '#10B981', Icon: Users },
+  'Finance Executive': { color: '#7C3AED', bg: '#F3F0FF', border: '#8B5CF6', Icon: DollarSign },
+  'Order Manager':     { color: '#EA580C', bg: '#FFF7ED', border: '#F97316', Icon: Package },
+  'Warehouse Manager': { color: '#374151', bg: '#F3F4F6', border: '#6B7280', Icon: Archive },
+  'Vendor Editor':     { color: '#DB2777', bg: '#FDF2F8', border: '#EC4899', Icon: Edit3 },
+  'Vendor Viewer':     { color: '#6B7280', bg: '#F3F4F6', border: '#9CA3AF', Icon: Eye },
+};
+
+function getRoleStyle(name: string) {
+  return ROLE_STYLES[name] ?? { color: '#6B7280', bg: '#F3F4F6', border: '#9CA3AF', Icon: Eye };
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export function EditMemberModal({ memberId, memberName, roles, onClose, onSaved }: EditMemberModalProps) {
+  const [loading, setLoading] = useState(true);
+  const [outlets, setOutlets] = useState<OutletItem[]>([]);
+  const [registry, setRegistry] = useState<Record<string, readonly string[]>>({});
+
+  // Editable state
+  const [allOutlets, setAllOutlets] = useState(true);
+  const [selectedOutletIds, setSelectedOutletIds] = useState<Set<string>>(new Set());
+  const [selectedRoleId, setSelectedRoleId] = useState('');
+  const [permissions, setPermissions] = useState<PermissionsMap>({});
+  const [sfView, setSfView] = useState(false);
+  const [sfOrder, setSfOrder] = useState(false);
+  const [sfPay, setSfPay] = useState(false);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load member details + outlets + registry in parallel
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/v1/vendor/team/${memberId}`).then(r => r.json()),
+      fetch('/api/v1/vendor/outlets').then(r => r.json()),
+      fetch('/api/v1/permissions/registry').then(r => r.json()),
+    ]).then(([memberJson, outletsJson, regJson]) => {
+      if (outletsJson.success) setOutlets(outletsJson.data.outlets ?? []);
+      if (regJson.success) setRegistry(regJson.data.modules ?? {});
+      if (memberJson.success) {
+        const d = memberJson.data as MemberDetails;
+        // Initialise outlet selection
+        if (d.outletIds.length === 0) {
+          setAllOutlets(true);
+          setSelectedOutletIds(new Set());
+        } else {
+          setAllOutlets(false);
+          setSelectedOutletIds(new Set(d.outletIds));
+        }
+        // Find matching role chip
+        const matchingRole = roles.find(r => r.id === d.role.id);
+        if (matchingRole) {
+          setSelectedRoleId(matchingRole.id);
+          setPermissions(structuredClone(matchingRole.permissions));
+        }
+        // Storefront
+        setSfView(d.storefrontAccess.view);
+        setSfOrder(d.storefrontAccess.order);
+        setSfPay(d.storefrontAccess.pay);
+      }
+    }).catch(() => {
+      setError('Failed to load member details');
+    }).finally(() => {
+      setLoading(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberId]);
+
+  // Show all roles as chips except Storefront ones (custom roles created by the vendor are included).
+  const templates = roles.filter(r => !r.name.startsWith('Storefront'));
+
+  const handleSelectRole = useCallback((role: RoleItem) => {
+    setSelectedRoleId(role.id);
+    setPermissions(structuredClone(role.permissions));
+  }, []);
+
+  const handleTogglePermission = useCallback((mod: string, action: string) => {
+    setPermissions(prev => {
+      const next: PermissionsMap = { ...prev, [mod]: { ...(prev[mod] ?? {}) } };
+      if (next[mod][action]) {
+        delete next[mod][action];
+        if (Object.keys(next[mod]).length === 0) delete next[mod];
+      } else {
+        next[mod][action] = true;
+      }
+      return next;
+    });
+    setSelectedRoleId('');
+  }, []);
+
+  const toggleOutlet = (id: string) => {
+    setAllOutlets(false);
+    setSelectedOutletIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const totalSelected = Object.values(permissions).reduce(
+    (sum, actions) => sum + Object.values(actions).filter(Boolean).length, 0,
+  );
+
+  const handleSave = async () => {
+    if (Object.keys(permissions).length === 0) { setError('Select at least one permission'); return; }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = { permissions };
+      if (!allOutlets) body.outletIds = Array.from(selectedOutletIds);
+      else body.outletIds = [];
+      body.storefrontAccess = { view: sfView, order: sfOrder, pay: sfPay };
+
+      const res = await fetch(`/api/v1/vendor/team/${memberId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message ?? 'Failed to save');
+      onSaved();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[15000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-[20px] w-full max-w-[900px] shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#F0F0F0] shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-[#FFF7E6] rounded-[10px] flex items-center justify-center">
+              <Pencil size={17} className="text-[#F59E0B]" />
+            </div>
+            <div>
+              <h3 className="text-[16px] font-bold text-[#181725]">Edit Team Member</h3>
+              <p className="text-[11px] text-[#AEAEAE] font-medium">{memberName} — outlet access &amp; role</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-[8px] hover:bg-gray-100 transition-colors">
+            <X size={16} className="text-[#7C7C7C]" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center py-16">
+            <Loader2 size={28} className="animate-spin text-[#299E60]" />
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0 space-y-6">
+
+            {/* Outlet access */}
+            <section>
+              <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-2">
+                Outlet Access
+              </p>
+              <div className="border border-[#EEEEEE] rounded-[12px] divide-y divide-[#F5F5F5] max-h-[260px] overflow-y-auto">
+                <button onClick={() => { setAllOutlets(true); setSelectedOutletIds(new Set()); }}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-[#FAFAFA] transition-colors text-left">
+                  <Checkbox checked={allOutlets} accent="#299E60" />
+                  <div>
+                    <p className="text-[13px] font-bold text-[#181725]">All outlets (account-wide)</p>
+                    <p className="text-[11px] text-[#7C7C7C]">Access all current and future outlets</p>
+                  </div>
+                </button>
+                {outlets.map(outlet => (
+                  <button key={outlet.id} onClick={() => toggleOutlet(outlet.id)}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#FAFAFA] transition-colors text-left">
+                    <Checkbox checked={!allOutlets && selectedOutletIds.has(outlet.id)} accent="#299E60" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-bold text-[#181725] flex items-center gap-2">
+                        {outlet.name}
+                        {outlet.code && (
+                          <span className="text-[10px] text-[#AEAEAE] font-mono bg-[#F5F5F5] px-1.5 py-0.5 rounded">{outlet.code}</span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-[#7C7C7C] truncate">
+                        {outlet.addressLine}{outlet.city ? `, ${outlet.city}` : ''}{outlet.pincode ? ` — ${outlet.pincode}` : ''}
+                      </p>
+                    </div>
+                    {!allOutlets && selectedOutletIds.has(outlet.id) && (
+                      <span className="text-[10px] font-bold text-[#299E60] bg-[#ECFDF5] px-2 py-0.5 rounded-full shrink-0">Assigned</span>
+                    )}
+                  </button>
+                ))}
+                {outlets.length === 0 && (
+                  <div className="px-4 py-8 text-center">
+                    <p className="text-[13px] font-bold text-[#AEAEAE]">No outlets configured</p>
+                    <p className="text-[11px] text-[#AEAEAE] mt-1">Member will have account-wide access.</p>
+                  </div>
+                )}
+              </div>
+              {!allOutlets && selectedOutletIds.size > 0 && (
+                <p className="text-[11px] text-[#299E60] font-bold mt-1.5">
+                  {selectedOutletIds.size} outlet{selectedOutletIds.size === 1 ? '' : 's'} selected — member can only access these.
+                </p>
+              )}
+            </section>
+
+            {/* Role templates */}
+            <section>
+              <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-2">
+                Role Templates — click to auto-fill permissions
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {templates.map(r => {
+                  const style = getRoleStyle(r.name);
+                  const isSelected = r.id === selectedRoleId;
+                  const { Icon } = style;
+                  return (
+                    <button key={r.id} onClick={() => handleSelectRole(r)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-[12px] font-bold border-2 transition-all hover:shadow-sm"
+                      style={isSelected
+                        ? { background: style.bg, borderColor: style.border, color: style.color }
+                        : { background: 'white', borderColor: '#EEEEEE', color: '#7C7C7C' }
+                      }>
+                      <Icon size={13} />
+                      {r.name}
+                    </button>
+                  );
+                })}
+              </div>
+              {!selectedRoleId && (
+                <p className="text-[11px] text-[#AEAEAE] mt-1 italic">Custom permissions ({totalSelected} selected)</p>
+              )}
+            </section>
+
+            {/* Permissions matrix */}
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">Permissions</p>
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${totalSelected > 0 ? 'bg-[#ECFDF5] text-[#299E60]' : 'bg-[#F5F5F5] text-[#AEAEAE]'}`}>
+                  {totalSelected} selected
+                </span>
+              </div>
+              <div className="border border-[#EEEEEE] rounded-[12px] overflow-x-auto">
+                <table className="w-full text-[11px] min-w-[520px]">
+                  <thead>
+                    <tr className="bg-[#FAFAFA]">
+                      <th className="text-left px-4 py-2.5 font-bold text-[#7C7C7C] uppercase tracking-wider text-[10px]">Module</th>
+                      {ACTIONS.map(a => (
+                        <th key={a} className="text-center px-2 py-2.5 font-bold text-[#7C7C7C] uppercase tracking-wider text-[10px] w-[72px] capitalize">{a}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {VENDOR_MODULES.map(({ key, label }) => {
+                      const rowPerms = permissions[key] ?? {};
+                      const validActions = (registry[key] as readonly string[] | undefined) ?? [];
+                      return (
+                        <tr key={key} className="border-t border-[#F5F5F5] hover:bg-[#FAFAFA]/60 transition-colors">
+                          <td className="px-4 py-2.5 font-bold text-[#181725] text-[12px]">{label}</td>
+                          {ACTIONS.map(a => {
+                            const isValid = validActions.length === 0 || validActions.includes(a);
+                            const checked = isValid && !!rowPerms[a];
+                            return (
+                              <td key={a} className="text-center px-2 py-2.5">
+                                {isValid ? (
+                                  <button
+                                    onClick={() => handleTogglePermission(key, a)}
+                                    className="w-[22px] h-[22px] rounded-[5px] border-2 flex items-center justify-center transition-all mx-auto hover:scale-110"
+                                    style={checked
+                                      ? { borderColor: '#299E60', backgroundColor: '#299E60' }
+                                      : { borderColor: '#DDDDDD', backgroundColor: 'white' }
+                                    }
+                                  >
+                                    {checked && <Check size={12} className="text-white" />}
+                                  </button>
+                                ) : (
+                                  <span className="text-[#EEEEEE]">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[10px] text-[#AEAEAE] mt-1.5">
+                Click any checkbox to add or remove a permission. Templates above auto-fill this matrix.
+              </p>
+            </section>
+
+            {/* Storefront access */}
+            <section className="bg-[#F0F7FF] border border-[#BFDBFE] rounded-[12px] p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Store size={15} className="text-[#2563EB]" />
+                <p className="text-[13px] font-bold text-[#181725]">Storefront Access</p>
+                <span className="text-[10px] text-[#2563EB] bg-[#DBEAFE] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">As Buyer</span>
+              </div>
+              <p className="text-[11px] text-[#6B7280] mb-3 leading-relaxed">
+                Allow this member to access the HoReCa Hub storefront on behalf of your business.
+              </p>
+              <div className="space-y-2.5">
+                {([
+                  { label: 'Browse storefront & view products', Icon: Eye,          checked: sfView,  toggle: () => setSfView(!sfView) },
+                  { label: 'Place orders on storefront',        Icon: ShoppingCart, checked: sfOrder, toggle: () => setSfOrder(!sfOrder) },
+                  { label: 'Make payments on storefront',       Icon: CreditCard,   checked: sfPay,   toggle: () => setSfPay(!sfPay) },
+                ] as const).map(({ label, Icon, checked, toggle }) => (
+                  <button key={label} onClick={toggle} className="flex items-center gap-3 w-full text-left">
+                    <Checkbox checked={checked} accent="#2563EB" />
+                    <Icon size={13} className={checked ? 'text-[#2563EB]' : 'text-[#9CA3AF]'} />
+                    <span className={`text-[12px] font-medium ${checked ? 'text-[#181725]' : 'text-[#6B7280]'}`}>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {error && (
+              <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-[10px] p-3">
+                <AlertCircle size={14} className="shrink-0" /> {error}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Footer */}
+        {!loading && (
+          <div className="px-6 py-4 border-t border-[#F0F0F0] flex items-center justify-end gap-3 shrink-0 bg-[#FAFAFA] rounded-b-[20px]">
+            <button onClick={onClose}
+              className="h-[40px] px-5 text-[13px] font-bold text-[#7C7C7C] hover:text-[#181725] transition-colors">
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={submitting}
+              className="h-[42px] px-6 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] disabled:opacity-50 flex items-center gap-2 transition-colors shadow-sm">
+              {submitting && <Loader2 size={14} className="animate-spin" />}
+              {submitting ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Checkbox({ checked, accent }: { checked: boolean; accent: string }) {
+  return (
+    <div
+      className="w-[20px] h-[20px] rounded-[5px] border-2 flex items-center justify-center shrink-0 transition-colors"
+      style={checked ? { borderColor: accent, backgroundColor: accent } : { borderColor: '#DDDDDD', backgroundColor: 'white' }}
+    >
+      {checked && <Check size={12} className="text-white" />}
+    </div>
+  );
+}

@@ -1,19 +1,30 @@
-// PATCH  /api/v1/vendor/team/[id] — change a vendor team member's role
+// GET    /api/v1/vendor/team/[id] — fetch a member's details + current outlet access
+// PATCH  /api/v1/vendor/team/[id] — update role and/or outlet access
 // DELETE /api/v1/vendor/team/[id] — remove a member from the vendor team
-//
-// `[id]` is the VendorTeamMember.id (matches the legacy contract).
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { vendorOnly } from '@/middleware/rbac';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
-import { requirePermission } from '@/lib/permissions/engine';
+import { requirePermission, sanitizePermissions } from '@/lib/permissions/engine';
 import { prisma } from '@/lib/prisma';
+import { redis } from '@/lib/redis';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
+import { toTeamMemberDTO, teamMemberInclude } from '@/lib/teamMemberShape';
+import type { AuthContext } from '@/middleware/auth';
 import type { TeamRole } from '@prisma/client';
 
 const updateSchema = z.object({
-  roleId: z.string().uuid(),
+  roleId: z.string().uuid().optional(),
+  permissions: z.record(z.string(), z.record(z.string(), z.boolean())).optional(),
+  outletIds: z.array(z.string().uuid()).optional(),
+  storefrontAccess: z.object({
+    view: z.boolean().optional(),
+    order: z.boolean().optional(),
+    pay: z.boolean().optional(),
+  }).optional(),
+}).refine(d => d.roleId || d.permissions || d.outletIds !== undefined || d.storefrontAccess !== undefined, {
+  message: 'Nothing to update',
 });
 
 const VENDOR_ROLE_TO_ENUM: Record<string, TeamRole> = {
@@ -23,12 +34,86 @@ const VENDOR_ROLE_TO_ENUM: Record<string, TeamRole> = {
   'Vendor Viewer': 'viewer',
 };
 
+function sortKeys(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sortKeys);
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(
+      Object.entries(v as Record<string, unknown>).sort().map(([k, val]) => [k, sortKeys(val)]),
+    );
+  }
+  return v;
+}
+
 function extractId(req: NextRequest): string {
   const segments = new URL(req.url).pathname.split('/');
   return segments[segments.length - 1];
 }
 
-export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
+export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
+  try {
+    const { vendorId } = await resolveVendorContext(ctx, req);
+    const id = extractId(req);
+
+    const member = await prisma.vendorTeamMember.findFirst({
+      where: { id, vendorId },
+      include: teamMemberInclude,
+    });
+    if (!member) throw Errors.notFound('Team member not found');
+
+    const vendor = await prisma.vendor.findUnique({
+      where: { id: vendorId },
+      select: { businessAccountId: true },
+    });
+    if (!vendor) throw Errors.notFound('Vendor not found');
+
+    // Fetch outlet-scoped UserRoles for this member (excluding storefront roles).
+    const userRoles = await prisma.userRole.findMany({
+      where: {
+        userId: member.userId,
+        businessAccountId: vendor.businessAccountId,
+        role: { scope: 'vendor', name: { not: { startsWith: 'Storefront' } } },
+      },
+      select: { outletId: true },
+    });
+    const hasAccountWide = userRoles.some(r => r.outletId === null);
+    const outletIds = hasAccountWide
+      ? []
+      : [...new Set(userRoles.filter(r => r.outletId !== null).map(r => r.outletId!))];
+
+    // Storefront access
+    const sfRole = await prisma.userRole.findFirst({
+      where: {
+        userId: member.userId,
+        businessAccountId: vendor.businessAccountId,
+        role: { scope: 'vendor', name: { startsWith: 'Storefront' } },
+      },
+      select: { role: { select: { permissions: true } } },
+    });
+    const sfPerms = (sfRole?.role?.permissions as Record<string, Record<string, boolean>> | null)?.storefront ?? {};
+
+    const dto = toTeamMemberDTO({
+      id: member.id,
+      createdAt: member.createdAt,
+      legacyRole: member.role,
+      isOwner: false,
+      user: member.user,
+      roleRef: member.roleRef,
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...dto,
+        outletIds,
+        storefrontAccess: { view: !!sfPerms.view, order: !!sfPerms.order, pay: !!sfPerms.pay },
+      },
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+});
+
+export const PATCH = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
     const { vendorId } = await resolveVendorContext(ctx, req);
     requirePermission(ctx, 'users.edit');
@@ -40,47 +125,122 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     });
     if (!member) throw Errors.notFound('Team member not found');
 
-    const body = await req.json();
-    const { roleId } = updateSchema.parse(body);
-
-    const role = await prisma.accountRole.findUnique({
-      where: { id: roleId },
-      select: { id: true, name: true, scope: true },
-    });
-    if (!role || role.scope !== 'vendor') {
-      throw Errors.badRequest('roleId must reference a vendor-scope role');
-    }
-
     const vendor = await prisma.vendor.findUnique({
       where: { id: vendorId },
       select: { businessAccountId: true },
     });
     if (!vendor) throw Errors.notFound('Vendor not found');
-
-    const legacyEnum: TeamRole = VENDOR_ROLE_TO_ENUM[role.name] ?? 'viewer';
+    const { businessAccountId } = vendor;
     const userId = member.userId;
-    const businessAccountId = vendor.businessAccountId;
+
+    const body = await req.json();
+    const input = updateSchema.parse(body);
+
+    // Resolve new role (if roleId or permissions provided).
+    let role: { id: string; name: string; scope: string; description: string | null } | null = null;
+
+    if (input.roleId) {
+      const found = await prisma.accountRole.findUnique({
+        where: { id: input.roleId },
+        select: { id: true, name: true, scope: true, description: true },
+      });
+      if (!found || found.scope !== 'vendor') throw Errors.badRequest('roleId must reference a vendor-scope role');
+      role = found;
+    } else if (input.permissions) {
+      const sanitized = sanitizePermissions(input.permissions);
+      const sanitizedStr = JSON.stringify(sortKeys(sanitized));
+      const candidates = await prisma.accountRole.findMany({
+        where: { scope: 'vendor', OR: [{ isTemplate: true, businessAccountId: null }, { businessAccountId }] },
+        select: { id: true, name: true, scope: true, description: true, permissions: true },
+      });
+      const match = candidates.find(r => JSON.stringify(sortKeys(r.permissions as Record<string, unknown>)) === sanitizedStr);
+      if (match) {
+        role = { id: match.id, name: match.name, scope: match.scope, description: match.description };
+      } else {
+        const customName = `Custom (${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })})`;
+        role = await prisma.accountRole.upsert({
+          where: { businessAccountId_name: { businessAccountId, name: customName } },
+          create: {
+            businessAccountId,
+            name: customName,
+            scope: 'vendor',
+            permissions: sanitized,
+            isTemplate: false,
+            createdBy: ctx.userId,
+          },
+          update: { permissions: sanitized },
+          select: { id: true, name: true, scope: true, description: true },
+        });
+      }
+    }
+
+    const outletTargets: (string | null)[] | null =
+      input.outletIds !== undefined
+        ? (input.outletIds.length > 0 ? input.outletIds : [null])
+        : null;
 
     await prisma.$transaction(async (tx) => {
-      await tx.vendorTeamMember.update({
-        where: { id: member.id },
-        data: { roleId: role.id, role: legacyEnum },
-      });
+      // Update role if changed.
+      if (role) {
+        const legacyEnum: TeamRole = VENDOR_ROLE_TO_ENUM[role.name] ?? 'viewer';
+        await tx.vendorTeamMember.update({
+          where: { id: member.id },
+          data: { roleId: role.id, role: legacyEnum },
+        });
+      }
 
-      // Replace any prior vendor-scope UserRole for this (user, account, account-wide)
-      // with the new role so the permission union reflects the change immediately.
-      await tx.userRole.deleteMany({
-        where: {
-          userId,
-          businessAccountId,
-          outletId: null,
-          role: { scope: 'vendor' },
-        },
-      });
-      await tx.userRole.create({
-        data: { userId, businessAccountId, outletId: null, roleId: role.id },
-      });
+      // Replace vendor-scope non-storefront UserRoles when role or outlets change.
+      if (role || outletTargets !== null) {
+        const effectiveRoleId = role?.id ?? member.roleId;
+        if (effectiveRoleId) {
+          await tx.userRole.deleteMany({
+            where: { userId, businessAccountId, role: { scope: 'vendor', name: { not: { startsWith: 'Storefront' } } } },
+          });
+          const targets = outletTargets ?? [null];
+          for (const outletId of targets) {
+            await tx.userRole.create({
+              data: { userId, businessAccountId, outletId: outletId ?? null, roleId: effectiveRoleId },
+            });
+          }
+        }
+      }
+
+      // Update storefront access if provided.
+      const sf = input.storefrontAccess;
+      if (sf !== undefined) {
+        // Remove existing storefront role(s) for this user+account.
+        await tx.userRole.deleteMany({
+          where: { userId, businessAccountId, role: { scope: 'vendor', name: { startsWith: 'Storefront' } } },
+        });
+        if (sf.view || sf.order || sf.pay) {
+          const sfPermissions = {
+            storefront: {
+              ...(sf.view  && { view:  true }),
+              ...(sf.order && { order: true }),
+              ...(sf.pay   && { pay:   true }),
+            },
+          };
+          const parts = Object.keys(sfPermissions.storefront);
+          const sfRoleName = `Storefront (${parts.join('+')})`;
+          let sfRole = await tx.accountRole.findFirst({
+            where: { businessAccountId, scope: 'vendor', name: sfRoleName },
+            select: { id: true },
+          });
+          if (!sfRole) {
+            sfRole = await tx.accountRole.create({
+              data: { businessAccountId, name: sfRoleName, scope: 'vendor', permissions: sfPermissions, isTemplate: false, description: 'Storefront buyer access' },
+              select: { id: true },
+            });
+          }
+          await tx.userRole.create({
+            data: { userId, businessAccountId, outletId: null, roleId: sfRole.id },
+          });
+        }
+      }
     });
+
+    // Mark the affected user's session stale so the next auth() call reloads permissions.
+    try { await redis.set(`session:stale:${userId}`, '1', 'EX', 3600); } catch { /* non-critical */ }
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -88,7 +248,7 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   }
 });
 
-export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
+export const DELETE = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
     const { vendorId } = await resolveVendorContext(ctx, req);
     requirePermission(ctx, 'users.delete');
@@ -113,9 +273,6 @@ export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
     await prisma.$transaction(async (tx) => {
       await tx.vendorTeamMember.delete({ where: { id: member.id } });
 
-      // Strip the vendor-scope UserRole(s) for this (user, account). Leave any
-      // account-scope UserRole alone — a customer-side role attached to the
-      // same BusinessAccount is unrelated to vendor team membership.
       await tx.userRole.deleteMany({
         where: {
           userId: member.userId,
@@ -123,10 +280,6 @@ export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
           role: { scope: 'vendor' },
         },
       });
-      // BusinessAccountMember is left in place — the user may still be a
-      // customer of the same account or a brand-team member; removing it
-      // would orphan those roles. The /account/[id]/users DELETE handler is
-      // the right place to fully detach a member from an account.
     });
 
     return NextResponse.json({ success: true });

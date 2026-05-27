@@ -1,15 +1,16 @@
 // GET  /api/v1/vendor/team — list vendor team members (with assigned Role)
 // POST /api/v1/vendor/team — invite a user to the vendor team
 //
-// V2.2 RBAC: permission check uses the new requirePermission engine.
-// POST body: { identifier (email|phone), fullName?, password?, roleId }.
+// POST body: { identifier, fullName?, password?, roleId? | permissions, outletIds?, storefrontAccess? }
+// Either roleId OR permissions must be provided. When permissions are sent the
+// handler finds an existing role with matching permissions or creates a new one.
 
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { vendorOnly } from '@/middleware/rbac';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
-import { requirePermission } from '@/lib/permissions/engine';
+import { requirePermission, sanitizePermissions } from '@/lib/permissions/engine';
 import { prisma } from '@/lib/prisma';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { uniqueHcid } from '@/lib/hcid';
@@ -21,8 +22,15 @@ const inviteSchema = z.object({
   identifier: z.string().min(3).max(255),
   fullName: z.string().min(2).max(100).optional(),
   password: z.string().min(6).max(72).optional(),
-  roleId: z.string().uuid(),
-});
+  roleId: z.string().uuid().optional(),
+  permissions: z.record(z.string(), z.record(z.string(), z.boolean())).optional(),
+  outletIds: z.array(z.string().uuid()).optional(),
+  storefrontAccess: z.object({
+    view: z.boolean().optional(),
+    order: z.boolean().optional(),
+    pay: z.boolean().optional(),
+  }).optional(),
+}).refine(d => d.roleId || d.permissions, { message: 'Either roleId or permissions is required' });
 
 const VENDOR_ROLE_TO_ENUM: Record<string, TeamRole> = {
   'Vendor Admin': 'owner',
@@ -30,6 +38,17 @@ const VENDOR_ROLE_TO_ENUM: Record<string, TeamRole> = {
   'Vendor Editor': 'editor',
   'Vendor Viewer': 'viewer',
 };
+
+// Normalise a JSON object for stable comparison (sorts keys at every level).
+function sortKeys(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sortKeys);
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(
+      Object.entries(v as Record<string, unknown>).sort().map(([k, val]) => [k, sortKeys(val)]),
+    );
+  }
+  return v;
+}
 
 export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
@@ -47,17 +66,14 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
       include: teamMemberInclude,
     });
 
-    // Owner row is synthesised from the vendor.user — they have no team-member record.
     const owner: TeamMemberDTO = toTeamMemberDTO({
       id: `owner-${vendor.user.id}`,
       createdAt: vendor.user.createdAt,
       legacyRole: 'owner',
       isOwner: true,
       user: vendor.user,
-      // Fabricate a label-only role for the owner row so the UI chip renders.
       roleRef: null,
     });
-    // Replace synthesised role name "Owner" with "Vendor Admin" if that template exists.
     const adminTemplate = await prisma.accountRole.findFirst({
       where: { businessAccountId: null, isTemplate: true, scope: 'vendor', name: 'Vendor Admin' },
       select: { id: true, name: true, scope: true, description: true },
@@ -89,24 +105,60 @@ export const POST = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
     const body = await req.json();
     const input = inviteSchema.parse(body);
 
-    const role = await prisma.accountRole.findUnique({
-      where: { id: input.roleId },
-      select: { id: true, name: true, scope: true, description: true },
-    });
-    if (!role || role.scope !== 'vendor') {
-      throw Errors.badRequest('roleId must reference a vendor-scope role');
-    }
-
-    // Resolve the vendor's BusinessAccount so we can also write the V2.2-native
-    // BusinessAccountMember + UserRole rows. These are what loadActiveContext
-    // reads to populate session.permissions — without them a newly invited
-    // member would get a VendorTeamMember row but no actual permissions.
     const vendor = await prisma.vendor.findUnique({
       where: { id: vendorId },
       select: { businessAccountId: true },
     });
     if (!vendor) throw Errors.notFound('Vendor not found');
+    const businessAccountId = vendor.businessAccountId;
 
+    // ── Resolve the role ───────────────────────────────────────────────────────
+    // If roleId provided, use it directly. Otherwise derive from permissions JSON:
+    // find a vendor-scope role with matching permissions or create a new one.
+    let role: { id: string; name: string; scope: string; description: string | null };
+
+    if (input.roleId) {
+      const found = await prisma.accountRole.findUnique({
+        where: { id: input.roleId },
+        select: { id: true, name: true, scope: true, description: true },
+      });
+      if (!found || found.scope !== 'vendor') throw Errors.badRequest('roleId must reference a vendor-scope role');
+      role = found;
+    } else {
+      const sanitized = sanitizePermissions(input.permissions!);
+      const sanitizedStr = JSON.stringify(sortKeys(sanitized));
+
+      const candidates = await prisma.accountRole.findMany({
+        where: {
+          scope: 'vendor',
+          OR: [{ isTemplate: true, businessAccountId: null }, { businessAccountId }],
+        },
+        select: { id: true, name: true, scope: true, description: true, permissions: true },
+      });
+
+      const match = candidates.find(
+        r => JSON.stringify(sortKeys(r.permissions as Record<string, unknown>)) === sanitizedStr,
+      );
+
+      if (match) {
+        role = { id: match.id, name: match.name, scope: match.scope, description: match.description };
+      } else {
+        const created = await prisma.accountRole.create({
+          data: {
+            businessAccountId,
+            name: `Custom (${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })})`,
+            scope: 'vendor',
+            permissions: sanitized,
+            isTemplate: false,
+            createdBy: ctx.userId,
+          },
+          select: { id: true, name: true, scope: true, description: true },
+        });
+        role = created;
+      }
+    }
+
+    // ── Resolve / create the user ──────────────────────────────────────────────
     const identifierTrim = input.identifier.trim();
     const looksEmail = identifierTrim.includes('@');
     let user = looksEmail
@@ -142,52 +194,69 @@ export const POST = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
 
     const legacyEnum: TeamRole = VENDOR_ROLE_TO_ENUM[role.name] ?? 'viewer';
     const userId = user.id;
-    const businessAccountId = vendor.businessAccountId;
+    const outletTargets: (string | null)[] =
+      input.outletIds && input.outletIds.length > 0 ? input.outletIds : [null];
 
+    // ── Transactional write ────────────────────────────────────────────────────
     const member = await prisma.$transaction(async (tx) => {
       const m = await tx.vendorTeamMember.create({
-        data: {
-          vendorId,
-          userId,
-          role: legacyEnum,
-          roleId: role.id,
-          invitedBy: ctx.userId,
-        },
+        data: { vendorId, userId, role: legacyEnum, roleId: role.id, invitedBy: ctx.userId },
         include: teamMemberInclude,
       });
 
       await tx.businessAccountMember.upsert({
         where: { userId_businessAccountId: { userId, businessAccountId } },
         update: {},
-        create: {
-          userId,
-          businessAccountId,
-          isPrimary: false,
-          invitedBy: ctx.userId,
-          acceptedAt: new Date(),
-        },
+        create: { userId, businessAccountId, isPrimary: false, invitedBy: ctx.userId, acceptedAt: new Date() },
       });
 
-      // UserRole row: account-wide (outletId = null) since the new team UI
-      // doesn't yet assign per-outlet. Idempotent — skip if same row exists.
-      const existingRole = await tx.userRole.findFirst({
-        where: { userId, businessAccountId, outletId: null, roleId: role.id },
-        select: { id: true },
+      // Replace any prior vendor-scope roles for this user+account.
+      await tx.userRole.deleteMany({
+        where: { userId, businessAccountId, outletId: null, role: { scope: 'vendor' } },
       });
-      if (!existingRole) {
-        // Replace any prior vendor-scope role for this (user, account) so the
-        // role change is reflected in the permission union, not added on top.
-        await tx.userRole.deleteMany({
-          where: {
-            userId,
-            businessAccountId,
-            outletId: null,
-            role: { scope: 'vendor' },
-          },
-        });
+
+      // Create UserRole per outlet target (null = account-wide).
+      for (const outletId of outletTargets) {
         await tx.userRole.create({
-          data: { userId, businessAccountId, outletId: null, roleId: role.id },
+          data: { userId, businessAccountId, outletId: outletId ?? null, roleId: role.id },
         });
+      }
+
+      // Storefront access — find or create a per-account role with just storefront perms.
+      const sf = input.storefrontAccess;
+      if (sf && (sf.view || sf.order || sf.pay)) {
+        const sfPermissions = {
+          storefront: {
+            ...(sf.view  && { view:  true }),
+            ...(sf.order && { order: true }),
+            ...(sf.pay   && { pay:   true }),
+          },
+        };
+        const parts = Object.keys(sfPermissions.storefront);
+        const sfRoleName = `Storefront (${parts.join('+')})`;
+
+        let sfRole = await tx.accountRole.findFirst({
+          where: { businessAccountId, scope: 'vendor', name: sfRoleName },
+          select: { id: true },
+        });
+        if (!sfRole) {
+          sfRole = await tx.accountRole.create({
+            data: {
+              businessAccountId, name: sfRoleName, scope: 'vendor',
+              permissions: sfPermissions, isTemplate: false, description: 'Storefront buyer access',
+            },
+            select: { id: true },
+          });
+        }
+        const existingSf = await tx.userRole.findFirst({
+          where: { userId, businessAccountId, outletId: null, roleId: sfRole.id },
+          select: { id: true },
+        });
+        if (!existingSf) {
+          await tx.userRole.create({
+            data: { userId, businessAccountId, outletId: null, roleId: sfRole.id },
+          });
+        }
       }
 
       return m;
