@@ -80,6 +80,14 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       allowedFields.isActive = body.isActive;
     }
     if (body.role && ['customer', 'vendor', 'admin'].includes(body.role)) {
+      // Admin role transitions must go through /admin/team to ensure the
+      // AdminTeamMember row + AccountRole assignment stay consistent. This
+      // endpoint must not be a back-door for self-promotion.
+      const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+      if (!target) throw Errors.notFound('User');
+      if (body.role === 'admin' || target.role === 'admin') {
+        throw Errors.forbidden('Admin role transitions are managed via the admin team page');
+      }
       allowedFields.role = body.role;
     }
     if (typeof body.fullName === 'string' && body.fullName.trim()) {
@@ -115,6 +123,14 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     }
     if (typeof body.password === 'string' && body.password.length > 0) {
       if (body.password.length < 6) throw Errors.badRequest('Password must be at least 6 characters');
+      // Password resets on admin users must go through /admin/team/[id]/password
+      // where the target's rank can be compared against the caller's. Allowing
+      // it here would let any admin with users.edit take over the super-admin.
+      const tgt = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+      if (!tgt) throw Errors.notFound('User');
+      if (tgt.role === 'admin') {
+        throw Errors.forbidden('Use /admin/team to reset another admin\'s password');
+      }
       allowedFields.password = await bcrypt.hash(body.password, 10);
     }
 

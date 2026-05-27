@@ -47,6 +47,11 @@ const updateSettingsSchema = z.object({
 // GET — full vendor profile with service areas, delivery slots, and account info
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
+    // Settings include bank account number, IFSC, GST and registered address.
+    // Restrict to settings.view so a Viewer / storefront-only buyer can't pull
+    // bank credentials by hitting this endpoint directly.
+    requirePermission(ctx, 'settings.view');
+
     const vendorId = await resolveVendorId(ctx, req);
 
     const profile = await prisma.vendor.findUnique({

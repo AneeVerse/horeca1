@@ -21,16 +21,34 @@ export async function resolveVendorContext(ctx: AuthContext, req: NextRequest): 
     return { vendorId: vendor.id, teamRole: 'owner' };
   }
 
-  // Check direct ownership first
+  // Check direct ownership first. A user can only own one Vendor (Vendor.userId
+  // is unique), so no active-account filter needed here.
   const ownVendor = await prisma.vendor.findUnique({
     where: { userId: ctx.userId },
-    select: { id: true },
+    select: { id: true, businessAccountId: true },
   });
-  if (ownVendor) return { vendorId: ownVendor.id, teamRole: 'owner' };
+  if (ownVendor) {
+    // If the user is also a team member on other vendors, their session's
+    // active business account may point elsewhere — respect it.
+    if (ctx.activeBusinessAccountId && ownVendor.businessAccountId !== ctx.activeBusinessAccountId) {
+      // fall through to team-membership lookup
+    } else {
+      return { vendorId: ownVendor.id, teamRole: 'owner' };
+    }
+  }
 
-  // Check team membership (team members have role='vendor' but no direct Vendor record)
+  // Check team membership scoped to the active business account so a user on
+  // multiple vendor teams lands on the vendor they actually selected in the
+  // navbar account switcher. Without this filter, findFirst returned an
+  // arbitrary membership and let a consultant accidentally operate on the
+  // wrong vendor account.
   const membership = await prisma.vendorTeamMember.findFirst({
-    where: { userId: ctx.userId },
+    where: {
+      userId: ctx.userId,
+      ...(ctx.activeBusinessAccountId
+        ? { vendor: { businessAccountId: ctx.activeBusinessAccountId } }
+        : {}),
+    },
     select: { vendorId: true, role: true },
   });
   if (!membership) throw Errors.forbidden('No vendor profile linked to your account');

@@ -7,9 +7,13 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { errorResponse } from '@/middleware/errorHandler';
 import { resolveVendorId } from '@/lib/resolveVendorId';
+import { requirePermission } from '@/lib/permissions/engine';
 
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
+    // Wallet exposes balance + payout/settlement history — finance data that
+    // storefront-only buyers and Viewers shouldn't see.
+    requirePermission(ctx, 'payments.view');
     const vendorId = await resolveVendorId(ctx, req);
     const url = new URL(req.url);
     const cursor = url.searchParams.get('cursor');

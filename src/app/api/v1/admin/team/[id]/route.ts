@@ -28,6 +28,16 @@ const ADMIN_ROLE_TO_ENUM: Record<string, TeamRole> = {
   Viewer: 'viewer',
 };
 
+// Rank for team-role comparisons. Seeded super-admin owner has no
+// AdminTeamMember row — they outrank everyone. A team-member action against
+// a peer or higher rank is refused.
+const ENUM_RANK: Record<TeamRole, number> = { owner: 80, manager: 60, editor: 40, viewer: 20 };
+const SEEDED_OWNER_RANK = 100;
+async function adminRank(userId: string): Promise<number> {
+  const m = await prisma.adminTeamMember.findUnique({ where: { userId }, select: { role: true } });
+  return m ? ENUM_RANK[m.role] : SEEDED_OWNER_RANK;
+}
+
 function extractId(req: NextRequest): string {
   const segments = new URL(req.url).pathname.split('/');
   return segments[segments.length - 1];
@@ -43,6 +53,13 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       select: { id: true, role: true, roleId: true },
     });
     if (!member) throw Errors.notFound('Team member not found');
+
+    // Rank check — caller must outrank target before mutating their role.
+    const callerRank = await adminRank(ctx.userId);
+    const targetRank = ENUM_RANK[member.role];
+    if (callerRank <= targetRank) {
+      throw Errors.forbidden('You cannot change the role of a peer or higher-ranked admin');
+    }
 
     const body = await req.json();
     const input = updateSchema.parse(body);
@@ -113,9 +130,21 @@ export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
       select: { id: true, role: true, roleId: true },
     });
 
-    if (member) {
-      await prisma.adminTeamMember.delete({ where: { id: member.id } });
+    // The seeded super-admin owner has no AdminTeamMember row. Without this
+    // guard, ANY admin with users.delete could demote them to 'customer' and
+    // lock the platform out.
+    if (!member) {
+      throw Errors.forbidden('The platform owner cannot be removed from the admin team');
     }
+
+    // Rank check — caller must outrank target before removing them.
+    const callerRank = await adminRank(ctx.userId);
+    const targetRank = ENUM_RANK[member.role];
+    if (callerRank <= targetRank) {
+      throw Errors.forbidden('You cannot remove a peer or higher-ranked admin');
+    }
+
+    await prisma.adminTeamMember.delete({ where: { id: member.id } });
     // Demote user role so they can't access admin routes
     await prisma.user.update({ where: { id: userId }, data: { role: 'customer' } });
 
@@ -123,7 +152,7 @@ export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
       action: AUDIT_ACTIONS.adminTeamRemove,
       entity: 'AdminTeamMember',
       entityId: userId,
-      before: { roleId: member?.roleId, role: member?.role ?? 'owner' },
+      before: { roleId: member.roleId, role: member.role },
     });
 
     return NextResponse.json({ success: true });

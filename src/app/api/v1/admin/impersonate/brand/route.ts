@@ -5,16 +5,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
+import { requirePermission } from '@/lib/permissions/engine';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 
 const BRAND_ID_COOKIE   = 'admin_impersonate_brand_id';
 const BRAND_NAME_COOKIE = 'admin_impersonate_brand_name';
 const COOKIE_MAX_AGE    = 60 * 60 * 4; // 4 hours
+const IS_PROD = process.env.NODE_ENV === 'production';
 
-export const POST = adminOnly(async (req: NextRequest, _ctx) => {
+export const POST = adminOnly(async (req: NextRequest, ctx) => {
   try {
+    // Same rationale as vendor impersonation: gate behind brand-management
+    // permission so Viewers/Support Agents can't impersonate brands.
+    requirePermission(ctx, 'brands.edit');
+
     const { brandId } = await req.json();
-    if (!brandId) throw Errors.forbidden('brandId is required');
+    if (!brandId) throw Errors.badRequest('brandId is required');
 
     const brand = await prisma.brand.findUnique({
       where: { id: brandId },
@@ -23,8 +29,8 @@ export const POST = adminOnly(async (req: NextRequest, _ctx) => {
     if (!brand) throw Errors.notFound('Brand not found');
 
     const res = NextResponse.json({ success: true });
-    res.cookies.set(BRAND_ID_COOKIE, brand.id, { httpOnly: false, sameSite: 'lax', path: '/', maxAge: COOKIE_MAX_AGE });
-    res.cookies.set(BRAND_NAME_COOKIE, brand.name, { httpOnly: false, sameSite: 'lax', path: '/', maxAge: COOKIE_MAX_AGE });
+    res.cookies.set(BRAND_ID_COOKIE, brand.id, { httpOnly: true, secure: IS_PROD, sameSite: 'lax', path: '/', maxAge: COOKIE_MAX_AGE });
+    res.cookies.set(BRAND_NAME_COOKIE, brand.name, { httpOnly: false, secure: IS_PROD, sameSite: 'lax', path: '/', maxAge: COOKIE_MAX_AGE });
     return res;
   } catch (error) {
     return errorResponse(error);

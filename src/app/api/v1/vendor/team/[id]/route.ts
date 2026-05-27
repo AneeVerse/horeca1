@@ -34,6 +34,27 @@ const VENDOR_ROLE_TO_ENUM: Record<string, TeamRole> = {
   'Vendor Viewer': 'viewer',
 };
 
+// Rank for team-role comparisons. A member can only mutate members ranked
+// below them; the vendor account owner (Vendor.userId) has no team-member
+// row and is treated as the maximum rank.
+const ENUM_RANK: Record<TeamRole, number> = { owner: 80, manager: 60, editor: 40, viewer: 20 };
+const VENDOR_OWNER_RANK = 100;
+
+async function vendorMemberRank(userId: string, vendorId: string): Promise<number> {
+  // A user listed on the Vendor row directly (Vendor.userId) is the account
+  // owner — outranks everyone, including 'owner'-enum team members.
+  const ownerVendor = await prisma.vendor.findFirst({
+    where: { id: vendorId, userId },
+    select: { id: true },
+  });
+  if (ownerVendor) return VENDOR_OWNER_RANK;
+  const m = await prisma.vendorTeamMember.findFirst({
+    where: { userId, vendorId },
+    select: { role: true },
+  });
+  return m ? ENUM_RANK[m.role] : 0;
+}
+
 function sortKeys(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(sortKeys);
   if (v && typeof v === 'object') {
@@ -124,6 +145,16 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
       select: { id: true, role: true, roleId: true, userId: true },
     });
     if (!member) throw Errors.notFound('Team member not found');
+
+    // Rank check — same logic as DELETE. Without this, a Manager could PATCH
+    // an Admin down to Viewer and then act as them.
+    if (member.userId !== ctx.userId) {
+      const callerRank = await vendorMemberRank(ctx.userId, vendorId);
+      const targetRank = ENUM_RANK[member.role];
+      if (callerRank <= targetRank) {
+        throw Errors.forbidden('You cannot change the role of a peer or higher-ranked team member');
+      }
+    }
 
     const vendor = await prisma.vendor.findUnique({
       where: { id: vendorId },
@@ -256,12 +287,20 @@ export const DELETE = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
 
     const member = await prisma.vendorTeamMember.findFirst({
       where: { id, vendorId },
-      select: { id: true, userId: true },
+      select: { id: true, userId: true, role: true },
     });
     if (!member) throw Errors.notFound('Team member not found');
 
     if (member.userId === ctx.userId) {
       throw Errors.badRequest('You cannot remove yourself from the team');
+    }
+
+    // Rank check — caller must outrank target. Without this, a Vendor Manager
+    // with users.delete could remove the Vendor Admin and seize the account.
+    const callerRank = await vendorMemberRank(ctx.userId, vendorId);
+    const targetRank = ENUM_RANK[member.role];
+    if (callerRank <= targetRank) {
+      throw Errors.forbidden('You cannot remove a peer or higher-ranked team member');
     }
 
     const vendor = await prisma.vendor.findUnique({

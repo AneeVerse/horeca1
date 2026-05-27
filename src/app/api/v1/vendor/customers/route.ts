@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { resolveVendorId } from '@/lib/resolveVendorId';
+import { requirePermission } from '@/lib/permissions/engine';
 
 const upsertSchema = z.object({
   userId: z.string().uuid(),
@@ -23,6 +24,9 @@ const upsertSchema = z.object({
 
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
+    // Customer list returns PII (name, business name, email, phone) plus
+    // spend totals — gate so storefront-only buyers and Viewers can't pull it.
+    requirePermission(ctx, 'customers.view');
     const vendorId = await resolveVendorId(ctx, req);
     const url = new URL(req.url);
     const search = url.searchParams.get('search')?.trim() ?? '';
@@ -97,6 +101,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 
 export const POST = vendorOnly(async (req: NextRequest, ctx) => {
   try {
+    requirePermission(ctx, 'customers.edit');
     const vendorId = await resolveVendorId(ctx, req);
     const body = upsertSchema.parse(await req.json());
 

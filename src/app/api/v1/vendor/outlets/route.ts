@@ -21,8 +21,17 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
 
     if (!vendor) return NextResponse.json({ success: true, data: { businessAccount: null, outlets: [] } });
 
+    // If the caller is outlet-scoped (their UserRole has outletId set on at
+    // least one row), only return the outlets they can actually access.
+    // Account-wide members (accessibleOutletIds is empty) see everything.
     const outlets = await prisma.outlet.findMany({
-      where: { businessAccountId: vendor.businessAccountId, isActive: true },
+      where: {
+        businessAccountId: vendor.businessAccountId,
+        isActive: true,
+        ...(ctx.accessibleOutletIds.length > 0
+          ? { id: { in: ctx.accessibleOutletIds } }
+          : {}),
+      },
       select: { id: true, name: true, code: true, addressLine: true, city: true, pincode: true },
       orderBy: { name: 'asc' },
     });

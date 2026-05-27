@@ -7,16 +7,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
+import { requirePermission } from '@/lib/permissions/engine';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 
 const VENDOR_ID_COOKIE = 'admin_impersonate_vendor_id';
 const VENDOR_NAME_COOKIE = 'admin_impersonate_vendor_name';
 const COOKIE_MAX_AGE = 60 * 60 * 4; // 4 hours
+const IS_PROD = process.env.NODE_ENV === 'production';
 
-export const POST = adminOnly(async (req: NextRequest, _ctx) => {
+export const POST = adminOnly(async (req: NextRequest, ctx) => {
   try {
+    // Impersonation lets an admin act as the vendor — gate behind the same
+    // permission that lets them manage vendor accounts. Plain adminOnly was
+    // letting Viewers and Support Agents impersonate freely.
+    requirePermission(ctx, 'vendors.edit');
+
     const { vendorId } = await req.json();
-    if (!vendorId) throw Errors.forbidden('vendorId is required');
+    if (!vendorId) throw Errors.badRequest('vendorId is required');
 
     const vendor = await prisma.vendor.findUnique({
       where: { id: vendorId },
@@ -25,14 +32,20 @@ export const POST = adminOnly(async (req: NextRequest, _ctx) => {
     if (!vendor) throw Errors.notFound('Vendor not found');
 
     const res = NextResponse.json({ success: true });
+    // The id cookie is read SERVER-SIDE only (resolveVendorId,
+    // resolveBusinessAccountContext). Making it httpOnly stops XSS from
+    // hijacking the impersonation token. The name cookie remains
+    // client-readable so the impersonation banner UI can render.
     res.cookies.set(VENDOR_ID_COOKIE, vendor.id, {
-      httpOnly: false,
+      httpOnly: true,
+      secure: IS_PROD,
       sameSite: 'lax',
       path: '/',
       maxAge: COOKIE_MAX_AGE,
     });
     res.cookies.set(VENDOR_NAME_COOKIE, vendor.businessName, {
       httpOnly: false,
+      secure: IS_PROD,
       sameSite: 'lax',
       path: '/',
       maxAge: COOKIE_MAX_AGE,

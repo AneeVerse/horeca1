@@ -52,6 +52,9 @@ function sortKeys(v: unknown): unknown {
 
 export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
+    // Team list returns every member's name/email/phone/HCID — gate so a
+    // Viewer can't enumerate peers' contact details.
+    requirePermission(ctx, 'users.view');
     const { vendorId } = await resolveVendorContext(ctx, req);
 
     const vendor = await prisma.vendor.findUnique({

@@ -43,8 +43,9 @@ const ADMIN_ROLE_TO_ENUM: Record<string, TeamRole> = {
   Viewer: 'viewer',
 };
 
-export const GET = adminOnly(async (_req: NextRequest, _ctx: AuthContext) => {
+export const GET = adminOnly(async (_req: NextRequest, ctx: AuthContext) => {
   try {
+    requirePermission(ctx, 'users.view');
     const admins = await prisma.user.findMany({
       where: { role: 'admin' },
       orderBy: { createdAt: 'asc' },
