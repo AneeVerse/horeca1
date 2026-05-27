@@ -7,12 +7,14 @@ import { brandOnly } from '@/middleware/rbac';
 import { resolveBrandContext } from '@/lib/resolveBrandId';
 import { requirePermission } from '@/lib/permissions/engine';
 import { prisma } from '@/lib/prisma';
+import { redis } from '@/lib/redis';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import type { TeamRole } from '@prisma/client';
 
 const updateSchema = z.object({
-  roleId: z.string().uuid(),
-});
+  roleId: z.string().uuid().optional(),
+  permissions: z.record(z.string(), z.record(z.string(), z.boolean())).optional(),
+}).refine(d => d.roleId || d.permissions, { message: 'Either roleId or permissions is required' });
 
 const BRAND_ROLE_TO_ENUM: Record<string, TeamRole> = {
   'Brand Admin': 'owner',
@@ -39,21 +41,39 @@ export const PATCH = brandOnly(async (req: NextRequest, ctx) => {
     if (!member) throw Errors.notFound('Team member not found');
 
     const body = await req.json();
-    const { roleId } = updateSchema.parse(body);
-
-    const role = await prisma.accountRole.findUnique({
-      where: { id: roleId },
-      select: { id: true, name: true, scope: true },
-    });
-    if (!role || role.scope !== 'brand') {
-      throw Errors.badRequest('roleId must reference a brand-scope role');
-    }
+    const input = updateSchema.parse(body);
 
     const brand = await prisma.brand.findUnique({
       where: { id: brandId },
       select: { businessAccountId: true },
     });
     if (!brand) throw Errors.notFound('Brand not found');
+
+    let role: { id: string; name: string; scope: string };
+    if (input.permissions && Object.keys(input.permissions).length > 0) {
+      const ALLOWED = ['view', 'create', 'edit', 'delete', 'approve'];
+      const sanitized: Record<string, Record<string, boolean>> = {};
+      for (const [mod, actions] of Object.entries(input.permissions)) {
+        sanitized[mod] = {};
+        for (const [a, v] of Object.entries(actions)) {
+          if (ALLOWED.includes(a) && typeof v === 'boolean') sanitized[mod][a] = v;
+        }
+      }
+      const customName = `Custom (${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })})`;
+      role = await prisma.accountRole.upsert({
+        where: { businessAccountId_name: { businessAccountId: brand.businessAccountId, name: customName } },
+        create: { businessAccountId: brand.businessAccountId, name: customName, scope: 'brand', permissions: sanitized, isTemplate: false, createdBy: ctx.userId },
+        update: { permissions: sanitized },
+        select: { id: true, name: true, scope: true },
+      });
+    } else {
+      const found = await prisma.accountRole.findUnique({
+        where: { id: input.roleId! },
+        select: { id: true, name: true, scope: true },
+      });
+      if (!found || found.scope !== 'brand') throw Errors.badRequest('roleId must reference a brand-scope role');
+      role = found;
+    }
 
     const legacyEnum: TeamRole = BRAND_ROLE_TO_ENUM[role.name] ?? 'viewer';
     const userId = member.userId;
@@ -77,6 +97,8 @@ export const PATCH = brandOnly(async (req: NextRequest, ctx) => {
         data: { userId, businessAccountId, outletId: null, roleId: role.id },
       });
     });
+
+    try { await redis.set(`session:stale:${userId}`, '1', 'EX', 3600); } catch { /* non-critical */ }
 
     return NextResponse.json({ success: true });
   } catch (error) {

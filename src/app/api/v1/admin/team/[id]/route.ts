@@ -11,11 +11,13 @@ import { requirePermission } from '@/lib/permissions/engine';
 import { prisma } from '@/lib/prisma';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
+import { redis } from '@/lib/redis';
 import type { TeamRole } from '@prisma/client';
 
 const updateSchema = z.object({
-  roleId: z.string().uuid(),
-});
+  roleId: z.string().uuid().optional(),
+  permissions: z.record(z.string(), z.record(z.string(), z.boolean())).optional(),
+}).refine(d => d.roleId || d.permissions, { message: 'Either roleId or permissions is required' });
 
 const ADMIN_ROLE_TO_ENUM: Record<string, TeamRole> = {
   'Super Admin': 'owner',
@@ -43,14 +45,29 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     if (!member) throw Errors.notFound('Team member not found');
 
     const body = await req.json();
-    const { roleId } = updateSchema.parse(body);
+    const input = updateSchema.parse(body);
 
-    const role = await prisma.accountRole.findUnique({
-      where: { id: roleId },
-      select: { id: true, name: true, scope: true },
-    });
-    if (!role || role.scope !== 'admin') {
-      throw Errors.badRequest('roleId must reference an admin-scope role');
+    let role: { id: string; name: string; scope: string };
+    if (input.permissions && Object.keys(input.permissions).length > 0) {
+      const ALLOWED = ['view', 'create', 'edit', 'delete', 'approve'];
+      const sanitized: Record<string, Record<string, boolean>> = {};
+      for (const [mod, actions] of Object.entries(input.permissions)) {
+        sanitized[mod] = {};
+        for (const [a, v] of Object.entries(actions)) {
+          if (ALLOWED.includes(a) && typeof v === 'boolean') sanitized[mod][a] = v;
+        }
+      }
+      role = await prisma.accountRole.create({
+        data: { businessAccountId: null, name: `Custom-${Date.now().toString(36)}`, scope: 'admin', permissions: sanitized, isTemplate: false, createdBy: ctx.userId },
+        select: { id: true, name: true, scope: true },
+      });
+    } else {
+      const found = await prisma.accountRole.findUnique({
+        where: { id: input.roleId! },
+        select: { id: true, name: true, scope: true },
+      });
+      if (!found || found.scope !== 'admin') throw Errors.badRequest('roleId must reference an admin-scope role');
+      role = found;
     }
 
     const legacyEnum: TeamRole = ADMIN_ROLE_TO_ENUM[role.name] ?? 'viewer';
@@ -67,6 +84,8 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       before: { roleId: member.roleId, role: member.role },
       after: { roleId: role.id, role: legacyEnum, roleName: role.name },
     });
+
+    try { await redis.set(`session:stale:${userId}`, '1', 'EX', 3600); } catch { /* non-critical */ }
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -18,8 +18,9 @@ const inviteSchema = z.object({
   identifier: z.string().min(3).max(255),
   fullName: z.string().min(2).max(100).optional(),
   password: z.string().min(6).max(72).optional(),
-  roleId: z.string().uuid(),
-});
+  roleId: z.string().uuid().optional(),
+  permissions: z.record(z.string(), z.record(z.string(), z.boolean())).optional(),
+}).refine(d => d.roleId || d.permissions, { message: 'Either roleId or permissions is required' });
 
 const BRAND_ROLE_TO_ENUM: Record<string, TeamRole> = {
   'Brand Admin': 'owner',
@@ -83,19 +84,37 @@ export const POST = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
     const body = await req.json();
     const input = inviteSchema.parse(body);
 
-    const role = await prisma.accountRole.findUnique({
-      where: { id: input.roleId },
-      select: { id: true, name: true, scope: true, description: true },
-    });
-    if (!role || role.scope !== 'brand') {
-      throw Errors.badRequest('roleId must reference a brand-scope role');
-    }
-
     const brand = await prisma.brand.findUnique({
       where: { id: brandId },
       select: { businessAccountId: true },
     });
     if (!brand) throw Errors.notFound('Brand not found');
+
+    let role: { id: string; name: string; scope: string; description: string | null };
+    if (input.permissions && Object.keys(input.permissions).length > 0) {
+      const ALLOWED = ['view', 'create', 'edit', 'delete', 'approve'];
+      const sanitized: Record<string, Record<string, boolean>> = {};
+      for (const [mod, actions] of Object.entries(input.permissions)) {
+        sanitized[mod] = {};
+        for (const [a, v] of Object.entries(actions)) {
+          if (ALLOWED.includes(a) && typeof v === 'boolean') sanitized[mod][a] = v;
+        }
+      }
+      const customName = `Custom (${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })})`;
+      role = await prisma.accountRole.upsert({
+        where: { businessAccountId_name: { businessAccountId: brand.businessAccountId, name: customName } },
+        create: { businessAccountId: brand.businessAccountId, name: customName, scope: 'brand', permissions: sanitized, isTemplate: false, createdBy: ctx.userId },
+        update: { permissions: sanitized },
+        select: { id: true, name: true, scope: true, description: true },
+      });
+    } else {
+      const found = await prisma.accountRole.findUnique({
+        where: { id: input.roleId! },
+        select: { id: true, name: true, scope: true, description: true },
+      });
+      if (!found || found.scope !== 'brand') throw Errors.badRequest('roleId must reference a brand-scope role');
+      role = found;
+    }
 
     const identifierTrim = input.identifier.trim();
     const looksEmail = identifierTrim.includes('@');

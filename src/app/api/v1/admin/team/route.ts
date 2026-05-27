@@ -28,8 +28,9 @@ const inviteSchema = z.object({
   identifier: z.string().min(3).max(255),
   fullName: z.string().min(2).max(100).optional(),
   password: z.string().min(6).max(72).optional(),
-  roleId: z.string().uuid(),
-});
+  roleId: z.string().uuid().optional(),
+  permissions: z.record(z.string(), z.record(z.string(), z.boolean())).optional(),
+}).refine(d => d.roleId || d.permissions, { message: 'Either roleId or permissions is required' });
 
 // Map seeded admin role name → legacy enum so we can keep writing the enum
 // column during the transition window (auth.ts still reads it as a fallback).
@@ -90,13 +91,28 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
     const body = await req.json();
     const input = inviteSchema.parse(body);
 
-    // Resolve the role and validate it's an admin-scope template.
-    const role = await prisma.accountRole.findUnique({
-      where: { id: input.roleId },
-      select: { id: true, name: true, scope: true, description: true, isTemplate: true },
-    });
-    if (!role || role.scope !== 'admin') {
-      throw Errors.badRequest('roleId must reference an admin-scope role');
+    // Resolve or create the role for this member.
+    let role: { id: string; name: string; scope: string; description: string | null };
+    if (input.permissions && Object.keys(input.permissions).length > 0) {
+      const ALLOWED = ['view', 'create', 'edit', 'delete', 'approve'];
+      const sanitized: Record<string, Record<string, boolean>> = {};
+      for (const [mod, actions] of Object.entries(input.permissions)) {
+        sanitized[mod] = {};
+        for (const [a, v] of Object.entries(actions)) {
+          if (ALLOWED.includes(a) && typeof v === 'boolean') sanitized[mod][a] = v;
+        }
+      }
+      role = await prisma.accountRole.create({
+        data: { businessAccountId: null, name: `Custom-${Date.now().toString(36)}`, scope: 'admin', permissions: sanitized, isTemplate: false, createdBy: ctx.userId },
+        select: { id: true, name: true, scope: true, description: true },
+      });
+    } else {
+      const found = await prisma.accountRole.findUnique({
+        where: { id: input.roleId! },
+        select: { id: true, name: true, scope: true, description: true },
+      });
+      if (!found || found.scope !== 'admin') throw Errors.badRequest('roleId must reference an admin-scope role');
+      role = found;
     }
 
     // Find existing user by email or phone, otherwise create one inline.

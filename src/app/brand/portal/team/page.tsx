@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Users, Plus, Trash2, Loader2, Crown, Shield, Edit3, Eye, AlertCircle, X, UserPlus, Settings2 } from 'lucide-react';
+import { Users, Plus, Trash2, Loader2, Crown, Shield, Edit3, Eye, AlertCircle, X, UserPlus, Settings2, KeyRound, Pencil, Check } from 'lucide-react';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { TeamRolesEditor } from '@/components/features/team/TeamRolesEditor';
+import { ResetPasswordModal } from '@/app/admin/team/page';
 import { toast } from 'sonner';
 
 interface TeamMember {
@@ -32,6 +33,7 @@ interface BrandRole {
     name: string;
     scope: 'admin' | 'vendor' | 'brand';
     description: string | null;
+    permissions: Record<string, Record<string, boolean>>;
 }
 
 const ROLE_LOOK: Record<string, { color: string; bg: string; Icon: React.ComponentType<{ size?: number; className?: string }> }> = {
@@ -50,7 +52,7 @@ function initials(name: string) {
 }
 
 export default function BrandTeamPage() {
-    const { data: session, status: sessionStatus, update: updateSession } = useSession();
+    const { data: session, status: sessionStatus } = useSession();
     const currentUserId = (session?.user as { id?: string })?.id;
     const sessionPerms = (session?.user as { permissions?: string[] })?.permissions ?? [];
     const canManage = sessionPerms.includes('users.create');
@@ -61,6 +63,8 @@ export default function BrandTeamPage() {
     const [loading, setLoading] = useState(true);
     const [showInvite, setShowInvite] = useState(false);
     const [showRolesEditor, setShowRolesEditor] = useState(false);
+    const [editingRole, setEditingRole] = useState<TeamMember | null>(null);
+    const [passwordMember, setPasswordMember] = useState<TeamMember | null>(null);
 
     const fetchTeam = useCallback(async () => {
         try {
@@ -76,28 +80,6 @@ export default function BrandTeamPage() {
     }, []);
 
     useEffect(() => { fetchTeam(); }, [fetchTeam]);
-
-    const handleRoleChange = async (member: TeamMember, newRoleId: string) => {
-        try {
-            const res = await fetch(`/api/v1/brand/team/${member.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ roleId: newRoleId }),
-            });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed to update role');
-            const nextRole = roles.find(r => r.id === newRoleId);
-            setTeam(prev => prev.map(m => m.id === member.id && nextRole
-                ? { ...m, role: { id: nextRole.id, name: nextRole.name, scope: nextRole.scope, description: nextRole.description } }
-                : m));
-            if (member.user.id === currentUserId) {
-                await updateSession();
-            }
-            toast.success(`Role updated to ${nextRole?.name ?? 'new role'}`);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : 'Failed to update role');
-        }
-    };
 
     const handleRemove = async (member: TeamMember) => {
         const ok = await confirm({
@@ -192,13 +174,10 @@ export default function BrandTeamPage() {
                                         style={{ backgroundColor: look.bg, color: look.color }}>
                                         {initials(member.user.fullName)}
                                     </div>
+
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <p className="text-[14px] font-bold text-[#181725] truncate">{member.user.fullName}</p>
-                                            <span className="text-[11px] font-[900] px-2 py-0.5 rounded-[5px] inline-flex items-center gap-1"
-                                                style={{ color: look.color, backgroundColor: look.bg }}>
-                                                <look.Icon size={11} /> {member.role.name}
-                                            </span>
                                             {isOwnerRow && (
                                                 <span className="text-[11px] font-bold text-[#F59E0B] bg-[#FFF7E6] px-2 py-0.5 rounded-[5px]">Primary</span>
                                             )}
@@ -213,32 +192,48 @@ export default function BrandTeamPage() {
                                             {member.user.email ?? member.user.phone ?? '—'}
                                         </p>
                                     </div>
-                                    <span className="text-[12px] text-[#AEAEAE] hidden md:block shrink-0">
-                                        {new Date(member.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+
+                                    {/* Role badge */}
+                                    <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] shrink-0"
+                                        style={{ backgroundColor: look.bg, color: look.color }}>
+                                        <look.Icon size={13} />
+                                        <span className="text-[12px] font-bold">{member.role.name}</span>
+                                    </div>
+
+                                    <span className="text-[12px] text-[#AEAEAE] hidden md:block shrink-0 w-[80px] text-right">
+                                        {new Date(member.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
                                     </span>
-                                    {!canManage ? <span className="shrink-0" /> : isOwnerRow ? (
-                                        <span className="text-[11px] text-[#AEAEAE] shrink-0">Owner</span>
-                                    ) : isSelf ? (
-                                        <span className="text-[11px] text-[#AEAEAE] shrink-0">You</span>
-                                    ) : (
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <select
-                                                value={member.role.id ?? ''}
-                                                onChange={(e) => handleRoleChange(member, e.target.value)}
-                                                disabled={!member.role.id}
-                                                className="h-[32px] text-[12px] border border-[#EEEEEE] rounded-[8px] px-2 outline-none bg-white"
-                                            >
-                                                {!member.role.id && <option value="">{member.role.name}</option>}
-                                                {roles.map((r) => (
-                                                    <option key={r.id} value={r.id}>{r.name}</option>
-                                                ))}
-                                            </select>
-                                            <button onClick={() => handleRemove(member)}
-                                                className="p-1.5 rounded-[6px] hover:bg-red-50 transition-colors" title="Remove">
-                                                <Trash2 size={14} className="text-[#E74C3C]" />
-                                            </button>
-                                        </div>
-                                    )}
+
+                                    <div className="shrink-0 flex items-center gap-1">
+                                        {isOwnerRow ? (
+                                            <>
+                                                <span className="text-[11px] text-[#AEAEAE] px-1">Owner</span>
+                                                {canManage && (
+                                                    <button onClick={() => setPasswordMember(member)}
+                                                        className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
+                                                        <KeyRound size={14} className="text-[#AEAEAE]" />
+                                                    </button>
+                                                )}
+                                            </>
+                                        ) : isSelf ? (
+                                            <span className="text-[11px] text-[#AEAEAE] px-1">You</span>
+                                        ) : canManage ? (
+                                            <>
+                                                <button onClick={() => setEditingRole(member)}
+                                                    className="p-2 rounded-[8px] hover:bg-amber-50 transition-colors" title="Change role">
+                                                    <Pencil size={14} className="text-[#F59E0B]" />
+                                                </button>
+                                                <button onClick={() => setPasswordMember(member)}
+                                                    className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
+                                                    <KeyRound size={14} className="text-[#AEAEAE]" />
+                                                </button>
+                                                <button onClick={() => handleRemove(member)}
+                                                    className="p-2 rounded-[8px] hover:bg-red-50 transition-colors" title="Remove">
+                                                    <Trash2 size={14} className="text-[#E74C3C]" />
+                                                </button>
+                                            </>
+                                        ) : null}
+                                    </div>
                                 </li>
                             );
                         })}
@@ -260,10 +255,30 @@ export default function BrandTeamPage() {
                 <InviteModal
                     roles={roles}
                     onClose={() => setShowInvite(false)}
-                    onInvited={(newMember) => {
-                        setTeam((prev) => [...prev, newMember]);
-                        setShowInvite(false);
+                    onInvited={(newMember) => { setTeam(prev => [...prev, newMember]); setShowInvite(false); }}
+                />
+            )}
+
+            {editingRole && (
+                <EditRoleModal
+                    member={editingRole}
+                    roles={roles}
+                    onClose={() => setEditingRole(null)}
+                    onSaved={(newRoleId) => {
+                        const nextRole = roles.find(r => r.id === newRoleId);
+                        setTeam(prev => prev.map(m => m.id === editingRole.id && nextRole
+                            ? { ...m, role: { id: nextRole.id, name: nextRole.name, scope: nextRole.scope, description: nextRole.description } }
+                            : m));
                     }}
+                />
+            )}
+
+            {passwordMember && (
+                <ResetPasswordModal
+                    member={passwordMember}
+                    passwordEndpoint={`/api/v1/brand/team/${passwordMember.id}/password`}
+                    accent="#53B175"
+                    onClose={() => setPasswordMember(null)}
                 />
             )}
 
@@ -278,27 +293,62 @@ export default function BrandTeamPage() {
     );
 }
 
+// ─── Invite Modal ──────────────────────────────────────────────────────────────
+
+const PERM_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve'] as const;
+
 function InviteModal({ roles, onClose, onInvited }: { roles: BrandRole[]; onClose: () => void; onInvited: (m: TeamMember) => void }) {
+    const [step, setStep] = useState<1 | 2>(1);
     const [identifier, setIdentifier] = useState('');
     const [fullName, setFullName] = useState('');
     const [password, setPassword] = useState('');
     const [roleId, setRoleId] = useState(roles[0]?.id ?? '');
+    const [customPerms, setCustomPerms] = useState<Record<string, Record<string, boolean>>>({});
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const selectedRole = roles.find(r => r.id === roleId);
+
+    const handleRoleSelect = (id: string) => {
+        const r = roles.find(x => x.id === id);
+        setRoleId(id);
+        setCustomPerms(r ? JSON.parse(JSON.stringify(r.permissions)) : {});
+    };
+
+    const goToStep2 = () => {
+        if (!identifier.trim()) { setError('Email or phone is required'); return; }
+        setError(null);
+        if (Object.keys(customPerms).length === 0) {
+            const r = roles.find(x => x.id === roleId);
+            setCustomPerms(r ? JSON.parse(JSON.stringify(r.permissions)) : {});
+        }
+        setStep(2);
+    };
+
+    const togglePerm = (mod: string, action: string) => {
+        setCustomPerms(prev => ({
+            ...prev,
+            [mod]: { ...prev[mod], [action]: !prev[mod]?.[action] },
+        }));
+    };
+
+    const isDirty = selectedRole && JSON.stringify(customPerms) !== JSON.stringify(selectedRole.permissions);
+
     const handleSubmit = async () => {
-        if (!identifier.trim() || !roleId) { setError('Identifier and role are required'); return; }
         try {
             setSubmitting(true); setError(null);
+            const body: Record<string, unknown> = {
+                identifier: identifier.trim(),
+                fullName: fullName.trim() || undefined,
+                password: password || undefined,
+            };
+            if (isDirty) body.permissions = customPerms;
+            else body.roleId = roleId;
+
             const res = await fetch('/api/v1/brand/team', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    identifier: identifier.trim(),
-                    fullName: fullName.trim() || undefined,
-                    password: password || undefined,
-                    roleId,
-                }),
+                body: JSON.stringify(body),
             });
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Failed to invite');
@@ -310,59 +360,291 @@ function InviteModal({ roles, onClose, onInvited }: { roles: BrandRole[]; onClos
 
     return (
         <div className="fixed inset-0 z-[15000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-[16px] w-full max-w-[480px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-                <div className="flex items-center justify-between mb-5">
+            <div className="bg-white rounded-[16px] w-full max-w-[520px] shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 pt-5 pb-3 shrink-0">
                     <div className="flex items-center gap-2">
                         <UserPlus size={18} className="text-[#53B175]" />
                         <h3 className="text-[16px] font-bold text-[#181725]">Add Team Member</h3>
                     </div>
-                    <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={16} className="text-[#7C7C7C]" /></button>
+                    <div className="flex items-center gap-3">
+                        <span className="text-[11px] text-[#AEAEAE]">Step {step} of 2</span>
+                        <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={16} className="text-[#7C7C7C]" /></button>
+                    </div>
                 </div>
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Email or phone</label>
-                        <input type="text" autoComplete="off" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
-                            placeholder="priya@brand.com or 9876543210"
-                            className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#53B175]/40 bg-[#FAFAFA] focus:bg-white transition-colors" />
-                        <p className="text-[11px] text-[#AEAEAE] mt-1">Existing accounts get added to this brand. For new accounts (email only), fill in the fields below.</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Full Name (new accounts)</label>
-                            <input type="text" autoComplete="off" value={fullName} onChange={(e) => setFullName(e.target.value)}
-                                placeholder="e.g. Priya Sharma"
-                                className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#53B175]/40 bg-[#FAFAFA] focus:bg-white transition-colors" />
+                <div className="flex gap-1.5 px-6 pb-4 shrink-0">
+                    {[1, 2].map(s => (
+                        <div key={s} className="h-1 rounded-full transition-all flex-1" style={{ backgroundColor: s <= step ? '#53B175' : '#EEEEEE' }} />
+                    ))}
+                </div>
+
+                {/* Scrollable body */}
+                <div className="flex-1 overflow-y-auto px-6 pb-6">
+                    {step === 1 ? (
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Email or Phone *</label>
+                                <input type="text" autoComplete="off" value={identifier} onChange={e => setIdentifier(e.target.value)}
+                                    placeholder="priya@brand.com or 9876543210"
+                                    className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#53B175]/40 bg-[#FAFAFA] focus:bg-white transition-colors" />
+                                <p className="text-[11px] text-[#AEAEAE] mt-1">Existing accounts get added to this brand. For new accounts fill the fields below.</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Full Name</label>
+                                    <input type="text" autoComplete="off" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="New accounts only"
+                                        className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#53B175]/40 bg-[#FAFAFA] focus:bg-white transition-colors" />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Password</label>
+                                    <input type="password" name="newPassword" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="New accounts only"
+                                        className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#53B175]/40 bg-[#FAFAFA] focus:bg-white transition-colors" />
+                                </div>
+                            </div>
+                            {error && (
+                                <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-[8px] p-2.5">
+                                    <AlertCircle size={14} /> {error}
+                                </div>
+                            )}
+                            <div className="flex gap-3 pt-1">
+                                <button onClick={goToStep2} disabled={!identifier.trim()}
+                                    className="flex-1 h-[44px] bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#3d9e41] disabled:opacity-50 transition-colors">
+                                    Next →
+                                </button>
+                                <button onClick={onClose} className="h-[44px] px-6 bg-gray-100 text-[#7C7C7C] rounded-[10px] text-[13px] font-bold hover:bg-gray-200 transition-colors">Cancel</button>
+                            </div>
                         </div>
-                        <div>
-                            <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Password (new accounts)</label>
-                            <input type="password" name="newPassword" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Min. 6 characters"
-                                className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#53B175]/40 bg-[#FAFAFA] focus:bg-white transition-colors" />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Role</label>
-                        <select value={roleId} onChange={(e) => setRoleId(e.target.value)}
-                            className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#53B175]/40 bg-white transition-colors">
-                            {roles.map((r) => (
-                                <option key={r.id} value={r.id}>{r.name}{r.description ? ` — ${r.description}` : ''}</option>
-                            ))}
-                        </select>
-                    </div>
-                    {error && (
-                        <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-[8px] p-2.5">
-                            <AlertCircle size={14} /> {error}
+                    ) : (
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-2">Role</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {roles.map(r => {
+                                        const look = lookFor(r.name);
+                                        const active = r.id === roleId;
+                                        return (
+                                            <button key={r.id} type="button" onClick={() => handleRoleSelect(r.id)}
+                                                className="flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-[12px] font-bold border-2 transition-all hover:shadow-sm"
+                                                style={active
+                                                    ? { background: look.bg, borderColor: look.color, color: look.color }
+                                                    : { background: 'white', borderColor: '#EEEEEE', color: '#7C7C7C' }}>
+                                                <look.Icon size={13} /> {r.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {selectedRole?.description && (
+                                    <p className="text-[11px] text-[#7C7C7C] mt-1.5">{selectedRole.description}</p>
+                                )}
+                            </div>
+
+                            {Object.keys(customPerms).length > 0 && (
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">
+                                            Permissions {isDirty && <span className="text-[#53B175] normal-case font-normal">(customized)</span>}
+                                        </label>
+                                        {isDirty && (
+                                            <button onClick={() => handleRoleSelect(roleId)} className="text-[10px] text-[#AEAEAE] hover:text-[#53B175] underline transition-colors">
+                                                Reset defaults
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="border border-[#EEEEEE] rounded-[12px] overflow-hidden overflow-y-auto max-h-[300px]">
+                                        <table className="w-full text-[11px] min-w-[400px]">
+                                            <thead className="sticky top-0 bg-[#FAFAFA] z-10">
+                                                <tr>
+                                                    <th className="text-left px-4 py-2.5 font-bold text-[#7C7C7C] uppercase tracking-wider text-[10px]">Module</th>
+                                                    {PERM_ACTIONS.map(a => (
+                                                        <th key={a} className="text-center px-1 py-2.5 font-bold text-[#7C7C7C] uppercase tracking-wider text-[10px] w-[54px] capitalize">{a}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {Object.entries(customPerms).map(([mod, actions]) => (
+                                                    <tr key={mod} className="border-t border-[#F5F5F5]">
+                                                        <td className="px-4 py-2 font-bold text-[#181725] text-[12px] capitalize">{mod}</td>
+                                                        {PERM_ACTIONS.map(a => (
+                                                            <td key={a} className="text-center px-1 py-2">
+                                                                <button type="button" onClick={() => togglePerm(mod, a)}
+                                                                    title={`Toggle ${mod}.${a}`}
+                                                                    className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center mx-auto transition-all hover:scale-110 hover:opacity-80"
+                                                                    style={{ backgroundColor: actions[a] ? '#53B175' : '#F0F0F0' }}>
+                                                                    {actions[a]
+                                                                        ? <Check size={12} className="text-white" />
+                                                                        : <span className="text-[#BBBBBB] text-[10px] leading-none">—</span>}
+                                                                </button>
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p className="text-[10px] text-[#AEAEAE] mt-1.5">Tap any cell to toggle. Changes override the selected role.</p>
+                                </div>
+                            )}
+
+                            {error && (
+                                <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-[8px] p-2.5">
+                                    <AlertCircle size={14} /> {error}
+                                </div>
+                            )}
+                            <div className="flex gap-3 pt-1">
+                                <button onClick={() => { setStep(1); setError(null); }}
+                                    className="h-[44px] px-5 bg-gray-100 text-[#7C7C7C] rounded-[10px] text-[13px] font-bold hover:bg-gray-200 transition-colors">
+                                    ← Back
+                                </button>
+                                <button onClick={handleSubmit} disabled={submitting || !roleId}
+                                    className="flex-1 h-[44px] bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#3d9e41] disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
+                                    {submitting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                                    {submitting ? 'Inviting…' : 'Invite Member'}
+                                </button>
+                            </div>
                         </div>
                     )}
-                    <div className="flex gap-3 pt-2">
-                        <button onClick={handleSubmit} disabled={submitting || !identifier.trim() || !roleId}
-                            className="flex-1 h-[44px] bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#3d9e41] disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
-                            {submitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                            {submitting ? 'Inviting…' : 'Invite Member'}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Edit Role Modal ───────────────────────────────────────────────────────────
+
+function EditRoleModal({ member, roles, onClose, onSaved }: {
+    member: TeamMember;
+    roles: BrandRole[];
+    onClose: () => void;
+    onSaved: (newRoleId: string) => void;
+}) {
+    const [selectedRoleId, setSelectedRoleId] = useState(member.role.id ?? roles[0]?.id ?? '');
+    const [customPerms, setCustomPerms] = useState<Record<string, Record<string, boolean>>>(() => {
+        const r = roles.find(x => x.id === (member.role.id ?? ''));
+        return r ? JSON.parse(JSON.stringify(r.permissions)) : {};
+    });
+    const [saving, setSaving] = useState(false);
+
+    const selectedRole = roles.find(r => r.id === selectedRoleId);
+    const isDirty = selectedRole && JSON.stringify(customPerms) !== JSON.stringify(selectedRole.permissions);
+    const hasChanged = selectedRoleId !== member.role.id || isDirty;
+
+    const handleRoleSelect = (id: string) => {
+        const r = roles.find(x => x.id === id);
+        setSelectedRoleId(id);
+        setCustomPerms(r ? JSON.parse(JSON.stringify(r.permissions)) : {});
+    };
+
+    const togglePerm = (mod: string, action: string) => {
+        setCustomPerms(prev => ({ ...prev, [mod]: { ...prev[mod], [action]: !prev[mod]?.[action] } }));
+    };
+
+    const handleSave = async () => {
+        if (!hasChanged) { onClose(); return; }
+        setSaving(true);
+        try {
+            const body: Record<string, unknown> = isDirty
+                ? { permissions: customPerms }
+                : { roleId: selectedRoleId };
+            const res = await fetch(`/api/v1/brand/team/${member.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Failed');
+            onSaved(selectedRoleId);
+            toast.success('Role updated');
+            onClose();
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Failed to update role');
+        } finally { setSaving(false); }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[15000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-[16px] w-full max-w-[520px] shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[88vh]">
+                <div className="flex items-center justify-between px-6 pt-5 pb-4 shrink-0">
+                    <div className="flex items-center gap-2">
+                        <Shield size={18} className="text-[#53B175]" />
+                        <h3 className="text-[16px] font-bold text-[#181725]">Change Role — {member.user.fullName}</h3>
+                    </div>
+                    <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={16} className="text-[#7C7C7C]" /></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                        {roles.map(role => {
+                            const look = lookFor(role.name);
+                            const active = role.id === selectedRoleId;
+                            return (
+                                <button key={role.id} onClick={() => handleRoleSelect(role.id)}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-[12px] font-bold border-2 transition-all hover:shadow-sm"
+                                    style={active
+                                        ? { background: look.bg, borderColor: look.color, color: look.color }
+                                        : { background: 'white', borderColor: '#EEEEEE', color: '#7C7C7C' }}>
+                                    <look.Icon size={12} /> {role.name}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {selectedRole?.description && (
+                        <p className="text-[11px] text-[#7C7C7C]">{selectedRole.description}</p>
+                    )}
+
+                    {Object.keys(customPerms).length > 0 && (
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">
+                                    Permissions {isDirty && <span className="text-[#53B175] normal-case font-normal">(customized)</span>}
+                                </label>
+                                {isDirty && (
+                                    <button onClick={() => handleRoleSelect(selectedRoleId)} className="text-[10px] text-[#AEAEAE] hover:text-[#53B175] underline transition-colors">
+                                        Reset defaults
+                                    </button>
+                                )}
+                            </div>
+                            <div className="border border-[#EEEEEE] rounded-[12px] overflow-hidden overflow-y-auto max-h-[300px]">
+                                <table className="w-full text-[11px] min-w-[400px]">
+                                    <thead className="sticky top-0 bg-[#FAFAFA] z-10">
+                                        <tr>
+                                            <th className="text-left px-4 py-2.5 font-bold text-[#7C7C7C] uppercase tracking-wider text-[10px]">Module</th>
+                                            {PERM_ACTIONS.map(a => (
+                                                <th key={a} className="text-center px-1 py-2.5 font-bold text-[#7C7C7C] uppercase tracking-wider text-[10px] w-[54px] capitalize">{a}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {Object.entries(customPerms).map(([mod, actions]) => (
+                                            <tr key={mod} className="border-t border-[#F5F5F5]">
+                                                <td className="px-4 py-2 font-bold text-[#181725] text-[12px] capitalize">{mod}</td>
+                                                {PERM_ACTIONS.map(a => (
+                                                    <td key={a} className="text-center px-1 py-2">
+                                                        <button type="button" onClick={() => togglePerm(mod, a)}
+                                                            title={`Toggle ${mod}.${a}`}
+                                                            className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center mx-auto transition-all hover:scale-110 hover:opacity-80"
+                                                            style={{ backgroundColor: actions[a] ? '#53B175' : '#F0F0F0' }}>
+                                                            {actions[a]
+                                                                ? <Check size={12} className="text-white" />
+                                                                : <span className="text-[#BBBBBB] text-[10px] leading-none">—</span>}
+                                                        </button>
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p className="text-[10px] text-[#AEAEAE] mt-1.5">Tap any cell to toggle. Changes override the selected role.</p>
+                        </div>
+                    )}
+
+                    <div className="flex gap-3 pt-1">
+                        <button onClick={handleSave} disabled={saving || !hasChanged}
+                            className="flex-1 h-[42px] bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#3d9e41] disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
+                            {saving ? <Loader2 size={14} className="animate-spin" /> : null}
+                            Save Changes
                         </button>
-                        <button onClick={onClose} className="h-[44px] px-6 bg-gray-100 text-[#7C7C7C] rounded-[10px] text-[13px] font-bold hover:bg-gray-200 transition-colors">
-                            Cancel
-                        </button>
+                        <button onClick={onClose} className="h-[42px] px-5 bg-gray-100 text-[#7C7C7C] rounded-[10px] text-[13px] font-bold hover:bg-gray-200 transition-colors">Cancel</button>
                     </div>
                 </div>
             </div>
