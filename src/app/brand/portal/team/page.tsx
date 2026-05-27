@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Users, Plus, Trash2, Loader2, Crown, Shield, Edit3, Eye, AlertCircle, X, UserPlus, Settings2, KeyRound, Pencil, Check } from 'lucide-react';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { TeamRolesEditor } from '@/components/features/team/TeamRolesEditor';
-import { ResetPasswordModal } from '@/app/admin/team/page';
+import { ResetPasswordModal } from '@/components/features/team/ResetPasswordModal';
 import { toast } from 'sonner';
 
 interface TeamMember {

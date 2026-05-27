@@ -7,7 +7,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { TeamRolesEditor } from '@/components/features/team/TeamRolesEditor';
 import { AddMemberWizard } from '@/components/features/team/AddMemberWizard';
 import { EditMemberModal } from '@/components/features/team/EditMemberModal';
-import { ResetPasswordModal } from '@/app/admin/team/page';
+import { ResetPasswordModal } from '@/components/features/team/ResetPasswordModal';
 import { toast } from 'sonner';
 
 interface TeamMember {

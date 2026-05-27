@@ -8,6 +8,7 @@ import {
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { TeamRolesEditor } from '@/components/features/team/TeamRolesEditor';
+import { ResetPasswordModal } from '@/components/features/team/ResetPasswordModal';
 import { toast } from 'sonner';
 
 interface TeamMember {
@@ -672,81 +673,3 @@ function EditRoleModal({ member, roles, onClose, onSaved }: {
     );
 }
 
-// ─── Reset Password Modal (shared) ────────────────────────────────────────────
-
-export function ResetPasswordModal({ member, passwordEndpoint, accent, onClose }: {
-    member: { user: { fullName: string; email: string | null; phone: string | null } };
-    passwordEndpoint: string;
-    accent: string;
-    onClose: () => void;
-}) {
-    const [password, setPassword] = useState('');
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [done, setDone] = useState(false);
-
-    const handleSubmit = async () => {
-        if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
-        try {
-            setSubmitting(true); setError(null);
-            const res = await fetch(passwordEndpoint, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password }),
-            });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed');
-            setDone(true);
-        } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed');
-        } finally { setSubmitting(false); }
-    };
-
-    return (
-        <div className="fixed inset-0 z-[15000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-[16px] w-full max-w-[400px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-                <div className="flex items-center justify-between mb-5">
-                    <div className="flex items-center gap-2">
-                        <KeyRound size={18} style={{ color: accent }} />
-                        <h3 className="text-[16px] font-bold text-[#181725]">Reset Password</h3>
-                    </div>
-                    <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={16} className="text-[#7C7C7C]" /></button>
-                </div>
-                {done ? (
-                    <div className="text-center py-4">
-                        <p className="text-[14px] font-bold text-green-700 mb-1">Password updated</p>
-                        <p className="text-[12px] text-[#7C7C7C] mb-4">{member.user.fullName} can now log in with the new password.</p>
-                        <button onClick={onClose} className="px-6 py-2 text-white rounded-[10px] text-[13px] font-bold" style={{ backgroundColor: accent }}>Done</button>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        <p className="text-[13px] text-[#7C7C7C]">
-                            Setting a new password for <span className="font-bold text-[#181725]">{member.user.fullName}</span>{' '}
-                            ({member.user.email ?? member.user.phone}).
-                        </p>
-                        <div>
-                            <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">New Password</label>
-                            <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Min. 6 characters"
-                                className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none bg-[#FAFAFA] focus:bg-white transition-colors" />
-                        </div>
-                        {error && (
-                            <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-[8px] p-2.5">
-                                <AlertCircle size={14} /> {error}
-                            </div>
-                        )}
-                        <div className="flex gap-3 pt-1">
-                            <button onClick={handleSubmit} disabled={submitting || password.length < 6}
-                                className="flex-1 h-[44px] text-white rounded-[10px] text-[13px] font-bold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
-                                style={{ backgroundColor: accent }}>
-                                {submitting ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
-                                {submitting ? 'Saving…' : 'Set Password'}
-                            </button>
-                            <button onClick={onClose} className="h-[44px] px-6 bg-gray-100 text-[#7C7C7C] rounded-[10px] text-[13px] font-bold hover:bg-gray-200 transition-colors">Cancel</button>
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
