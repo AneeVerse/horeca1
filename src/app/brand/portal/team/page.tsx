@@ -2,11 +2,17 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Users, Plus, Trash2, Loader2, Crown, Shield, Edit3, Eye, AlertCircle, X, UserPlus, Settings2, KeyRound, Pencil, Check } from 'lucide-react';
+import { Loader2, Crown, Shield, Edit3, Eye, AlertCircle, X, UserPlus, Check } from 'lucide-react';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { TeamRolesEditor } from '@/components/features/team/TeamRolesEditor';
 import { ResetPasswordModal } from '@/components/features/team/ResetPasswordModal';
+import { TeamPageHeader } from '@/components/features/team/TeamPageHeader';
+import { RoleCardsGrid } from '@/components/features/team/RoleCardsGrid';
+import { TeamMemberList } from '@/components/features/team/TeamMemberList';
 import { toast } from 'sonner';
+
+const ACCENT = '#53B175';
+const ACCENT_HOVER = '#3d9e41';
 
 interface TeamMember {
     id: string;
@@ -45,10 +51,6 @@ const ROLE_LOOK: Record<string, { color: string; bg: string; Icon: React.Compone
 
 function lookFor(roleName: string) {
     return ROLE_LOOK[roleName] ?? ROLE_LOOK['Brand Viewer'];
-}
-
-function initials(name: string) {
-    return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
 export default function BrandTeamPage() {
@@ -113,137 +115,33 @@ export default function BrandTeamPage() {
     }
 
     return (
-        <div className="max-w-[900px] mx-auto space-y-6 pb-10 animate-in fade-in duration-300">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-[26px] font-[900] text-[#181725] tracking-tight">Team</h1>
-                    <p className="text-[#7C7C7C] font-medium mt-0.5 text-[14px]">Manage your brand team members and their permissions</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    {canEdit && (
-                        <button onClick={() => setShowRolesEditor(true)}
-                            className="h-[40px] px-3.5 bg-white border border-[#EEEEEE] text-[#181725] rounded-[10px] text-[13px] font-bold hover:bg-gray-50 transition-colors flex items-center gap-1.5 shadow-sm">
-                            <Settings2 size={15} /> Manage Roles
-                        </button>
-                    )}
-                    {canInvite && (
-                        <button onClick={() => setShowInvite(true)}
-                            className="h-[40px] px-4 bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#3d9e41] transition-colors flex items-center gap-1.5 shadow-sm">
-                            <Plus size={16} /> Add Member
-                        </button>
-                    )}
-                </div>
-            </div>
+        <div className="space-y-6 pb-10 animate-in fade-in duration-300">
+            <TeamPageHeader
+                title="Team"
+                subtitle="Manage your brand team members and their permissions"
+                accent={ACCENT}
+                accentHover={ACCENT_HOVER}
+                addLabel="Add Member"
+                canEdit={canEdit}
+                canInvite={canInvite}
+                onManageRolesClick={() => setShowRolesEditor(true)}
+                onAddMemberClick={() => setShowInvite(true)}
+            />
 
-            {roles.length > 0 && (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    {roles.map((role) => {
-                        const look = lookFor(role.name);
-                        return (
-                            <div key={role.id} className="bg-white rounded-[14px] border border-[#EEEEEE] p-4 shadow-sm">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <div className="w-8 h-8 rounded-[8px] flex items-center justify-center" style={{ backgroundColor: look.bg, color: look.color }}>
-                                        <look.Icon size={15} />
-                                    </div>
-                                    <span className="text-[13px] font-bold text-[#181725]">{role.name}</span>
-                                </div>
-                                <p className="text-[12px] text-[#7C7C7C] leading-relaxed">{role.description ?? '—'}</p>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
+            <RoleCardsGrid roles={roles} getStyle={lookFor} />
 
-            <div className="bg-white rounded-[20px] border border-[#EEEEEE] overflow-hidden">
-                <div className="p-5 border-b border-[#EEEEEE] flex items-center gap-2">
-                    <Users size={18} className="text-[#53B175]" />
-                    <h2 className="text-[16px] font-bold text-[#181725]">Team Members</h2>
-                    <span className="text-[13px] text-[#AEAEAE]">({team.length})</span>
-                </div>
-
-                {loading ? (
-                    <div className="p-8 flex justify-center"><Loader2 size={28} className="animate-spin text-[#53B175]" /></div>
-                ) : team.length === 0 ? (
-                    <div className="p-8 text-center">
-                        <Users size={32} className="text-[#EEEEEE] mx-auto mb-2" />
-                        <p className="text-[14px] font-bold text-[#AEAEAE]">No team members yet</p>
-                    </div>
-                ) : (
-                    <ul className="divide-y divide-[#F5F5F5]">
-                        {team.map((member) => {
-                            const look = lookFor(member.role.name);
-                            const isSelf = member.user.id === currentUserId;
-                            const isOwnerRow = member.isOwner;
-                            return (
-                                <li key={member.id} className="px-6 py-4 flex items-center gap-4">
-                                    <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center text-[13px] font-[900] shrink-0"
-                                        style={{ backgroundColor: look.bg, color: look.color }}>
-                                        {initials(member.user.fullName)}
-                                    </div>
-
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <p className="text-[14px] font-bold text-[#181725] truncate">{member.user.fullName}</p>
-                                            {isOwnerRow && (
-                                                <span className="text-[11px] font-bold text-[#F59E0B] bg-[#FFF7E6] px-2 py-0.5 rounded-[5px]">Primary</span>
-                                            )}
-                                            {!member.user.isActive && (
-                                                <span className="text-[11px] font-bold text-[#AEAEAE] bg-[#F5F5F5] px-2 py-0.5 rounded-[5px]">Inactive</span>
-                                            )}
-                                            {member.user.hcidDisplay && (
-                                                <span className="text-[11px] text-[#AEAEAE] font-mono">{member.user.hcidDisplay}</span>
-                                            )}
-                                        </div>
-                                        <p className="text-[12px] text-[#7C7C7C] truncate">
-                                            {member.user.email ?? member.user.phone ?? '—'}
-                                        </p>
-                                    </div>
-
-                                    {/* Role badge */}
-                                    <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] shrink-0"
-                                        style={{ backgroundColor: look.bg, color: look.color }}>
-                                        <look.Icon size={13} />
-                                        <span className="text-[12px] font-bold">{member.role.name}</span>
-                                    </div>
-
-                                    <span className="text-[12px] text-[#AEAEAE] hidden md:block shrink-0 w-[80px] text-right">
-                                        {new Date(member.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
-                                    </span>
-
-                                    <div className="shrink-0 flex items-center gap-1">
-                                        {isOwnerRow ? (
-                                            <span className="text-[11px] text-[#AEAEAE] px-1">Owner</span>
-                                        ) : isSelf ? (
-                                            <span className="text-[11px] text-[#AEAEAE] px-1">You</span>
-                                        ) : (
-                                            <>
-                                                {canEdit && (
-                                                    <button onClick={() => setEditingRole(member)}
-                                                        className="p-2 rounded-[8px] hover:bg-amber-50 transition-colors" title="Change role">
-                                                        <Pencil size={14} className="text-[#F59E0B]" />
-                                                    </button>
-                                                )}
-                                                {canEdit && (
-                                                    <button onClick={() => setPasswordMember(member)}
-                                                        className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
-                                                        <KeyRound size={14} className="text-[#AEAEAE]" />
-                                                    </button>
-                                                )}
-                                                {canDelete && (
-                                                    <button onClick={() => handleRemove(member)}
-                                                        className="p-2 rounded-[8px] hover:bg-red-50 transition-colors" title="Remove">
-                                                        <Trash2 size={14} className="text-[#E74C3C]" />
-                                                    </button>
-                                                )}
-                                            </>
-                                        )}
-                                    </div>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                )}
-            </div>
+            <TeamMemberList
+                members={team}
+                loading={loading}
+                accent={ACCENT}
+                currentUserId={currentUserId}
+                getRoleStyle={lookFor}
+                canEdit={canEdit}
+                canDelete={canDelete}
+                onEdit={(m) => setEditingRole(m as TeamMember)}
+                onResetPassword={(m) => setPasswordMember(m as TeamMember)}
+                onRemove={(m) => handleRemove(m as TeamMember)}
+            />
 
             {!canManage && team.length > 0 && (
                 <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-100 rounded-[12px]">
