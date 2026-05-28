@@ -61,6 +61,9 @@ export default function AdminTeamPage() {
     const currentUserId = (session?.user as { id?: string })?.id;
     const perms = useAdminPermissions();
     const canManage = perms.canManageTeam;
+    const canInvite = perms.canInviteUsers;
+    const canEdit = perms.canEditUsers;
+    const canDelete = perms.canDeleteUsers;
     const confirm = useConfirm();
 
     const [team, setTeam] = useState<TeamMember[]>([]);
@@ -120,7 +123,7 @@ export default function AdminTeamPage() {
                         <AlertCircle size={22} className="text-[#E74C3C]" />
                     </div>
                     <h2 className="text-[18px] font-bold text-[#181725] mb-1">Access restricted</h2>
-                    <p className="text-[#7C7C7C] text-[14px]">You need the <code>users.create</code> permission to manage the admin team. Ask a Super Admin to grant you the Super Admin role.</p>
+                    <p className="text-[#7C7C7C] text-[14px]">You need at least one of <code>users.view</code>, <code>users.create</code>, <code>users.edit</code>, or <code>users.delete</code> to view the admin team. Ask a Super Admin for access.</p>
                 </div>
             </div>
         );
@@ -134,14 +137,18 @@ export default function AdminTeamPage() {
                     <p className="text-[#7C7C7C] text-[14px] font-medium">Manage who has access to the admin dashboard, and what they can do</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={() => setShowRolesEditor(true)}
-                        className="h-[44px] px-4 bg-white border border-[#EEEEEE] text-[#181725] rounded-[12px] text-[14px] font-bold hover:bg-gray-50 transition-colors flex items-center gap-2 shadow-sm">
-                        <Settings2 size={16} /> Manage Roles
-                    </button>
-                    <button onClick={() => setShowInvite(true)}
-                        className="h-[44px] px-5 bg-[#E74C3C] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#c0392b] transition-colors flex items-center gap-2 shadow-sm">
-                        <Plus size={16} /> Add Admin
-                    </button>
+                    {canEdit && (
+                        <button onClick={() => setShowRolesEditor(true)}
+                            className="h-[44px] px-4 bg-white border border-[#EEEEEE] text-[#181725] rounded-[12px] text-[14px] font-bold hover:bg-gray-50 transition-colors flex items-center gap-2 shadow-sm">
+                            <Settings2 size={16} /> Manage Roles
+                        </button>
+                    )}
+                    {canInvite && (
+                        <button onClick={() => setShowInvite(true)}
+                            className="h-[44px] px-5 bg-[#E74C3C] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#c0392b] transition-colors flex items-center gap-2 shadow-sm">
+                            <Plus size={16} /> Add Admin
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -222,35 +229,37 @@ export default function AdminTeamPage() {
 
                                     <div className="shrink-0 flex items-center gap-1">
                                         {isOwnerRow ? (
-                                            <>
-                                                <span className="text-[11px] text-[#AEAEAE] px-1">Owner</span>
-                                                <button onClick={() => setPasswordMember(member)}
-                                                    className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
-                                                    <KeyRound size={14} className="text-[#AEAEAE]" />
-                                                </button>
-                                            </>
+                                            <span className="text-[11px] text-[#AEAEAE] px-1">Owner</span>
                                         ) : isSelf ? (
                                             <>
                                                 <span className="text-[11px] text-[#AEAEAE] px-1">You</span>
-                                                <button onClick={() => setPasswordMember(member)}
-                                                    className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
-                                                    <KeyRound size={14} className="text-[#AEAEAE]" />
-                                                </button>
+                                                {canEdit && (
+                                                    <button onClick={() => setPasswordMember(member)}
+                                                        className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
+                                                        <KeyRound size={14} className="text-[#AEAEAE]" />
+                                                    </button>
+                                                )}
                                             </>
                                         ) : (
                                             <>
-                                                <button onClick={() => setEditingRole(member)}
-                                                    className="p-2 rounded-[8px] hover:bg-amber-50 transition-colors" title="Change role">
-                                                    <Pencil size={14} className="text-[#F59E0B]" />
-                                                </button>
-                                                <button onClick={() => setPasswordMember(member)}
-                                                    className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
-                                                    <KeyRound size={14} className="text-[#AEAEAE]" />
-                                                </button>
-                                                <button onClick={() => handleRemove(member)}
-                                                    className="p-2 rounded-[8px] hover:bg-red-50 transition-colors" title="Remove">
-                                                    <Trash2 size={14} className="text-[#E74C3C]" />
-                                                </button>
+                                                {canEdit && (
+                                                    <button onClick={() => setEditingRole(member)}
+                                                        className="p-2 rounded-[8px] hover:bg-amber-50 transition-colors" title="Change role">
+                                                        <Pencil size={14} className="text-[#F59E0B]" />
+                                                    </button>
+                                                )}
+                                                {canEdit && (
+                                                    <button onClick={() => setPasswordMember(member)}
+                                                        className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
+                                                        <KeyRound size={14} className="text-[#AEAEAE]" />
+                                                    </button>
+                                                )}
+                                                {canDelete && (
+                                                    <button onClick={() => handleRemove(member)}
+                                                        className="p-2 rounded-[8px] hover:bg-red-50 transition-colors" title="Remove">
+                                                        <Trash2 size={14} className="text-[#E74C3C]" />
+                                                    </button>
+                                                )}
                                             </>
                                         )}
                                     </div>

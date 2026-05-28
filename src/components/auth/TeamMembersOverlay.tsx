@@ -199,6 +199,11 @@ function InviteModal({ accountId, roles, outlets, onClose, onInvited }: {
           <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={16} /></button>
         </div>
         <div className="space-y-4">
+          {/* Helper note moved above the form so the disabled-looking submit
+              button doesn't read as "permanently broken". */}
+          <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2.5 leading-snug">
+            The invitee must already have a HoReCa Hub account. Ask them to sign up at horeca1.com first, then enter their phone or email below.
+          </p>
           <label className="block">
             <span className="text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wider">Email or phone</span>
             <input
@@ -238,14 +243,11 @@ function InviteModal({ accountId, roles, outlets, onClose, onInvited }: {
           <button
             onClick={submit}
             disabled={submitting || !identifier || !roleId}
-            className="w-full py-3 bg-[#53B175] text-white text-[13.5px] font-[700] rounded-xl hover:bg-[#48a068] disabled:opacity-50 flex items-center justify-center gap-2 mt-2 transition-colors"
+            className="w-full py-3 bg-[#53B175] text-white text-[13.5px] font-[700] rounded-xl hover:bg-[#48a068] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2 transition-colors"
           >
             {submitting ? <Loader2 size={14} className="animate-spin" /> : null}
-            {submitting ? 'Sending…' : 'Send Invite'}
+            {submitting ? 'Sending…' : !identifier ? 'Enter email or phone' : 'Send Invite'}
           </button>
-          <p className="text-[11px] text-[#AEAEAE] leading-normal">
-            Invitee must already have a HoReCa Hub account. Self-serve sign-up via invite link is V2.3.
-          </p>
         </div>
       </div>
     </div>

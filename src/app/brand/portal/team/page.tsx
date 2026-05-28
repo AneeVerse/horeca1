@@ -55,7 +55,11 @@ export default function BrandTeamPage() {
     const { data: session, status: sessionStatus } = useSession();
     const currentUserId = (session?.user as { id?: string })?.id;
     const sessionPerms = (session?.user as { permissions?: string[] })?.permissions ?? [];
-    const canManage = sessionPerms.includes('users.create');
+    const canInvite = sessionPerms.includes('users.create');
+    const canEdit = sessionPerms.includes('users.edit');
+    const canDelete = sessionPerms.includes('users.delete');
+    const canView = sessionPerms.includes('users.view');
+    const canManage = canInvite || canEdit || canDelete || canView;
     const confirm = useConfirm();
 
     const [team, setTeam] = useState<TeamMember[]>([]);
@@ -115,18 +119,20 @@ export default function BrandTeamPage() {
                     <h1 className="text-[26px] font-[900] text-[#181725] tracking-tight">Team</h1>
                     <p className="text-[#7C7C7C] font-medium mt-0.5 text-[14px]">Manage your brand team members and their permissions</p>
                 </div>
-                {canManage && (
-                    <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
+                    {canEdit && (
                         <button onClick={() => setShowRolesEditor(true)}
                             className="h-[40px] px-3.5 bg-white border border-[#EEEEEE] text-[#181725] rounded-[10px] text-[13px] font-bold hover:bg-gray-50 transition-colors flex items-center gap-1.5 shadow-sm">
                             <Settings2 size={15} /> Manage Roles
                         </button>
+                    )}
+                    {canInvite && (
                         <button onClick={() => setShowInvite(true)}
                             className="h-[40px] px-4 bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#3d9e41] transition-colors flex items-center gap-1.5 shadow-sm">
                             <Plus size={16} /> Add Member
                         </button>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
             {roles.length > 0 && (
@@ -206,33 +212,31 @@ export default function BrandTeamPage() {
 
                                     <div className="shrink-0 flex items-center gap-1">
                                         {isOwnerRow ? (
+                                            <span className="text-[11px] text-[#AEAEAE] px-1">Owner</span>
+                                        ) : isSelf ? (
+                                            <span className="text-[11px] text-[#AEAEAE] px-1">You</span>
+                                        ) : (
                                             <>
-                                                <span className="text-[11px] text-[#AEAEAE] px-1">Owner</span>
-                                                {canManage && (
+                                                {canEdit && (
+                                                    <button onClick={() => setEditingRole(member)}
+                                                        className="p-2 rounded-[8px] hover:bg-amber-50 transition-colors" title="Change role">
+                                                        <Pencil size={14} className="text-[#F59E0B]" />
+                                                    </button>
+                                                )}
+                                                {canEdit && (
                                                     <button onClick={() => setPasswordMember(member)}
                                                         className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
                                                         <KeyRound size={14} className="text-[#AEAEAE]" />
                                                     </button>
                                                 )}
+                                                {canDelete && (
+                                                    <button onClick={() => handleRemove(member)}
+                                                        className="p-2 rounded-[8px] hover:bg-red-50 transition-colors" title="Remove">
+                                                        <Trash2 size={14} className="text-[#E74C3C]" />
+                                                    </button>
+                                                )}
                                             </>
-                                        ) : isSelf ? (
-                                            <span className="text-[11px] text-[#AEAEAE] px-1">You</span>
-                                        ) : canManage ? (
-                                            <>
-                                                <button onClick={() => setEditingRole(member)}
-                                                    className="p-2 rounded-[8px] hover:bg-amber-50 transition-colors" title="Change role">
-                                                    <Pencil size={14} className="text-[#F59E0B]" />
-                                                </button>
-                                                <button onClick={() => setPasswordMember(member)}
-                                                    className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
-                                                    <KeyRound size={14} className="text-[#AEAEAE]" />
-                                                </button>
-                                                <button onClick={() => handleRemove(member)}
-                                                    className="p-2 rounded-[8px] hover:bg-red-50 transition-colors" title="Remove">
-                                                    <Trash2 size={14} className="text-[#E74C3C]" />
-                                                </button>
-                                            </>
-                                        ) : null}
+                                        )}
                                     </div>
                                 </li>
                             );

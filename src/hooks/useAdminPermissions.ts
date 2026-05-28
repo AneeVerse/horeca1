@@ -22,6 +22,12 @@ export interface AdminPermissions {
   canWriteInventory: boolean;
   canWriteSettings: boolean;
   canManageTeam: boolean;
+  // Granular team actions — used by /admin/team to gate individual buttons
+  // so a user with users.create but not users.delete doesn't see a Remove
+  // button that 403s on click.
+  canInviteUsers: boolean;
+  canEditUsers: boolean;
+  canDeleteUsers: boolean;
 }
 
 function has(perms: readonly string[] | undefined, key: PermissionKey): boolean {
@@ -38,6 +44,10 @@ export function useAdminPermissions(): AdminPermissions {
     canWriteProducts: has(perms, 'products.edit'),
     canWriteInventory: has(perms, 'inventory.edit'),
     canWriteSettings: has(perms, 'settings.edit'),
-    canManageTeam: has(perms, 'users.create'),
+    // canManageTeam stays = users.create for "can see the page" gate
+    canManageTeam: has(perms, 'users.create') || has(perms, 'users.edit') || has(perms, 'users.delete') || has(perms, 'users.view'),
+    canInviteUsers: has(perms, 'users.create'),
+    canEditUsers: has(perms, 'users.edit'),
+    canDeleteUsers: has(perms, 'users.delete'),
   };
 }

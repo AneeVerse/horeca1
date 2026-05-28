@@ -58,7 +58,11 @@ export default function VendorTeamPage() {
     const { data: session, status: sessionStatus } = useSession();
     const currentUserId = (session?.user as { id?: string })?.id;
     const sessionPerms = (session?.user as { permissions?: string[] })?.permissions ?? [];
-    const canManage = sessionPerms.includes('users.create');
+    const canInvite = sessionPerms.includes('users.create');
+    const canEdit = sessionPerms.includes('users.edit');
+    const canDelete = sessionPerms.includes('users.delete');
+    const canView = sessionPerms.includes('users.view');
+    const canManage = canInvite || canEdit || canDelete || canView;
     const confirm = useConfirm();
 
     const [team, setTeam] = useState<TeamMember[]>([]);
@@ -118,18 +122,20 @@ export default function VendorTeamPage() {
                     <h1 className="text-[28px] font-bold text-[#181725] leading-none mb-1">Team</h1>
                     <p className="text-[#7C7C7C] text-[14px] font-medium">Manage your vendor team members and their permissions</p>
                 </div>
-                {canManage && (
-                    <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
+                    {canEdit && (
                         <button onClick={() => setShowRolesEditor(true)}
                             className="h-[44px] px-4 bg-white border border-[#EEEEEE] text-[#181725] rounded-[12px] text-[14px] font-bold hover:bg-gray-50 transition-colors flex items-center gap-2 shadow-sm">
                             <Settings2 size={16} /> Manage Roles
                         </button>
+                    )}
+                    {canInvite && (
                         <button onClick={() => setShowInvite(true)}
                             className="h-[44px] px-5 bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] transition-colors flex items-center gap-2 shadow-sm">
                             <Plus size={16} /> Add Member
                         </button>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
             {roles.some(r => r.isTemplate && !r.name.startsWith('Storefront')) && (
@@ -214,22 +220,28 @@ export default function VendorTeamPage() {
                                             <span className="text-[11px] text-[#AEAEAE] px-2">Owner</span>
                                         ) : isSelf ? (
                                             <span className="text-[11px] text-[#AEAEAE] px-2">You</span>
-                                        ) : canManage ? (
+                                        ) : (
                                             <>
-                                                <button onClick={() => setEditingMember(member)}
-                                                    className="p-2 rounded-[8px] hover:bg-amber-50 transition-colors" title="Edit permissions & outlets">
-                                                    <Pencil size={14} className="text-[#F59E0B]" />
-                                                </button>
-                                                <button onClick={() => setPasswordMember(member)}
-                                                    className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
-                                                    <KeyRound size={14} className="text-[#AEAEAE]" />
-                                                </button>
-                                                <button onClick={() => handleRemove(member)}
-                                                    className="p-2 rounded-[8px] hover:bg-red-50 transition-colors" title="Remove member">
-                                                    <Trash2 size={14} className="text-[#E74C3C]" />
-                                                </button>
+                                                {canEdit && (
+                                                    <button onClick={() => setEditingMember(member)}
+                                                        className="p-2 rounded-[8px] hover:bg-amber-50 transition-colors" title="Edit permissions & outlets">
+                                                        <Pencil size={14} className="text-[#F59E0B]" />
+                                                    </button>
+                                                )}
+                                                {canEdit && (
+                                                    <button onClick={() => setPasswordMember(member)}
+                                                        className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
+                                                        <KeyRound size={14} className="text-[#AEAEAE]" />
+                                                    </button>
+                                                )}
+                                                {canDelete && (
+                                                    <button onClick={() => handleRemove(member)}
+                                                        className="p-2 rounded-[8px] hover:bg-red-50 transition-colors" title="Remove member">
+                                                        <Trash2 size={14} className="text-[#E74C3C]" />
+                                                    </button>
+                                                )}
                                             </>
-                                        ) : null}
+                                        )}
                                     </div>
                                 </li>
                             );
