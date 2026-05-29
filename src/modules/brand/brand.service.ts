@@ -51,8 +51,15 @@ interface CreateBrandProductInput {
 export class BrandService {
 
   // ── Resolve brand from userId ──────────────────────────────
+  // Brand.userId is no longer unique — pick the most recently created brand
+  // for this user. Callers that need a specific brand (multi-brand owners)
+  // should resolve via the active business account context instead.
   async getBrandIdForUser(userId: string): Promise<string> {
-    const brand = await prisma.brand.findUnique({ where: { userId }, select: { id: true } });
+    const brand = await prisma.brand.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
     if (!brand) throw Errors.notFound('Brand profile not found for this user');
     return brand.id;
   }
@@ -450,9 +457,13 @@ export class BrandService {
   }
 
   // ── Brand: get own profile ─────────────────────────────────
+  // V2.2: a user may own multiple brand profiles. Return the most recently
+  // created — callers that need a specific brand should resolve via active
+  // business account context first and pass brandId in directly.
   async getMyProfile(userId: string) {
-    const brand = await prisma.brand.findUnique({
+    const brand = await prisma.brand.findFirst({
       where: { userId },
+      orderBy: { createdAt: 'desc' },
       include: {
         _count: {
           select: {
@@ -468,7 +479,10 @@ export class BrandService {
 
   // ── Brand: update profile ──────────────────────────────────
   async updateProfile(userId: string, input: UpdateBrandInput) {
-    const brand = await prisma.brand.findUnique({ where: { userId } });
+    const brand = await prisma.brand.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
     if (!brand) throw Errors.notFound('Brand profile not found');
 
     return prisma.brand.update({

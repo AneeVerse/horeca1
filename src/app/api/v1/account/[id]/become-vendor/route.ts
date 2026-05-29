@@ -49,13 +49,14 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
 
     const body = Body.parse(await req.json());
 
-    // Prevent double-creation: each User has @@unique on Vendor.userId.
-    const existingVendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
-      select: { id: true, isVerified: true, isActive: true },
+    // Vendor.businessAccountId is unique — prevent making this same
+    // BusinessAccount into two vendor profiles.
+    const existingForAccount = await prisma.vendor.findUnique({
+      where: { businessAccountId: accountId },
+      select: { id: true },
     });
-    if (existingVendor) {
-      throw Errors.conflict('You already have a vendor profile. Check its approval status on the homepage banner or in /vendor/dashboard.');
+    if (existingForAccount) {
+      throw Errors.conflict('This account is already a vendor.');
     }
 
     // Confirm slug is free (extremely unlikely collision, but cheap to check).

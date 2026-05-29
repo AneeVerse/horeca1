@@ -21,21 +21,19 @@ export async function resolveVendorContext(ctx: AuthContext, req: NextRequest): 
     return { vendorId: vendor.id, teamRole: 'owner' };
   }
 
-  // Check direct ownership first. A user can only own one Vendor (Vendor.userId
-  // is unique), so no active-account filter needed here.
-  const ownVendor = await prisma.vendor.findUnique({
-    where: { userId: ctx.userId },
+  // Check direct ownership first. Vendor.userId is no longer unique (one User
+  // can own multiple vendor profiles, one per BusinessAccount), so we look
+  // for a vendor that BOTH matches the user AND the active business account.
+  // Without the second clause a multi-vendor user would land on whichever
+  // row Postgres returns first.
+  const ownVendor = await prisma.vendor.findFirst({
+    where: {
+      userId: ctx.userId,
+      ...(ctx.activeBusinessAccountId ? { businessAccountId: ctx.activeBusinessAccountId } : {}),
+    },
     select: { id: true, businessAccountId: true },
   });
-  if (ownVendor) {
-    // If the user is also a team member on other vendors, their session's
-    // active business account may point elsewhere — respect it.
-    if (ctx.activeBusinessAccountId && ownVendor.businessAccountId !== ctx.activeBusinessAccountId) {
-      // fall through to team-membership lookup
-    } else {
-      return { vendorId: ownVendor.id, teamRole: 'owner' };
-    }
-  }
+  if (ownVendor) return { vendorId: ownVendor.id, teamRole: 'owner' };
 
   // Check team membership scoped to the active business account so a user on
   // multiple vendor teams lands on the vendor they actually selected in the

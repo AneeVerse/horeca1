@@ -39,7 +39,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
         isActive: true,
         createdAt: true,
         updatedAt: true,
-        vendor: {
+        vendors: {
           select: {
             id: true,
             businessName: true,
@@ -165,34 +165,114 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   }
 });
 
-// DELETE — permanently remove a user from the database
+// DELETE /api/v1/admin/users/[id]?force=<bool>
+//   default (no force): soft-delete (isActive=false). Preserves all linked
+//   data — orders, audit trail, vendor row, business memberships.
+//   ?force=true: hard-delete. Refuses if the user has order history (because
+//   that would cascade-destroy financial records); otherwise wipes the user
+//   row and known dependents (sessions, accounts, team memberships, saved
+//   addresses, push subs, business-account membership, user roles, linked
+//   accounts, carts, vendor/brand rows) in a single transaction.
+//
+// Admin role transitions still go through /admin/team — see PATCH above.
 export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
   try {
     requirePermission(ctx, 'users.delete');
     const id = extractId(req);
+    const force = req.nextUrl.searchParams.get('force') === 'true';
 
-    // Prevent admin from deleting themselves
     if (id === ctx.userId) {
       throw Errors.badRequest('You cannot delete your own account');
     }
 
-    const existing = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true, isActive: true } });
+    const existing = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        role: true,
+        isActive: true,
+        _count: { select: { orders: true, reviews: true, returnRequests: true } },
+        vendors: { select: { id: true, _count: { select: { orders: true, products: true } } } },
+      },
+    });
     if (!existing) throw Errors.notFound('User');
 
-    // Soft delete — preserves vendor, orders, audit trail. A hard delete would
-    // cascade and destroy historical financial records (orders, payments, audit
-    // log entries actor links). Admins should never be able to nuke that data
-    // from a single click.
-    if (!existing.isActive) {
-      // Already deactivated — nothing more to do
-      return NextResponse.json({ success: true, data: { id, alreadyDeactivated: true } });
+    // ── Soft delete path ─────────────────────────────────────────────────
+    if (!force) {
+      if (!existing.isActive) {
+        return NextResponse.json({ success: true, data: { id, alreadyDeactivated: true } });
+      }
+      await prisma.user.update({ where: { id }, data: { isActive: false } });
+      return NextResponse.json({ success: true, data: { id, deactivated: true } });
     }
-    await prisma.user.update({
-      where: { id },
-      data: { isActive: false },
+
+    // ── Hard delete path ────────────────────────────────────────────────
+    // Refuse only on truly business-critical references. Anything else
+    // gets cleaned up in the transaction below.
+    if (existing._count.orders > 0) {
+      throw Errors.badRequest('User has order history — cannot delete permanently. Deactivate instead.');
+    }
+    if (existing._count.reviews > 0) {
+      throw Errors.badRequest('User has product reviews — cannot delete permanently. Deactivate instead.');
+    }
+    if (existing._count.returnRequests > 0) {
+      throw Errors.badRequest('User has return requests — cannot delete permanently. Deactivate instead.');
+    }
+    if (existing.vendors.some(v => v._count.orders > 0 || v._count.products > 0)) {
+      throw Errors.badRequest('Vendor has orders or products — cannot delete permanently. Deactivate instead.');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Many relations to User do NOT have onDelete: Cascade in schema.prisma
+      // (notifications, carts, quick order lists, credit accounts, etc.),
+      // so a bare user.delete() throws P2003. Walk them explicitly here.
+      // catch(()=>{}) on models whose schema MAY or MAY NOT exist (legacy).
+
+      // ── Drop rows the user owns ──────────────────────────────────────
+      await tx.notification.deleteMany({ where: { userId: id } });
+      await tx.cartItem.deleteMany({ where: { cart: { userId: id } } }).catch(() => {});
+      await tx.cart.deleteMany({ where: { userId: id } });
+      await tx.quickOrderListItem.deleteMany({ where: { list: { userId: id } } }).catch(() => {});
+      await tx.quickOrderList.deleteMany({ where: { userId: id } });
+      await tx.creditTransaction.deleteMany({ where: { creditAccount: { userId: id } } }).catch(() => {});
+      await tx.creditAccount.deleteMany({ where: { userId: id } });
+      await tx.walletTransaction.deleteMany({ where: { wallet: { userId: id } } }).catch(() => {});
+      await tx.wallet.deleteMany({ where: { userId: id } }).catch(() => {});
+      await tx.customerVendor.deleteMany({ where: { userId: id } }).catch(() => {});
+      await tx.vendorCustomer.deleteMany({ where: { userId: id } }).catch(() => {});
+
+      // ── Team / RBAC rows ─────────────────────────────────────────────
+      await tx.adminTeamMember.deleteMany({ where: { userId: id } });
+      await tx.vendorTeamMember.deleteMany({ where: { userId: id } }).catch(() => {});
+      await tx.brandTeamMember.deleteMany({ where: { userId: id } }).catch(() => {});
+      await tx.userRole.deleteMany({ where: { userId: id } });
+      await tx.businessAccountMember.deleteMany({ where: { userId: id } });
+
+      // ── Null out inviter references on memberships owned by OTHER users
+      // (we want to keep those rows; we just can't keep pointing at a row
+      //  that's about to disappear). ───────────────────────────────────
+      await tx.vendorTeamMember.updateMany({ where: { invitedBy: id }, data: { invitedBy: null } }).catch(() => {});
+      await tx.brandTeamMember.updateMany({ where: { invitedBy: id }, data: { invitedBy: null } }).catch(() => {});
+      await tx.adminTeamMember.updateMany({ where: { invitedBy: id }, data: { invitedBy: null } }).catch(() => {});
+      await tx.businessAccountMember.updateMany({ where: { invitedBy: id }, data: { invitedBy: null } }).catch(() => {});
+
+      // ── Auth-adapter + misc personal data ────────────────────────────
+      await tx.linkedAccount.deleteMany({ where: { OR: [{ userId: id }, { linkedUserId: id }] } });
+      await tx.savedAddress.deleteMany({ where: { userId: id } });
+      await tx.pushSubscription.deleteMany({ where: { userId: id } });
+      await tx.session.deleteMany({ where: { userId: id } });
+      await tx.account.deleteMany({ where: { userId: id } });
+
+      // ── Vendor / brand rows — safe to delete because of guards above
+      if (existing.vendors.length > 0) {
+        await tx.vendor.deleteMany({ where: { id: { in: existing.vendors.map(v => v.id) } } });
+      }
+      await tx.brand.deleteMany({ where: { userId: id } }).catch(() => {});
+
+      await tx.user.delete({ where: { id } });
     });
 
-    return NextResponse.json({ success: true, data: { id, deactivated: true } });
+    return NextResponse.json({ success: true, data: { id, hardDeleted: true } });
   } catch (error) {
     return errorResponse(error);
   }

@@ -16,9 +16,13 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       return NextResponse.json({ success: true, data: { suggestions: [], ownMatches: [] } });
     }
 
-    // Resolve vendor
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: ctx.userId },
+    // Resolve vendor (scoped to active business account — Vendor.userId no
+    // longer unique).
+    const vendor = await prisma.vendor.findFirst({
+      where: {
+        userId: ctx.userId,
+        ...(ctx.activeBusinessAccountId ? { businessAccountId: ctx.activeBusinessAccountId } : {}),
+      },
       select: { id: true },
     });
 

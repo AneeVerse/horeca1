@@ -41,10 +41,25 @@ export default function BrandPortalLayout({ children }: { children: React.ReactN
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [adminBrandName, setAdminBrandName] = useState<string | null>(null);
 
+    // Only treat the impersonation cookie as authoritative when the current
+    // session is actually an admin. A brand user logging in fresh would
+    // otherwise see an "Admin View" banner for whichever brand an admin
+    // previously impersonated on the same browser. When the cookie is found
+    // on a non-admin session we also DELETE the impersonation server-side so
+    // the stale cookie doesn't keep poisoning future requests.
+    const sessionRole = (session?.user as { role?: string } | undefined)?.role;
     React.useEffect(() => {
+        if (status !== 'authenticated') return;
         const match = document.cookie.match(/(?:^|;\s*)admin_impersonate_brand_name=([^;]+)/);
-        setAdminBrandName(match ? decodeURIComponent(match[1]) : null);
-    }, []);
+        if (sessionRole === 'admin' && match) {
+            setAdminBrandName(decodeURIComponent(match[1]));
+        } else {
+            setAdminBrandName(null);
+            if (match) {
+                fetch('/api/v1/admin/impersonate/brand', { method: 'DELETE' }).catch(() => {});
+            }
+        }
+    }, [status, sessionRole]);
 
     const handleExitAdminView = async () => {
         await fetch('/api/v1/admin/impersonate/brand', { method: 'DELETE' });

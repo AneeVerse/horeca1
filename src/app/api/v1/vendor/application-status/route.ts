@@ -10,8 +10,12 @@ import { errorResponse } from '@/middleware/errorHandler';
 
 export const GET = withAuth(async (_req: NextRequest, ctx) => {
   try {
-    const vendor = await prisma.vendor.findUnique({
+    // A user may own multiple vendor profiles since the V2.2 HCID change.
+    // Surface the most recently created one for the homepage banner — that's
+    // the most likely candidate for "still pending review".
+    const vendor = await prisma.vendor.findFirst({
       where: { userId: ctx.userId },
+      orderBy: { createdAt: 'desc' },
       select: {
         id: true,
         businessName: true,

@@ -31,8 +31,8 @@ const Body = z.object({
   // Step 1 — phone (already verified via /auth/otp/verify)
   phone: z.string().regex(PHONE_RE, 'Invalid phone number'),
 
-  // Step 2 — vendor type
-  vendorType: z.enum(['distributor', 'wholesaler', 'manufacturer', 'importer', 'producer']),
+  // Step 2 — vendor type (5 spec values, matches /api/v1/account)
+  vendorType: z.enum(['distributor', 'wholesaler', 'brand_store', 'manufacturer', 'dark_store']),
 
   // Step 3 — basic details
   fullName: z.string().min(2).max(255),

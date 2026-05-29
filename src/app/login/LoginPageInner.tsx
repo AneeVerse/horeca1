@@ -21,6 +21,11 @@ type Step = 'form' | 'otp';
 export default function LoginPageInner() {
   const params = useSearchParams();
   const redirectTo = params?.get('redirect') || null;
+  // Pre-fill the phone/email field when callers (vendor register success
+  // screen, etc.) pass ?phone= or ?email= — saves the user retyping the
+  // number they just verified.
+  const prefilledPhone = params?.get('phone')?.replace(/\D/g, '').slice(0, 10) ?? '';
+  const prefilledEmail = params?.get('email') ?? '';
   const { status: sessionStatus, data: session } = useSession();
 
   const [step, setStep] = useState<Step>('form');
@@ -39,7 +44,7 @@ export default function LoginPageInner() {
     else window.location.href = '/';
   }, [sessionStatus, session, redirectTo]);
 
-  const [identifier, setIdentifier] = useState('');
+  const [identifier, setIdentifier] = useState(prefilledPhone || prefilledEmail);
   const [usePassword, setUsePassword] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);

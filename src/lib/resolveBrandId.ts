@@ -21,16 +21,24 @@ export async function resolveBrandContext(ctx: AuthContext, req: NextRequest): P
     return { brandId: brand.id, teamRole: 'owner' };
   }
 
-  // Check direct ownership first
-  const ownBrand = await prisma.brand.findUnique({
-    where: { userId: ctx.userId },
+  // Check direct ownership first — scoped to the active business account
+  // because Brand.userId is no longer unique (one User can own multiple
+  // brand profiles, one per BusinessAccount).
+  const ownBrand = await prisma.brand.findFirst({
+    where: {
+      userId: ctx.userId,
+      ...(ctx.activeBusinessAccountId ? { businessAccountId: ctx.activeBusinessAccountId } : {}),
+    },
     select: { id: true },
   });
   if (ownBrand) return { brandId: ownBrand.id, teamRole: 'owner' };
 
-  // Check team membership
+  // Check team membership scoped to active account.
   const membership = await prisma.brandTeamMember.findFirst({
-    where: { userId: ctx.userId },
+    where: {
+      userId: ctx.userId,
+      ...(ctx.activeBusinessAccountId ? { brand: { businessAccountId: ctx.activeBusinessAccountId } } : {}),
+    },
     select: { brandId: true, role: true },
   });
   if (!membership) throw Errors.forbidden('No brand profile linked to your account');
@@ -50,9 +58,12 @@ export async function resolveUserId(ctx: AuthContext, req: NextRequest): Promise
     if (!brand) throw Errors.forbidden('Impersonated brand not found');
     return brand.userId;
   }
-  // Owner path
-  const ownBrand = await prisma.brand.findUnique({
-    where: { userId: ctx.userId },
+  // Owner path — Brand.userId no longer unique, prefer active account.
+  const ownBrand = await prisma.brand.findFirst({
+    where: {
+      userId: ctx.userId,
+      ...(ctx.activeBusinessAccountId ? { businessAccountId: ctx.activeBusinessAccountId } : {}),
+    },
     select: { userId: true },
   });
   if (ownBrand) return ownBrand.userId;

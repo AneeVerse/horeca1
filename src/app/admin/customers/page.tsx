@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
     Users,
@@ -19,6 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface AdminUser {
     id: string;
@@ -35,8 +37,10 @@ export default function CustomersPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeMenu, setActiveMenu] = useState<string | null>(null);
+    const [initialLoad, setInitialLoad] = useState(true);
+    const [activeMenu, setActiveMenu] = useState<{ id: string; top: number; right: number } | null>(null);
     const [showAddModal, setShowAddModal] = useState(false);
+    const confirm = useConfirm();
 
     const refetch = useCallback(() => {
         setLoading(true);
@@ -47,7 +51,7 @@ export default function CustomersPage() {
             .then(res => res.json())
             .then(json => { if (json.success) setUsers(json.data.users); })
             .catch(console.error)
-            .finally(() => setLoading(false));
+            .finally(() => { setLoading(false); setInitialLoad(false); });
     }, [searchQuery]);
 
     useEffect(() => {
@@ -74,18 +78,30 @@ export default function CustomersPage() {
     ];
 
     const deleteUser = async (userId: string, name: string) => {
-        if (!confirm(`Permanently delete "${name}"? This cannot be undone.`)) return;
-        try {
-            const res = await fetch(`/api/v1/admin/users/${userId}`, { method: 'DELETE' });
-            const json = await res.json();
-            if (json.success) setUsers(prev => prev.filter(u => u.id !== userId));
-        } catch (err) {
-            console.error('Failed to delete user:', err);
-        }
         setActiveMenu(null);
+        const ok = await confirm({
+            title: 'Delete permanently?',
+            message: `${name} will be removed completely along with their team memberships, saved addresses and other personal data. This cannot be undone.`,
+            confirmText: 'Delete permanently',
+            tone: 'danger',
+        });
+        if (!ok) return;
+        try {
+            const res = await fetch(`/api/v1/admin/users/${userId}?force=true`, { method: 'DELETE' });
+            const json = await res.json();
+            if (!json.success) {
+                toast.error(json.error?.message || json.error || 'Failed to delete');
+                return;
+            }
+            setUsers(prev => prev.filter(u => u.id !== userId));
+            toast.success(`${name} deleted permanently`);
+        } catch {
+            toast.error('Failed to delete');
+        }
     };
 
     const toggleUserActive = async (userId: string, isActive: boolean) => {
+        setActiveMenu(null);
         try {
             const res = await fetch(`/api/v1/admin/users/${userId}`, {
                 method: 'PATCH',
@@ -95,11 +111,13 @@ export default function CustomersPage() {
             const json = await res.json();
             if (json.success) {
                 setUsers(prev => prev.map(u => u.id === userId ? { ...u, isActive: !isActive } : u));
+                toast.success(isActive ? 'User deactivated' : 'User activated');
+            } else {
+                toast.error(json.error?.message || 'Failed to update');
             }
-        } catch (err) {
-            console.error('Failed to toggle user status:', err);
+        } catch {
+            toast.error('Failed to update');
         }
-        setActiveMenu(null);
     };
 
     // Close menu when clicking anywhere else
@@ -111,6 +129,18 @@ export default function CustomersPage() {
         return () => window.removeEventListener('click', handleClickOutside);
     }, [activeMenu]);
 
+    // Close the menu on scroll/resize because the portal coords would otherwise drift.
+    useEffect(() => {
+        if (!activeMenu) return;
+        const close = () => setActiveMenu(null);
+        window.addEventListener('scroll', close, true);
+        window.addEventListener('resize', close);
+        return () => {
+            window.removeEventListener('scroll', close, true);
+            window.removeEventListener('resize', close);
+        };
+    }, [activeMenu]);
+
     return (
         <div className="space-y-8 pb-10">
             {/* Page Header */}
@@ -119,13 +149,7 @@ export default function CustomersPage() {
                 <p className="text-[#000000] text-[13px] font-medium opacity-70">Whole data about your Customers</p>
             </div>
 
-            {loading ? (
-                <div className="flex items-center justify-center py-20">
-                    <Loader2 className="animate-spin text-[#299E60]" size={32} />
-                </div>
-            ) : (
-            <>
-            {/* Stat Cards */}
+            {/* Stat Cards (always rendered — initial spinner is on the table area only) */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {stats.map((stat, idx) => (
                     <div key={idx} className="bg-white p-6 rounded-[14px] border border-[#EEEEEE] shadow-sm hover:shadow-md transition-all h-[130px] flex flex-col justify-between">
@@ -149,11 +173,14 @@ export default function CustomersPage() {
                             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={16} />
                             <input
                                 type="text"
-                                placeholder="Search by name or email"
+                                placeholder="Search name, email, phone, business"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="h-[40px] w-full bg-white border border-[#DCDCDC] rounded-[10px] pl-10 pr-4 text-[13px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 shadow-sm"
+                                className="h-[40px] w-full bg-white border border-[#DCDCDC] rounded-[10px] pl-10 pr-9 text-[13px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 shadow-sm"
                             />
+                            {loading && !initialLoad && (
+                                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] animate-spin" size={14} />
+                            )}
                         </div>
                         <button
                             onClick={() => setShowAddModal(true)}
@@ -164,8 +191,13 @@ export default function CustomersPage() {
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full">
+                <div className="overflow-x-auto relative">
+                    {initialLoad && (
+                        <div className="flex items-center justify-center py-20">
+                            <Loader2 className="animate-spin text-[#299E60]" size={32} />
+                        </div>
+                    )}
+                    {!initialLoad && <table className="w-full">
                         <thead>
                             <tr className="bg-white">
                                 <th className="p-4 text-left text-[14px] font-[800] text-[#4B4B4B]">Name</th>
@@ -224,39 +256,29 @@ export default function CustomersPage() {
                                                     <Eye size={16} />
                                                 </Link>
 
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setActiveMenu(activeMenu === user.id ? null : user.id);
-                                                        }}
-                                                        className={cn(
-                                                            "w-[34px] h-[34px] flex items-center justify-center rounded-[10px] transition-all shadow-sm",
-                                                            activeMenu === user.id ? "bg-gray-100 text-gray-900 border border-gray-200" : "bg-white border border-[#EEEEEE] text-[#7C7C7C] hover:bg-gray-50"
-                                                        )}
-                                                    >
-                                                        <MoreVertical size={16} />
-                                                    </button>
-
-                                                    {activeMenu === user.id && (
-                                                        <div className="absolute right-0 mt-2 w-44 bg-white rounded-[8px] shadow-xl border border-gray-100 z-50 py-1 overflow-hidden animate-in fade-in zoom-in duration-200">
-                                                            <button
-                                                                onClick={() => toggleUserActive(user.id, user.isActive)}
-                                                                className="w-full flex items-center gap-3 px-4 py-2 text-[13px] font-semibold text-[#4B4B4B] hover:bg-gray-50 transition-colors"
-                                                            >
-                                                                {user.isActive ? <UserX size={14} className="text-red-400" /> : <UserCheck size={14} className="text-green-400" />}
-                                                                {user.isActive ? 'Deactivate' : 'Activate'}
-                                                            </button>
-                                                            <button
-                                                                onClick={() => deleteUser(user.id, user.fullName)}
-                                                                className="w-full flex items-center gap-3 px-4 py-2 text-[13px] font-semibold text-red-500 hover:bg-red-50 transition-colors"
-                                                            >
-                                                                <Trash2 size={14} />
-                                                                Delete permanently
-                                                            </button>
-                                                        </div>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (activeMenu?.id === user.id) {
+                                                            setActiveMenu(null);
+                                                            return;
+                                                        }
+                                                        const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                                                        // Anchor the portal-rendered menu just below the kebab button,
+                                                        // right-aligned with it.
+                                                        setActiveMenu({
+                                                            id: user.id,
+                                                            top: rect.bottom + 6,
+                                                            right: window.innerWidth - rect.right,
+                                                        });
+                                                    }}
+                                                    className={cn(
+                                                        "w-[34px] h-[34px] flex items-center justify-center rounded-[10px] transition-all shadow-sm",
+                                                        activeMenu?.id === user.id ? "bg-gray-100 text-gray-900 border border-gray-200" : "bg-white border border-[#EEEEEE] text-[#7C7C7C] hover:bg-gray-50"
                                                     )}
-                                                </div>
+                                                >
+                                                    <MoreVertical size={16} />
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -269,10 +291,42 @@ export default function CustomersPage() {
                                 </tr>
                             )}
                         </tbody>
-                    </table>
+                    </table>}
                 </div>
             </div>
-            </>
+
+            {/* Action menu rendered as a portal so it escapes the table's overflow-x-auto
+                clipping. Coordinates are captured at click time from the kebab button. */}
+            {activeMenu && typeof window !== 'undefined' && createPortal(
+                <div
+                    style={{ position: 'fixed', top: activeMenu.top, right: activeMenu.right, zIndex: 12000 }}
+                    className="w-44 bg-white rounded-[8px] shadow-xl border border-gray-100 py-1 overflow-hidden animate-in fade-in zoom-in duration-200"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {(() => {
+                        const u = users.find(x => x.id === activeMenu.id);
+                        if (!u) return null;
+                        return (
+                            <>
+                                <button
+                                    onClick={() => toggleUserActive(u.id, u.isActive)}
+                                    className="w-full flex items-center gap-3 px-4 py-2 text-[13px] font-semibold text-[#4B4B4B] hover:bg-gray-50 transition-colors"
+                                >
+                                    {u.isActive ? <UserX size={14} className="text-red-400" /> : <UserCheck size={14} className="text-green-400" />}
+                                    {u.isActive ? 'Deactivate' : 'Activate'}
+                                </button>
+                                <button
+                                    onClick={() => deleteUser(u.id, u.fullName)}
+                                    className="w-full flex items-center gap-3 px-4 py-2 text-[13px] font-semibold text-red-500 hover:bg-red-50 transition-colors"
+                                >
+                                    <Trash2 size={14} />
+                                    Delete permanently
+                                </button>
+                            </>
+                        );
+                    })()}
+                </div>,
+                document.body,
             )}
 
             {showAddModal && (

@@ -2,6 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { signOut, useSession } from 'next-auth/react';
+import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import {
   ArrowLeft, ArrowRight, Loader2, CheckCircle2, Phone, Building2, FileText, Landmark,
   MapPin, Truck, ShieldCheck, X, Plus,
@@ -18,20 +20,40 @@ const STEP_TITLES = [
   { id: 7, label: 'Service & KYC', icon: ShieldCheck },
 ];
 
+// Five vendor types per the platform spec. Keep keys stable — they're stored
+// on Vendor.vendorType and read by downstream filters (search, segmentation,
+// settlement rules). Any future addition must also update the API enums in
+// /api/v1/account and /api/v1/vendor/onboarding/submit.
 const VENDOR_TYPES = [
-  { id: 'distributor', label: 'Distributor', desc: 'Resell to retailers / HORECA buyers' },
-  { id: 'wholesaler', label: 'Wholesaler', desc: 'Bulk sale to businesses' },
-  { id: 'manufacturer', label: 'Manufacturer', desc: 'Produce and sell own brand goods' },
-  { id: 'importer', label: 'Importer', desc: 'Import and distribute foreign goods' },
-  { id: 'producer', label: 'Producer / Farm', desc: 'Fresh produce or farm goods' },
+  { id: 'distributor',  label: 'Standard Distributor', desc: 'Stocks inventory and sells directly to B2B customers.' },
+  { id: 'wholesaler',   label: 'Wholesaler',           desc: 'Large SKU catalog, regional pricing, bulk logistics.' },
+  { id: 'brand_store',  label: 'Brand Store',          desc: 'Brand-controlled storefront. Maps products to distributors; may not fulfill directly.' },
+  { id: 'manufacturer', label: 'Manufacturer',         desc: 'Direct sales, distributor-assisted sales, and institutional sales.' },
+  { id: 'dark_store',   label: 'Dark Store / Fulfillment', desc: 'Inventory holding node, delivery-driven operations.' },
 ];
 
 const PHONE_RE = /^\d{10}$/;
+const PINCODE_RE = /^\d{6}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GST_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
 const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-const PINCODE_RE = /^\d{6}$/;
+
+// ─── Per-field validators ─────────────────────────────────────────────────
+// Returns an error message for an invalid value, or '' for valid.
+// `optional` skips validation when the value is blank; required fields use
+// `mustExist` to surface the "is required" error on blur.
+const V = {
+  required: (v: string, label: string) => v.trim() ? '' : `${label} is required`,
+  minLen:   (v: string, label: string, n: number) => v.trim().length < n ? `${label} must be at least ${n} characters` : '',
+  email:    (v: string) => !v.trim() ? '' : EMAIL_RE.test(v.trim()) ? '' : 'Enter a valid email address',
+  phone10:  (v: string) => PHONE_RE.test(v) ? '' : 'Enter a valid 10-digit number',
+  pincode:  (v: string) => PINCODE_RE.test(v) ? '' : 'Pincode must be 6 digits',
+  gst:      (v: string) => GST_RE.test(v.toUpperCase()) ? '' : 'Format: 22ABCDE1234F1Z5',
+  pan:      (v: string) => PAN_RE.test(v.toUpperCase()) ? '' : 'Format: ABCDE1234F',
+  ifsc:     (v: string) => IFSC_RE.test(v.toUpperCase()) ? '' : 'Format: HDFC0001234',
+  password: (v: string) => !v ? '' : v.length < 6 ? 'Password must be at least 6 characters' : '',
+};
 
 type Address = { addressLine: string; city: string; state: string; pincode: string };
 
@@ -41,6 +63,16 @@ const RESEND_COOLDOWN = 60;
 
 export default function VendorRegisterPage() {
   const router = useRouter();
+  // Auth-aware mode: when a user is already signed in, the wizard runs in
+  // "add a vendor under my existing HCID" mode instead of "new public
+  // signup" mode. This skips step 1 (OTP — the user is already
+  // authenticated) and routes the final submit to /api/v1/account so the
+  // new vendor lives under their existing User record. Session is read once
+  // when the wizard mounts; we don't react to mid-flow auth changes.
+  const { data: session, status: sessionStatus } = useSession();
+  const isAuthMode = sessionStatus === 'authenticated';
+  const { switchAccount } = useBusinessAccountSwitcher();
+
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -93,6 +125,77 @@ export default function VendorRegisterPage() {
   const [udyamNumber, setUdyamNumber] = useState('');
   const [cinNumber, setCinNumber] = useState('');
 
+  // ─── Auth-mode seeding ──────────────────────────────────────────────────
+  // When the user is already logged in we fetch their existing phone +
+  // fullName from /api/v1/auth/me (the session payload doesn't carry phone),
+  // mark the OTP step as already done, and jump straight to step 2. Runs
+  // exactly once when sessionStatus flips to 'authenticated'.
+  const authSeedDone = useRef(false);
+  useEffect(() => {
+    if (!isAuthMode || authSeedDone.current) return;
+    authSeedDone.current = true;
+    let cancelled = false;
+    fetch('/api/v1/auth/me').then(r => r.json()).then(j => {
+      if (cancelled || !j.success) return;
+      const me = j.data ?? {};
+      if (me.phone) setPhone(String(me.phone));
+      if (me.fullName) setFullName(String(me.fullName));
+      if (me.email) setEmail(String(me.email));
+      setPhoneVerified(true);
+      setOtpSent(true);
+      setStep(2);
+    }).catch(() => { /* fall back to manual entry */ });
+    return () => { cancelled = true; };
+  }, [isAuthMode]);
+
+  // ─── Inline field errors ────────────────────────────────────────────────
+  // Set by onBlur on each input. Continue button reads these to block
+  // forward navigation when the current step has any active error.
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const setFE = useCallback((key: string, msg: string) => {
+    setFieldErrors(prev => {
+      if (msg && prev[key] === msg) return prev;
+      if (!msg && !prev[key]) return prev;
+      const next = { ...prev };
+      if (msg) next[key] = msg; else delete next[key];
+      return next;
+    });
+  }, []);
+
+  // Run all validators for the active step. Returns true if any field in the
+  // step is invalid OR a required field hasn't been touched yet.
+  const validateAllForStep = useCallback((s: number): Record<string, string> => {
+    const e: Record<string, string> = {};
+    if (s === 3) {
+      const x = V.minLen(fullName, 'Full name', 2); if (x) e.fullName = x;
+      const x2 = V.minLen(businessName, 'Business name', 2); if (x2) e.businessName = x2;
+      const x3 = V.minLen(tradeName, 'Trade name', 2); if (x3) e.tradeName = x3;
+      if (email) { const x4 = V.email(email); if (x4) e.email = x4; }
+      if (password) { const x5 = V.password(password); if (x5) e.password = x5; }
+      const x6 = V.minLen(authorizedPersonName, 'Name', 2); if (x6) e.authorizedPersonName = x6;
+      const x7 = V.phone10(authorizedPersonPhone); if (x7) e.authorizedPersonPhone = x7;
+      if (authorizedPersonEmail) { const x8 = V.email(authorizedPersonEmail); if (x8) e.authorizedPersonEmail = x8; }
+    } else if (s === 4) {
+      const x = V.gst(gstNumber); if (x) e.gstNumber = x;
+      const x2 = V.pan(panNumber); if (x2) e.panNumber = x2;
+    } else if (s === 5) {
+      const x = V.minLen(bankAccountName, 'Account holder name', 2); if (x) e.bankAccountName = x;
+      if (bankAccountNumber.trim().length < 8) e.bankAccountNumber = 'Enter a valid account number';
+      const x3 = V.ifsc(bankIfsc); if (x3) e.bankIfsc = x3;
+      const x4 = V.minLen(bankName, 'Bank name', 2); if (x4) e.bankName = x4;
+    } else if (s === 6) {
+      const check = (a: Address, prefix: string) => {
+        if (a.addressLine.trim().length < 5) e[`${prefix}AddressLine`] = 'Enter the full address';
+        if (!a.city.trim()) e[`${prefix}City`] = 'City is required';
+        if (!a.state.trim()) e[`${prefix}State`] = 'State is required';
+        const p = V.pincode(a.pincode); if (p) e[`${prefix}Pincode`] = p;
+      };
+      check(billingAddress, 'billing');
+      check(pickupAddress, 'pickup');
+    }
+    return e;
+  }, [fullName, businessName, tradeName, email, password, authorizedPersonName, authorizedPersonPhone, authorizedPersonEmail, gstNumber, panNumber, bankAccountName, bankAccountNumber, bankIfsc, bankName, billingAddress, pickupAddress]);
+
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
   const startResendTimer = useCallback(() => {
@@ -109,6 +212,27 @@ export default function VendorRegisterPage() {
     if (!PHONE_RE.test(phone)) { setError('Enter a valid 10-digit mobile number'); return; }
     setOtpLoading(true);
     try {
+      // Pre-check: refuse if this phone already belongs to ANY user account.
+      // Vendors must be brand-new accounts; existing customers should use the
+      // "Become Vendor" flow on their account instead.
+      const checkRes = await fetch('/api/v1/auth/check-vendor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const checkData = await checkRes.json();
+      if (checkData.success && checkData.data?.exists) {
+        const t = checkData.data.accountType as string;
+        const msg =
+          t === 'vendor'         ? 'This number is already an active vendor. Please log in.'
+          : t === 'vendor_pending' ? 'This number has a vendor application pending review. Please log in to check the status.'
+          : t === 'admin'        ? 'This number belongs to an admin account. Please log in instead.'
+          : t === 'brand'        ? 'This number belongs to a brand account. Please log in instead.'
+          :                        'This number already has an account. Please log in — you can apply to become a vendor from your profile.';
+        setError(msg);
+        return;
+      }
+
       const res = await fetch('/api/v1/auth/otp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -181,48 +305,23 @@ export default function VendorRegisterPage() {
   }, [pickupSameAsBilling, billingAddress]);
 
   // ─── Validation per step ────────────────────────────────────────────────
+  // Each input also runs validators on blur via setFE() so the user sees
+  // errors inline as they go. This function is the final gate Continue
+  // calls — it re-runs the validators for the active step, flushes any
+  // missed errors into fieldErrors, and returns a single banner-level
+  // message when the step can't advance.
   const validateStep = (s: number): string | null => {
-    switch (s) {
-      case 1:
-        if (!phoneVerified) return 'Please verify your mobile number first';
-        return null;
-      case 2:
-        if (!vendorType) return 'Select your business type';
-        return null;
-      case 3:
-        if (fullName.trim().length < 2) return 'Enter your full name';
-        if (businessName.trim().length < 2) return 'Enter business name';
-        if (tradeName.trim().length < 2) return 'Enter trade name';
-        if (email && !EMAIL_RE.test(email)) return 'Enter a valid email';
-        if (password && password.length < 6) return 'Password must be at least 6 characters';
-        if (authorizedPersonName.trim().length < 2) return 'Enter authorized person name';
-        if (!PHONE_RE.test(authorizedPersonPhone)) return 'Authorized person phone must be 10 digits';
-        if (authorizedPersonEmail && !EMAIL_RE.test(authorizedPersonEmail)) return 'Invalid authorized person email';
-        return null;
-      case 4:
-        if (!GST_RE.test(gstNumber.toUpperCase())) return 'Invalid GSTIN format (e.g. 27ABCDE1234F1Z5)';
-        if (!PAN_RE.test(panNumber.toUpperCase())) return 'Invalid PAN format (e.g. ABCDE1234F)';
-        return null;
-      case 5:
-        if (bankAccountName.trim().length < 2) return 'Enter account holder name';
-        if (bankAccountNumber.trim().length < 8) return 'Enter a valid account number';
-        if (!IFSC_RE.test(bankIfsc.toUpperCase())) return 'Invalid IFSC (e.g. HDFC0001234)';
-        if (bankName.trim().length < 2) return 'Enter bank name';
-        return null;
-      case 6: {
-        const check = (a: Address, label: string) => {
-          if (a.addressLine.trim().length < 5) return `Enter ${label} address line`;
-          if (a.city.trim().length < 1) return `Enter ${label} city`;
-          if (a.state.trim().length < 1) return `Enter ${label} state`;
-          if (!PINCODE_RE.test(a.pincode)) return `Invalid ${label} pincode`;
-          return null;
-        };
-        return check(billingAddress, 'billing') ?? check(pickupAddress, 'pickup');
-      }
-      case 7:
-        if (pincodes.length === 0) return 'Add at least one serviceable pincode';
-        if (!deliveryCapability) return 'Select your delivery capability';
-        return null;
+    if (s === 1) return phoneVerified ? null : 'Please verify your mobile number first';
+    if (s === 2) return vendorType ? null : 'Select your business type';
+    if (s === 7) {
+      if (pincodes.length === 0) return 'Add at least one serviceable pincode';
+      if (!deliveryCapability) return 'Select your delivery capability';
+      return null;
+    }
+    const stepErrors = validateAllForStep(s);
+    if (Object.keys(stepErrors).length > 0) {
+      setFieldErrors(prev => ({ ...prev, ...stepErrors }));
+      return 'Please fix the highlighted fields before continuing';
     }
     return null;
   };
@@ -237,14 +336,83 @@ export default function VendorRegisterPage() {
 
   const handleBack = () => {
     setError('');
-    if (step > 1) setStep(step - 1);
+    // In auth mode the OTP step is bypassed entirely — clamping at step 2
+    // keeps the user from accidentally falling onto a Verify Mobile screen
+    // that doesn't apply to them.
+    const floor = isAuthMode ? 2 : 1;
+    if (step > floor) setStep(step - 1);
   };
 
   // ─── Final submit ───────────────────────────────────────────────────────
+  // Two branches:
+  //   • Public mode (no session)   → POST /api/v1/vendor/onboarding/submit,
+  //                                  sign out, redirect to /login?phone=
+  //   • Auth mode (logged in user) → POST /api/v1/account with vendorDetails
+  //                                  block, switch session to the new
+  //                                  business account, redirect to dashboard
   const handleSubmit = async () => {
     setError('');
     setSubmitting(true);
     try {
+      if (isAuthMode) {
+        // ── AUTH MODE: add a vendor under existing HCID ───────────────────
+        const body = {
+          legalName: businessName.trim(),
+          displayName: tradeName.trim(),
+          gstin: gstNumber.toUpperCase().trim(),
+          pan: panNumber.toUpperCase().trim(),
+          businessType: 'vendor',
+          isCustomer: true,
+          isVendor: true,
+          isBrand: false,
+          primaryOutlet: {
+            name: tradeName.trim() || businessName.trim(),
+            addressLine: pickupAddress.addressLine,
+            city: pickupAddress.city,
+            state: pickupAddress.state,
+            pincode: pickupAddress.pincode,
+          },
+          vendorDetails: {
+            vendorType,
+            panNumber: panNumber.toUpperCase().trim(),
+            authorizedPersonName: authorizedPersonName.trim(),
+            authorizedPersonPhone,
+            authorizedPersonEmail: authorizedPersonEmail.trim().toLowerCase(),
+            billingAddress,
+            bankAccountName: bankAccountName.trim(),
+            bankAccountNumber: bankAccountNumber.trim(),
+            bankIfsc: bankIfsc.toUpperCase().trim(),
+            bankName: bankName.trim(),
+            bankAccountType,
+            serviceablePincodes: pincodes,
+            deliveryCapability,
+            fssaiNumber: fssaiNumber.trim(),
+            udyamNumber: udyamNumber.trim(),
+            cinNumber: cinNumber.trim(),
+          },
+        };
+        const res = await fetch('/api/v1/account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          setError(data.error?.message || data.error || 'Failed to create vendor');
+          return;
+        }
+        // Switch session context to the new business account so the vendor
+        // dashboard resolves to THIS vendor and not the user's old one.
+        try {
+          await switchAccount(data.data.account.id, data.data.outlet.id);
+        } catch { /* non-fatal — user can switch manually */ }
+        setSubmitted({ hcid: '' });
+        // Redirect after a brief moment so the success screen is visible.
+        setTimeout(() => { window.location.assign('/vendor/dashboard'); }, 1200);
+        return;
+      }
+
+      // ── PUBLIC MODE: brand-new user signup ──────────────────────────────
       const body = {
         phone,
         vendorType,
@@ -281,6 +449,17 @@ export default function VendorRegisterPage() {
         setError(data.error?.message || data.error || 'Failed to submit application');
         return;
       }
+      // Sign out whatever session was active before the user opened the
+      // wizard — otherwise /profile and the navbar still show the OLD
+      // account they were logged into. Also clears any leftover admin
+      // impersonation cookies for good measure.
+      try {
+        await Promise.all([
+          fetch('/api/v1/admin/impersonate', { method: 'DELETE' }).catch(() => {}),
+          fetch('/api/v1/admin/impersonate/brand', { method: 'DELETE' }).catch(() => {}),
+        ]);
+        await signOut({ redirect: false });
+      } catch { /* non-fatal */ }
       setSubmitted({ hcid: data.data?.hcidDisplay ?? '' });
     } catch { setError('Submission failed. Please try again.'); }
     finally { setSubmitting(false); }
@@ -296,20 +475,37 @@ export default function VendorRegisterPage() {
           </div>
           <h1 className="text-[24px] font-[800] text-gray-800 mb-3">Application Submitted</h1>
           <p className="text-[14px] text-gray-500 mb-6 leading-relaxed">
-            Thank you for applying! Your vendor account is under review. Our team will verify your KYC documents and contact you shortly.
+            {isAuthMode
+              ? 'Your new vendor business is created and under review. Switching you to the new account now…'
+              : 'Thank you for applying! Your vendor account is under review. Log in below to track your application status — our team will verify your KYC documents and contact you shortly.'}
           </p>
-          {submitted.hcid && (
+          {submitted.hcid && !isAuthMode && (
             <div className="bg-gray-50 rounded-lg px-4 py-3 mb-6">
               <p className="text-[12px] text-gray-400 mb-1">Your HCID</p>
               <p className="text-[16px] font-bold text-gray-800 tracking-wider">{submitted.hcid}</p>
             </div>
           )}
-          <button
-            onClick={() => router.push('/')}
-            className="w-full bg-[#53B175] hover:bg-[#48a068] text-white font-bold py-3 rounded-lg transition-colors"
-          >
-            Back to Home
-          </button>
+          {isAuthMode ? (
+            <div className="flex items-center justify-center gap-2 text-[13px] text-gray-500">
+              <Loader2 size={16} className="animate-spin" />
+              Redirecting to your vendor dashboard…
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => router.push(`/login?phone=${encodeURIComponent(phone)}`)}
+                className="w-full bg-[#53B175] hover:bg-[#48a068] text-white font-bold py-3 rounded-lg transition-colors"
+              >
+                Continue to log in
+              </button>
+              <button
+                onClick={() => router.push('/')}
+                className="w-full mt-2 text-[13px] text-gray-400 font-bold hover:text-gray-600 transition-colors py-2"
+              >
+                Back to home
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -324,9 +520,17 @@ export default function VendorRegisterPage() {
       <div className="bg-gradient-to-r from-[#53B175] to-[#48a068] px-4 md:px-10 py-5 md:py-7 shrink-0">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
           <div>
-            <p className="text-[11px] md:text-[12px] font-bold uppercase tracking-[0.18em] text-white/70 mb-1">Vendor Application</p>
-            <h1 className="text-[20px] md:text-[26px] font-[900] text-white leading-tight">Become a Horeca1 Vendor</h1>
-            <p className="text-[12px] md:text-[13px] text-white/80 mt-1">Complete 7 quick steps — our team reviews within 24 hours.</p>
+            <p className="text-[11px] md:text-[12px] font-bold uppercase tracking-[0.18em] text-white/70 mb-1">
+              {isAuthMode ? 'Add Vendor Business' : 'Vendor Application'}
+            </p>
+            <h1 className="text-[20px] md:text-[26px] font-[900] text-white leading-tight">
+              {isAuthMode ? 'Register a new vendor under your HCID' : 'Become a Horeca1 Vendor'}
+            </h1>
+            <p className="text-[12px] md:text-[13px] text-white/80 mt-1">
+              {isAuthMode
+                ? 'Complete the KYC below — our team reviews within 24 hours.'
+                : 'Complete 7 quick steps — our team reviews within 24 hours.'}
+            </p>
           </div>
           <button onClick={() => router.push('/')}
             className="shrink-0 flex items-center gap-1.5 text-[12px] font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5 transition-colors">
@@ -386,11 +590,22 @@ export default function VendorRegisterPage() {
                 <div className="relative flex items-center">
                   <span className="absolute left-4 text-[13px] font-bold text-gray-500 z-10">+91</span>
                   <input type="tel" inputMode="numeric" maxLength={10}
-                    disabled={otpSent}
                     value={phone}
-                    onChange={e => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 10)); setError(''); }}
+                    onChange={e => {
+                      const next = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      // Editing the phone after Send OTP / Verify must invalidate
+                      // the OTP state — otherwise the wizard would carry a "Verified"
+                      // marker for a number the user no longer typed.
+                      if (next !== phone && (otpSent || phoneVerified)) {
+                        setOtpSent(false);
+                        setPhoneVerified(false);
+                        setOtpDigits(['', '', '', '']);
+                      }
+                      setPhone(next);
+                      setError('');
+                    }}
                     placeholder="10 digit mobile number"
-                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#53B175] disabled:bg-gray-50 disabled:text-gray-500" />
+                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#53B175]" />
                 </div>
               </Field>
 
@@ -425,11 +640,19 @@ export default function VendorRegisterPage() {
                     ) : (
                       <button onClick={handleSendOtp} disabled={otpLoading} className="text-[#53B175] font-bold hover:underline">Resend OTP</button>
                     )}
-                    {!phoneVerified && (
-                      <button onClick={() => { setOtpSent(false); setOtpDigits(['', '', '', '']); }} className="text-gray-500 hover:underline">
-                        Change number
-                      </button>
-                    )}
+                    {/* Always available — user may circle back from a later step
+                        to fix the phone. Resets step-1 state only; everything
+                        the user filled in steps 2-7 stays in component state. */}
+                    <button
+                      onClick={() => {
+                        setOtpSent(false);
+                        setPhoneVerified(false);
+                        setOtpDigits(['', '', '', '']);
+                        setError('');
+                      }}
+                      className="text-gray-500 hover:underline">
+                      Change number
+                    </button>
                   </div>
                 </div>
               )}
@@ -463,20 +686,35 @@ export default function VendorRegisterPage() {
               <p className="text-[13px] text-gray-500 mb-6">Tell us about your business and the person we&apos;ll be in touch with.</p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="Your full name" required>
-                  <Input value={fullName} onChange={setFullName} placeholder="John Doe" />
+                <Field label="Your full name" required error={fieldErrors.fullName}>
+                  <Input value={fullName} onChange={v => { setFullName(v); if (fieldErrors.fullName) setFE('fullName', V.minLen(v, 'Full name', 2)); }}
+                    onBlur={() => setFE('fullName', V.minLen(fullName, 'Full name', 2))}
+                    hasError={!!fieldErrors.fullName}
+                    placeholder="John Doe" />
                 </Field>
-                <Field label="Business (legal) name" required>
-                  <Input value={businessName} onChange={setBusinessName} placeholder="Acme Foods Pvt Ltd" />
+                <Field label="Business (legal) name" required error={fieldErrors.businessName}>
+                  <Input value={businessName} onChange={v => { setBusinessName(v); if (fieldErrors.businessName) setFE('businessName', V.minLen(v, 'Business name', 2)); }}
+                    onBlur={() => setFE('businessName', V.minLen(businessName, 'Business name', 2))}
+                    hasError={!!fieldErrors.businessName}
+                    placeholder="Acme Foods Pvt Ltd" />
                 </Field>
-                <Field label="Trade name (storefront)" required className="md:col-span-2">
-                  <Input value={tradeName} onChange={setTradeName} placeholder="Acme Foods" />
+                <Field label="Trade name (storefront)" required className="md:col-span-2" error={fieldErrors.tradeName}>
+                  <Input value={tradeName} onChange={v => { setTradeName(v); if (fieldErrors.tradeName) setFE('tradeName', V.minLen(v, 'Trade name', 2)); }}
+                    onBlur={() => setFE('tradeName', V.minLen(tradeName, 'Trade name', 2))}
+                    hasError={!!fieldErrors.tradeName}
+                    placeholder="Acme Foods" />
                 </Field>
-                <Field label="Email (optional)">
-                  <Input value={email} onChange={setEmail} type="email" placeholder="you@example.com" />
+                <Field label="Email (optional)" error={fieldErrors.email}>
+                  <Input value={email} onChange={v => { setEmail(v); if (fieldErrors.email) setFE('email', V.email(v)); }}
+                    onBlur={() => setFE('email', V.email(email))}
+                    hasError={!!fieldErrors.email}
+                    type="email" placeholder="you@example.com" />
                 </Field>
-                <Field label="Password (optional — skip OTP next time)">
-                  <Input value={password} onChange={setPassword} type="password" placeholder="At least 6 characters" />
+                <Field label="Password (optional — skip OTP next time)" error={fieldErrors.password}>
+                  <Input value={password} onChange={v => { setPassword(v); if (fieldErrors.password) setFE('password', V.password(v)); }}
+                    onBlur={() => setFE('password', V.password(password))}
+                    hasError={!!fieldErrors.password}
+                    type="password" placeholder="At least 6 characters" />
                 </Field>
               </div>
 
@@ -484,14 +722,23 @@ export default function VendorRegisterPage() {
                 <h3 className="font-bold text-[15px] text-gray-800 mb-1">Authorized Person</h3>
                 <p className="text-[12px] text-gray-500 mb-4">The person we should contact for KYC and approvals.</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Field label="Name" required>
-                    <Input value={authorizedPersonName} onChange={setAuthorizedPersonName} placeholder="Full name" />
+                  <Field label="Name" required error={fieldErrors.authorizedPersonName}>
+                    <Input value={authorizedPersonName} onChange={v => { setAuthorizedPersonName(v); if (fieldErrors.authorizedPersonName) setFE('authorizedPersonName', V.minLen(v, 'Name', 2)); }}
+                      onBlur={() => setFE('authorizedPersonName', V.minLen(authorizedPersonName, 'Name', 2))}
+                      hasError={!!fieldErrors.authorizedPersonName}
+                      placeholder="Full name" />
                   </Field>
-                  <Field label="Phone" required>
-                    <Input value={authorizedPersonPhone} onChange={v => setAuthorizedPersonPhone(v.replace(/\D/g, '').slice(0, 10))} type="tel" placeholder="10-digit number" />
+                  <Field label="Phone" required error={fieldErrors.authorizedPersonPhone}>
+                    <Input value={authorizedPersonPhone} onChange={v => { const n = v.replace(/\D/g, '').slice(0, 10); setAuthorizedPersonPhone(n); if (fieldErrors.authorizedPersonPhone) setFE('authorizedPersonPhone', V.phone10(n)); }}
+                      onBlur={() => setFE('authorizedPersonPhone', V.phone10(authorizedPersonPhone))}
+                      hasError={!!fieldErrors.authorizedPersonPhone}
+                      type="tel" placeholder="10-digit number" />
                   </Field>
-                  <Field label="Email (optional)" className="md:col-span-2">
-                    <Input value={authorizedPersonEmail} onChange={setAuthorizedPersonEmail} type="email" placeholder="you@example.com" />
+                  <Field label="Email (optional)" className="md:col-span-2" error={fieldErrors.authorizedPersonEmail}>
+                    <Input value={authorizedPersonEmail} onChange={v => { setAuthorizedPersonEmail(v); if (fieldErrors.authorizedPersonEmail) setFE('authorizedPersonEmail', V.email(v)); }}
+                      onBlur={() => setFE('authorizedPersonEmail', V.email(authorizedPersonEmail))}
+                      hasError={!!fieldErrors.authorizedPersonEmail}
+                      type="email" placeholder="you@example.com" />
                   </Field>
                 </div>
               </div>
@@ -503,11 +750,17 @@ export default function VendorRegisterPage() {
               <h2 className="text-[22px] font-[800] text-gray-800 mb-1">GST & PAN</h2>
               <p className="text-[13px] text-gray-500 mb-6">Required by law for B2B invoicing.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="GSTIN" required>
-                  <Input value={gstNumber} onChange={v => setGstNumber(v.toUpperCase().slice(0, 15))} placeholder="27ABCDE1234F1Z5" />
+                <Field label="GSTIN" required error={fieldErrors.gstNumber}>
+                  <Input value={gstNumber} onChange={v => { const n = v.toUpperCase().slice(0, 15); setGstNumber(n); if (fieldErrors.gstNumber) setFE('gstNumber', V.gst(n)); }}
+                    onBlur={() => setFE('gstNumber', V.gst(gstNumber))}
+                    hasError={!!fieldErrors.gstNumber}
+                    placeholder="22ABCDE1234F1Z5" />
                 </Field>
-                <Field label="PAN" required>
-                  <Input value={panNumber} onChange={v => setPanNumber(v.toUpperCase().slice(0, 10))} placeholder="ABCDE1234F" />
+                <Field label="PAN" required error={fieldErrors.panNumber}>
+                  <Input value={panNumber} onChange={v => { const n = v.toUpperCase().slice(0, 10); setPanNumber(n); if (fieldErrors.panNumber) setFE('panNumber', V.pan(n)); }}
+                    onBlur={() => setFE('panNumber', V.pan(panNumber))}
+                    hasError={!!fieldErrors.panNumber}
+                    placeholder="ABCDE1234F" />
                 </Field>
               </div>
               <p className="text-[12px] text-gray-400 mt-4">
@@ -521,17 +774,29 @@ export default function VendorRegisterPage() {
               <h2 className="text-[22px] font-[800] text-gray-800 mb-1">Bank Details</h2>
               <p className="text-[13px] text-gray-500 mb-6">For settlement of your orders. Your account will be verified via a ₹1 penny-drop.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="Account holder name" required className="md:col-span-2">
-                  <Input value={bankAccountName} onChange={setBankAccountName} placeholder="As per bank records" />
+                <Field label="Account holder name" required className="md:col-span-2" error={fieldErrors.bankAccountName}>
+                  <Input value={bankAccountName} onChange={v => { setBankAccountName(v); if (fieldErrors.bankAccountName) setFE('bankAccountName', V.minLen(v, 'Account holder name', 2)); }}
+                    onBlur={() => setFE('bankAccountName', V.minLen(bankAccountName, 'Account holder name', 2))}
+                    hasError={!!fieldErrors.bankAccountName}
+                    placeholder="As per bank records" />
                 </Field>
-                <Field label="Account number" required>
-                  <Input value={bankAccountNumber} onChange={v => setBankAccountNumber(v.replace(/\D/g, '').slice(0, 18))} placeholder="123456789012" />
+                <Field label="Account number" required error={fieldErrors.bankAccountNumber}>
+                  <Input value={bankAccountNumber} onChange={v => { const n = v.replace(/\D/g, '').slice(0, 18); setBankAccountNumber(n); if (fieldErrors.bankAccountNumber) setFE('bankAccountNumber', n.length < 8 ? 'Enter a valid account number' : ''); }}
+                    onBlur={() => setFE('bankAccountNumber', bankAccountNumber.length < 8 ? 'Enter a valid account number' : '')}
+                    hasError={!!fieldErrors.bankAccountNumber}
+                    placeholder="123456789012" />
                 </Field>
-                <Field label="IFSC code" required>
-                  <Input value={bankIfsc} onChange={v => setBankIfsc(v.toUpperCase().slice(0, 11))} placeholder="HDFC0001234" />
+                <Field label="IFSC code" required error={fieldErrors.bankIfsc}>
+                  <Input value={bankIfsc} onChange={v => { const n = v.toUpperCase().slice(0, 11); setBankIfsc(n); if (fieldErrors.bankIfsc) setFE('bankIfsc', V.ifsc(n)); }}
+                    onBlur={() => setFE('bankIfsc', V.ifsc(bankIfsc))}
+                    hasError={!!fieldErrors.bankIfsc}
+                    placeholder="HDFC0001234" />
                 </Field>
-                <Field label="Bank name" required>
-                  <Input value={bankName} onChange={setBankName} placeholder="HDFC Bank" />
+                <Field label="Bank name" required error={fieldErrors.bankName}>
+                  <Input value={bankName} onChange={v => { setBankName(v); if (fieldErrors.bankName) setFE('bankName', V.minLen(v, 'Bank name', 2)); }}
+                    onBlur={() => setFE('bankName', V.minLen(bankName, 'Bank name', 2))}
+                    hasError={!!fieldErrors.bankName}
+                    placeholder="HDFC Bank" />
                 </Field>
                 <Field label="Account type" required>
                   <select value={bankAccountType} onChange={e => setBankAccountType(e.target.value as 'savings' | 'current')}
@@ -552,19 +817,33 @@ export default function VendorRegisterPage() {
               <div className="bg-white border border-gray-200 rounded-xl p-5 mb-5">
                 <h3 className="font-bold text-[15px] text-gray-800 mb-3">Billing Address</h3>
                 <div className="space-y-3">
-                  <Field label="Address line" required>
-                    <Input value={billingAddress.addressLine} onChange={v => setBillingAddress({ ...billingAddress, addressLine: v })} placeholder="Building, street, area" />
+                  <Field label="Address line" required error={fieldErrors.billingAddressLine}>
+                    <Input value={billingAddress.addressLine}
+                      onChange={v => { setBillingAddress({ ...billingAddress, addressLine: v }); if (fieldErrors.billingAddressLine) setFE('billingAddressLine', v.trim().length < 5 ? 'Enter the full address' : ''); }}
+                      onBlur={() => setFE('billingAddressLine', billingAddress.addressLine.trim().length < 5 ? 'Enter the full address' : '')}
+                      hasError={!!fieldErrors.billingAddressLine}
+                      placeholder="Building, street, area" />
                   </Field>
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="City" required>
-                      <Input value={billingAddress.city} onChange={v => setBillingAddress({ ...billingAddress, city: v })} />
+                    <Field label="City" required error={fieldErrors.billingCity}>
+                      <Input value={billingAddress.city}
+                        onChange={v => { setBillingAddress({ ...billingAddress, city: v }); if (fieldErrors.billingCity) setFE('billingCity', v.trim() ? '' : 'City is required'); }}
+                        onBlur={() => setFE('billingCity', billingAddress.city.trim() ? '' : 'City is required')}
+                        hasError={!!fieldErrors.billingCity} />
                     </Field>
-                    <Field label="State" required>
-                      <Input value={billingAddress.state} onChange={v => setBillingAddress({ ...billingAddress, state: v })} />
+                    <Field label="State" required error={fieldErrors.billingState}>
+                      <Input value={billingAddress.state}
+                        onChange={v => { setBillingAddress({ ...billingAddress, state: v }); if (fieldErrors.billingState) setFE('billingState', v.trim() ? '' : 'State is required'); }}
+                        onBlur={() => setFE('billingState', billingAddress.state.trim() ? '' : 'State is required')}
+                        hasError={!!fieldErrors.billingState} />
                     </Field>
                   </div>
-                  <Field label="Pincode" required>
-                    <Input value={billingAddress.pincode} onChange={v => setBillingAddress({ ...billingAddress, pincode: v.replace(/\D/g, '').slice(0, 6) })} placeholder="6-digit pincode" />
+                  <Field label="Pincode" required error={fieldErrors.billingPincode}>
+                    <Input value={billingAddress.pincode}
+                      onChange={v => { const n = v.replace(/\D/g, '').slice(0, 6); setBillingAddress({ ...billingAddress, pincode: n }); if (fieldErrors.billingPincode) setFE('billingPincode', V.pincode(n)); }}
+                      onBlur={() => setFE('billingPincode', V.pincode(billingAddress.pincode))}
+                      hasError={!!fieldErrors.billingPincode}
+                      placeholder="6-digit pincode" />
                   </Field>
                 </div>
               </div>
@@ -579,23 +858,33 @@ export default function VendorRegisterPage() {
                   </label>
                 </div>
                 <div className="space-y-3">
-                  <Field label="Address line" required>
+                  <Field label="Address line" required error={!pickupSameAsBilling ? fieldErrors.pickupAddressLine : undefined}>
                     <Input value={pickupAddress.addressLine} disabled={pickupSameAsBilling}
-                      onChange={v => setPickupAddress({ ...pickupAddress, addressLine: v })} placeholder="Warehouse / godown address" />
+                      onChange={v => { setPickupAddress({ ...pickupAddress, addressLine: v }); if (fieldErrors.pickupAddressLine) setFE('pickupAddressLine', v.trim().length < 5 ? 'Enter the full address' : ''); }}
+                      onBlur={() => setFE('pickupAddressLine', pickupAddress.addressLine.trim().length < 5 ? 'Enter the full address' : '')}
+                      hasError={!pickupSameAsBilling && !!fieldErrors.pickupAddressLine}
+                      placeholder="Warehouse / godown address" />
                   </Field>
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="City" required>
+                    <Field label="City" required error={!pickupSameAsBilling ? fieldErrors.pickupCity : undefined}>
                       <Input value={pickupAddress.city} disabled={pickupSameAsBilling}
-                        onChange={v => setPickupAddress({ ...pickupAddress, city: v })} />
+                        onChange={v => { setPickupAddress({ ...pickupAddress, city: v }); if (fieldErrors.pickupCity) setFE('pickupCity', v.trim() ? '' : 'City is required'); }}
+                        onBlur={() => setFE('pickupCity', pickupAddress.city.trim() ? '' : 'City is required')}
+                        hasError={!pickupSameAsBilling && !!fieldErrors.pickupCity} />
                     </Field>
-                    <Field label="State" required>
+                    <Field label="State" required error={!pickupSameAsBilling ? fieldErrors.pickupState : undefined}>
                       <Input value={pickupAddress.state} disabled={pickupSameAsBilling}
-                        onChange={v => setPickupAddress({ ...pickupAddress, state: v })} />
+                        onChange={v => { setPickupAddress({ ...pickupAddress, state: v }); if (fieldErrors.pickupState) setFE('pickupState', v.trim() ? '' : 'State is required'); }}
+                        onBlur={() => setFE('pickupState', pickupAddress.state.trim() ? '' : 'State is required')}
+                        hasError={!pickupSameAsBilling && !!fieldErrors.pickupState} />
                     </Field>
                   </div>
-                  <Field label="Pincode" required>
+                  <Field label="Pincode" required error={!pickupSameAsBilling ? fieldErrors.pickupPincode : undefined}>
                     <Input value={pickupAddress.pincode} disabled={pickupSameAsBilling}
-                      onChange={v => setPickupAddress({ ...pickupAddress, pincode: v.replace(/\D/g, '').slice(0, 6) })} placeholder="6-digit pincode" />
+                      onChange={v => { const n = v.replace(/\D/g, '').slice(0, 6); setPickupAddress({ ...pickupAddress, pincode: n }); if (fieldErrors.pickupPincode) setFE('pickupPincode', V.pincode(n)); }}
+                      onBlur={() => setFE('pickupPincode', V.pincode(pickupAddress.pincode))}
+                      hasError={!pickupSameAsBilling && !!fieldErrors.pickupPincode}
+                      placeholder="6-digit pincode" />
                   </Field>
                 </div>
               </div>
@@ -680,7 +969,7 @@ export default function VendorRegisterPage() {
       {/* Footer action bar — pinned to viewport bottom */}
       <footer className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 px-4 md:px-8 py-3 md:py-4 shadow-[0_-2px_8px_rgba(0,0,0,0.04)]">
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
-          <button onClick={handleBack} disabled={step === 1 || submitting}
+          <button onClick={handleBack} disabled={step <= (isAuthMode ? 2 : 1) || submitting}
             className="px-5 py-3 text-gray-600 font-bold rounded-lg hover:bg-gray-50 disabled:opacity-30 flex items-center gap-2">
             <ArrowLeft size={16} /> Back
           </button>
@@ -702,32 +991,47 @@ export default function VendorRegisterPage() {
 }
 
 // ─── Tiny UI helpers ──────────────────────────────────────────────────────
-function Field({ label, required, children, className }: { label: string; required?: boolean; children: React.ReactNode; className?: string }) {
+function Field({
+  label, required, children, className, error,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+  className?: string;
+  error?: string;
+}) {
   return (
     <div className={cn('space-y-1.5', className)}>
       <label className="block text-[12px] font-bold text-gray-700 ml-0.5">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}
+      {error && (
+        <p className="text-[11px] text-red-600 font-medium ml-0.5">{error}</p>
+      )}
     </div>
   );
 }
 
 function Input({
-  value, onChange, type = 'text', placeholder, disabled,
+  value, onChange, type = 'text', placeholder, disabled, onBlur, hasError,
 }: {
   value: string;
   onChange: (v: string) => void;
   type?: string;
   placeholder?: string;
   disabled?: boolean;
+  onBlur?: () => void;
+  hasError?: boolean;
 }) {
   return (
     <input type={type} value={value} disabled={disabled}
       onChange={e => onChange(e.target.value)}
+      onBlur={onBlur}
       placeholder={placeholder}
       className={cn(
-        'w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#53B175] transition-colors',
+        'w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors',
+        hasError ? 'border-red-400 focus:border-red-500' : 'border-gray-200 focus:border-[#53B175]',
         disabled && 'bg-gray-50 text-gray-500',
       )}
     />

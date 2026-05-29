@@ -37,9 +37,13 @@ export const PATCH = withRole(['vendor', 'admin'], async (req: NextRequest, ctx)
       if (!order) throw Errors.notFound('Order');
       vendorId = order.vendorId;
     } else {
-      // Vendor users: look up their vendor profile by userId
-      const vendor = await prisma.vendor.findUnique({
-        where: { userId: ctx.userId },
+      // Vendor users: look up their vendor profile scoped to the active
+      // business account (a user can own multiple vendors now).
+      const vendor = await prisma.vendor.findFirst({
+        where: {
+          userId: ctx.userId,
+          ...(ctx.activeBusinessAccountId ? { businessAccountId: ctx.activeBusinessAccountId } : {}),
+        },
         select: { id: true },
       });
       if (!vendor) throw Errors.forbidden('No vendor profile linked to your account');

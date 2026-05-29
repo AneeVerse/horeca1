@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Building2, MapPin, Loader2, Sparkles, AlertCircle, Check } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { X, Building2, MapPin, Loader2, Sparkles, AlertCircle, Check, ArrowRight, ShieldCheck } from 'lucide-react';
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
 import { useAddress } from '@/context/AddressContext';
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
@@ -13,11 +14,16 @@ interface CreateBusinessAccountModalProps {
   onCreated?: () => void;
 }
 
+const GST_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+const PINCODE_RE = /^\d{6}$/;
+
 export function CreateBusinessAccountModal({
   isOpen,
   onClose,
   onCreated,
 }: CreateBusinessAccountModalProps) {
+  const router = useRouter();
   const { switchAccount, refresh: refreshAccounts } = useBusinessAccountSwitcher();
   const { setSelectedAddress } = useAddress();
 
@@ -43,6 +49,20 @@ export function CreateBusinessAccountModal({
   // States
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const setFE = (key: string, msg: string) => setFieldErrors(prev => {
+    if (!msg && !prev[key]) return prev;
+    if (msg && prev[key] === msg) return prev;
+    const next = { ...prev };
+    if (msg) next[key] = msg; else delete next[key];
+    return next;
+  });
+
+  // V2.2 HCID architecture: one User can own many vendor / brand profiles
+  // — one per BusinessAccount. Vendor.userId is no longer unique, so all
+  // three business-type buttons stay enabled regardless of what the user
+  // already owns. The (vendor.businessAccountId @unique) invariant is still
+  // enforced server-side.
 
   // Auto-fill city & state when a valid 6-digit pincode is typed manually
   useEffect(() => {
@@ -76,16 +96,18 @@ export function CreateBusinessAccountModal({
   };
 
   const handleSubmit = async () => {
-    if (!legalName.trim()) {
-      setError('Business legal name is required.');
-      return;
-    }
-    if (!outletName.trim()) {
-      setError('Primary branch/outlet name is required.');
-      return;
-    }
-    if (!addressLine.trim()) {
-      setError('Address is required.');
+    // Run validators across the whole form so the user sees inline red
+    // borders + per-field messages instead of a single banner.
+    const fe: Record<string, string> = {};
+    if (legalName.trim().length < 2) fe.legalName = 'Legal business name is required';
+    if (gstin && !GST_RE.test(gstin.toUpperCase())) fe.gstin = 'Format: 22ABCDE1234F1Z5';
+    if (pan && !PAN_RE.test(pan.toUpperCase())) fe.pan = 'Format: ABCDE1234F';
+    if (outletName.trim().length < 2) fe.outletName = 'Outlet name is required';
+    if (addressLine.trim().length < 5) fe.addressLine = 'Enter the full address';
+    if (pincode && !PINCODE_RE.test(pincode)) fe.pincode = 'Pincode must be 6 digits';
+    if (Object.keys(fe).length > 0) {
+      setFieldErrors(prev => ({ ...prev, ...fe }));
+      setError('Please fix the highlighted fields before continuing.');
       return;
     }
 
@@ -219,7 +241,9 @@ export function CreateBusinessAccountModal({
               label="Legal business name"
               required
               value={legalName}
-              onChange={setLegalName}
+              onChange={(v) => { setLegalName(v); if (fieldErrors.legalName) setFE('legalName', v.trim().length < 2 ? 'Legal business name is required' : ''); }}
+              onBlur={() => setFE('legalName', legalName.trim().length < 2 ? 'Legal business name is required' : '')}
+              error={fieldErrors.legalName}
               placeholder="e.g. Rockville Hospitality Pvt Ltd"
             />
 
@@ -234,14 +258,18 @@ export function CreateBusinessAccountModal({
               <Field
                 label="GSTIN (optional)"
                 value={gstin}
-                onChange={(v) => setGstin(v.toUpperCase())}
-                placeholder="27AAACZ8867B1Z7"
+                onChange={(v) => { const n = v.toUpperCase(); setGstin(n); if (fieldErrors.gstin) setFE('gstin', !n ? '' : GST_RE.test(n) ? '' : 'Format: 22ABCDE1234F1Z5'); }}
+                onBlur={() => setFE('gstin', !gstin ? '' : GST_RE.test(gstin.toUpperCase()) ? '' : 'Format: 22ABCDE1234F1Z5')}
+                error={fieldErrors.gstin}
+                placeholder="22ABCDE1234F1Z5"
                 maxLength={15}
               />
               <Field
                 label="PAN (optional)"
                 value={pan}
-                onChange={(v) => setPan(v.toUpperCase())}
+                onChange={(v) => { const n = v.toUpperCase(); setPan(n); if (fieldErrors.pan) setFE('pan', !n ? '' : PAN_RE.test(n) ? '' : 'Format: ABCDE1234F'); }}
+                onBlur={() => setFE('pan', !pan ? '' : PAN_RE.test(pan.toUpperCase()) ? '' : 'Format: ABCDE1234F')}
+                error={fieldErrors.pan}
                 placeholder="ABCDE1234F"
                 maxLength={10}
               />
@@ -267,13 +295,45 @@ export function CreateBusinessAccountModal({
               </div>
               <p className="text-[11px] text-gray-400 mt-1.5 leading-normal">
                 {businessType === 'customer' && 'Buy ingredients/supplies from vendors.'}
-                {businessType === 'vendor' && 'Sell your inventory & buy from other vendors.'}
+                {businessType === 'vendor' && 'Sell your inventory & buy from other vendors. Approval required — your vendor profile starts pending review.'}
                 {businessType === 'brand' && 'Manage catalogs and brand mapping across platforms.'}
               </p>
             </div>
           </div>
 
-          {/* Section 2: Primary Outlet */}
+          {/* Vendor branch — sends the user to the 7-step KYC wizard instead
+              of trying to collect bank / pickup / pincodes / vendor type in
+              this small modal. Wizard runs in auth-mode for logged-in users
+              (no OTP, posts to /api/v1/account). */}
+          {businessType === 'vendor' && (
+            <div className="rounded-2xl border-2 border-[#53B175]/30 bg-green-50/40 p-5">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-[#53B175]/15 flex items-center justify-center shrink-0">
+                  <ShieldCheck size={18} className="text-[#53B175]" />
+                </div>
+                <div>
+                  <p className="font-bold text-[13.5px] text-[#181725] mb-1">Vendor onboarding needs full KYC</p>
+                  <p className="text-[11.5px] text-gray-600 leading-relaxed">
+                    A vendor profile needs GST, PAN, bank details, billing &amp; pickup
+                    addresses, serviceable pincodes and delivery capability — collected in
+                    a 7-step wizard. Your existing session and HCID are preserved; the new
+                    vendor becomes another business under your account.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { onClose(); router.push('/vendor/register'); }}
+                className="w-full bg-[#53B175] hover:bg-[#48a068] text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-green-100 transition-colors"
+              >
+                Continue to vendor onboarding <ArrowRight size={16} />
+              </button>
+            </div>
+          )}
+
+          {/* Section 2: Primary Outlet — only relevant for customer/brand;
+              vendor outlet is collected as pickupAddress inside the wizard. */}
+          {businessType !== 'vendor' && (
           <div className="space-y-3.5 pt-2">
             <h4 className="text-[13px] font-bold text-[#181725] pb-1.5 border-b border-gray-50 uppercase tracking-wider flex items-center gap-1.5">
               <MapPin size={14} className="text-gray-400" />
@@ -292,7 +352,9 @@ export function CreateBusinessAccountModal({
               label="Branch / Outlet name"
               required
               value={outletName}
-              onChange={setOutletName}
+              onChange={(v) => { setOutletName(v); if (fieldErrors.outletName) setFE('outletName', v.trim().length < 2 ? 'Outlet name is required' : ''); }}
+              onBlur={() => setFE('outletName', outletName.trim().length < 2 ? 'Outlet name is required' : '')}
+              error={fieldErrors.outletName}
               placeholder="e.g. Rockville Vashi Branch"
             />
 
@@ -300,7 +362,9 @@ export function CreateBusinessAccountModal({
               label="Flat, suite, floor, street number"
               required
               value={addressLine}
-              onChange={setAddressLine}
+              onChange={(v) => { setAddressLine(v); if (fieldErrors.addressLine) setFE('addressLine', v.trim().length < 5 ? 'Enter the full address' : ''); }}
+              onBlur={() => setFE('addressLine', addressLine.trim().length < 5 ? 'Enter the full address' : '')}
+              error={fieldErrors.addressLine}
               placeholder="e.g. Ground Floor, Plot 10, Sector 30"
             />
 
@@ -315,7 +379,9 @@ export function CreateBusinessAccountModal({
                 label="Pincode (6 digits)"
                 required
                 value={pincode}
-                onChange={(v) => setPincode(v.replace(/\D/g, '').slice(0, 6))}
+                onChange={(v) => { const n = v.replace(/\D/g, '').slice(0, 6); setPincode(n); if (fieldErrors.pincode) setFE('pincode', n && !PINCODE_RE.test(n) ? 'Pincode must be 6 digits' : ''); }}
+                onBlur={() => setFE('pincode', pincode && !PINCODE_RE.test(pincode) ? 'Pincode must be 6 digits' : '')}
+                error={fieldErrors.pincode}
                 placeholder="400703"
                 inputMode="numeric"
               />
@@ -347,6 +413,7 @@ export function CreateBusinessAccountModal({
               </div>
             )}
           </div>
+          )}
 
           {error && (
             <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-100 rounded-xl">
@@ -366,14 +433,18 @@ export function CreateBusinessAccountModal({
           >
             Cancel
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || !legalName.trim() || !outletName.trim() || !addressLine.trim()}
-            className="px-5 py-2 bg-[#299E60] text-white text-[13px] font-bold rounded-xl hover:bg-[#238a54] disabled:opacity-50 flex items-center gap-2 transition-all shadow-sm"
-          >
-            {submitting ? <Loader2 size={14} className="animate-spin" /> : null}
-            {submitting ? 'Registering…' : 'Create Business'}
-          </button>
+          {/* Vendor uses the wizard CTA in the body — only customer/brand
+              submit through this modal. */}
+          {businessType !== 'vendor' && (
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || !legalName.trim() || !outletName.trim() || !addressLine.trim()}
+              className="px-5 py-2 bg-[#299E60] text-white text-[13px] font-bold rounded-xl hover:bg-[#238a54] disabled:opacity-50 flex items-center gap-2 transition-all shadow-sm"
+            >
+              {submitting ? <Loader2 size={14} className="animate-spin" /> : null}
+              {submitting ? 'Registering…' : 'Create Business'}
+            </button>
+          )}
         </div>
 
       </div>
@@ -389,6 +460,8 @@ function Field({
   required,
   maxLength,
   inputMode,
+  error,
+  onBlur,
 }: {
   label: string;
   value: string;
@@ -397,6 +470,8 @@ function Field({
   required?: boolean;
   maxLength?: number;
   inputMode?: 'text' | 'numeric' | 'tel' | 'email';
+  error?: string;
+  onBlur?: () => void;
 }) {
   return (
     <label className="block">
@@ -410,9 +485,15 @@ function Field({
         maxLength={maxLength}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         placeholder={placeholder}
-        className="w-full px-3.5 py-2.5 text-[13px] border border-gray-200 rounded-xl outline-none focus:border-[#299E60] focus:ring-2 focus:ring-[#299E60]/10 bg-[#FAFAFA] focus:bg-white transition-all text-gray-700 placeholder:text-gray-400"
+        className={`w-full px-3.5 py-2.5 text-[13px] border rounded-xl outline-none focus:ring-2 bg-[#FAFAFA] focus:bg-white transition-all text-gray-700 placeholder:text-gray-400 ${
+          error
+            ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+            : 'border-gray-200 focus:border-[#299E60] focus:ring-[#299E60]/10'
+        }`}
       />
+      {error && <p className="text-[11px] text-red-600 font-medium mt-1">{error}</p>}
     </label>
   );
 }

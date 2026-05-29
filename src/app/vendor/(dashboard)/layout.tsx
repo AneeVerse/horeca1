@@ -92,10 +92,26 @@ export default function VendorLayout({
         ? SIDEBAR_LINKS
         : SIDEBAR_LINKS.filter(link => !link.perm || sessionPerms.includes(link.perm));
 
+    // Only treat the impersonation cookie as authoritative when the current
+    // session is actually an admin. A vendor logging in fresh would otherwise
+    // see an "Admin View" banner for whichever vendor an admin previously
+    // impersonated on the same browser. When the cookie is found on a
+    // non-admin session we also DELETE the impersonation server-side so the
+    // stale cookie doesn't keep poisoning future requests.
+    const sessionRole = (session?.user as { role?: string } | undefined)?.role;
     React.useEffect(() => {
+        if (status !== 'authenticated') return;
         const match = document.cookie.match(/(?:^|;\s*)admin_impersonate_vendor_name=([^;]+)/);
-        setAdminVendorName(match ? decodeURIComponent(match[1]) : null);
-    }, []);
+        if (sessionRole === 'admin' && match) {
+            setAdminVendorName(decodeURIComponent(match[1]));
+        } else {
+            setAdminVendorName(null);
+            if (match) {
+                // Stale impersonation cookie from a previous admin session — clear it.
+                fetch('/api/v1/admin/impersonate', { method: 'DELETE' }).catch(() => {});
+            }
+        }
+    }, [status, sessionRole]);
 
     // Refresh permissions automatically so role/outlet changes by an admin
     // propagate to the browser without requiring logout/login.
