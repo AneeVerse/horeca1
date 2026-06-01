@@ -238,8 +238,17 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
         await tx.userRole.create({
           data: { userId: ctx.userId, businessAccountId: account.id, outletId: null, roleId: vendorAdminTemplate.id },
         });
-        // Legacy role field consumed by older routes
-        await tx.user.update({ where: { id: ctx.userId }, data: { role: 'vendor' } });
+        // Legacy User.role field — only used by older routes that haven't been
+        // migrated to BusinessAccountMember + UserRole yet. We ONLY promote
+        // 'customer' → 'vendor' here; an admin who happens to create a vendor
+        // business (e.g. for testing or because the same human runs both)
+        // MUST stay role='admin' or they lose admin access on next session
+        // refresh. Brand path correctly skips this update — vendor path was
+        // the only one writing the legacy field, which created the asymmetry.
+        await tx.user.updateMany({
+          where: { id: ctx.userId, role: 'customer' },
+          data: { role: 'vendor' },
+        });
 
         // Serviceable pincodes — one ServiceArea row per pincode. Dedupe so
         // the user can paste a sloppy list without violating the
