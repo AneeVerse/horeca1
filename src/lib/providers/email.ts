@@ -1,5 +1,8 @@
-// Email provider adapter — Resend by default (simplest HTTP API, no SDK dependency).
-// If RESEND_API_KEY is not set, falls back to logging (useful for dev).
+// Email provider adapter — Nodemailer + Gmail SMTP.
+// If EMAIL_USER / EMAIL_PASS are not set, falls back to console.log of the
+// payload (dev behavior) and returns silently without throwing.
+
+import nodemailer from 'nodemailer';
 
 interface SendEmailInput {
   to: string;
@@ -9,32 +12,38 @@ interface SendEmailInput {
   name?: string;
 }
 
-export async function sendEmail(input: SendEmailInput): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM || 'HoReCa Hub <onboarding@resend.dev>';
+const FROM = process.env.EMAIL_FROM ?? 'HoReCa Hub <team.horeca1@gmail.com>';
 
-  if (!apiKey) {
-    console.warn(`[email:dev] ${input.to} | ${input.subject} | ${input.text.slice(0, 100)}…`);
+let cachedTransporter: nodemailer.Transporter | null = null;
+function getTransporter(): nodemailer.Transporter | null {
+  if (cachedTransporter) return cachedTransporter;
+  const user = process.env.EMAIL_USER;
+  const pass = process.env.EMAIL_PASS;
+  if (!user || !pass) return null;
+  cachedTransporter = nodemailer.createTransport({
+    service: process.env.EMAIL_SERVICE ?? 'gmail',
+    host: process.env.EMAIL_HOST ?? 'smtp.gmail.com',
+    port: Number(process.env.EMAIL_PORT ?? '465'),
+    secure: true,
+    auth: { user, pass },
+  });
+  return cachedTransporter;
+}
+
+export async function sendEmail(input: SendEmailInput): Promise<void> {
+  const transporter = getTransporter();
+  if (!transporter) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[email:dev]', input.subject, '→', input.to, '\n', input.text.slice(0, 200));
+    }
     return;
   }
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from,
-      to: [input.to],
-      subject: input.subject,
-      text: input.text,
-      html: input.html ?? `<p>${input.text.replace(/\n/g, '<br/>')}</p>`,
-    }),
+  const html = input.html ?? `<p>${input.text.replace(/\n/g, '<br>')}</p>`;
+  await transporter.sendMail({
+    from: FROM,
+    to: input.name ? `${input.name} <${input.to}>` : input.to,
+    subject: input.subject,
+    text: input.text,
+    html,
   });
-
-  if (!res.ok) {
-    const detail = await res.text().catch(() => res.statusText);
-    throw new Error(`Resend ${res.status}: ${detail}`);
-  }
 }
