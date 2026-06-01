@@ -57,3 +57,93 @@ export function isValidPermissionKey(key: string): key is PermissionKey {
 
 /** Permissions JSON as stored on AccountRole.permissions. */
 export type PermissionsJson = Partial<Record<Module, Partial<Record<Action, boolean>>>>;
+
+// ─── Scope ↔ Module mapping ──────────────────────────────────────────────
+//
+// Each AccountRole has a scope (account / vendor / brand / admin / delivery).
+// The permission matrix shown when creating or editing a role of a given
+// scope must only include modules that make sense for that scope —
+// otherwise a customer-team admin sees vendor-only modules like GRN /
+// dispatch / inventory, which is confusing and lets them set permissions
+// that never apply.
+//
+// Membership rule of thumb:
+//   • account  — buying-side: orders, payments, credit, team, outlets, settings
+//   • vendor   — selling-side: full catalog/inventory/dispatch + everything
+//   • brand    — brand-store: catalog management + distributor relationships
+//   • admin    — platform staff: everything cross-tenant + audit trail
+//   • delivery — delivery operators (V2.3+): dispatch + deliveries + orders.view
+//
+// Keep this list aligned with what each portal's pages actually need.
+export type RoleScope = 'account' | 'vendor' | 'brand' | 'admin' | 'delivery';
+
+export const SCOPE_MODULES: Record<RoleScope, readonly Module[]> = {
+  account: [
+    'dashboard',
+    'orders',
+    'repeatOrders',
+    'payments',
+    'creditLine',
+    'users',
+    'outlets',
+    'settings',
+  ],
+  vendor: [
+    'dashboard',
+    'products',
+    'brandStore',
+    'orders',
+    'repeatOrders',
+    'inventory',
+    'grn',
+    'dispatch',
+    'deliveries',
+    'payments',
+    'creditLine',
+    'customers',
+    'users',
+    'outlets',
+    'analytics',
+    'promotions',
+    'settings',
+  ],
+  brand: [
+    'dashboard',
+    'products',
+    'vendors',
+    'analytics',
+    'users',
+    'settings',
+  ],
+  admin: [
+    'dashboard',
+    'orders',
+    'customers',
+    'vendors',
+    'brands',
+    'products',
+    'payments',
+    'analytics',
+    'users',
+    'auditLogs',
+    'settings',
+    'support',
+    'logistics',
+  ],
+  delivery: [
+    'dashboard',
+    'orders',
+    'dispatch',
+    'deliveries',
+  ],
+} as const;
+
+/** Filter MODULES down to just the ones a given role-scope can use. */
+export function modulesForScope(scope: RoleScope): Record<Module, readonly Action[]> {
+  const allowed = SCOPE_MODULES[scope];
+  const out: Partial<Record<Module, readonly Action[]>> = {};
+  for (const m of allowed) {
+    out[m] = MODULES[m];
+  }
+  return out as Record<Module, readonly Action[]>;
+}

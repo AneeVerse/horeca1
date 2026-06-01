@@ -208,6 +208,7 @@ export default function AdminTeamPage() {
                 onClose={() => setShowRolesEditor(false)}
                 endpointBase="/api/v1/admin/roles"
                 accent="#E74C3C"
+                scope="admin"
                 onRolesChanged={fetchTeam}
             />
         </div>

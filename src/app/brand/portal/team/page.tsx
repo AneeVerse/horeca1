@@ -190,6 +190,7 @@ export default function BrandTeamPage() {
                 onClose={() => setShowRolesEditor(false)}
                 endpointBase="/api/v1/brand/roles"
                 accent="#53B175"
+                scope="brand"
                 onRolesChanged={fetchTeam}
             />
         </div>

@@ -33,6 +33,9 @@ interface TeamRolesEditorProps {
     accent?: string;
     /** Optional callback so the parent team page can refresh its role dropdown. */
     onRolesChanged?: () => void;
+    /** Role-scope; the permission matrix is narrowed to modules relevant for
+     *  this scope (e.g. customer-team roles don't see GRN / dispatch). */
+    scope?: 'account' | 'vendor' | 'brand' | 'admin' | 'delivery';
 }
 
 export function TeamRolesEditor({
@@ -41,6 +44,7 @@ export function TeamRolesEditor({
     endpointBase,
     accent = '#53B175',
     onRolesChanged,
+    scope,
 }: TeamRolesEditorProps) {
     const [modules, setModules] = useState<Record<string, readonly string[]>>({});
     const [roles, setRoles] = useState<Role[]>([]);
@@ -51,8 +55,11 @@ export function TeamRolesEditor({
 
     const load = () => {
         Promise.resolve().then(() => setLoading(true));
+        const registryUrl = scope
+            ? `/api/v1/permissions/registry?scope=${scope}`
+            : '/api/v1/permissions/registry';
         Promise.all([
-            fetch('/api/v1/permissions/registry').then((r) => r.json()),
+            fetch(registryUrl).then((r) => r.json()),
             fetch(endpointBase).then((r) => r.json()),
         ])
             .then(([m, r]) => {

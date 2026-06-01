@@ -198,6 +198,7 @@ export default function VendorTeamPage() {
                 onClose={() => setShowRolesEditor(false)}
                 endpointBase="/api/v1/vendor/roles"
                 accent="#299E60"
+                scope="vendor"
                 onRolesChanged={fetchTeam}
             />
         </div>
