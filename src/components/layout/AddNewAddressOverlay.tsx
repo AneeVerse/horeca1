@@ -104,7 +104,7 @@ export function AddNewAddressOverlay({
             zoomControl: true,
             zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_CENTER },
             gestureHandling: 'greedy',
-            mapId: 'horecahub_map',
+            mapId: 'horeca1_map',
         });
         mapRef.current = map;
 

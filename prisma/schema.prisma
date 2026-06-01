@@ -49,6 +49,7 @@ model VerificationToken {
   @@map("verification_tokens")
 }
 
+
 // ═══ USER ═════════════════════════════════════════════
 
 model User {

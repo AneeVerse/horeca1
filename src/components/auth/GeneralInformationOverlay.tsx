@@ -13,7 +13,7 @@ export function GeneralInformationOverlay({ isOpen, onClose }: GeneralInformatio
     if (!isOpen) return null;
 
     const infoItems = [
-        { id: 'about', label: 'About HorecaHub', description: 'Learn more about us', icon: Info, color: 'bg-blue-50 text-blue-500' },
+        { id: 'about', label: 'About horeca1', description: 'Learn more about us', icon: Info, color: 'bg-blue-50 text-blue-500' },
         { id: 'terms', label: 'Terms & Conditions', description: 'Our terms of service', icon: FileText, color: 'bg-orange-50 text-orange-500' },
         { id: 'privacy', label: 'Privacy Policy', description: 'How we handle your data', icon: Shield, color: 'bg-green-50 text-[#53B175]' },
         { id: 'faq', label: 'FAQ', description: 'Frequently asked questions', icon: HelpCircle, color: 'bg-purple-50 text-purple-500' },
@@ -66,8 +66,8 @@ export function GeneralInformationOverlay({ isOpen, onClose }: GeneralInformatio
 
                     {/* App Version */}
                     <div className="text-center pt-2 md:pt-4">
-                        <p className="text-[11px] md:text-[13px] text-[#7C7C7C] font-[500]">HorecaHub v2.1.0</p>
-                        <p className="text-[10px] md:text-[11px] text-[#BABABA] font-[400] mt-1">© 2025 HorecaHub. All rights reserved.</p>
+                        <p className="text-[11px] md:text-[13px] text-[#7C7C7C] font-[500]">horeca1 v2.1.0</p>
+                        <p className="text-[10px] md:text-[11px] text-[#BABABA] font-[400] mt-1">© 2025 horeca1. All rights reserved.</p>
                     </div>
                 </div>
             </div>

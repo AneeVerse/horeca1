@@ -42,7 +42,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "HorecaHub - B2B E-commerce for Restaurant Products",
+  title: "horeca1 - B2B E-commerce for Restaurant Products",
   description: "High speed, optimized B2B platform for restaurant and eating products.",
   icons: {
     icon: "/horeca1_logo.jpg",
@@ -60,26 +60,26 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${quicksand.variable} ${inter.variable} ${poppins.variable} ${playfair.variable} font-sans antialiased bg-background`}>
         <AuthProvider>
-        <GoogleMapsProvider>
-          <AddressProvider>
-            <WishlistProvider>
-              <CartProvider>
-                <ConfirmProvider>
-                  <Suspense fallback={null}><ScrollRestoration /></Suspense>
-                  <Toaster position="top-center" richColors />
-                  <Navbar />
-                  <OutletCompletionBanner />
-                  <VendorApplicationBanner />
-                  <main className="w-full min-h-screen pb-20 md:pb-0">
-                    {children}
-                  </main>
-                  <Footer />
-                  <PostLoginAccountSelector />
-                </ConfirmProvider>
-              </CartProvider>
-          </WishlistProvider>
-        </AddressProvider>
-        </GoogleMapsProvider>
+          <GoogleMapsProvider>
+            <AddressProvider>
+              <WishlistProvider>
+                <CartProvider>
+                  <ConfirmProvider>
+                    <Suspense fallback={null}><ScrollRestoration /></Suspense>
+                    <Toaster position="top-center" richColors />
+                    <Navbar />
+                    <OutletCompletionBanner />
+                    <VendorApplicationBanner />
+                    <main className="w-full min-h-screen pb-20 md:pb-0">
+                      {children}
+                    </main>
+                    <Footer />
+                    <PostLoginAccountSelector />
+                  </ConfirmProvider>
+                </CartProvider>
+              </WishlistProvider>
+            </AddressProvider>
+          </GoogleMapsProvider>
         </AuthProvider>
       </body>
     </html>

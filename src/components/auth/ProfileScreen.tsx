@@ -228,10 +228,13 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
     // resolved on the session. Each card jumps straight into the matching tab on
     // /account/[id]/... so this profile screen acts as the customer's dashboard.
     const activeAccountIdForLinks = (session?.user as { activeBusinessAccountId?: string } | undefined)?.activeBusinessAccountId;
+    // Roles & Permissions used to be its own sidebar entry; folded into the
+    // Team page's "Manage Roles" button so there's one entry per concept.
+    // RolesPermissionsOverlay still mounts below for the ?open=roles deep-link
+    // fallback, but isn't surfaced as a top-level item.
     const businessAccountItems = activeAccountIdForLinks ? [
         { id: 'outlets',     label: 'Outlets',       desc: 'Delivery locations & branches',  icon: MapPin,      onClick: () => setIsOutletsOpen(true) },
-        { id: 'team-members',label: 'Team Members',  desc: 'Invite users & manage access',   icon: Users,       onClick: () => setIsTeamOpen(true) },
-        { id: 'roles',       label: 'Roles & Permissions', desc: 'Permission matrix · templates', icon: BadgeCheck, onClick: () => setIsRolesOpen(true) },
+        { id: 'team-members',label: 'Team Members',  desc: 'Invite users, manage roles & access',   icon: Users,       onClick: () => router.push('/profile/team') },
         { id: 'account-overview', label: 'Account Overview', desc: 'GST, business type, members', icon: Building2, onClick: () => setIsOverviewOpen(true) },
         { id: 'create-account', label: 'Register New Business', desc: 'Create a new business account', icon: Plus, onClick: () => setIsCreateAccountOpen(true) },
     ] : [];

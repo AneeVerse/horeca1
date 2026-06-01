@@ -43,8 +43,8 @@ const AddressContext = createContext<AddressContextType | undefined>(undefined);
 // ─── Storage Keys (localStorage fallback for unauthenticated) ────────────────
 
 const STORAGE_KEYS = {
-    SELECTED: 'horecahub_selected_address',
-    SAVED: 'horecahub_saved_addresses',
+    SELECTED: 'horeca1_selected_address',
+    SAVED: 'horeca1_saved_addresses',
 };
 
 // ─── Provider ────────────────────────────────────────────────────────────────

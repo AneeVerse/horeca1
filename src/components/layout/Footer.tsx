@@ -172,34 +172,22 @@ export function Footer() {
                     </div>
                 </div>
 
-                {/* Shop on The Go + Social Links */}
-                <div className="pb-10 md:pb-16 border-t border-gray-100 pt-10">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-8">
-                        <div>
-                            <h4 className="text-[16px] md:text-[18px] font-bold text-[#181725] mb-3">Shop on The Go</h4>
-                            <p className="text-[14px] text-[#7C7C7C]">
-                                Marketpro App is available. Get it now
-                            </p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            {SOCIAL_LINKS.map((social, idx) => (
-                                <Link
-                                    key={idx}
-                                    href={social.href}
-                                    className="w-11 h-11 rounded-full bg-[#D3F2E0] text-[#299E60] flex items-center justify-center hover:bg-[#299E60] hover:text-white transition-all"
-                                >
-                                    <social.icon size={18} />
-                                </Link>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
                 {/* Bottom Bar */}
-                <div className="py-6 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="py-6 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-6">
                     <p className="text-[14px] text-[#7C7C7C] text-center md:text-left">
                         Horeca1 eCommerce © 2025. All Rights Reserved
                     </p>
+                    <div className="flex items-center gap-4">
+                        {SOCIAL_LINKS.map((social, idx) => (
+                            <Link
+                                key={idx}
+                                href={social.href}
+                                className="w-11 h-11 rounded-full bg-[#D3F2E0] text-[#299E60] flex items-center justify-center hover:bg-[#299E60] hover:text-white transition-all"
+                            >
+                                <social.icon size={18} />
+                            </Link>
+                        ))}
+                    </div>
                 </div>
             </div>
         </footer>

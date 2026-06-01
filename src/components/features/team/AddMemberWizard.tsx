@@ -87,8 +87,8 @@ export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardPr
 
   // Step 1
   const [identifier, setIdentifier] = useState('');
+  const [identifierError, setIdentifierError] = useState<string | null>(null);
   const [fullName, setFullName] = useState('');
-  const [password, setPassword] = useState('');
 
   // Step 2
   const [baName, setBaName] = useState('');
@@ -165,7 +165,13 @@ export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardPr
   const handleNext = () => {
     setError(null);
     if (step === 1) {
-      if (!identifier.trim()) { setError('Email or phone is required'); return; }
+      const trimmed = identifier.trim();
+      if (!trimmed) { setError('Email address is required'); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        setError('Enter a valid email address');
+        setIdentifierError('Enter a valid email address');
+        return;
+      }
       setStep(2);
     } else if (step === 2) {
       setStep(3);
@@ -188,7 +194,6 @@ export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardPr
         permissions,
       };
       if (fullName.trim()) body.fullName = fullName.trim();
-      if (password) body.password = password;
       if (!allOutlets && selectedOutletIds.size > 0) body.outletIds = Array.from(selectedOutletIds);
       if (sfView || sfOrder || sfPay) body.storefrontAccess = { view: sfView, order: sfOrder, pay: sfPay };
 
@@ -258,8 +263,8 @@ export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardPr
           {step === 1 && (
             <Step1UserInfo
               identifier={identifier} setIdentifier={setIdentifier}
+              identifierError={identifierError} setIdentifierError={setIdentifierError}
               fullName={fullName} setFullName={setFullName}
-              password={password} setPassword={setPassword}
             />
           )}
           {step === 2 && (
@@ -324,51 +329,57 @@ export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardPr
 // ─── Step 1: User Info ────────────────────────────────────────────────────────
 
 function Step1UserInfo({
-  identifier, setIdentifier, fullName, setFullName, password, setPassword,
+  identifier, setIdentifier, identifierError, setIdentifierError, fullName, setFullName,
 }: {
   identifier: string; setIdentifier: (v: string) => void;
+  identifierError: string | null; setIdentifierError: (v: string | null) => void;
   fullName: string; setFullName: (v: string) => void;
-  password: string; setPassword: (v: string) => void;
 }) {
+  const handleBlur = () => {
+    const trimmed = identifier.trim();
+    if (!trimmed) { setIdentifierError(null); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setIdentifierError('Enter a valid email address');
+    } else {
+      setIdentifierError(null);
+    }
+  };
+
   return (
     <div className="space-y-4 max-w-[520px]">
       <div>
         <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
-          Email or Phone <span className="text-red-400">*</span>
+          Email address <span className="text-red-400">*</span>
         </label>
         <input
-          type="text" autoFocus autoComplete="off"
-          value={identifier} onChange={e => setIdentifier(e.target.value)}
-          placeholder="rahul@vendor.com or 9876543210"
-          className="w-full h-[46px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10 bg-[#FAFAFA] focus:bg-white transition-all"
+          type="email" autoFocus autoComplete="off"
+          value={identifier}
+          onChange={e => { setIdentifier(e.target.value); if (identifierError) setIdentifierError(null); }}
+          onBlur={handleBlur}
+          placeholder="e.g. teammate@company.com"
+          className={`w-full h-[46px] border rounded-[10px] px-4 text-[14px] outline-none focus:ring-2 bg-[#FAFAFA] focus:bg-white transition-all ${
+            identifierError
+              ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
+              : 'border-[#EEEEEE] focus:border-[#299E60]/40 focus:ring-[#299E60]/10'
+          }`}
         />
+        {identifierError && (
+          <p className="text-[11px] text-red-600 mt-1.5">{identifierError}</p>
+        )}
         <p className="text-[11px] text-[#AEAEAE] mt-1.5 leading-relaxed">
-          Existing accounts get added automatically. For new accounts (email only), fill in the fields below.
+          We&apos;ll email a one-click sign-in link. The invitee sets their own password.
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
-            Full Name <span className="text-[#AEAEAE] font-normal normal-case">(new accounts)</span>
-          </label>
-          <input
-            type="text" autoComplete="off"
-            value={fullName} onChange={e => setFullName(e.target.value)}
-            placeholder="e.g. Rahul Sharma"
-            className="w-full h-[46px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10 bg-[#FAFAFA] focus:bg-white transition-all"
-          />
-        </div>
-        <div>
-          <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
-            Password <span className="text-[#AEAEAE] font-normal normal-case">(new accounts)</span>
-          </label>
-          <input
-            type="password" name="newMemberPassword" autoComplete="new-password"
-            value={password} onChange={e => setPassword(e.target.value)}
-            placeholder="Min. 6 characters"
-            className="w-full h-[46px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10 bg-[#FAFAFA] focus:bg-white transition-all"
-          />
-        </div>
+      <div>
+        <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
+          Full Name <span className="text-[#AEAEAE] font-normal normal-case">(new accounts)</span>
+        </label>
+        <input
+          type="text" autoComplete="off"
+          value={fullName} onChange={e => setFullName(e.target.value)}
+          placeholder="e.g. Rahul Sharma"
+          className="w-full h-[46px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10 bg-[#FAFAFA] focus:bg-white transition-all"
+        />
       </div>
     </div>
   );

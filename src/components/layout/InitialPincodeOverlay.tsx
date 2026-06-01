@@ -63,7 +63,7 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
             // Don't show if user already has an address selected or has previously interacted
             if (
                 localStorage.getItem('pincode_interacted') === 'true' ||
-                localStorage.getItem('horecahub_selected_address')
+                localStorage.getItem('horeca1_selected_address')
             ) return;
         } catch { /* ignore */ }
 
