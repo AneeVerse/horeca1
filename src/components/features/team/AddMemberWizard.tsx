@@ -89,6 +89,7 @@ export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardPr
   const [identifier, setIdentifier] = useState('');
   const [identifierError, setIdentifierError] = useState<string | null>(null);
   const [fullName, setFullName] = useState('');
+  const [password, setPassword] = useState('');
 
   // Step 2
   const [baName, setBaName] = useState('');
@@ -194,6 +195,7 @@ export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardPr
         permissions,
       };
       if (fullName.trim()) body.fullName = fullName.trim();
+      if (password) body.password = password;
       if (!allOutlets && selectedOutletIds.size > 0) body.outletIds = Array.from(selectedOutletIds);
       if (sfView || sfOrder || sfPay) body.storefrontAccess = { view: sfView, order: sfOrder, pay: sfPay };
 
@@ -265,6 +267,7 @@ export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardPr
               identifier={identifier} setIdentifier={setIdentifier}
               identifierError={identifierError} setIdentifierError={setIdentifierError}
               fullName={fullName} setFullName={setFullName}
+              password={password} setPassword={setPassword}
             />
           )}
           {step === 2 && (
@@ -330,10 +333,12 @@ export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardPr
 
 function Step1UserInfo({
   identifier, setIdentifier, identifierError, setIdentifierError, fullName, setFullName,
+  password, setPassword,
 }: {
   identifier: string; setIdentifier: (v: string) => void;
   identifierError: string | null; setIdentifierError: (v: string | null) => void;
   fullName: string; setFullName: (v: string) => void;
+  password: string; setPassword: (v: string) => void;
 }) {
   const handleBlur = () => {
     const trimmed = identifier.trim();
@@ -367,19 +372,32 @@ function Step1UserInfo({
           <p className="text-[11px] text-red-600 mt-1.5">{identifierError}</p>
         )}
         <p className="text-[11px] text-[#AEAEAE] mt-1.5 leading-relaxed">
-          We&apos;ll email a one-click sign-in link. The invitee sets their own password.
+          Existing accounts get added straight in. For a brand-new user, fill name + password below — we&apos;ll email them the credentials.
         </p>
       </div>
-      <div>
-        <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
-          Full Name <span className="text-[#AEAEAE] font-normal normal-case">(new accounts)</span>
-        </label>
-        <input
-          type="text" autoComplete="off"
-          value={fullName} onChange={e => setFullName(e.target.value)}
-          placeholder="e.g. Rahul Sharma"
-          className="w-full h-[46px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10 bg-[#FAFAFA] focus:bg-white transition-all"
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
+            Full Name <span className="text-[#AEAEAE] font-normal normal-case">(new accounts)</span>
+          </label>
+          <input
+            type="text" autoComplete="off"
+            value={fullName} onChange={e => setFullName(e.target.value)}
+            placeholder="e.g. Rahul Sharma"
+            className="w-full h-[46px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10 bg-[#FAFAFA] focus:bg-white transition-all"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
+            Password <span className="text-[#AEAEAE] font-normal normal-case">(new accounts)</span>
+          </label>
+          <input
+            type="password" name="newMemberPassword" autoComplete="new-password"
+            value={password} onChange={e => setPassword(e.target.value)}
+            placeholder="At least 6 characters"
+            className="w-full h-[46px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10 bg-[#FAFAFA] focus:bg-white transition-all"
+          />
+        </div>
       </div>
     </div>
   );
