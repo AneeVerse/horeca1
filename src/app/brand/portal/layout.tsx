@@ -23,15 +23,24 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { signOut } from 'next-auth/react';
+import type { PermissionKey } from '@/lib/permissions/registry';
 
-const SIDEBAR_LINKS = [
-    { name: 'Dashboard', icon: LayoutDashboard, href: '/brand/portal' },
-    { name: 'My Products', icon: Package, href: '/brand/portal/products' },
-    { name: 'Distributor Map', icon: GitMerge, href: '/brand/portal/mappings' },
-    { name: 'Distributors', icon: Users, href: '/brand/portal/distributors' },
-    { name: 'Analytics', icon: BarChart3, href: '/brand/portal/analytics' },
-    { name: 'Team', icon: Users, href: '/brand/portal/team' },
-    { name: 'Settings', icon: Settings, href: '/brand/portal/settings' },
+interface BrandSidebarLink {
+    name: string;
+    icon: React.ComponentType<{ size?: number; className?: string }>;
+    href: string;
+    // ANY-match: array → user needs at least one perm. Omit → always visible.
+    requiredPerm?: PermissionKey | PermissionKey[];
+}
+
+const SIDEBAR_LINKS: BrandSidebarLink[] = [
+    { name: 'Dashboard', icon: LayoutDashboard, href: '/brand/portal', requiredPerm: 'dashboard.view' },
+    { name: 'My Products', icon: Package, href: '/brand/portal/products', requiredPerm: 'products.view' },
+    { name: 'Distributor Map', icon: GitMerge, href: '/brand/portal/mappings', requiredPerm: 'vendors.view' },
+    { name: 'Distributors', icon: Users, href: '/brand/portal/distributors', requiredPerm: 'vendors.view' },
+    { name: 'Analytics', icon: BarChart3, href: '/brand/portal/analytics', requiredPerm: 'analytics.view' },
+    { name: 'Team', icon: Users, href: '/brand/portal/team', requiredPerm: ['users.view', 'users.create', 'users.edit', 'users.delete'] },
+    { name: 'Settings', icon: Settings, href: '/brand/portal/settings', requiredPerm: 'settings.view' },
 ];
 
 export default function BrandPortalLayout({ children }: { children: React.ReactNode }) {
@@ -40,6 +49,19 @@ export default function BrandPortalLayout({ children }: { children: React.ReactN
     const { data: session, status } = useSession();
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [adminBrandName, setAdminBrandName] = useState<string | null>(null);
+
+    // Filter sidebar links by the user's permission set. Empty array means
+    // no restrictions yet (owner/legacy) — show all. Server-side RBAC still
+    // enforces actual page access.
+    const sessionPerms = ((session?.user as { permissions?: string[] } | undefined)?.permissions) ?? [];
+    const can = (need?: PermissionKey | PermissionKey[]): boolean => {
+        if (!need) return true;
+        if (sessionPerms.length === 0) return true;
+        return Array.isArray(need)
+            ? need.some((p) => sessionPerms.includes(p))
+            : sessionPerms.includes(need);
+    };
+    const visibleLinks = SIDEBAR_LINKS.filter((link) => can(link.requiredPerm));
 
     // Only treat the impersonation cookie as authoritative when the current
     // session is actually an admin. A brand user logging in fresh would
@@ -171,7 +193,7 @@ export default function BrandPortalLayout({ children }: { children: React.ReactN
                                 )}
                             </div>
                         )}
-                        {SIDEBAR_LINKS.map((link) => {
+                        {visibleLinks.map((link) => {
                             const isActive = link.href === '/brand/portal'
                                 ? pathname === '/brand/portal'
                                 : pathname.startsWith(link.href);

@@ -29,22 +29,31 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
-import { useAdminPermissions } from '@/hooks/useAdminPermissions';
+import type { PermissionKey } from '@/lib/permissions/registry';
 
-const SIDEBAR_LINKS = [
+interface AdminSidebarLink {
+    name: string;
+    icon: React.ComponentType<{ size?: number; className?: string }>;
+    href: string;
+    // ANY-match: if array, user needs at least one of the listed perms.
+    // Omit → always visible (e.g. Dashboard).
+    requiredPerm?: PermissionKey | PermissionKey[];
+}
+
+const SIDEBAR_LINKS: AdminSidebarLink[] = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
-    { name: 'Orders', icon: ShoppingBag, href: '/admin/orders' },
-    { name: 'Customers', icon: Users, href: '/admin/customers' },
-    { name: 'Vendors', icon: Store, href: '/admin/vendors' },
-    { name: 'Products', icon: Package, href: '/admin/products' },
-    { name: 'Categories', icon: Tag, href: '/admin/categories' },
-    { name: 'Approvals', icon: CheckSquare, href: '/admin/approvals' },
-    { name: 'Returns', icon: RotateCcw, href: '/admin/returns' },
-    { name: 'Brands', icon: Sparkles, href: '/admin/brands' },
-    { name: 'Finance', icon: Wallet, href: '/admin/finance' },
-    { name: 'Reports', icon: BarChart3, href: '/admin/reports' },
-    { name: 'Team', icon: Users, href: '/admin/team' },
-    { name: 'Settings', icon: Settings, href: '/admin/settings' },
+    { name: 'Orders', icon: ShoppingBag, href: '/admin/orders', requiredPerm: 'orders.view' },
+    { name: 'Customers', icon: Users, href: '/admin/customers', requiredPerm: 'customers.view' },
+    { name: 'Vendors', icon: Store, href: '/admin/vendors', requiredPerm: 'vendors.view' },
+    { name: 'Products', icon: Package, href: '/admin/products', requiredPerm: 'products.view' },
+    { name: 'Categories', icon: Tag, href: '/admin/categories', requiredPerm: 'products.edit' },
+    { name: 'Approvals', icon: CheckSquare, href: '/admin/approvals', requiredPerm: ['vendors.approve', 'brands.approve', 'products.approve'] },
+    { name: 'Returns', icon: RotateCcw, href: '/admin/returns', requiredPerm: 'orders.edit' },
+    { name: 'Brands', icon: Sparkles, href: '/admin/brands', requiredPerm: 'brands.view' },
+    { name: 'Finance', icon: Wallet, href: '/admin/finance', requiredPerm: 'payments.view' },
+    { name: 'Reports', icon: BarChart3, href: '/admin/reports', requiredPerm: 'analytics.view' },
+    { name: 'Team', icon: Users, href: '/admin/team', requiredPerm: ['users.view', 'users.create', 'users.edit', 'users.delete'] },
+    { name: 'Settings', icon: Settings, href: '/admin/settings', requiredPerm: 'settings.view' },
 ];
 
 export default function AdminLayout({
@@ -55,15 +64,22 @@ export default function AdminLayout({
     const pathname = usePathname();
     const router = useRouter();
     const { data: session, status } = useSession();
-    const perms = useAdminPermissions();
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [pendingApprovals, setPendingApprovals] = useState(0);
 
     // Hide sidebar links the current admin role cannot use. Server-side RBAC
-    // still enforces access; this keeps the sidebar honest with what UI is reachable.
-    const visibleLinks = SIDEBAR_LINKS.filter(
-        (link) => link.name !== 'Team' || perms.canManageTeam,
-    );
+    // still enforces access; this keeps the sidebar honest with what UI is
+    // reachable. Empty permissions array means no restrictions yet (legacy /
+    // root admin) — show everything; otherwise filter by requiredPerm.
+    const sessionPerms = ((session?.user as { permissions?: string[] } | undefined)?.permissions) ?? [];
+    const can = (need?: PermissionKey | PermissionKey[]): boolean => {
+        if (!need) return true;
+        if (sessionPerms.length === 0) return true;
+        return Array.isArray(need)
+            ? need.some((p) => sessionPerms.includes(p))
+            : sessionPerms.includes(need);
+    };
+    const visibleLinks = SIDEBAR_LINKS.filter((link) => can(link.requiredPerm));
 
     // Poll the pending-approvals count so the sidebar badge reflects reality
     // without a full page reload. 60s cadence is friendly to the DB and good

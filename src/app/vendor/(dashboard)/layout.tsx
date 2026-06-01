@@ -53,25 +53,34 @@ import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
 import { VendorOutletStrip } from '@/components/vendor/VendorOutletStrip';
 import { PostLoginAccountSelector } from '@/components/auth/PostLoginAccountSelector';
+import type { PermissionKey } from '@/lib/permissions/registry';
 
-const SIDEBAR_LINKS = [
-    { name: 'Dashboard',     icon: LayoutDashboard, href: '/vendor/dashboard',      perm: 'dashboard.view' },
-    { name: 'Orders',        icon: ShoppingBag,     href: '/vendor/orders',         perm: 'orders.view' },
-    { name: 'Products',      icon: Package,         href: '/vendor/products',       perm: 'products.view' },
-    { name: 'Bulk Upload',   icon: Upload,          href: '/vendor/bulk-upload',    perm: 'products.create' },
-    { name: 'Brand Mappings',icon: GitMerge,        href: '/vendor/brand-mappings', perm: 'products.view' },
-    { name: 'Inventory',     icon: Warehouse,       href: '/vendor/inventory',      perm: 'inventory.view' },
-    { name: 'Collections',   icon: Landmark,        href: '/vendor/collections',    perm: 'products.view' },
-    { name: 'Returns',       icon: RotateCcw,       href: '/vendor/returns',        perm: 'orders.view' },
-    { name: 'Customers',     icon: UserCircle,      href: '/vendor/customers',      perm: 'customers.view' },
-    { name: 'Price Lists',   icon: Tag,             href: '/vendor/price-lists',    perm: 'products.view' },
-    { name: 'Promotions',    icon: Gift,            href: '/vendor/promotions',     perm: 'promotions.view' },
-    { name: 'Wallet',        icon: Wallet,          href: '/vendor/wallet',         perm: 'payments.view' },
-    { name: 'Ledger',        icon: BookOpen,        href: '/vendor/ledger',         perm: 'payments.view' },
-    { name: 'Reports',       icon: BarChart3,       href: '/vendor/reports',        perm: 'analytics.view' },
-    { name: 'Notifications', icon: Bell,            href: '/vendor/notifications',  perm: null },
-    { name: 'Team',          icon: Users,           href: '/vendor/team',           perm: 'users.view' },
-    { name: 'Settings',      icon: Settings,        href: '/vendor/settings',       perm: 'settings.view' },
+interface VendorSidebarLink {
+    name: string;
+    icon: React.ComponentType<{ size?: number; className?: string }>;
+    href: string;
+    // ANY-match: array → user needs at least one perm. null/undefined → always visible.
+    requiredPerm?: PermissionKey | PermissionKey[] | null;
+}
+
+const SIDEBAR_LINKS: VendorSidebarLink[] = [
+    { name: 'Dashboard',     icon: LayoutDashboard, href: '/vendor/dashboard',      requiredPerm: 'dashboard.view' },
+    { name: 'Orders',        icon: ShoppingBag,     href: '/vendor/orders',         requiredPerm: 'orders.view' },
+    { name: 'Products',      icon: Package,         href: '/vendor/products',       requiredPerm: 'products.view' },
+    { name: 'Bulk Upload',   icon: Upload,          href: '/vendor/bulk-upload',    requiredPerm: 'products.create' },
+    { name: 'Brand Mappings',icon: GitMerge,        href: '/vendor/brand-mappings', requiredPerm: 'products.edit' },
+    { name: 'Inventory',     icon: Warehouse,       href: '/vendor/inventory',      requiredPerm: 'inventory.view' },
+    { name: 'Collections',   icon: Landmark,        href: '/vendor/collections',    requiredPerm: 'products.edit' },
+    { name: 'Returns',       icon: RotateCcw,       href: '/vendor/returns',        requiredPerm: 'orders.edit' },
+    { name: 'Customers',     icon: UserCircle,      href: '/vendor/customers',      requiredPerm: 'customers.view' },
+    { name: 'Price Lists',   icon: Tag,             href: '/vendor/price-lists',    requiredPerm: 'products.edit' },
+    { name: 'Promotions',    icon: Gift,            href: '/vendor/promotions',     requiredPerm: 'promotions.view' },
+    { name: 'Wallet',        icon: Wallet,          href: '/vendor/wallet',         requiredPerm: 'payments.view' },
+    { name: 'Ledger',        icon: BookOpen,        href: '/vendor/ledger',         requiredPerm: 'payments.view' },
+    { name: 'Reports',       icon: BarChart3,       href: '/vendor/reports',        requiredPerm: 'analytics.view' },
+    { name: 'Notifications', icon: Bell,            href: '/vendor/notifications' },
+    { name: 'Team',          icon: Users,           href: '/vendor/team',           requiredPerm: ['users.view', 'users.create', 'users.edit', 'users.delete'] },
+    { name: 'Settings',      icon: Settings,        href: '/vendor/settings',       requiredPerm: 'settings.view' },
 ];
 
 export default function VendorLayout({
@@ -88,9 +97,14 @@ export default function VendorLayout({
     // Filter sidebar links by the user's permission set.
     // Empty array means no restrictions yet (owner/legacy) — show all.
     const sessionPerms = ((session?.user as Record<string, unknown>)?.permissions as string[] | undefined) ?? [];
-    const visibleLinks = sessionPerms.length === 0
-        ? SIDEBAR_LINKS
-        : SIDEBAR_LINKS.filter(link => !link.perm || sessionPerms.includes(link.perm));
+    const can = (need?: PermissionKey | PermissionKey[] | null): boolean => {
+        if (!need) return true;
+        if (sessionPerms.length === 0) return true;
+        return Array.isArray(need)
+            ? need.some((p) => sessionPerms.includes(p))
+            : sessionPerms.includes(need);
+    };
+    const visibleLinks = SIDEBAR_LINKS.filter((link) => can(link.requiredPerm));
 
     // Only treat the impersonation cookie as authoritative when the current
     // session is actually an admin. A vendor logging in fresh would otherwise
