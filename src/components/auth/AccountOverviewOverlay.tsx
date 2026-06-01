@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, Loader2, MapPin, Users, ShieldCheck, ChevronRight, X, Building2 } from 'lucide-react';
+import { ChevronLeft, Loader2, MapPin, Users, ShieldCheck, ChevronRight, X, Building2, AlertTriangle, Trash2 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
+import { toast } from 'sonner';
 
 interface AccountDetail {
   id: string;
@@ -25,6 +27,9 @@ interface AccountOverviewOverlayProps {
   onOpenOutlets?: () => void;
   onOpenMembers?: () => void;
   onOpenRoles?: () => void;
+  /** Called after a successful hard-delete so the parent can refresh its
+      account list and switch the user to a different BA. */
+  onDeleted?: (deletedAccountId: string) => void;
 }
 
 export function AccountOverviewOverlay({
@@ -34,9 +39,47 @@ export function AccountOverviewOverlay({
   onOpenOutlets,
   onOpenMembers,
   onOpenRoles,
+  onDeleted,
 }: AccountOverviewOverlayProps) {
+  const { data: session } = useSession();
+  const activeAccountId = (session?.user as { activeBusinessAccountId?: string } | undefined)?.activeBusinessAccountId;
+  const isActive = accountId === activeAccountId;
+
   const [account, setAccount] = useState<AccountDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Delete-confirmation state. We open a small inline confirm card under the
+  // Danger Zone button rather than a separate modal so the typed-name field
+  // and error message sit right next to the trigger.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    if (!account) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/v1/account/${accountId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: confirmText }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setDeleteError(json.error?.message || 'Failed to delete');
+        return;
+      }
+      toast.success(`Deleted ${account.legalName}`);
+      onDeleted?.(accountId);
+      onClose();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const load = () => {
     if (!accountId) return;
@@ -174,6 +217,77 @@ export function AccountOverviewOverlay({
                       .join(' · ')}
                   />
                 </dl>
+              </div>
+
+              {/* Danger Zone — hard delete. Backend rejects:
+                  - non-owner / non-admin callers
+                  - confirm string mismatch
+                  - BAs with order history (must use deactivate instead)
+                  - the caller's currently-active BA (switch first). */}
+              <div className="bg-red-50/60 border border-red-100 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <AlertTriangle size={16} className="text-red-500" />
+                  <h3 className="text-[14px] font-bold text-red-700">Danger Zone</h3>
+                </div>
+                <p className="text-[12px] text-red-600/90 mb-4 leading-relaxed">
+                  Permanently deletes this business account and everything attached to it — outlets,
+                  members, custom roles, vendor/brand profile, products, inventory. This cannot be undone.
+                </p>
+
+                {isActive && (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg mb-3">
+                    <AlertTriangle size={13} className="text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-[11.5px] text-amber-800 leading-relaxed">
+                      You&apos;re currently using this account. Switch to a different business account from the
+                      navbar before deleting.
+                    </p>
+                  </div>
+                )}
+
+                {!confirmOpen ? (
+                  <button
+                    onClick={() => { setConfirmOpen(true); setDeleteError(null); }}
+                    disabled={isActive}
+                    className="h-[40px] px-4 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-[10px] text-[13px] font-bold flex items-center gap-2 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                    Delete this business account
+                  </button>
+                ) : (
+                  <div className="bg-white border border-red-100 rounded-lg p-4 space-y-3">
+                    <p className="text-[12px] text-[#181725] leading-relaxed">
+                      Type <code className="px-1.5 py-0.5 bg-red-50 text-red-700 rounded font-mono text-[11.5px]">{account.legalName}</code> below to confirm.
+                    </p>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={confirmText}
+                      onChange={(e) => { setConfirmText(e.target.value); if (deleteError) setDeleteError(null); }}
+                      placeholder={account.legalName}
+                      className="w-full h-[40px] border border-red-200 rounded-[10px] px-3 text-[13px] font-mono outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 transition-all"
+                    />
+                    {deleteError && (
+                      <p className="text-[11.5px] text-red-600">{deleteError}</p>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleDelete}
+                        disabled={deleting || confirmText !== account.legalName}
+                        className="h-[38px] px-4 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-[10px] text-[12.5px] font-bold flex items-center gap-2 transition-colors"
+                      >
+                        {deleting && <Loader2 size={13} className="animate-spin" />}
+                        {deleting ? 'Deleting…' : 'Delete permanently'}
+                      </button>
+                      <button
+                        onClick={() => { setConfirmOpen(false); setConfirmText(''); setDeleteError(null); }}
+                        disabled={deleting}
+                        className="h-[38px] px-4 text-[#7C7C7C] hover:text-[#181725] text-[12.5px] font-bold transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

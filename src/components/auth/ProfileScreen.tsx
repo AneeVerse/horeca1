@@ -804,6 +804,12 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                         onOpenOutlets={() => setIsOutletsOpen(true)}
                         onOpenMembers={() => setIsTeamOpen(true)}
                         onOpenRoles={() => setIsRolesOpen(true)}
+                        // Hard refresh after a delete — the navbar account
+                        // switcher caches /api/v1/account and won't re-fetch
+                        // unless we force a reload. Reload also resets any
+                        // stale activeBusinessAccountId in case the user
+                        // somehow deleted the BA they're viewing from.
+                        onDeleted={() => { window.location.reload(); }}
                     />
                 </>
             )}
