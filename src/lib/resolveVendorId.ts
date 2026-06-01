@@ -14,6 +14,24 @@ export interface VendorContext {
 
 export async function resolveVendorContext(ctx: AuthContext, req: NextRequest): Promise<VendorContext> {
   if (ctx.role === 'admin') {
+    // Priority for admins (V2.2 HCID):
+    //   1. If the admin's active BusinessAccount has a Vendor row they OWN,
+    //      use it. This is the "admin wears their own vendor hat" path —
+    //      admin creates a vendor BA, switches to it via the navbar account
+    //      switcher, expects the vendor dashboard to just work. Without this
+    //      branch the switcher silently breaks because the admin would still
+    //      need the impersonation cookie.
+    //   2. Else fall back to the impersonation cookie set by clicking
+    //      "View Dashboard" in admin → vendors. That path is for admins
+    //      LOOKING AT someone else's vendor data, not owning one.
+    if (ctx.activeBusinessAccountId) {
+      const ownVendor = await prisma.vendor.findFirst({
+        where: { userId: ctx.userId, businessAccountId: ctx.activeBusinessAccountId },
+        select: { id: true },
+      });
+      if (ownVendor) return { vendorId: ownVendor.id, teamRole: 'owner' };
+    }
+
     const impersonateId = req.cookies.get('admin_impersonate_vendor_id')?.value;
     if (!impersonateId) throw Errors.forbidden('No vendor selected for admin view. Go back and click "View Dashboard" on a vendor.');
     const vendor = await prisma.vendor.findUnique({ where: { id: impersonateId }, select: { id: true } });

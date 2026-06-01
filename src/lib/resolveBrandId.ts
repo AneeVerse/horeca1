@@ -14,6 +14,16 @@ export interface BrandContext {
 
 export async function resolveBrandContext(ctx: AuthContext, req: NextRequest): Promise<BrandContext> {
   if (ctx.role === 'admin') {
+    // V2.2: admin who created a brand BA themselves and switched into it via
+    // the navbar account switcher → use that brand without requiring the
+    // impersonation cookie. See resolveVendorContext for the same pattern.
+    if (ctx.activeBusinessAccountId) {
+      const ownBrand = await prisma.brand.findFirst({
+        where: { userId: ctx.userId, businessAccountId: ctx.activeBusinessAccountId },
+        select: { id: true },
+      });
+      if (ownBrand) return { brandId: ownBrand.id, teamRole: 'owner' };
+    }
     const impersonateId = req.cookies.get('admin_impersonate_brand_id')?.value;
     if (!impersonateId) throw Errors.forbidden('No brand selected for admin view. Go back and click "View Portal" on a brand.');
     const brand = await prisma.brand.findUnique({ where: { id: impersonateId }, select: { id: true } });
@@ -52,6 +62,15 @@ export async function resolveBrandId(ctx: AuthContext, req: NextRequest): Promis
 
 export async function resolveUserId(ctx: AuthContext, req: NextRequest): Promise<string> {
   if (ctx.role === 'admin') {
+    // Owned-on-active-BA first, impersonation second (same priority as
+    // resolveBrandContext above).
+    if (ctx.activeBusinessAccountId) {
+      const ownBrand = await prisma.brand.findFirst({
+        where: { userId: ctx.userId, businessAccountId: ctx.activeBusinessAccountId },
+        select: { userId: true },
+      });
+      if (ownBrand) return ownBrand.userId;
+    }
     const impersonateId = req.cookies.get('admin_impersonate_brand_id')?.value;
     if (!impersonateId) throw Errors.forbidden('No brand selected for admin view.');
     const brand = await prisma.brand.findUnique({ where: { id: impersonateId }, select: { userId: true } });
