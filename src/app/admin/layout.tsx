@@ -41,7 +41,7 @@ interface AdminSidebarLink {
 }
 
 const SIDEBAR_LINKS: AdminSidebarLink[] = [
-    { name: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
+    { name: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard', requiredPerm: 'dashboard.view' },
     { name: 'Orders', icon: ShoppingBag, href: '/admin/orders', requiredPerm: 'orders.view' },
     { name: 'Customers', icon: Users, href: '/admin/customers', requiredPerm: 'customers.view' },
     { name: 'Vendors', icon: Store, href: '/admin/vendors', requiredPerm: 'vendors.view' },
