@@ -12,6 +12,7 @@ import { ResetPasswordModal } from '@/components/features/team/ResetPasswordModa
 import { TeamPageHeader } from '@/components/features/team/TeamPageHeader';
 import { RoleCardsGrid } from '@/components/features/team/RoleCardsGrid';
 import { TeamMemberList } from '@/components/features/team/TeamMemberList';
+import { MODULES } from '@/lib/permissions/registry';
 import { toast } from 'sonner';
 
 const ACCENT = '#E74C3C';
@@ -220,6 +221,7 @@ const PERM_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve'] as const;
 function InviteModal({ roles, onClose, onInvited }: { roles: AdminRole[]; onClose: () => void; onInvited: () => void }) {
     const [step, setStep] = useState<1 | 2>(1);
     const [identifier, setIdentifier] = useState('');
+    const [identifierError, setIdentifierError] = useState<string | null>(null);
     const [fullName, setFullName] = useState('');
     const [password, setPassword] = useState('');
     const [roleId, setRoleId] = useState(roles[0]?.id ?? '');
@@ -236,13 +238,29 @@ function InviteModal({ roles, onClose, onInvited }: { roles: AdminRole[]; onClos
     };
 
     const goToStep2 = () => {
-        if (!identifier.trim()) { setError('Email or phone is required'); return; }
+        const trimmed = identifier.trim();
+        if (!trimmed) { setError('Email address is required'); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+            setError('Enter a valid email address');
+            setIdentifierError('Enter a valid email address');
+            return;
+        }
         setError(null);
         if (Object.keys(customPerms).length === 0) {
             const r = roles.find(x => x.id === roleId);
             setCustomPerms(r ? JSON.parse(JSON.stringify(r.permissions)) : {});
         }
         setStep(2);
+    };
+
+    const handleIdentifierBlur = () => {
+        const trimmed = identifier.trim();
+        if (!trimmed) { setIdentifierError(null); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+            setIdentifierError('Enter a valid email address');
+        } else {
+            setIdentifierError(null);
+        }
     };
 
     const togglePerm = (mod: string, action: string) => {
@@ -381,21 +399,37 @@ function InviteModal({ roles, onClose, onInvited }: { roles: AdminRole[]; onClos
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {Object.entries(customPerms).map(([mod, actions]) => (
+                                                {/* Show ALL modules from the registry so the admin can grant
+                                                    any permission, not just ones the selected role already had.
+                                                    Cells for actions a module doesn't support (e.g. dashboard
+                                                    only supports view) are rendered as permanently-disabled
+                                                    dashes. */}
+                                                {Object.entries(MODULES).map(([mod, allowedActions]) => (
                                                     <tr key={mod} className="border-t border-[#F5F5F5]">
                                                         <td className="px-4 py-2 font-bold text-[#181725] text-[12px] capitalize">{mod}</td>
-                                                        {PERM_ACTIONS.map(a => (
-                                                            <td key={a} className="text-center px-1 py-2">
-                                                                <button type="button" onClick={() => togglePerm(mod, a)}
-                                                                    title={`Toggle ${mod}.${a}`}
-                                                                    className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center mx-auto transition-all hover:scale-110 hover:opacity-80"
-                                                                    style={{ backgroundColor: actions[a] ? '#E74C3C' : '#F0F0F0' }}>
-                                                                    {actions[a]
-                                                                        ? <Check size={12} className="text-white" />
-                                                                        : <span className="text-[#BBBBBB] text-[10px] leading-none">—</span>}
-                                                                </button>
-                                                            </td>
-                                                        ))}
+                                                        {PERM_ACTIONS.map(a => {
+                                                            const supported = (allowedActions as readonly string[]).includes(a);
+                                                            const checked = !!customPerms[mod]?.[a];
+                                                            if (!supported) {
+                                                                return (
+                                                                    <td key={a} className="text-center px-1 py-2">
+                                                                        <span className="inline-block w-[22px] h-[22px] rounded-[5px] bg-[#FAFAFA] text-[#DDDDDD] leading-[22px] cursor-not-allowed">·</span>
+                                                                    </td>
+                                                                );
+                                                            }
+                                                            return (
+                                                                <td key={a} className="text-center px-1 py-2">
+                                                                    <button type="button" onClick={() => togglePerm(mod, a)}
+                                                                        title={`Toggle ${mod}.${a}`}
+                                                                        className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center mx-auto transition-all hover:scale-110 hover:opacity-80"
+                                                                        style={{ backgroundColor: checked ? '#E74C3C' : '#F0F0F0' }}>
+                                                                        {checked
+                                                                            ? <Check size={12} className="text-white" />
+                                                                            : <span className="text-[#BBBBBB] text-[10px] leading-none">—</span>}
+                                                                    </button>
+                                                                </td>
+                                                            );
+                                                        })}
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -534,21 +568,32 @@ function EditRoleModal({ member, roles, onClose, onSaved }: {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {Object.entries(customPerms).map(([mod, actions]) => (
+                                        {Object.entries(MODULES).map(([mod, allowedActions]) => (
                                             <tr key={mod} className="border-t border-[#F5F5F5]">
                                                 <td className="px-4 py-2 font-bold text-[#181725] text-[12px] capitalize">{mod}</td>
-                                                {PERM_ACTIONS.map(a => (
-                                                    <td key={a} className="text-center px-1 py-2">
-                                                        <button type="button" onClick={() => togglePerm(mod, a)}
-                                                            title={`Toggle ${mod}.${a}`}
-                                                            className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center mx-auto transition-all hover:scale-110 hover:opacity-80"
-                                                            style={{ backgroundColor: actions[a] ? '#E74C3C' : '#F0F0F0' }}>
-                                                            {actions[a]
-                                                                ? <Check size={12} className="text-white" />
-                                                                : <span className="text-[#BBBBBB] text-[10px] leading-none">—</span>}
-                                                        </button>
-                                                    </td>
-                                                ))}
+                                                {PERM_ACTIONS.map(a => {
+                                                    const supported = (allowedActions as readonly string[]).includes(a);
+                                                    const checked = !!customPerms[mod]?.[a];
+                                                    if (!supported) {
+                                                        return (
+                                                            <td key={a} className="text-center px-1 py-2">
+                                                                <span className="inline-block w-[22px] h-[22px] rounded-[5px] bg-[#FAFAFA] text-[#DDDDDD] leading-[22px] cursor-not-allowed">·</span>
+                                                            </td>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <td key={a} className="text-center px-1 py-2">
+                                                            <button type="button" onClick={() => togglePerm(mod, a)}
+                                                                title={`Toggle ${mod}.${a}`}
+                                                                className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center mx-auto transition-all hover:scale-110 hover:opacity-80"
+                                                                style={{ backgroundColor: checked ? '#E74C3C' : '#F0F0F0' }}>
+                                                                {checked
+                                                                    ? <Check size={12} className="text-white" />
+                                                                    : <span className="text-[#BBBBBB] text-[10px] leading-none">—</span>}
+                                                            </button>
+                                                        </td>
+                                                    );
+                                                })}
                                             </tr>
                                         ))}
                                     </tbody>

@@ -9,6 +9,7 @@ import { ResetPasswordModal } from '@/components/features/team/ResetPasswordModa
 import { TeamPageHeader } from '@/components/features/team/TeamPageHeader';
 import { RoleCardsGrid } from '@/components/features/team/RoleCardsGrid';
 import { TeamMemberList } from '@/components/features/team/TeamMemberList';
+import { MODULES } from '@/lib/permissions/registry';
 import { toast } from 'sonner';
 
 const ACCENT = '#53B175';
@@ -363,21 +364,35 @@ function InviteModal({ roles, onClose, onInvited }: { roles: BrandRole[]; onClos
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {Object.entries(customPerms).map(([mod, actions]) => (
+                                                {/* Iterate all modules (not just ones the role already has)
+                                                    so admins can grant any permission. Unsupported actions
+                                                    render as permanently-disabled dots. */}
+                                                {Object.entries(MODULES).map(([mod, allowedActions]) => (
                                                     <tr key={mod} className="border-t border-[#F5F5F5]">
                                                         <td className="px-4 py-2 font-bold text-[#181725] text-[12px] capitalize">{mod}</td>
-                                                        {PERM_ACTIONS.map(a => (
-                                                            <td key={a} className="text-center px-1 py-2">
-                                                                <button type="button" onClick={() => togglePerm(mod, a)}
-                                                                    title={`Toggle ${mod}.${a}`}
-                                                                    className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center mx-auto transition-all hover:scale-110 hover:opacity-80"
-                                                                    style={{ backgroundColor: actions[a] ? '#53B175' : '#F0F0F0' }}>
-                                                                    {actions[a]
-                                                                        ? <Check size={12} className="text-white" />
-                                                                        : <span className="text-[#BBBBBB] text-[10px] leading-none">—</span>}
-                                                                </button>
-                                                            </td>
-                                                        ))}
+                                                        {PERM_ACTIONS.map(a => {
+                                                            const supported = (allowedActions as readonly string[]).includes(a);
+                                                            const checked = !!customPerms[mod]?.[a];
+                                                            if (!supported) {
+                                                                return (
+                                                                    <td key={a} className="text-center px-1 py-2">
+                                                                        <span className="inline-block w-[22px] h-[22px] rounded-[5px] bg-[#FAFAFA] text-[#DDDDDD] leading-[22px] cursor-not-allowed">·</span>
+                                                                    </td>
+                                                                );
+                                                            }
+                                                            return (
+                                                                <td key={a} className="text-center px-1 py-2">
+                                                                    <button type="button" onClick={() => togglePerm(mod, a)}
+                                                                        title={`Toggle ${mod}.${a}`}
+                                                                        className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center mx-auto transition-all hover:scale-110 hover:opacity-80"
+                                                                        style={{ backgroundColor: checked ? '#53B175' : '#F0F0F0' }}>
+                                                                        {checked
+                                                                            ? <Check size={12} className="text-white" />
+                                                                            : <span className="text-[#BBBBBB] text-[10px] leading-none">—</span>}
+                                                                    </button>
+                                                                </td>
+                                                            );
+                                                        })}
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -516,21 +531,32 @@ function EditRoleModal({ member, roles, onClose, onSaved }: {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {Object.entries(customPerms).map(([mod, actions]) => (
+                                        {Object.entries(MODULES).map(([mod, allowedActions]) => (
                                             <tr key={mod} className="border-t border-[#F5F5F5]">
                                                 <td className="px-4 py-2 font-bold text-[#181725] text-[12px] capitalize">{mod}</td>
-                                                {PERM_ACTIONS.map(a => (
-                                                    <td key={a} className="text-center px-1 py-2">
-                                                        <button type="button" onClick={() => togglePerm(mod, a)}
-                                                            title={`Toggle ${mod}.${a}`}
-                                                            className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center mx-auto transition-all hover:scale-110 hover:opacity-80"
-                                                            style={{ backgroundColor: actions[a] ? '#53B175' : '#F0F0F0' }}>
-                                                            {actions[a]
-                                                                ? <Check size={12} className="text-white" />
-                                                                : <span className="text-[#BBBBBB] text-[10px] leading-none">—</span>}
-                                                        </button>
-                                                    </td>
-                                                ))}
+                                                {PERM_ACTIONS.map(a => {
+                                                    const supported = (allowedActions as readonly string[]).includes(a);
+                                                    const checked = !!customPerms[mod]?.[a];
+                                                    if (!supported) {
+                                                        return (
+                                                            <td key={a} className="text-center px-1 py-2">
+                                                                <span className="inline-block w-[22px] h-[22px] rounded-[5px] bg-[#FAFAFA] text-[#DDDDDD] leading-[22px] cursor-not-allowed">·</span>
+                                                            </td>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <td key={a} className="text-center px-1 py-2">
+                                                            <button type="button" onClick={() => togglePerm(mod, a)}
+                                                                title={`Toggle ${mod}.${a}`}
+                                                                className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center mx-auto transition-all hover:scale-110 hover:opacity-80"
+                                                                style={{ backgroundColor: checked ? '#53B175' : '#F0F0F0' }}>
+                                                                {checked
+                                                                    ? <Check size={12} className="text-white" />
+                                                                    : <span className="text-[#BBBBBB] text-[10px] leading-none">—</span>}
+                                                            </button>
+                                                        </td>
+                                                    );
+                                                })}
                                             </tr>
                                         ))}
                                     </tbody>
