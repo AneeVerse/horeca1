@@ -21,6 +21,8 @@ import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { uniqueHcid } from '@/lib/hcid';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
 import { toTeamMemberDTO, teamMemberInclude, type TeamMemberDTO } from '@/lib/teamMemberShape';
+import { sendEmail } from '@/lib/providers/email';
+import { buildInviteEmail } from '@/lib/email-templates/invite';
 import type { AuthContext } from '@/middleware/auth';
 import type { TeamRole } from '@prisma/client';
 
@@ -123,6 +125,10 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
       ? await prisma.user.findUnique({ where: { email: identifierTrim.toLowerCase() } })
       : await prisma.user.findUnique({ where: { phone: identifierTrim.replace(/\D/g, '') } });
 
+    // Capture plain-text password BEFORE bcrypt.hash so we can email it. Only
+    // set for the new-user creation path; existing users keep their password.
+    let tempPassword = '';
+
     if (!user) {
       if (!looksEmail) {
         throw Errors.badRequest('New admin invites require an email identifier');
@@ -130,6 +136,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
       if (!input.fullName || !input.password) {
         throw Errors.badRequest('fullName and password are required when the invitee is a new user');
       }
+      tempPassword = input.password;
       const hashedPassword = await bcrypt.hash(input.password, 12);
       const hcidDisplay = await uniqueHcid();
       user = await prisma.user.create({
@@ -146,7 +153,10 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
       // Existing user — promote to admin if needed, and update password if supplied.
       const updateData: Record<string, unknown> = {};
       if (user.role !== 'admin') updateData.role = 'admin';
-      if (input.password) updateData.password = await bcrypt.hash(input.password, 12);
+      if (input.password) {
+        tempPassword = input.password;
+        updateData.password = await bcrypt.hash(input.password, 12);
+      }
       if (Object.keys(updateData).length > 0) {
         user = await prisma.user.update({ where: { id: user.id }, data: updateData });
       }
@@ -183,6 +193,28 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
       user: member.user,
       roleRef: member.roleRef,
     });
+
+    // Send credential email if invitee has an email + a freshly-set password.
+    if (user.email && tempPassword) {
+      try {
+        const inviter = await prisma.user.findUnique({
+          where: { id: ctx.userId },
+          select: { fullName: true },
+        });
+        const { subject, text, html } = buildInviteEmail({
+          recipientName: user.fullName ?? '',
+          recipientEmail: user.email,
+          tempPassword,
+          scope: 'admin',
+          businessName: 'HoReCa Hub Admin',
+          loginUrl: (process.env.AUTH_URL ?? 'http://localhost:3000') + '/login',
+          inviterName: inviter?.fullName ?? undefined,
+        });
+        await sendEmail({ to: user.email, subject, text, html });
+      } catch (err) {
+        console.error('[invite-email] failed to send admin invite email', err);
+      }
+    }
 
     return NextResponse.json({ success: true, data: dto }, { status: 201 });
   } catch (error) {

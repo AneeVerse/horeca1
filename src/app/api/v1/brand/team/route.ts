@@ -11,6 +11,8 @@ import { prisma } from '@/lib/prisma';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { uniqueHcid } from '@/lib/hcid';
 import { toTeamMemberDTO, teamMemberInclude, type TeamMemberDTO } from '@/lib/teamMemberShape';
+import { sendEmail } from '@/lib/providers/email';
+import { buildInviteEmail } from '@/lib/email-templates/invite';
 import type { AuthContext } from '@/middleware/auth';
 import type { TeamRole } from '@prisma/client';
 
@@ -86,7 +88,7 @@ export const POST = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
 
     const brand = await prisma.brand.findUnique({
       where: { id: brandId },
-      select: { businessAccountId: true },
+      select: { businessAccountId: true, name: true },
     });
     if (!brand) throw Errors.notFound('Brand not found');
 
@@ -122,11 +124,16 @@ export const POST = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
       ? await prisma.user.findUnique({ where: { email: identifierTrim.toLowerCase() } })
       : await prisma.user.findUnique({ where: { phone: identifierTrim.replace(/\D/g, '') } });
 
+    // Capture plain-text password BEFORE bcrypt.hash so we can email it. Only
+    // set on the new-user creation path; existing users keep their password.
+    let tempPassword = '';
+
     if (!user) {
       if (!looksEmail) throw Errors.badRequest('New brand invites require an email identifier');
       if (!input.fullName || !input.password) {
         throw Errors.badRequest('fullName and password are required when the invitee is a new user');
       }
+      tempPassword = input.password;
       const hashedPassword = await bcrypt.hash(input.password, 12);
       const hcidDisplay = await uniqueHcid();
       user = await prisma.user.create({
@@ -206,6 +213,28 @@ export const POST = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
       user: member.user,
       roleRef: member.roleRef,
     });
+
+    // Send credential email if invitee has an email + a freshly-set password.
+    if (user.email && tempPassword) {
+      try {
+        const inviter = await prisma.user.findUnique({
+          where: { id: ctx.userId },
+          select: { fullName: true },
+        });
+        const { subject, text, html } = buildInviteEmail({
+          recipientName: user.fullName ?? '',
+          recipientEmail: user.email,
+          tempPassword,
+          scope: 'brand',
+          businessName: brand.name,
+          loginUrl: (process.env.AUTH_URL ?? 'http://localhost:3000') + '/login',
+          inviterName: inviter?.fullName ?? undefined,
+        });
+        await sendEmail({ to: user.email, subject, text, html });
+      } catch (err) {
+        console.error('[invite-email] failed to send brand invite email', err);
+      }
+    }
 
     return NextResponse.json({ success: true, data: dto }, { status: 201 });
   } catch (error) {
