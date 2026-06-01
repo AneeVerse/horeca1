@@ -34,17 +34,36 @@ interface TeamMember {
   role: { id: string | null; name: string; scope: string; description: string | null };
 }
 
+type Scope = 'vendor' | 'account' | 'brand' | 'admin';
+
+/**
+ * Wizard config for scopes other than vendor (the default).
+ * `accountId` is required when scope='account' so we can hit the per-account
+ * endpoints. `accent` recolors the chrome to match the portal's brand.
+ */
+export interface AddMemberWizardConfig {
+  scope?: Scope;             // default 'vendor'
+  accountId?: string;        // required for scope='account'
+  accent?: string;           // default '#299E60'
+  outletsEndpoint?: string;  // overrides /api/v1/vendor/outlets
+  teamEndpoint?: string;     // overrides /api/v1/vendor/team
+  modules?: ReadonlyArray<{ key: string; label: string }>; // overrides VENDOR_MODULES
+  showStorefront?: boolean;  // vendor-only concept; default true for vendor, false otherwise
+  businessAccountLabel?: string; // step-2 left card title — e.g. 'Customer Account'
+}
+
 interface AddMemberWizardProps {
   roles: RoleItem[];
   onClose: () => void;
   onInvited: (member: TeamMember) => void;
+  config?: AddMemberWizardConfig;
 }
 
 type PermissionsMap = Record<string, Record<string, boolean>>;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const VENDOR_MODULES = [
+const VENDOR_MODULES: ReadonlyArray<{ key: string; label: string }> = [
   { key: 'dashboard',    label: 'Dashboard' },
   { key: 'products',     label: 'Products' },
   { key: 'orders',       label: 'Orders' },
@@ -59,7 +78,19 @@ const VENDOR_MODULES = [
   { key: 'analytics',    label: 'Analytics' },
   { key: 'promotions',   label: 'Promotions' },
   { key: 'settings',     label: 'Settings' },
-] as const;
+];
+
+// Account-scope modules — narrower; no inventory/GRN/dispatch/customers/analytics/promotions
+const ACCOUNT_MODULES: ReadonlyArray<{ key: string; label: string }> = [
+  { key: 'dashboard',    label: 'Dashboard' },
+  { key: 'orders',       label: 'Orders' },
+  { key: 'repeatOrders', label: 'Repeat Orders' },
+  { key: 'payments',     label: 'Payments' },
+  { key: 'creditLine',   label: 'Credit Line' },
+  { key: 'users',        label: 'Team' },
+  { key: 'outlets',      label: 'Outlets' },
+  { key: 'settings',     label: 'Settings' },
+];
 
 const ACTIONS = ['view', 'create', 'edit', 'delete', 'approve'] as const;
 
@@ -82,7 +113,22 @@ const STEP_LABELS = ['Member Info', 'Outlet Access', 'Role & Permissions'];
 
 // ─── Main wizard ──────────────────────────────────────────────────────────────
 
-export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardProps) {
+export function AddMemberWizard({ roles, onClose, onInvited, config }: AddMemberWizardProps) {
+  const scope = config?.scope ?? 'vendor';
+  // accent is accepted on AddMemberWizardConfig for future use (custom per-
+  // portal coloring of the chrome) but the wizard intentionally keeps all
+  // green chrome today so the 4 team pages share one visual rhythm.
+  const outletsEndpoint = config?.outletsEndpoint
+    ?? (scope === 'account' && config?.accountId ? `/api/v1/account/${config.accountId}/outlets` : '/api/v1/vendor/outlets');
+  const teamEndpoint = config?.teamEndpoint
+    ?? (scope === 'account' && config?.accountId ? `/api/v1/account/${config.accountId}/users` : '/api/v1/vendor/team');
+  const modules = config?.modules ?? (scope === 'account' ? ACCOUNT_MODULES : VENDOR_MODULES);
+  // Storefront access toggle is a vendor-team concept (vendor staff acting
+  // as a buyer on the storefront). It has no meaning for account members.
+  const showStorefront = config?.showStorefront ?? (scope === 'vendor');
+  const businessAccountLabel = config?.businessAccountLabel
+    ?? (scope === 'account' ? 'Customer Account' : 'Vendor Account');
+
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // Step 1
@@ -114,11 +160,17 @@ export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardPr
   useEffect(() => {
     if (step === 2 && outlets.length === 0 && !outletsLoading) {
       setOutletsLoading(true);
-      fetch('/api/v1/vendor/outlets')
+      fetch(outletsEndpoint)
         .then(r => r.json())
         .then(j => {
-          if (j.success) {
-            setBaName(j.data.businessAccount?.name ?? 'Vendor Account');
+          if (!j.success) return;
+          // Vendor endpoint returns { businessAccount: {...}, outlets: [...] }.
+          // Account endpoint returns a plain array. Handle both shapes.
+          if (Array.isArray(j.data)) {
+            setBaName(businessAccountLabel);
+            setOutlets(j.data ?? []);
+          } else {
+            setBaName(j.data.businessAccount?.name ?? businessAccountLabel);
             setOutlets(j.data.outlets ?? []);
           }
         })
@@ -197,9 +249,11 @@ export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardPr
       if (fullName.trim()) body.fullName = fullName.trim();
       if (password) body.password = password;
       if (!allOutlets && selectedOutletIds.size > 0) body.outletIds = Array.from(selectedOutletIds);
-      if (sfView || sfOrder || sfPay) body.storefrontAccess = { view: sfView, order: sfOrder, pay: sfPay };
+      if (showStorefront && (sfView || sfOrder || sfPay)) {
+        body.storefrontAccess = { view: sfView, order: sfOrder, pay: sfPay };
+      }
 
-      const res = await fetch('/api/v1/vendor/team', {
+      const res = await fetch(teamEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -292,6 +346,9 @@ export function AddMemberWizard({ roles, onClose, onInvited }: AddMemberWizardPr
               sfView={sfView} setSfView={setSfView}
               sfOrder={sfOrder} setSfOrder={setSfOrder}
               sfPay={sfPay} setSfPay={setSfPay}
+              modules={modules}
+              showStorefront={showStorefront}
+              scope={scope}
             />
           )}
 
@@ -499,6 +556,7 @@ function Step3Role({
   templates, selectedRoleId, selectedRole,
   permissions, onSelectRole, onTogglePermission,
   sfView, setSfView, sfOrder, setSfOrder, sfPay, setSfPay,
+  modules, showStorefront, scope,
 }: {
   templates: RoleItem[];
   selectedRoleId: string; selectedRole: RoleItem | undefined;
@@ -508,16 +566,20 @@ function Step3Role({
   sfView: boolean; setSfView: (v: boolean) => void;
   sfOrder: boolean; setSfOrder: (v: boolean) => void;
   sfPay: boolean; setSfPay: (v: boolean) => void;
+  modules: ReadonlyArray<{ key: string; label: string }>;
+  showStorefront: boolean;
+  scope: Scope;
 }) {
-  // Fetch the module/action registry so we know which cells are valid
+  // Fetch the scope-narrowed module/action registry so we know which cells
+  // are valid for THIS scope. Account scope drops vendor-only actions etc.
   const [registry, setRegistry] = useState<Record<string, readonly string[]>>({});
 
   useEffect(() => {
-    fetch('/api/v1/permissions/registry')
+    fetch(`/api/v1/permissions/registry?scope=${scope}`)
       .then(r => r.json())
       .then(j => { if (j.success) setRegistry(j.data.modules); })
       .catch(() => {});
-  }, []);
+  }, [scope]);
 
   const totalSelected = Object.values(permissions).reduce(
     (sum, actions) => sum + Object.values(actions).filter(Boolean).length, 0,
@@ -577,7 +639,7 @@ function Step3Role({
               </tr>
             </thead>
             <tbody>
-              {VENDOR_MODULES.map(({ key, label }) => {
+              {modules.map(({ key, label }) => {
                 const rowPerms = permissions[key] ?? {};
                 const validActions = (registry[key] as readonly string[] | undefined) ?? [];
                 return (
@@ -616,30 +678,34 @@ function Step3Role({
         </p>
       </div>
 
-      {/* Storefront access */}
-      <div className="bg-[#F0F7FF] border border-[#BFDBFE] rounded-[12px] p-4">
-        <div className="flex items-center gap-2 mb-1">
-          <Store size={15} className="text-[#2563EB]" />
-          <p className="text-[13px] font-bold text-[#181725]">Storefront Access</p>
-          <span className="text-[10px] text-[#2563EB] bg-[#DBEAFE] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">As Buyer</span>
+      {/* Storefront access — vendor scope only. Customer/brand/admin teams
+          don't carry this concept (their members already are buyers / brand
+          users / staff respectively). */}
+      {showStorefront && (
+        <div className="bg-[#F0F7FF] border border-[#BFDBFE] rounded-[12px] p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Store size={15} className="text-[#2563EB]" />
+            <p className="text-[13px] font-bold text-[#181725]">Storefront Access</p>
+            <span className="text-[10px] text-[#2563EB] bg-[#DBEAFE] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">As Buyer</span>
+          </div>
+          <p className="text-[11px] text-[#6B7280] mb-3 leading-relaxed">
+            Allow this member to access the HoReCa Hub storefront on behalf of your business.
+          </p>
+          <div className="space-y-2.5">
+            {([
+              { label: 'Browse storefront & view products', Icon: Eye,          checked: sfView,  toggle: () => setSfView(!sfView) },
+              { label: 'Place orders on storefront',        Icon: ShoppingCart, checked: sfOrder, toggle: () => setSfOrder(!sfOrder) },
+              { label: 'Make payments on storefront',       Icon: CreditCard,   checked: sfPay,   toggle: () => setSfPay(!sfPay) },
+            ] as const).map(({ label, Icon, checked, toggle }) => (
+              <button key={label} onClick={toggle} className="flex items-center gap-3 w-full text-left">
+                <Checkbox checked={checked} accent="#2563EB" />
+                <Icon size={13} className={checked ? 'text-[#2563EB]' : 'text-[#9CA3AF]'} />
+                <span className={`text-[12px] font-medium ${checked ? 'text-[#181725]' : 'text-[#6B7280]'}`}>{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
-        <p className="text-[11px] text-[#6B7280] mb-3 leading-relaxed">
-          Allow this member to access the HoReCa Hub storefront on behalf of your business.
-        </p>
-        <div className="space-y-2.5">
-          {([
-            { label: 'Browse storefront & view products', Icon: Eye,          checked: sfView,  toggle: () => setSfView(!sfView) },
-            { label: 'Place orders on storefront',        Icon: ShoppingCart, checked: sfOrder, toggle: () => setSfOrder(!sfOrder) },
-            { label: 'Make payments on storefront',       Icon: CreditCard,   checked: sfPay,   toggle: () => setSfPay(!sfPay) },
-          ] as const).map(({ label, Icon, checked, toggle }) => (
-            <button key={label} onClick={toggle} className="flex items-center gap-3 w-full text-left">
-              <Checkbox checked={checked} accent="#2563EB" />
-              <Icon size={13} className={checked ? 'text-[#2563EB]' : 'text-[#9CA3AF]'} />
-              <span className={`text-[12px] font-medium ${checked ? 'text-[#181725]' : 'text-[#6B7280]'}`}>{label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
