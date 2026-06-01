@@ -51,7 +51,11 @@ const InviteBody = z.object({
   // matrix and we create an inline scope='account' AccountRole for it.
   roleId: z.string().uuid().optional(),
   permissions: z.record(z.string(), z.record(z.string(), z.boolean())).optional(),
-  outletId: z.string().uuid().nullable().optional(),
+  // Outlet scope:
+  //   • missing OR empty array → account-wide (one UserRole with outletId=null)
+  //   • non-empty array → one UserRole per outletId (caller can access ONLY
+  //     those outlets). All ids must belong to the same business account.
+  outletIds: z.array(z.string().uuid()).optional(),
   fullName: z.string().min(2).max(100).optional(),
   password: z.string().min(6).max(72).optional(),
 }).refine((d) => d.roleId || d.permissions, { message: 'Either roleId or permissions is required' });
@@ -99,10 +103,18 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
       roleIdToUse = role.id;
     }
 
-    // Validate outlet belongs to the account if specified
-    if (body.outletId) {
-      const ok = await prisma.outlet.findFirst({ where: { id: body.outletId, businessAccountId: id }, select: { id: true } });
-      if (!ok) throw Errors.badRequest('Outlet does not belong to this account');
+    // Validate every outlet belongs to the account. De-dupe defensively so the
+    // tx below can't double-create assignment rows when the client sends the
+    // same outletId twice.
+    const outletIds = Array.from(new Set(body.outletIds ?? []));
+    if (outletIds.length > 0) {
+      const found = await prisma.outlet.findMany({
+        where: { id: { in: outletIds }, businessAccountId: id },
+        select: { id: true },
+      });
+      if (found.length !== outletIds.length) {
+        throw Errors.badRequest('One or more outlets do not belong to this account');
+      }
     }
 
     // Look up (or create) the invitee user.
@@ -178,14 +190,23 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
           acceptedAt: new Date(),
         },
       });
-      const existing = await tx.userRole.findFirst({
-        where: { userId: inviteeUser.id, businessAccountId: id, outletId: body.outletId ?? null, roleId: roleIdToUse },
-        select: { id: true },
-      });
-      const assignment = existing ?? await tx.userRole.create({
-        data: { userId: inviteeUser.id, businessAccountId: id, outletId: body.outletId ?? null, roleId: roleIdToUse },
-      });
-      return { membership, assignment };
+      // outletIds empty → one assignment with outletId=null (account-wide).
+      // outletIds non-empty → one assignment per outlet so the caller can
+      // narrow which outlets the invitee can actually act under.
+      const targets: Array<string | null> = outletIds.length > 0 ? outletIds : [null];
+      const assignments = [] as Array<{ id: string; outletId: string | null }>;
+      for (const outletId of targets) {
+        const existing = await tx.userRole.findFirst({
+          where: { userId: inviteeUser.id, businessAccountId: id, outletId, roleId: roleIdToUse },
+          select: { id: true, outletId: true },
+        });
+        const row = existing ?? await tx.userRole.create({
+          data: { userId: inviteeUser.id, businessAccountId: id, outletId, roleId: roleIdToUse },
+          select: { id: true, outletId: true },
+        });
+        assignments.push(row);
+      }
+      return { membership, assignments };
     });
 
     // Fire-and-forget invite email. Never let a mail-send failure roll back the user creation.
