@@ -40,16 +40,21 @@ const VENDOR_ROLE_TO_ENUM: Record<string, TeamRole> = {
 const ENUM_RANK: Record<TeamRole, number> = { owner: 80, manager: 60, editor: 40, viewer: 20 };
 const VENDOR_OWNER_RANK = 100;
 
-async function vendorMemberRank(userId: string, vendorId: string): Promise<number> {
+async function vendorMemberRank(ctx: AuthContext, vendorId: string): Promise<number> {
+  // Platform admins impersonating a vendor (via admin_impersonate_vendor_id
+  // cookie) aren't in Vendor.userId OR VendorTeamMember — without this
+  // bypass they'd be treated as rank 0 and refused every mutation.
+  if (ctx.role === 'admin') return Number.MAX_SAFE_INTEGER;
+
   // A user listed on the Vendor row directly (Vendor.userId) is the account
   // owner — outranks everyone, including 'owner'-enum team members.
   const ownerVendor = await prisma.vendor.findFirst({
-    where: { id: vendorId, userId },
+    where: { id: vendorId, userId: ctx.userId },
     select: { id: true },
   });
   if (ownerVendor) return VENDOR_OWNER_RANK;
   const m = await prisma.vendorTeamMember.findFirst({
-    where: { userId, vendorId },
+    where: { userId: ctx.userId, vendorId },
     select: { role: true },
   });
   return m ? ENUM_RANK[m.role] : 0;
@@ -149,7 +154,7 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
     // Rank check — same logic as DELETE. Without this, a Manager could PATCH
     // an Admin down to Viewer and then act as them.
     if (member.userId !== ctx.userId) {
-      const callerRank = await vendorMemberRank(ctx.userId, vendorId);
+      const callerRank = await vendorMemberRank(ctx, vendorId);
       const targetRank = ENUM_RANK[member.role];
       if (callerRank <= targetRank) {
         throw Errors.forbidden('You cannot change the role of a peer or higher-ranked team member');
@@ -297,7 +302,7 @@ export const DELETE = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
 
     // Rank check — caller must outrank target. Without this, a Vendor Manager
     // with users.delete could remove the Vendor Admin and seize the account.
-    const callerRank = await vendorMemberRank(ctx.userId, vendorId);
+    const callerRank = await vendorMemberRank(ctx, vendorId);
     const targetRank = ENUM_RANK[member.role];
     if (callerRank <= targetRank) {
       throw Errors.forbidden('You cannot remove a peer or higher-ranked team member');

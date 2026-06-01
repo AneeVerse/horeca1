@@ -8,6 +8,7 @@ import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
 import { prisma } from '@/lib/prisma';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
+import type { AuthContext } from '@/middleware/auth';
 import type { TeamRole } from '@prisma/client';
 
 const schema = z.object({
@@ -22,14 +23,16 @@ function extractMemberId(req: NextRequest): string {
   return segments[segments.length - 2]; // …/team/[memberId]/password
 }
 
-async function vendorMemberRank(userId: string, vendorId: string): Promise<number> {
+async function vendorMemberRank(ctx: AuthContext, vendorId: string): Promise<number> {
+  // Admin impersonating a vendor outranks all team members.
+  if (ctx.role === 'admin') return Number.MAX_SAFE_INTEGER;
   const ownerVendor = await prisma.vendor.findFirst({
-    where: { id: vendorId, userId },
+    where: { id: vendorId, userId: ctx.userId },
     select: { id: true },
   });
   if (ownerVendor) return VENDOR_OWNER_RANK;
   const m = await prisma.vendorTeamMember.findFirst({
-    where: { userId, vendorId },
+    where: { userId: ctx.userId, vendorId },
     select: { role: true },
   });
   return m ? ENUM_RANK[m.role] : 0;
@@ -48,7 +51,7 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     if (!member) throw Errors.notFound('Team member not found');
 
     // Rank check — a Manager shouldn't be able to reset an Admin's password.
-    const callerRank = await vendorMemberRank(ctx.userId, vendorId);
+    const callerRank = await vendorMemberRank(ctx, vendorId);
     if (callerRank <= ENUM_RANK[member.role]) {
       throw Errors.forbidden('You cannot reset the password of a peer or higher-ranked team member');
     }
