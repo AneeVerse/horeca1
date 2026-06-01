@@ -19,6 +19,12 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
   try {
     const id = extractAccountId(req);
     await assertAccountMember(ctx.userId, id);
+    // A BusinessAccount can have isCustomer=true AND isVendor=true simultaneously
+    // (V2.2 HCID model). In that case a single User on the account may hold both
+    // 'account' (customer-side) UserRoles AND 'vendor' UserRoles. The customer
+    // team page must surface ONLY the account-scope roles — otherwise vendor-
+    // team and customer-team data leak into each other. The vendor team page
+    // uses VendorTeamMember which is a different table and already isolated.
     const members = await prisma.businessAccountMember.findMany({
       where: { businessAccountId: id },
       orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
@@ -28,7 +34,7 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
           select: {
             id: true, fullName: true, email: true, phone: true, image: true, hcidDisplay: true, isActive: true,
             userRoles: {
-              where: { businessAccountId: id },
+              where: { businessAccountId: id, role: { scope: 'account' } },
               select: { id: true, outletId: true, role: { select: { id: true, name: true } } },
             },
           },
@@ -41,11 +47,14 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
 
 const InviteBody = z.object({
   identifier: z.string().min(3), // email or phone
-  roleId: z.string().uuid(),
+  // Either pick an existing role (roleId) OR send a custom permissions
+  // matrix and we create an inline scope='account' AccountRole for it.
+  roleId: z.string().uuid().optional(),
+  permissions: z.record(z.string(), z.record(z.string(), z.boolean())).optional(),
   outletId: z.string().uuid().nullable().optional(),
   fullName: z.string().min(2).max(100).optional(),
   password: z.string().min(6).max(72).optional(),
-});
+}).refine((d) => d.roleId || d.permissions, { message: 'Either roleId or permissions is required' });
 
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
@@ -53,12 +62,42 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     await assertAccountPermission(ctx.userId, id, 'users.create');
     const body = InviteBody.parse(await req.json());
 
-    // Validate role belongs to the account (template or custom)
-    const role = await prisma.accountRole.findFirst({
-      where: { id: body.roleId, OR: [{ businessAccountId: id }, { isTemplate: true }] },
-      select: { id: true },
-    });
-    if (!role) throw Errors.badRequest('Role not available for this account');
+    // Resolve the role for this membership.
+    //   • permissions object supplied → create a new scope='account' custom role
+    //     scoped to THIS business account. Filtered to account-scope modules
+    //     by the client; we still re-sanitize on the server.
+    //   • else → require an existing roleId that belongs to the account or is
+    //     a template.
+    let roleIdToUse: string;
+    if (body.permissions && Object.keys(body.permissions).length > 0) {
+      const ALLOWED_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve'];
+      const sanitized: Record<string, Record<string, boolean>> = {};
+      for (const [mod, actions] of Object.entries(body.permissions)) {
+        sanitized[mod] = {};
+        for (const [a, v] of Object.entries(actions)) {
+          if (ALLOWED_ACTIONS.includes(a) && typeof v === 'boolean' && v) sanitized[mod][a] = true;
+        }
+      }
+      const customRole = await prisma.accountRole.create({
+        data: {
+          businessAccountId: id,
+          name: `Custom-${Date.now().toString(36)}`,
+          scope: 'account',
+          permissions: sanitized,
+          isTemplate: false,
+          createdBy: ctx.userId,
+        },
+        select: { id: true },
+      });
+      roleIdToUse = customRole.id;
+    } else {
+      const role = await prisma.accountRole.findFirst({
+        where: { id: body.roleId!, scope: 'account', OR: [{ businessAccountId: id }, { isTemplate: true }] },
+        select: { id: true },
+      });
+      if (!role) throw Errors.badRequest('Role not available for this account');
+      roleIdToUse = role.id;
+    }
 
     // Validate outlet belongs to the account if specified
     if (body.outletId) {
@@ -140,11 +179,11 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
         },
       });
       const existing = await tx.userRole.findFirst({
-        where: { userId: inviteeUser.id, businessAccountId: id, outletId: body.outletId ?? null, roleId: body.roleId },
+        where: { userId: inviteeUser.id, businessAccountId: id, outletId: body.outletId ?? null, roleId: roleIdToUse },
         select: { id: true },
       });
       const assignment = existing ?? await tx.userRole.create({
-        data: { userId: inviteeUser.id, businessAccountId: id, outletId: body.outletId ?? null, roleId: body.roleId },
+        data: { userId: inviteeUser.id, businessAccountId: id, outletId: body.outletId ?? null, roleId: roleIdToUse },
       });
       return { membership, assignment };
     });

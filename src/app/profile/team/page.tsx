@@ -8,8 +8,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
-    Loader2, Crown, Shield, Edit3, Eye, AlertCircle, X, UserPlus,
+    Loader2, Crown, Shield, Edit3, Eye, AlertCircle, X, UserPlus, Check,
 } from 'lucide-react';
+import { modulesForScope, type Module, type Action } from '@/lib/permissions/registry';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { ResetPasswordModal } from '@/components/features/team/ResetPasswordModal';
 import { TeamPageHeader } from '@/components/features/team/TeamPageHeader';
@@ -309,6 +310,7 @@ export default function AccountTeamPage() {
                         onClose={() => setShowRolesEditor(false)}
                         endpointBase={`/api/v1/account/${accountId}/roles`}
                         accent={ACCENT}
+                        scope="account"
                         onRolesChanged={fetchTeam}
                     />
                 )}
@@ -327,15 +329,47 @@ interface InviteModalProps {
     onInvited: () => void;
 }
 
+// Modules a customer-team role is allowed to grant — filters out vendor-only
+// modules (GRN, dispatch, inventory, etc.) from the inline matrix.
+const ACCOUNT_MODULES = modulesForScope('account');
+const PERM_ACTIONS: readonly Action[] = ['view', 'create', 'edit', 'delete', 'approve'];
+
 function InviteModal({ accountId, roles, outlets, onClose, onInvited }: InviteModalProps) {
     const [email, setEmail] = useState('');
     const [fullName, setFullName] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [roleId, setRoleId] = useState(roles[0]?.id ?? '');
+    const initialRoleId = roles[0]?.id ?? '';
+    const [roleId, setRoleId] = useState(initialRoleId);
+    const [customPerms, setCustomPerms] = useState<Record<string, Record<string, boolean>>>(() => {
+        const r = roles[0];
+        return r ? JSON.parse(JSON.stringify(r.permissions)) : {};
+    });
     const [outletId, setOutletId] = useState<string>('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // When the user picks a different role chip, snap the matrix back to that
+    // role's permissions. After that, any cell toggle marks the matrix dirty
+    // and we send `permissions` to the server (which creates a custom
+    // scope='account' role) instead of `roleId`.
+    const handleRoleSelect = (id: string) => {
+        const r = roles.find(x => x.id === id);
+        setRoleId(id);
+        setCustomPerms(r ? JSON.parse(JSON.stringify(r.permissions)) : {});
+    };
+
+    const togglePerm = (mod: string, action: string) => {
+        setCustomPerms(prev => ({
+            ...prev,
+            [mod]: { ...prev[mod], [action]: !prev[mod]?.[action] },
+        }));
+    };
+
+    const selectedRole = roles.find(r => r.id === roleId);
+    const isDirty = selectedRole
+        ? JSON.stringify(customPerms) !== JSON.stringify(selectedRole.permissions)
+        : Object.keys(customPerms).length > 0;
 
     const handleSubmit = async () => {
         const trimmedEmail = email.trim().toLowerCase();
@@ -344,7 +378,7 @@ function InviteModal({ accountId, roles, outlets, onClose, onInvited }: InviteMo
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) { setError('Enter a valid email address'); return; }
         if (!trimmedName) { setError('Full name is required'); return; }
         if (password.length < 6 || password.length > 72) { setError('Password must be 6–72 characters'); return; }
-        if (!roleId) { setError('Pick a role'); return; }
+        if (!roleId && !isDirty) { setError('Pick a role'); return; }
 
         try {
             setSubmitting(true); setError(null);
@@ -352,8 +386,12 @@ function InviteModal({ accountId, roles, outlets, onClose, onInvited }: InviteMo
                 identifier: trimmedEmail,
                 fullName: trimmedName,
                 password,
-                roleId,
             };
+            // Send custom permissions when the matrix has been edited away from
+            // the picked role — the server then mints a new scope='account'
+            // role for this invitee. Otherwise just send the picked roleId.
+            if (isDirty) body.permissions = customPerms;
+            else body.roleId = roleId;
             if (outletId) body.outletId = outletId;
             const res = await fetch(`/api/v1/account/${accountId}/users`, {
                 method: 'POST',
@@ -443,7 +481,7 @@ function InviteModal({ accountId, roles, outlets, onClose, onInvited }: InviteMo
                                         <button
                                             key={r.id}
                                             type="button"
-                                            onClick={() => setRoleId(r.id)}
+                                            onClick={() => handleRoleSelect(r.id)}
                                             className="flex items-start gap-2 p-3 rounded-[10px] text-left border-2 transition-all hover:shadow-sm"
                                             style={active
                                                 ? { background: look.bg, borderColor: look.color }
@@ -465,6 +503,69 @@ function InviteModal({ accountId, roles, outlets, onClose, onInvited }: InviteMo
                             </div>
                         )}
                     </div>
+
+                    {/* Permission matrix — narrowed to account-scope modules so
+                        customer-team admins don't see vendor-only modules like
+                        GRN / dispatch / inventory. Tap any cell to toggle; once
+                        the matrix differs from the picked role, the server
+                        creates a custom scope='account' role for this invitee. */}
+                    {roles.length > 0 && Object.keys(ACCOUNT_MODULES).length > 0 && (
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">
+                                    Permissions {isDirty && <span className="text-[#53B175] normal-case font-normal">(customized)</span>}
+                                </label>
+                                {isDirty && (
+                                    <button onClick={() => handleRoleSelect(roleId)} className="text-[10px] text-[#AEAEAE] hover:text-[#53B175] underline transition-colors">
+                                        Reset to role
+                                    </button>
+                                )}
+                            </div>
+                            <div className="border border-[#EEEEEE] rounded-[12px] overflow-hidden overflow-y-auto max-h-[280px]">
+                                <table className="w-full text-[11px] min-w-[380px]">
+                                    <thead className="sticky top-0 bg-[#FAFAFA] z-10">
+                                        <tr>
+                                            <th className="text-left px-4 py-2.5 font-bold text-[#7C7C7C] uppercase tracking-wider text-[10px]">Module</th>
+                                            {PERM_ACTIONS.map(a => (
+                                                <th key={a} className="text-center px-1 py-2.5 font-bold text-[#7C7C7C] uppercase tracking-wider text-[10px] w-[54px] capitalize">{a}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(Object.entries(ACCOUNT_MODULES) as Array<[Module, readonly Action[]]>).map(([mod, allowedActions]) => (
+                                            <tr key={mod} className="border-t border-[#F5F5F5]">
+                                                <td className="px-4 py-2 font-bold text-[#181725] text-[12px] capitalize">{mod}</td>
+                                                {PERM_ACTIONS.map(a => {
+                                                    const supported = allowedActions.includes(a);
+                                                    const checked = !!customPerms[mod]?.[a];
+                                                    if (!supported) {
+                                                        return (
+                                                            <td key={a} className="text-center px-1 py-2">
+                                                                <span className="inline-block w-[22px] h-[22px] rounded-[5px] bg-[#FAFAFA] text-[#DDDDDD] leading-[22px] cursor-not-allowed">·</span>
+                                                            </td>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <td key={a} className="text-center px-1 py-2">
+                                                            <button type="button" onClick={() => togglePerm(mod, a)}
+                                                                title={`Toggle ${mod}.${a}`}
+                                                                className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center mx-auto transition-all hover:scale-110 hover:opacity-80"
+                                                                style={{ backgroundColor: checked ? '#53B175' : '#F0F0F0' }}>
+                                                                {checked
+                                                                    ? <Check size={12} className="text-white" />
+                                                                    : <span className="text-[#BBBBBB] text-[10px] leading-none">—</span>}
+                                                            </button>
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p className="text-[10px] text-[#AEAEAE] mt-1.5">Tap any cell to toggle. Changes override the picked role.</p>
+                        </div>
+                    )}
 
                     {outlets.length > 0 && (
                         <div>
