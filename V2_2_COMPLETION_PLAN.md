@@ -267,14 +267,41 @@ Each chunk lands separately with its own diff so any regression is bisectable. S
 |---|---|---|---|---|
 | 0 | ✅ Done | — | 2026-06-02 | `aa89e18..bef4f61` |
 | 1 | ✅ Code complete — awaiting deploy | 2026-06-02 | 2026-06-02 | `aa40fd3..e91ab6f` (6 commits + plan) |
-| 2 | Not started | — | — | — |
-| 3 | Not started | — | — | — |
+| 1.5 | ✅ Admin Add-Vendor full KYC wizard | 2026-06-03 | 2026-06-03 | `9b78b0b` (+ `cdd2934` switcher fix) |
+| 2 | ✅ Code complete | 2026-06-03 | 2026-06-03 | bulk-update endpoint + count endpoint + UI |
+| 3 | ✅ Code complete (bundled with Phase 2) | 2026-06-03 | 2026-06-03 | category 1-parent enforcement |
 | 4 | Not started | — | — | — |
 | 5 | Not started | — | — | — |
 | 6 | Not started | — | — | — |
 | 7 | Not started | — | — | — |
 | 8 | Not started | — | — | — |
 | 9 | Not started | — | — | — |
+
+---
+
+## Phase 2 + 3 deliverables (2026-06-03)
+
+**Phase 2 — Generic Bulk-Update**
+- Backend: `PATCH /api/v1/vendor/products/bulk-update` — accepts `{filter, set}` body. Whitelisted `set` fields:
+  - Direct writes: `isActive`, `minOrderQty`, `taxPercent`, `creditEligible`, `isFeatured`, `vegNonVeg`, `storageType`, `shelfLifeDays`, `description`, `brand`, `countryOfOrigin`
+  - Price adjustments: `basePrice` + `originalPrice` with `{type: 'set'|'percent'|'fixed', value, roundTo?}`; optional `applyToSlabs` to fan adjustments through `priceSlabs`
+  - Convenience: `clearPromo` wipes `promoPrice` + `promoStartTime` + `promoEndTime` in one call
+- Filter shape: `{ productIds?, categoryId?, brand?, isActive? }`. At least one criterion required.
+- Multi-tenant: every read + every update scoped to caller's `vendorId`. Forged ids from other vendors filter out, no 403 leakage.
+- Direct-field writes use `updateMany` (single SQL); price adjustments require per-row reads + writes (bounded by filter).
+- Backend: `GET /api/v1/vendor/products/count` — lightweight count for the live "N products match" indicator on the UI.
+- Frontend: `/vendor/bulk-update` page — filter card + grouped set fields (Status / Pricing / Catalog metadata). Confirm dialog before apply. Sidebar entry between Bulk Upload and Brand Mappings.
+
+**Phase 3 — Category 2-level enforcement**
+- Server-side guard on `POST /api/v1/admin/categories` and `PATCH /api/v1/admin/categories/[id]`:
+  - Parent must exist and itself be a root (`parent.parentId IS NULL`)
+  - A category cannot be its own parent (self-loop blocked)
+  - A category with children cannot be reparented (would create level-3 grandchildren)
+- App-level enforcement chosen over DB CHECK constraint because Postgres `CHECK` can't reference another row's column; a TRIGGER would work but adds operational overhead for marginal gain. Application enforcement is sufficient since all writes go through these two endpoints.
+
+**Known follow-ups (next phase)**
+- Bulk-update for **Inventory** stock quantities — Inventory is a separate model; better fits a dedicated bulk action on `/vendor/inventory`. Phase 4 PriceList work will revisit.
+- Extending the Excel `bulk-import` to write `isActive`, `minOrderQty`, `creditEligible`, `description`, `vegNonVeg`, `storageType` columns — current scope is intentionally limited to creating products; "update on existing SKU" already happens via the importer but only for the original column set. Will fold into Phase 4 since pricelist work touches the same import pipeline.
 
 This row updates as each phase completes — commit hash + date.
 

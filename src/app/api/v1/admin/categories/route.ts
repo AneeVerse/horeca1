@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
-import { errorResponse } from '@/middleware/errorHandler';
+import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
 
 // Auto-generate slug from name: lowercase, replace spaces with hyphens, strip non-alphanumeric
@@ -64,12 +64,34 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
   }
 });
 
-// POST — create a new category (auto-approved by admin)
+// POST — create a new category (auto-approved by admin).
+//
+// V2.2 Phase 3 enforcement: the platform's category model is a strict
+// two-level tree (Level 1 = root Category, Level 2 = Sub-Category). No
+// grand-children. If the request specifies parentId, the parent MUST
+// itself be a root (parentId=null). Without this check the UI could
+// silently create level-3 categories that downstream filtering doesn't
+// understand.
 export const POST = adminOnly(async (req: NextRequest, ctx) => {
   try {
     requirePermission(ctx, 'products.create');
     const body = await req.json();
     const data = createCategorySchema.parse(body);
+
+    if (data.parentId) {
+      const parent = await prisma.category.findUnique({
+        where: { id: data.parentId },
+        select: { id: true, parentId: true },
+      });
+      if (!parent) {
+        return errorResponse(Errors.badRequest('Parent category does not exist'));
+      }
+      if (parent.parentId) {
+        return errorResponse(Errors.badRequest(
+          'Categories are a strict 2-level tree. The parent you picked is itself a sub-category — pick a root category instead.',
+        ));
+      }
+    }
 
     const category = await prisma.category.create({
       data: {

@@ -54,7 +54,16 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
   }
 });
 
-// PATCH — update category fields
+// PATCH — update category fields.
+//
+// V2.2 Phase 3 enforcement: the platform's category tree is strictly two
+// levels deep. Three guards on the parentId reassignment path:
+//   (1) parent can't be the row itself (self-loop)
+//   (2) parent must exist and be a root (parent.parentId IS NULL)
+//   (3) if THIS row already has children, it can't become a sub-category
+//       (that would create grand-children). Children = this is acting as
+//       a level-1 root; turning it into a level-2 sub-category would
+//       silently make its children level-3.
 export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
     requirePermission(ctx, 'products.edit');
@@ -64,9 +73,34 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
 
     const existing = await prisma.category.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, parentId: true, _count: { select: { children: true } } },
     });
     if (!existing) throw Errors.notFound('Category');
+
+    // Only validate when parentId is actually being changed (undefined =
+    // not in payload, null = explicit root, uuid = a parent picked).
+    if (data.parentId !== undefined) {
+      if (data.parentId === id) {
+        throw Errors.badRequest('A category cannot be its own parent');
+      }
+      if (data.parentId) {
+        const parent = await prisma.category.findUnique({
+          where: { id: data.parentId },
+          select: { id: true, parentId: true },
+        });
+        if (!parent) throw Errors.badRequest('Parent category does not exist');
+        if (parent.parentId) {
+          throw Errors.badRequest(
+            'Categories are a strict 2-level tree. The parent you picked is itself a sub-category — pick a root category instead.',
+          );
+        }
+        if (existing._count.children > 0) {
+          throw Errors.badRequest(
+            'Cannot move this category under a parent — it already has child categories. Reparent or delete the children first.',
+          );
+        }
+      }
+    }
 
     const category = await prisma.category.update({
       where: { id },
