@@ -104,6 +104,10 @@ model User {
   accountInvitesSent BusinessAccountMember[] @relation("AccountInvites")
   userRoles          UserRole[]              @relation("UserRoles")
 
+  // V2.2 Phase 1 — Salesman Commission
+  salespersonProfile     Salesperson[]        @relation("UserSalespersonProfile")
+  approvedAccruals       CommissionAccrual[]  @relation("CommissionApprover")
+
   @@index([email])
   @@index([phone])
   @@index([pincode])
@@ -201,6 +205,9 @@ model Vendor {
   promotions         Promotion[]
   customerTasks      VendorCustomerTask[]
   customerPrices     VendorCustomerPrice[]
+  salespersons       Salesperson[]
+  commissionRules    CommissionRule[]
+  commissionAccruals CommissionAccrual[]
 
   // Ordering defaults applied to new products and checkout
   defaultMOQ          Int?      @map("default_moq")
@@ -550,6 +557,9 @@ model Order {
   deliveryNotes      String?      @map("delivery_notes") @db.Text
   deliveredAt        DateTime?    @map("delivered_at") @db.Timestamptz
   ewayBillNo         String?      @map("eway_bill_no") @db.VarChar(30)
+  // V2.2 Phase 1 — salesman attribution. Snapshotted at order creation
+  // so commission survives reassignment of the customer's salesperson later.
+  salespersonId      String?      @map("salesperson_id") @db.Uuid
   createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -559,17 +569,20 @@ model Order {
   businessAccount BusinessAccount @relation(fields: [businessAccountId], references: [id])
   outlet          Outlet          @relation(fields: [outletId], references: [id])
   deliverySlot    DeliverySlot?   @relation(fields: [deliverySlotId], references: [id])
+  salesperson     Salesperson?    @relation(fields: [salespersonId], references: [id], onDelete: SetNull)
   items          OrderItem[]
   payments       Payment[]
   creditTxns     CreditTransaction[]
   review         Review?
   returnRequest  ReturnRequest?
+  commissionAccruals CommissionAccrual[]
 
   @@index([userId])
   @@index([vendorId])
   @@index([businessAccountId])
   @@index([outletId])
   @@index([status])
+  @@index([salespersonId])
   @@index([createdAt(sort: Desc)])
   @@map("orders")
 }
@@ -1196,6 +1209,11 @@ model BusinessAccount {
   displayName     String?  @map("display_name") @db.VarChar(255)
   gstin           String?  @db.VarChar(20)
   pan             String?  @db.VarChar(20)
+  fssaiNumber     String?  @map("fssai_number") @db.VarChar(50)
+  billingAddressLine String? @map("billing_address_line") @db.Text
+  billingCity     String?  @map("billing_city") @db.VarChar(100)
+  billingState    String?  @map("billing_state") @db.VarChar(100)
+  billingPincode  String?  @map("billing_pincode") @db.VarChar(10)
   businessType    String?  @map("business_type") @db.VarChar(50)
   isCustomer      Boolean  @default(true)  @map("is_customer")
   isVendor        Boolean  @default(false) @map("is_vendor")
@@ -1417,7 +1435,11 @@ model VendorCustomer {
   status       VendorCustomerStatus @default(active)
   priceListId  String?              @map("price_list_id") @db.Uuid
   territory       String?              @db.VarChar(100)
+  // Legacy free-text salesperson name. Preserved for one release cycle so
+  // bulk-import scripts still parse old files; new code reads salespersonId
+  // first and falls back to this string only when the FK is null.
   salesExecutive  String?              @map("sales_executive") @db.VarChar(100)
+  salespersonId   String?              @map("salesperson_id") @db.Uuid
   deliveryRoute   String?              @map("delivery_route") @db.VarChar(100)
   tags            String[]             @default([]) @map("tags")
   notes           String?              @db.Text
@@ -1425,13 +1447,15 @@ model VendorCustomer {
   createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  vendor    Vendor     @relation("VendorCustomerMapping", fields: [vendorId], references: [id], onDelete: Cascade)
-  user      User       @relation("VendorCustomerUser", fields: [userId], references: [id])
-  priceList PriceList? @relation(fields: [priceListId], references: [id])
+  vendor      Vendor       @relation("VendorCustomerMapping", fields: [vendorId], references: [id], onDelete: Cascade)
+  user        User         @relation("VendorCustomerUser", fields: [userId], references: [id])
+  priceList   PriceList?   @relation(fields: [priceListId], references: [id])
+  salesperson Salesperson? @relation(fields: [salespersonId], references: [id], onDelete: SetNull)
 
   @@unique([vendorId, userId])
   @@index([vendorId])
   @@index([userId])
+  @@index([salespersonId])
   @@map("vendor_customers")
 }
 
@@ -1578,4 +1602,120 @@ model InventoryLog {
   @@index([inventoryId])
   @@index([vendorId])
   @@map("inventory_logs")
+}
+
+// ─── Phase 1: Salesman Commission (V2.2) ──────────────────────────────────
+// Structure-only build — accruals are auto-generated on order.delivered but
+// no automated payout pipeline runs. Vendor + admin can view + approve +
+// manually mark-paid; actual money movement is handled offline today.
+
+// A vendor's sales representative. May or may not log into the platform —
+// most distributor field-officers don't. Linking to a User is optional and
+// only used when commissioning sales taken via a logged-in rep.
+model Salesperson {
+  id        String   @id @default(uuid()) @db.Uuid
+  vendorId  String   @map("vendor_id") @db.Uuid
+  name      String   @db.VarChar(255)
+  phone     String?  @db.VarChar(15)
+  email     String?  @db.VarChar(255)
+  code      String?  @db.VarChar(30)  // vendor's internal employee id
+  userId    String?  @map("user_id") @db.Uuid
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor          Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  user            User?               @relation("UserSalespersonProfile", fields: [userId], references: [id], onDelete: SetNull)
+  rules           CommissionRule[]
+  accruals        CommissionAccrual[]
+  vendorCustomers VendorCustomer[]
+  orders          Order[]
+
+  @@unique([vendorId, code])
+  @@index([vendorId])
+  @@index([userId])
+  @@map("salespersons")
+}
+
+// Defines what a salesperson earns. Multiple rules allowed; resolution
+// picks the most-specific active rule at the time the order is delivered:
+//   customer-scoped > brand-scoped > category-scoped > default.
+model CommissionRule {
+  id            String              @id @default(uuid()) @db.Uuid
+  vendorId      String              @map("vendor_id") @db.Uuid
+  salespersonId String              @map("salesperson_id") @db.Uuid
+  scope         CommissionRuleScope
+  // When scope='customer'|'brand'|'category', this points at the
+  // VendorCustomer.id, Brand.id, or Category.id the rule applies to.
+  // Null for scope='default'. We don't FK this (the referenced model
+  // varies by scope) — the service layer validates referential integrity.
+  scopeRefId    String?             @map("scope_ref_id") @db.Uuid
+  ratePercent   Decimal?            @map("rate_percent") @db.Decimal(5, 2)
+  rateFixed     Decimal?            @map("rate_fixed") @db.Decimal(12, 2)
+  minOrderValue Decimal?            @map("min_order_value") @db.Decimal(12, 2)
+  validFrom     DateTime?           @map("valid_from") @db.Timestamptz
+  validTo       DateTime?           @map("valid_to") @db.Timestamptz
+  isActive      Boolean             @default(true) @map("is_active")
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor      Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  salesperson Salesperson         @relation(fields: [salespersonId], references: [id], onDelete: Cascade)
+  accruals    CommissionAccrual[]
+
+  @@index([vendorId, salespersonId, isActive])
+  @@index([scope, scopeRefId])
+  @@map("commission_rules")
+}
+
+enum CommissionRuleScope {
+  default
+  customer
+  brand
+  category
+
+  @@map("commission_rule_scope")
+}
+
+// One row per (Order, Salesperson). Generated when the order moves to
+// 'delivered' state — see commission.service.ts. Append-only; status
+// transitions in place. The unique constraint stops double-write if the
+// status hook fires twice (idempotent).
+model CommissionAccrual {
+  id            String                  @id @default(uuid()) @db.Uuid
+  orderId       String                  @map("order_id") @db.Uuid
+  vendorId      String                  @map("vendor_id") @db.Uuid
+  salespersonId String                  @map("salesperson_id") @db.Uuid
+  ruleId        String?                 @map("rule_id") @db.Uuid
+  baseAmount    Decimal                 @map("base_amount") @db.Decimal(12, 2)
+  ratePercent   Decimal?                @map("rate_percent") @db.Decimal(5, 2)
+  rateFixed     Decimal?                @map("rate_fixed") @db.Decimal(12, 2)
+  accruedAmount Decimal                 @map("accrued_amount") @db.Decimal(12, 2)
+  period        String                  @db.VarChar(7)  // 'YYYY-MM'
+  status        CommissionAccrualStatus @default(pending)
+  approvedBy    String?                 @map("approved_by") @db.Uuid
+  approvedAt    DateTime?               @map("approved_at") @db.Timestamptz
+  paidAt        DateTime?               @map("paid_at") @db.Timestamptz
+  notes         String?                 @db.Text
+  createdAt     DateTime                @default(now()) @map("created_at") @db.Timestamptz
+
+  order       Order           @relation(fields: [orderId], references: [id])
+  vendor      Vendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  salesperson Salesperson     @relation(fields: [salespersonId], references: [id])
+  rule        CommissionRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  approver    User?           @relation("CommissionApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@unique([orderId, salespersonId])
+  @@index([vendorId, period, status])
+  @@index([salespersonId, period])
+  @@map("commission_accruals")
+}
+
+enum CommissionAccrualStatus {
+  pending
+  approved
+  paid
+  cancelled
+
+  @@map("commission_accrual_status")
 }
