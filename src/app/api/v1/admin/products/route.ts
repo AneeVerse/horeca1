@@ -39,6 +39,16 @@ const createProductSchema = z.object({
   description: z.string().optional(),
   imageUrl: z.string().optional(),
   creditEligible: z.boolean().optional(),
+  fssaiRef: z.string().max(50).optional(),
+  aliasNames: z.array(z.string()).optional(),
+  vegNonVeg: z.enum(['veg', 'nonveg', 'egg']).optional(),
+  storageType: z.string().max(50).optional(),
+  shelfLifeDays: z.number().int().min(0).optional(),
+  countryOfOrigin: z.string().max(100).optional(),
+  substituteIds: z.array(z.string().uuid()).optional(),
+  isFeatured: z.boolean().optional(),
+  basedOnProductId: z.string().uuid().optional(),
+  basedOnBrandMasterProductId: z.string().uuid().optional(),
   priceSlabs: z.array(z.object({
     minQty: z.number().int().min(1),
     maxQty: z.number().int().min(1).optional(),
@@ -203,6 +213,8 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       slug: providedSlug,
       categoryIds,
       primaryCategoryId,
+      basedOnProductId,
+      basedOnBrandMasterProductId,
       ...productData
     } = data;
 

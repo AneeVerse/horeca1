@@ -117,6 +117,14 @@ interface ProductFormData {
     packSize: string;
     tags: string[];
     images: string[]; // additional images, NOT including imageUrl
+    fssaiRef: string;
+    aliasNames: string[];
+    vegNonVeg: '' | 'veg' | 'nonveg' | 'egg';
+    storageType: string;
+    shelfLifeDays: string;
+    countryOfOrigin: string;
+    substituteIds: string[];
+    isFeatured: boolean;
 }
 
 // Same enum-like constants used by vendor form. GST slabs are government-fixed,
@@ -144,6 +152,14 @@ const EMPTY_FORM: ProductFormData = {
     packSize: '',
     tags: [],
     images: [],
+    fssaiRef: '',
+    aliasNames: [],
+    vegNonVeg: '',
+    storageType: '',
+    shelfLifeDays: '',
+    countryOfOrigin: '',
+    substituteIds: [],
+    isFeatured: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -216,6 +232,71 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[
     );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Substitute Product Picker                                          */
+/* ------------------------------------------------------------------ */
+
+function SubstituteProductPicker({
+    selectedIds,
+    currentProductId,
+    products,
+    onChange,
+}: {
+    selectedIds: string[];
+    currentProductId?: string;
+    products: Product[];
+    onChange: (ids: string[]) => void;
+}) {
+    const [query, setQuery] = useState('');
+
+    const candidates = products.filter(p =>
+        p.id !== currentProductId &&
+        !selectedIds.includes(p.id) &&
+        (query.length === 0 || p.name.toLowerCase().includes(query.toLowerCase()))
+    ).slice(0, 6);
+
+    const selected = products.filter(p => selectedIds.includes(p.id));
+
+    const add = (id: string) => { onChange([...selectedIds, id]); setQuery(''); };
+    const remove = (id: string) => onChange(selectedIds.filter(s => s !== id));
+
+    return (
+        <div className="space-y-2">
+            {selected.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                    {selected.map(p => (
+                        <span key={p.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 text-[12px] font-bold rounded-[8px]">
+                            {p.name}
+                            <button type="button" onClick={() => remove(p.id)} className="hover:text-[#E74C3C]"><X size={12} /></button>
+                        </span>
+                    ))}
+                </div>
+            )}
+            <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search products to add as substitutes..."
+                className={inputCls}
+            />
+            {query.length > 0 && candidates.length > 0 && (
+                <div className="border border-[#EEEEEE] rounded-[10px] overflow-hidden bg-white">
+                    {candidates.map(p => (
+                        <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => add(p.id)}
+                            className="w-full text-left px-4 py-2 text-[13px] font-medium hover:bg-[#EEF8F1] transition-colors border-b border-[#EEEEEE] last:border-0"
+                        >
+                            {p.name}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 const STATUS_CONFIG = {
     approved: { label: 'Approved', bg: 'bg-[#EEF8F1]', text: 'text-[#299E60]', dot: 'bg-[#299E60]' },
     pending: { label: 'Pending', bg: 'bg-[#FFF7E6]', text: 'text-[#F59E0B]', dot: 'bg-[#F59E0B]' },
@@ -244,6 +325,7 @@ export default function ProductsPage() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
+    const [loadingProduct, setLoadingProduct] = useState(false);
 
     // Pagination
     const [cursor, setCursor] = useState<string | null>(null);
@@ -486,39 +568,91 @@ export default function ProductsPage() {
         }
     }, [editIdParam, loading, products]);
 
-    const openEdit = (product: Product) => {
+    const openEdit = async (product: Product) => {
         setEditingProduct(product);
-        // Build the unified category list, primary first. Falls back to the
-        // legacy single Product.categoryId for rows that pre-date the join
-        // table — same logic as the vendor form.
-        const primaryId = product.category?.id ?? '';
-        const linkIds = (product.categoryLinks ?? []).map(l => l.categoryId);
-        const uniqueIds = primaryId
-            ? [primaryId, ...linkIds.filter(id => id !== primaryId)]
-            : linkIds;
-        setFormData({
-            name: product.name,
-            sku: product.sku ?? '',
-            hsn: product.hsn ?? '',
-            barcode: product.barcode ?? '',
-            brand: product.brand ?? '',
-            categoryIds: uniqueIds,
-            description: product.description ?? '',
-            basePrice: String(product.basePrice),
-            originalPrice: product.originalPrice != null ? String(product.originalPrice) : '',
-            vendorId: product.vendor?.id ?? '',
-            taxPercent: String(product.taxPercent),
-            unit: product.unit ?? 'piece',
-            minOrderQty: String(product.minOrderQty),
-            creditEligible: product.creditEligible,
-            imageUrl: product.imageUrl ?? '',
-            priceSlabs: [],
-            packSize: product.packSize ?? '',
-            tags: Array.isArray(product.tags) ? product.tags : [],
-            images: Array.isArray(product.images) ? product.images.filter(Boolean) : [],
-        });
-        setFormErrors({});
         setPanelOpen(true);
+        setLoadingProduct(true);
+        setFormErrors({});
+
+        try {
+            const res = await fetch(`/api/v1/admin/products/${product.id}`);
+            const json = await res.json();
+            const p = json.success ? json.data : product;
+
+            const primaryId = p.category?.id ?? '';
+            const linkIds = Array.isArray(p.categoryLinks)
+                ? (p.categoryLinks as Array<{ categoryId: string }>).map(l => l.categoryId)
+                : [];
+            const uniqueIds = primaryId
+                ? [primaryId, ...linkIds.filter(id => id !== primaryId)]
+                : linkIds;
+
+            setFormData({
+                name: p.name || '',
+                sku: p.sku ?? '',
+                hsn: p.hsn ?? '',
+                barcode: p.barcode ?? '',
+                brand: p.brand ?? '',
+                categoryIds: uniqueIds,
+                description: p.description ?? '',
+                basePrice: p.basePrice != null ? String(p.basePrice) : '',
+                originalPrice: p.originalPrice != null ? String(p.originalPrice) : '',
+                vendorId: p.vendor?.id ?? '',
+                taxPercent: p.taxPercent != null ? String(p.taxPercent) : '0',
+                unit: p.unit ?? 'piece',
+                minOrderQty: p.minOrderQty != null ? String(p.minOrderQty) : '1',
+                creditEligible: !!p.creditEligible,
+                imageUrl: p.imageUrl ?? '',
+                packSize: p.packSize ?? '',
+                tags: Array.isArray(p.tags) ? p.tags : [],
+                images: Array.isArray(p.images) ? p.images.filter(Boolean) : [],
+                fssaiRef: p.fssaiRef || '',
+                aliasNames: Array.isArray(p.aliasNames) ? p.aliasNames : [],
+                vegNonVeg: (p.vegNonVeg as '' | 'veg' | 'nonveg' | 'egg') || '',
+                storageType: p.storageType || '',
+                shelfLifeDays: p.shelfLifeDays != null ? String(p.shelfLifeDays) : '',
+                countryOfOrigin: p.countryOfOrigin || '',
+                substituteIds: Array.isArray(p.substituteIds) ? p.substituteIds : [],
+                isFeatured: !!p.isFeatured,
+                priceSlabs: Array.isArray(p.priceSlabs)
+                    ? p.priceSlabs.map((s: { minQty: number; maxQty?: number | null; price: number }) => ({
+                        minQty: String(s.minQty),
+                        maxQty: s.maxQty != null ? String(s.maxQty) : '',
+                        price: String(s.price),
+                    }))
+                    : [],
+            });
+        } catch (err) {
+            console.error('Failed to fetch product details:', err);
+            const primaryId = product.category?.id ?? '';
+            const linkIds = (product.categoryLinks ?? []).map(l => l.categoryId);
+            const uniqueIds = primaryId
+                ? [primaryId, ...linkIds.filter(id => id !== primaryId)]
+                : linkIds;
+            setFormData({
+                ...EMPTY_FORM,
+                name: product.name,
+                sku: product.sku ?? '',
+                hsn: product.hsn ?? '',
+                barcode: product.barcode ?? '',
+                brand: product.brand ?? '',
+                categoryIds: uniqueIds,
+                description: product.description ?? '',
+                basePrice: String(product.basePrice),
+                originalPrice: product.originalPrice != null ? String(product.originalPrice) : '',
+                vendorId: product.vendor?.id ?? '',
+                taxPercent: String(product.taxPercent),
+                unit: product.unit ?? 'piece',
+                minOrderQty: String(product.minOrderQty),
+                creditEligible: product.creditEligible,
+                imageUrl: product.imageUrl ?? '',
+                packSize: product.packSize ?? '',
+                tags: Array.isArray(product.tags) ? product.tags : [],
+                images: Array.isArray(product.images) ? product.images.filter(Boolean) : [],
+            });
+        } finally {
+            setLoadingProduct(false);
+        }
     };
 
     const closePanel = () => {
@@ -589,6 +723,15 @@ export default function ProductsPage() {
             if (formData.tags.length > 0) payload.tags = formData.tags;
             const additionalImages = formData.images.filter(Boolean);
             if (additionalImages.length > 0) payload.images = additionalImages;
+
+            if (formData.fssaiRef.trim()) payload.fssaiRef = formData.fssaiRef.trim();
+            if (formData.aliasNames.length > 0) payload.aliasNames = formData.aliasNames;
+            if (formData.vegNonVeg) payload.vegNonVeg = formData.vegNonVeg;
+            if (formData.storageType) payload.storageType = formData.storageType;
+            if (formData.shelfLifeDays) payload.shelfLifeDays = parseInt(formData.shelfLifeDays, 10);
+            if (formData.countryOfOrigin.trim()) payload.countryOfOrigin = formData.countryOfOrigin.trim();
+            if (formData.substituteIds.length > 0) payload.substituteIds = formData.substituteIds;
+            payload.isFeatured = formData.isFeatured;
 
             const isEdit = !!editingProduct;
             const url = isEdit
@@ -1090,12 +1233,18 @@ export default function ProductsPage() {
 
                 {/* Panel Body */}
                 <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 bg-[#F8F9FB]">
-                    {formErrors._server && (
-                        <div className="flex items-center gap-3 bg-[#FFF0F0] border border-[#E74C3C]/20 text-[#E74C3C] rounded-[12px] px-5 py-4 text-[13px] font-semibold">
-                            <AlertTriangle size={18} />
-                            {formErrors._server}
+                    {loadingProduct ? (
+                        <div className="flex items-center justify-center py-32">
+                            <Loader2 className="animate-spin text-[#299E60]" size={32} />
                         </div>
-                    )}
+                    ) : (
+                        <>
+                            {formErrors._server && (
+                                <div className="flex items-center gap-3 bg-[#FFF0F0] border border-[#E74C3C]/20 text-[#E74C3C] rounded-[12px] px-5 py-4 text-[13px] font-semibold">
+                                    <AlertTriangle size={18} />
+                                    {formErrors._server}
+                                </div>
+                            )}
 
                     {/* ======== Section 1: Basic Information ======== */}
                     <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
@@ -1499,9 +1648,125 @@ export default function ProductsPage() {
                                     <p className="text-[11px] text-[#AEAEAE] font-medium">Allow buyers to purchase this product on credit terms</p>
                                 </div>
                             </label>
+
+                            {/* Featured Product */}
+                            <label className="flex items-center gap-3 cursor-pointer py-1">
+                                <input
+                                    type="checkbox"
+                                    checked={formData.isFeatured}
+                                    onChange={(e) => updateField('isFeatured', e.target.checked)}
+                                    className="w-5 h-5 accent-[#F59E0B] shrink-0"
+                                />
+                                <div>
+                                    <span className="text-[14px] font-bold text-[#181725]">Featured Product</span>
+                                    <p className="text-[11px] text-[#AEAEAE] font-medium">Highlight this product in search results and vendor page</p>
+                                </div>
+                            </label>
+
+                            {/* Veg / Non-Veg */}
+                            <div>
+                                <FieldLabel>Veg / Non-Veg</FieldLabel>
+                                <div className="flex gap-2">
+                                    {([['', 'Not Set'], ['veg', '🟢 Veg'], ['nonveg', '🔴 Non-Veg'], ['egg', '🟡 Egg']] as ['' | 'veg' | 'nonveg' | 'egg', string][]).map(([v, label]) => (
+                                        <button
+                                            key={v}
+                                            type="button"
+                                            onClick={() => updateField('vegNonVeg', v)}
+                                            className={cn(
+                                                'flex-1 h-[40px] rounded-[10px] text-[12px] font-bold border transition-colors',
+                                                formData.vegNonVeg === v
+                                                    ? 'bg-[#299E60] text-white border-[#299E60]'
+                                                    : 'bg-white text-[#7C7C7C] border-[#EEEEEE] hover:border-[#299E60]/40'
+                                            )}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Storage Type */}
+                            <div>
+                                <FieldLabel>Storage Type</FieldLabel>
+                                <select
+                                    value={formData.storageType}
+                                    onChange={(e) => updateField('storageType', e.target.value)}
+                                    className={selectCls}
+                                >
+                                    <option value="">Not specified</option>
+                                    <option value="ambient">Ambient (Room Temp)</option>
+                                    <option value="refrigerated">Refrigerated (2–8°C)</option>
+                                    <option value="frozen">Frozen (−18°C)</option>
+                                    <option value="dry">Dry Storage</option>
+                                    <option value="cool">Cool / Dark (10–15°C)</option>
+                                </select>
+                            </div>
+
+                            {/* FSSAI Reference */}
+                            <div>
+                                <FieldLabel>FSSAI Reference</FieldLabel>
+                                <input
+                                    type="text"
+                                    maxLength={50}
+                                    placeholder="e.g. 10016011000015"
+                                    value={formData.fssaiRef}
+                                    onChange={e => updateField('fssaiRef', e.target.value)}
+                                    className={inputCls}
+                                />
+                            </div>
+
+                            {/* Alias / Search Names */}
+                            <div>
+                                <FieldLabel>Alias / Search Names</FieldLabel>
+                                <TagInput
+                                    tags={formData.aliasNames}
+                                    onChange={(names) => setFormData(prev => ({ ...prev, aliasNames: names }))}
+                                />
+                                <p className="text-[11px] text-[#AEAEAE] font-medium mt-1">Alternate names buyers may search by (e.g. local language variants)</p>
+                            </div>
+
+                            {/* Shelf Life & Country of Origin */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <FieldLabel>Shelf Life (days)</FieldLabel>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        value={formData.shelfLifeDays}
+                                        onChange={(e) => updateField('shelfLifeDays', e.target.value)}
+                                        className={inputCls}
+                                        placeholder="e.g. 180"
+                                    />
+                                </div>
+                                <div>
+                                    <FieldLabel>Country of Origin</FieldLabel>
+                                    <input
+                                        type="text"
+                                        value={formData.countryOfOrigin}
+                                        onChange={(e) => updateField('countryOfOrigin', e.target.value)}
+                                        className={inputCls}
+                                        placeholder="e.g. India"
+                                        maxLength={100}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Substitute Products */}
+                            <div>
+                                <FieldLabel>Substitute Products</FieldLabel>
+                                <SubstituteProductPicker
+                                    selectedIds={formData.substituteIds}
+                                    currentProductId={editingProduct?.id}
+                                    products={products}
+                                    onChange={(ids) => setFormData(prev => ({ ...prev, substituteIds: ids }))}
+                                />
+                                <p className="text-[11px] text-[#AEAEAE] font-medium mt-1">Products shown to buyers when this item is out of stock</p>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </>
+            )}
+        </div>
 
                 {/* Panel Footer */}
                 <div className="px-8 py-6 border-t border-[#EEEEEE] shrink-0 flex items-center gap-4">

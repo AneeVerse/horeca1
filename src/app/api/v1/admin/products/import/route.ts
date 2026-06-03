@@ -268,6 +268,15 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           // Replace price slabs (requires vendorId)
           if (vendorId) await updatePriceSlabs(existing.id, vendorId, r);
 
+          // Link category in the join table
+          if (categoryId) {
+            await prisma.productCategory.upsert({
+              where: { productId_categoryId: { productId: existing.id, categoryId } },
+              create: { productId: existing.id, categoryId, isPrimary: true },
+              update: { isPrimary: true },
+            });
+          }
+
           updated++;
         } else {
           // ── CREATE new product ──
@@ -299,6 +308,17 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           }
 
           const product = await prisma.product.create({ data: productData as Parameters<typeof prisma.product.create>[0]['data'] });
+
+          // Link category in the join table
+          if (categoryId) {
+            await prisma.productCategory.create({
+              data: {
+                productId: product.id,
+                categoryId,
+                isPrimary: true,
+              },
+            });
+          }
 
           // Create price slabs (requires vendorId)
           if (vendorId) await updatePriceSlabs(product.id, vendorId, r);
