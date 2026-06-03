@@ -26,6 +26,8 @@ type EditRow = Partial<{
 
 interface Vendor { id: string; businessName: string }
 
+interface PreviewSlab { minQty: number; price: number; grossRate: number; promoPrice?: number | null }
+
 interface PreviewItem {
   row: number;
   action: 'create' | 'update' | 'skip';
@@ -37,6 +39,7 @@ interface PreviewItem {
   taxPercent: number;
   stock?: number;
   bulkSlabCount: number;
+  bulkSlabs?: PreviewSlab[];   // full tier list for the popover
   hasPromo: boolean;
   existing?: {
     id: string; name: string; basePrice: number;
@@ -445,6 +448,27 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
                   <SummaryCard label="Errors" value={preview.errors.length} color="#E74C3C" bg="#FFF0F0" />
                 </div>
 
+                {/* Pending edits indicator — surfaces the count of rows the
+                    admin has touched + a "revert all" affordance so they
+                    can clear edits without abandoning the import. Counts
+                    affected rows, not individual field changes. */}
+                {Object.keys(edits).length > 0 && (
+                  <div className="flex items-center justify-between gap-3 px-4 py-3 bg-[#EEF8F1] border border-[#299E60]/30 rounded-[12px]">
+                    <div className="flex items-center gap-2">
+                      <Check size={14} className="text-[#299E60]" />
+                      <p className="text-[12.5px] text-[#1F6A3E]">
+                        <strong>{Object.keys(edits).length}</strong> row{Object.keys(edits).length !== 1 ? 's' : ''} with inline edits. Your changes will be applied when you click Confirm &amp; Import.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setEdits({})}
+                      className="text-[11.5px] font-bold text-[#1F6A3E] hover:text-[#0F4A2E] underline"
+                    >
+                      Revert all edits
+                    </button>
+                  </div>
+                )}
+
                 {/* Parse errors */}
                 {preview.errors.length > 0 && (
                   <div className="bg-[#FFF0F0] rounded-[12px] p-4">
@@ -581,7 +605,28 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
                                   )}
                                 />
                               </td>
-                              <td className="px-3 py-3 text-right font-bold text-[#181725]">₹{item.grossRate.toFixed(2)}</td>
+                              {/* Live gross-rate recompute. When admin edits
+                                  basePrice or tax%, the displayed gross
+                                  updates immediately so they see the customer-
+                                  facing price reflect their change. The
+                                  original Excel gross is shown struck-out
+                                  beneath when it diverges. */}
+                              <td className="px-3 py-3 text-right">
+                                {(() => {
+                                  const bp = edits[item.row]?.basePrice ?? item.basePrice;
+                                  const tx = edits[item.row]?.taxPercent ?? item.taxPercent;
+                                  const liveGross = Math.round(bp * (1 + tx / 100) * 100) / 100;
+                                  const drift = Math.abs(liveGross - item.grossRate) > 0.005;
+                                  return (
+                                    <span className="inline-flex flex-col items-end">
+                                      <span className="font-bold text-[#181725]">₹{liveGross.toFixed(2)}</span>
+                                      {drift && (
+                                        <span className="text-[10.5px] text-[#AEAEAE] line-through">₹{item.grossRate.toFixed(2)}</span>
+                                      )}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
                               <td className="px-3 py-3 text-right">
                                 <EditableCell
                                   type="number" step={0.01} min={0} max={100}
@@ -599,28 +644,39 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
                                   )}
                                 />
                               </td>
+                              {/* Stock — always editable, even when initial
+                                  value is undefined. Lets admin add stock to
+                                  catalog rows that came in without it. */}
                               <td className="px-3 py-3 text-right">
-                                {(item.stock !== undefined || edits[item.row]?.stock !== undefined) ? (
-                                  <EditableCell
-                                    type="number" step={1} min={0}
-                                    value={edits[item.row]?.stock ?? item.stock ?? 0}
-                                    edited={edits[item.row]?.stock !== undefined}
-                                    disabled={isSkipped}
-                                    onSave={(v) => {
-                                      const num = Number(v);
-                                      setEdit(item.row, 'stock', !Number.isFinite(num) || num === (item.stock ?? 0) ? undefined : Math.floor(num));
-                                    }}
-                                    display={() => (
-                                      isUpdate && item.existing
-                                        ? <DiffNumber old={item.existing.stock} next={edits[item.row]?.stock ?? item.stock ?? 0} />
-                                        : <span className="text-[#7C7C7C]">{edits[item.row]?.stock ?? item.stock}</span>
-                                    )}
-                                  />
-                                ) : (
-                                  <span className="text-[#DDDDDD]">—</span>
-                                )}
+                                <EditableCell
+                                  type="number" step={1} min={0}
+                                  value={edits[item.row]?.stock ?? item.stock ?? 0}
+                                  edited={edits[item.row]?.stock !== undefined}
+                                  disabled={isSkipped}
+                                  onSave={(v) => {
+                                    const num = Number(v);
+                                    const original = item.stock;
+                                    setEdit(item.row, 'stock', !Number.isFinite(num) || num === (original ?? -1) ? undefined : Math.floor(num));
+                                  }}
+                                  display={() => {
+                                    const current = edits[item.row]?.stock ?? item.stock;
+                                    if (current === undefined) {
+                                      return <span className="text-[#DDDDDD]">—</span>;
+                                    }
+                                    if (isUpdate && item.existing) {
+                                      return <DiffNumber old={item.existing.stock} next={current} />;
+                                    }
+                                    return <span className="text-[#7C7C7C]">{current}</span>;
+                                  }}
+                                />
                               </td>
-                              <td className="px-3 py-3 text-center text-[#7C7C7C]">{item.bulkSlabCount || '—'}</td>
+                              {/* Slabs — count cell with a hover popover that
+                                  shows every tier's qty + taxable + gross
+                                  rate, so admin doesn't have to switch to the
+                                  detail view to inspect the slab structure. */}
+                              <td className="px-3 py-3 text-center">
+                                <SlabsCell slabs={item.bulkSlabs ?? []} count={item.bulkSlabCount} />
+                              </td>
                               <td className="px-3 py-3">
                                 <button
                                   onClick={() => toggleSkip(item.row)}
@@ -1016,5 +1072,57 @@ function EditableCell({
           : <Pencil size={10} className="text-[#AEAEAE] opacity-0 group-hover:opacity-100 transition-opacity" />}
       </span>
     </button>
+  );
+}
+
+// ── SlabsCell ────────────────────────────────────────────────────────
+// Compact bulk-tier indicator with a hover popover that lists every
+// slab's qty threshold + taxable rate + customer-facing gross. Lets the
+// admin verify the tier prices without leaving the list view.
+function SlabsCell({ slabs, count }: { slabs: PreviewSlab[]; count: number }) {
+  const [open, setOpen] = useState(false);
+
+  if (count === 0) return <span className="text-[#AEAEAE]">—</span>;
+
+  return (
+    <div
+      className="relative inline-block"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#EFF6FF] text-[#2563EB] text-[11px] font-bold hover:bg-[#DBEAFE] transition-colors"
+      >
+        {count} {count === 1 ? 'tier' : 'tiers'}
+      </button>
+      {open && slabs.length > 0 && (
+        <div className="absolute right-0 top-[calc(100%+4px)] z-30 bg-white rounded-[10px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-[#EEEEEE] p-3 min-w-[240px]">
+          <p className="text-[10.5px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-2">Bulk tier prices</p>
+          <table className="text-[11.5px] w-full">
+            <thead>
+              <tr className="text-[#AEAEAE]">
+                <th className="text-left pb-1 font-bold">Min qty</th>
+                <th className="text-right pb-1 font-bold">Taxable</th>
+                <th className="text-right pb-1 font-bold">Gross</th>
+              </tr>
+            </thead>
+            <tbody>
+              {slabs.map((s, i) => (
+                <tr key={i} className="border-t border-[#F5F5F5]">
+                  <td className="py-1 font-bold text-[#181725]">≥ {s.minQty}</td>
+                  <td className="py-1 text-right text-[#7C7C7C]">₹{s.price.toFixed(2)}</td>
+                  <td className="py-1 text-right font-bold text-[#181725]">₹{s.grossRate.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {slabs.some((s) => s.promoPrice != null) && (
+            <p className="text-[10px] text-[#AEAEAE] mt-2">Promo tier prices are also set on rows where they apply.</p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

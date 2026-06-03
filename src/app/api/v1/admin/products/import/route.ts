@@ -19,6 +19,10 @@ interface PreviewItem {
   taxPercent: number;
   stock?: number;
   bulkSlabCount: number;
+  // Full slab list so the UI can show admin the actual tier prices
+  // (not just the count). Each entry is the taxable rate + qty threshold
+  // the row defines.
+  bulkSlabs: Array<{ minQty: number; price: number; grossRate: number; promoPrice?: number | null }>;
   hasPromo: boolean;
   // For updates — show what changed
   existing?: {
@@ -141,6 +145,16 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
         const rowNum = idx + 2;
         const existing = findExisting(r);
 
+        // Surface the actual slab tier prices so the UI can show them
+        // inline. The taxable + gross rates are kept distinct so the UI
+        // doesn't have to recompute.
+        const slabPreview = r.bulkSlabs.map((s) => ({
+          minQty: s.minQty,
+          price: s.taxableRate,
+          grossRate: s.grossRate,
+          promoPrice: s.promoTaxableRate ?? null,
+        }));
+
         if (existing) {
           updates++;
           items.push({
@@ -154,6 +168,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             taxPercent: r.taxPercent,
             stock: r.stock,
             bulkSlabCount: r.bulkSlabs.length,
+            bulkSlabs: slabPreview,
             hasPromo: !!r.promoPrice,
             existing: {
               id: existing.id,
@@ -178,6 +193,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             taxPercent: r.taxPercent,
             stock: r.stock,
             bulkSlabCount: r.bulkSlabs.length,
+            bulkSlabs: slabPreview,
             hasPromo: !!r.promoPrice,
           });
         }
@@ -278,10 +294,13 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 
         if (existing) {
           // ── UPDATE existing product ──
+          // SKU also gets written through — previously the update path
+          // dropped SKU edits silently. Admin edits land everywhere.
           await prisma.product.update({
             where: { id: existing.id },
             data: {
               name: r.name,
+              sku: r.sku ?? existing.sku,
               hsn: r.hsn || existing.hsn,
               unit: r.unit || existing.unit,
               brand: r.brand || existing.brand,
@@ -295,16 +314,27 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             },
           });
 
-          // Update inventory if stock provided and vendor exists
-          if (r.stock !== undefined && vendorId) {
-            await prisma.inventory.upsert({
-              where: { productId: existing.id },
-              update: { qtyAvailable: r.stock },
-              create: { productId: existing.id, vendorId, qtyAvailable: r.stock, lowStockThreshold: 10 },
-            });
+          // Stock update — for catalog-level imports (no vendor selected),
+          // we update inventory IF the existing product already has an
+          // Inventory row (and thus a vendorId on it). Without a vendorId
+          // we can't CREATE a new Inventory row, but updating an existing
+          // one is safe because the FK to vendor is preserved.
+          if (r.stock !== undefined) {
+            if (vendorId) {
+              await prisma.inventory.upsert({
+                where: { productId: existing.id },
+                update: { qtyAvailable: r.stock },
+                create: { productId: existing.id, vendorId, qtyAvailable: r.stock, lowStockThreshold: 10 },
+              });
+            } else {
+              await prisma.inventory.updateMany({
+                where: { productId: existing.id },
+                data: { qtyAvailable: r.stock },
+              });
+            }
           }
 
-          // Replace price slabs (requires vendorId)
+          // Replace price slabs (requires vendorId — slabs are per-vendor)
           if (vendorId) await updatePriceSlabs(existing.id, vendorId, r);
 
           // Link category in the join table
