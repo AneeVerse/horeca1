@@ -266,7 +266,7 @@ Each chunk lands separately with its own diff so any regression is bisectable. S
 | Phase | Status | Started | Completed | Commit range |
 |---|---|---|---|---|
 | 0 | ✅ Done | — | 2026-06-02 | `aa89e18..bef4f61` |
-| 1 | Not started | — | — | — |
+| 1 | ✅ Code complete — awaiting deploy | 2026-06-02 | 2026-06-02 | `aa40fd3..e91ab6f` (6 commits + plan) |
 | 2 | Not started | — | — | — |
 | 3 | Not started | — | — | — |
 | 4 | Not started | — | — | — |
