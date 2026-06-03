@@ -226,11 +226,50 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
     const skipRowsStr = formData.get('skipRows') as string | null;
     const skipRows = new Set(skipRowsStr ? JSON.parse(skipRowsStr) as number[] : []);
 
+    // Optional: get per-row inline edits from client (admin tweaked values
+    // in the review table before clicking Confirm). Shape:
+    //   { [rowNum]: { name?, sku?, category?, basePrice?, taxPercent?, stock? } }
+    // Whitelisted at apply-time so a forged extra key can't reach Prisma.
+    const editsStr = formData.get('edits') as string | null;
+    type EditRow = Partial<{ name: string; sku: string; category: string; basePrice: number; taxPercent: number; stock: number }>;
+    let editsMap: Record<number, EditRow> = {};
+    if (editsStr) {
+      try {
+        const parsed = JSON.parse(editsStr) as Record<string, EditRow>;
+        // Normalize keys to numbers + whitelist fields.
+        for (const [k, v] of Object.entries(parsed)) {
+          const n = Number(k);
+          if (!Number.isInteger(n)) continue;
+          const safe: EditRow = {};
+          if (typeof v.name === 'string')      safe.name = v.name.trim();
+          if (typeof v.sku === 'string')       safe.sku = v.sku.trim();
+          if (typeof v.category === 'string')  safe.category = v.category.trim();
+          if (typeof v.basePrice === 'number'  && v.basePrice > 0) safe.basePrice = v.basePrice;
+          if (typeof v.taxPercent === 'number' && v.taxPercent >= 0 && v.taxPercent <= 100) safe.taxPercent = v.taxPercent;
+          if (typeof v.stock === 'number'      && v.stock >= 0 && Number.isInteger(v.stock)) safe.stock = v.stock;
+          editsMap[n] = safe;
+        }
+      } catch { editsMap = {}; }
+    }
+
     for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
+      const parsedRow = rows[i];
       const rowNum = i + 2;
 
       if (skipRows.has(rowNum)) continue;
+
+      // Merge inline edits OVER the parsed row. The admin's keystrokes
+      // win for any field they touched in the review table.
+      const e = editsMap[rowNum] ?? {};
+      const r = {
+        ...parsedRow,
+        ...(e.name      !== undefined ? { name: e.name } : {}),
+        ...(e.sku       !== undefined ? { sku: e.sku } : {}),
+        ...(e.category  !== undefined ? { category: e.category } : {}),
+        ...(e.basePrice !== undefined ? { basePrice: e.basePrice } : {}),
+        ...(e.taxPercent !== undefined ? { taxPercent: e.taxPercent } : {}),
+        ...(e.stock     !== undefined ? { stock: e.stock } : {}),
+      };
 
       try {
         const slug = r.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');

@@ -1,12 +1,26 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   X, Upload, Download, Loader2, ChevronLeft, ChevronRight,
   CheckCircle, AlertTriangle, Plus, Pencil, SkipForward,
-  FileSpreadsheet, ArrowRight, RotateCcw, Eye,
+  FileSpreadsheet, ArrowRight, RotateCcw, Eye, Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// Per-row inline edits the admin makes in the review table before
+// clicking Confirm. Keys are the row numbers (1-indexed from the Excel
+// header). Values are partial overrides that get merged onto the parsed
+// row server-side at commit time. The backend whitelists these keys
+// before applying — never a free-form write surface.
+type EditRow = Partial<{
+  name: string;
+  sku: string;
+  category: string;
+  basePrice: number;
+  taxPercent: number;
+  stock: number;
+}>;
 
 // ── Types ──
 
@@ -76,6 +90,23 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
   const [reviewIdx, setReviewIdx] = useState(0); // current item index for left/right nav
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
 
+  // Per-row edits the admin made by clicking a cell + typing a new value.
+  // Submitted alongside the file on Confirm; backend merges onto each row
+  // before create/update.
+  const [edits, setEdits] = useState<Record<number, EditRow>>({});
+
+  // Category dropdown source — loaded once when the modal opens so the
+  // inline category-cell editor has a list to pick from. Used by name
+  // resolution at commit time too (the backend re-resolves names→ids).
+  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    if (!open || categories.length > 0) return;
+    fetch('/api/v1/admin/categories')
+      .then((r) => r.json())
+      .then((j) => { if (j.success && Array.isArray(j.data)) setCategories(j.data); })
+      .catch(() => {});
+  }, [open, categories.length]);
+
   // Commit step
   const [committing, setCommitting] = useState(false);
   const [result, setResult] = useState<CommitResult | null>(null);
@@ -93,11 +124,32 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
     setSkipRows(new Set());
     setReviewIdx(0);
     setViewMode('list');
+    setEdits({});
     setCommitting(false);
     setResult(null);
     setBackupData(null);
     setUndoing(false);
     setUndone(false);
+  }, []);
+
+  // ── Edit a single cell on one row ──
+  // Setting `value === undefined` reverts the field to the parsed value.
+  const setEdit = useCallback(<K extends keyof EditRow>(row: number, key: K, value: EditRow[K] | undefined) => {
+    setEdits((prev) => {
+      const next = { ...prev };
+      const rowEdits: EditRow = { ...(next[row] ?? {}) };
+      if (value === undefined) {
+        delete rowEdits[key];
+      } else {
+        rowEdits[key] = value;
+      }
+      if (Object.keys(rowEdits).length === 0) {
+        delete next[row];
+      } else {
+        next[row] = rowEdits;
+      }
+      return next;
+    });
   }, []);
 
   const handleClose = () => {
@@ -156,6 +208,11 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
       fd.append('mode', 'commit');
       if (skipRows.size > 0) {
         fd.append('skipRows', JSON.stringify([...skipRows]));
+      }
+      // Per-row inline edits the admin made in the review table. Empty
+      // map = no edits; backend will use the parsed Excel values verbatim.
+      if (Object.keys(edits).length > 0) {
+        fd.append('edits', JSON.stringify(edits));
       }
 
       const res = await fetch('/api/v1/admin/products/import', { method: 'POST', body: fd });
@@ -465,36 +522,100 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
                                   {item.action === 'create' ? <><Plus size={10} /> New</> : <><Pencil size={10} /> Update</>}
                                 </span>
                               </td>
+                              {/* Editable Product name. Edited values
+                                  show with a green left-border + dot. */}
                               <td className="px-3 py-3">
-                                <p className={cn('font-semibold text-[#181725] leading-tight', isSkipped && 'line-through')}>{item.name}</p>
-                                {isUpdate && item.existing && item.existing.name !== item.name && (
+                                <EditableCell
+                                  type="text"
+                                  value={edits[item.row]?.name ?? item.name}
+                                  edited={edits[item.row]?.name !== undefined}
+                                  disabled={isSkipped}
+                                  onSave={(v) => setEdit(item.row, 'name', v === item.name ? undefined : (v as string))}
+                                  display={(v) => (
+                                    <p className={cn('font-semibold text-[#181725] leading-tight', isSkipped && 'line-through')}>{String(v)}</p>
+                                  )}
+                                />
+                                {isUpdate && item.existing && item.existing.name !== (edits[item.row]?.name ?? item.name) && (
                                   <p className="text-[10.5px] text-[#AEAEAE] mt-0.5 line-through truncate">{item.existing.name}</p>
                                 )}
                               </td>
-                              <td className="px-3 py-3 font-mono text-[11.5px] text-[#7C7C7C]">{item.sku || '—'}</td>
-                              <td className="px-3 py-3 text-[#7C7C7C]">{item.category || '—'}</td>
+                              <td className="px-3 py-3">
+                                <EditableCell
+                                  type="text"
+                                  value={edits[item.row]?.sku ?? item.sku ?? ''}
+                                  edited={edits[item.row]?.sku !== undefined}
+                                  disabled={isSkipped}
+                                  onSave={(v) => setEdit(item.row, 'sku', (v as string) === (item.sku ?? '') ? undefined : (v as string))}
+                                  display={(v) => (
+                                    <span className="font-mono text-[11.5px] text-[#7C7C7C]">{String(v) || '—'}</span>
+                                  )}
+                                />
+                              </td>
+                              <td className="px-3 py-3">
+                                <EditableCell
+                                  type="select"
+                                  options={categories.map((c) => c.name)}
+                                  value={edits[item.row]?.category ?? item.category ?? ''}
+                                  edited={edits[item.row]?.category !== undefined}
+                                  disabled={isSkipped}
+                                  onSave={(v) => setEdit(item.row, 'category', (v as string) === (item.category ?? '') ? undefined : (v as string))}
+                                  display={(v) => (
+                                    <span className="text-[#7C7C7C]">{String(v) || '—'}</span>
+                                  )}
+                                />
+                              </td>
                               <td className="px-3 py-3 text-right">
-                                {isUpdate && item.existing ? (
-                                  <DiffNumber prefix="₹" old={item.existing.basePrice} next={item.basePrice} />
-                                ) : (
-                                  <span className="font-bold text-[#181725]">₹{item.basePrice.toFixed(2)}</span>
-                                )}
+                                <EditableCell
+                                  type="number" step={0.01} min={0.01}
+                                  value={edits[item.row]?.basePrice ?? item.basePrice}
+                                  edited={edits[item.row]?.basePrice !== undefined}
+                                  disabled={isSkipped}
+                                  onSave={(v) => {
+                                    const num = Number(v);
+                                    setEdit(item.row, 'basePrice', !Number.isFinite(num) || num === item.basePrice ? undefined : num);
+                                  }}
+                                  display={() => (
+                                    isUpdate && item.existing
+                                      ? <DiffNumber prefix="₹" old={item.existing.basePrice} next={edits[item.row]?.basePrice ?? item.basePrice} />
+                                      : <span className="font-bold text-[#181725]">₹{(edits[item.row]?.basePrice ?? item.basePrice).toFixed(2)}</span>
+                                  )}
+                                />
                               </td>
                               <td className="px-3 py-3 text-right font-bold text-[#181725]">₹{item.grossRate.toFixed(2)}</td>
                               <td className="px-3 py-3 text-right">
-                                {isUpdate && item.existing ? (
-                                  <DiffNumber suffix="%" old={item.existing.taxPercent} next={item.taxPercent} />
-                                ) : (
-                                  <span className="text-[#7C7C7C]">{item.taxPercent}%</span>
-                                )}
+                                <EditableCell
+                                  type="number" step={0.01} min={0} max={100}
+                                  value={edits[item.row]?.taxPercent ?? item.taxPercent}
+                                  edited={edits[item.row]?.taxPercent !== undefined}
+                                  disabled={isSkipped}
+                                  onSave={(v) => {
+                                    const num = Number(v);
+                                    setEdit(item.row, 'taxPercent', !Number.isFinite(num) || num === item.taxPercent ? undefined : num);
+                                  }}
+                                  display={() => (
+                                    isUpdate && item.existing
+                                      ? <DiffNumber suffix="%" old={item.existing.taxPercent} next={edits[item.row]?.taxPercent ?? item.taxPercent} />
+                                      : <span className="text-[#7C7C7C]">{(edits[item.row]?.taxPercent ?? item.taxPercent)}%</span>
+                                  )}
+                                />
                               </td>
                               <td className="px-3 py-3 text-right">
-                                {item.stock !== undefined ? (
-                                  isUpdate && item.existing ? (
-                                    <DiffNumber old={item.existing.stock} next={item.stock} />
-                                  ) : (
-                                    <span className="text-[#7C7C7C]">{item.stock}</span>
-                                  )
+                                {(item.stock !== undefined || edits[item.row]?.stock !== undefined) ? (
+                                  <EditableCell
+                                    type="number" step={1} min={0}
+                                    value={edits[item.row]?.stock ?? item.stock ?? 0}
+                                    edited={edits[item.row]?.stock !== undefined}
+                                    disabled={isSkipped}
+                                    onSave={(v) => {
+                                      const num = Number(v);
+                                      setEdit(item.row, 'stock', !Number.isFinite(num) || num === (item.stock ?? 0) ? undefined : Math.floor(num));
+                                    }}
+                                    display={() => (
+                                      isUpdate && item.existing
+                                        ? <DiffNumber old={item.existing.stock} next={edits[item.row]?.stock ?? item.stock ?? 0} />
+                                        : <span className="text-[#7C7C7C]">{edits[item.row]?.stock ?? item.stock}</span>
+                                    )}
+                                  />
                                 ) : (
                                   <span className="text-[#DDDDDD]">—</span>
                                 )}
@@ -798,5 +919,102 @@ function DiffNumber({
         {fmt(nextValue)}
       </span>
     </span>
+  );
+}
+
+// ── EditableCell ─────────────────────────────────────────────────────
+// Click-to-edit cell used in the import review table. Renders the
+// `display()` output by default; on click swaps to an <input>/<select>
+// scoped to the cell. Enter or blur saves via `onSave`; Escape cancels.
+// `edited=true` adds a green left-border + check dot so the admin sees
+// at a glance which cells they've changed.
+function EditableCell({
+  type, value, edited, disabled, onSave, display, options, step, min, max,
+}: {
+  type: 'text' | 'number' | 'select';
+  value: string | number;
+  edited: boolean;
+  disabled?: boolean;
+  onSave: (v: string | number) => void;
+  display: (v: string | number) => React.ReactNode;
+  options?: string[];
+  step?: number;
+  min?: number;
+  max?: number;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+
+  // Sync draft when parent value changes (e.g. user reset edits) and
+  // we are NOT currently editing — otherwise typed input would be wiped.
+  // Wrapped in Promise.resolve().then() per the codebase convention for
+  // satisfying the react-hooks/set-state-in-effect lint rule.
+  useEffect(() => {
+    if (editing) return;
+    Promise.resolve().then(() => setDraft(String(value)));
+  }, [value, editing]);
+
+  if (disabled) {
+    return <div className={cn('px-1 py-0.5', edited && 'border-l-2 border-[#299E60] pl-2')}>{display(value)}</div>;
+  }
+
+  if (editing) {
+    const commit = () => {
+      setEditing(false);
+      if (draft === String(value)) return;
+      onSave(type === 'number' ? Number(draft) : draft);
+    };
+    const cancel = () => { setDraft(String(value)); setEditing(false); };
+    const baseCls = 'w-full h-[28px] border border-[#299E60] rounded-[6px] px-2 text-[12.5px] outline-none focus:ring-2 focus:ring-[#299E60]/20 bg-white';
+
+    if (type === 'select') {
+      return (
+        <select
+          autoFocus value={draft}
+          onChange={(e) => { setDraft(e.target.value); }}
+          onBlur={() => { setEditing(false); if (draft !== String(value)) onSave(draft); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+            if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+          }}
+          className={baseCls}
+        >
+          <option value="">— pick —</option>
+          {options?.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      );
+    }
+    return (
+      <input
+        autoFocus type={type}
+        step={step} min={min} max={max}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+          if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+        }}
+        className={cn(baseCls, type === 'number' && 'text-right tabular-nums')}
+      />
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      title="Click to edit"
+      className={cn(
+        'group block w-full text-left px-1 py-0.5 rounded-[4px] hover:bg-[#F0F7FF] transition-colors cursor-text',
+        edited && 'border-l-2 border-[#299E60] pl-2',
+      )}
+    >
+      <span className="inline-flex items-center gap-1">
+        {display(value)}
+        {edited
+          ? <Check size={10} className="text-[#299E60] opacity-80" />
+          : <Pencil size={10} className="text-[#AEAEAE] opacity-0 group-hover:opacity-100 transition-opacity" />}
+      </span>
+    </button>
   );
 }
