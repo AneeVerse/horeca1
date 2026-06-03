@@ -17,13 +17,17 @@ import { requirePermission } from '@/lib/permissions/engine';
 
 const rowSchema = z.object({
   name: z.string().min(1).max(200),
-  sku: z.string().min(1).max(100),
+  sku: z.string().max(100).optional().nullable(),
   basePrice: z.number().positive(),
-  packSize: z.string().optional(),
-  unit: z.string().optional(),
-  hsn: z.string().optional(),
-  taxPercent: z.number().min(0).max(100).optional(),
-  description: z.string().optional(),
+  packSize: z.string().optional().nullable(),
+  unit: z.string().optional().nullable(),
+  hsn: z.string().optional().nullable(),
+  taxPercent: z.number().min(0).max(100).optional().nullable(),
+  description: z.string().optional().nullable(),
+  brand: z.string().optional().nullable(),
+  category: z.string().optional().nullable(),
+  stock: z.number().int().min(0).optional().nullable(),
+  moq: z.number().int().positive().optional().nullable(),
 });
 
 const importSchema = z.object({
@@ -38,59 +42,128 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
 
     const { rows, defaultCategoryId } = importSchema.parse(await req.json());
 
+    // Clean up rows and auto-generate SKUs if missing
+    const processedRows = rows.map((r, i) => {
+      const sku = r.sku?.trim() || `SKU-${r.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}-${i}-${Math.floor(Math.random() * 1000)}`;
+      return { ...r, sku };
+    });
+
     // Fetch all existing vendor products by SKU for upsert lookup
     const existingBySku = new Map(
       (await prisma.product.findMany({
-        where: { vendorId, sku: { in: rows.map(r => r.sku) } },
+        where: { vendorId, sku: { in: processedRows.map(r => r.sku) } },
         select: { id: true, sku: true },
       })).map(p => [p.sku!, p.id]),
     );
 
-    let created = 0;
-    let updated = 0;
+    // Fetch all active categories to match category name/slug to ID
+    const categories = await prisma.category.findMany({
+      where: { isActive: true, approvalStatus: 'approved' },
+      select: { id: true, name: true, slug: true },
+    });
 
-    for (const row of rows) {
-      const existingId = existingBySku.get(row.sku);
-
-      if (existingId) {
-        await prisma.product.update({
-          where: { id: existingId },
-          data: {
-            name: row.name,
-            basePrice: row.basePrice,
-            packSize: row.packSize,
-            unit: row.unit,
-            hsn: row.hsn,
-            taxPercent: row.taxPercent,
-            description: row.description,
-          },
-        });
-        updated++;
-      } else {
-        const slug = `${row.sku.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`;
-        const product = await prisma.product.create({
-          data: {
-            name: row.name,
-            slug,
-            sku: row.sku,
-            vendorId,
-            basePrice: row.basePrice,
-            packSize: row.packSize,
-            unit: row.unit,
-            hsn: row.hsn,
-            taxPercent: row.taxPercent,
-            description: row.description,
-            categoryId: defaultCategoryId ?? null,
-            approvalStatus: 'pending',
-          },
-        });
-        // Create inventory row
-        await prisma.inventory.create({
-          data: { vendorId, productId: product.id, qtyAvailable: 0, qtyReserved: 0 },
-        });
-        created++;
-      }
+    const catMap = new Map<string, string>();
+    for (const cat of categories) {
+      catMap.set(cat.name.toLowerCase().trim(), cat.id);
+      catMap.set(cat.slug.toLowerCase().trim(), cat.id);
     }
+
+    const { created, updated } = await prisma.$transaction(async (tx) => {
+      let createdCount = 0;
+      let updatedCount = 0;
+
+      for (const row of processedRows) {
+        const existingId = existingBySku.get(row.sku);
+        const resolvedCategoryId = row.category 
+          ? (catMap.get(row.category.toLowerCase().trim()) ?? defaultCategoryId ?? null) 
+          : (defaultCategoryId ?? null);
+
+        if (existingId) {
+          // Update product fields
+          await tx.product.update({
+            where: { id: existingId },
+            data: {
+              name: row.name,
+              basePrice: row.basePrice,
+              packSize: row.packSize || undefined,
+              unit: row.unit || undefined,
+              hsn: row.hsn || undefined,
+              taxPercent: row.taxPercent !== null && row.taxPercent !== undefined ? row.taxPercent : undefined,
+              description: row.description || undefined,
+              brand: row.brand || undefined,
+              minOrderQty: row.moq || undefined,
+              categoryId: resolvedCategoryId || undefined,
+            },
+          });
+
+          // Update stock if specified
+          if (row.stock !== null && row.stock !== undefined) {
+            await tx.inventory.update({
+              where: { productId: existingId },
+              data: { qtyAvailable: row.stock },
+            });
+          }
+
+          // Link category in the join table
+          if (resolvedCategoryId) {
+            await tx.productCategory.upsert({
+              where: { productId_categoryId: { productId: existingId, categoryId: resolvedCategoryId } },
+              create: { productId: existingId, categoryId: resolvedCategoryId, isPrimary: true },
+              update: { isPrimary: true },
+            });
+          }
+
+          updatedCount++;
+        } else {
+          // Create product
+          const slug = `${row.sku.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+          const product = await tx.product.create({
+            data: {
+              name: row.name,
+              slug,
+              sku: row.sku,
+              vendorId,
+              basePrice: row.basePrice,
+              packSize: row.packSize || null,
+              unit: row.unit || null,
+              hsn: row.hsn || null,
+              taxPercent: row.taxPercent ?? 0,
+              description: row.description || null,
+              brand: row.brand || null,
+              minOrderQty: row.moq ?? 1,
+              categoryId: resolvedCategoryId,
+              approvalStatus: 'pending',
+            },
+          });
+
+          // Initialize inventory row
+          await tx.inventory.create({
+            data: {
+              vendorId,
+              productId: product.id,
+              qtyAvailable: row.stock ?? 0,
+              qtyReserved: 0,
+              lowStockThreshold: 10,
+            },
+          });
+
+          // Link category in the join table
+          if (resolvedCategoryId) {
+            await tx.productCategory.create({
+              data: {
+                productId: product.id,
+                categoryId: resolvedCategoryId,
+                isPrimary: true,
+              },
+            });
+          }
+
+          createdCount++;
+        }
+      }
+
+      return { created: createdCount, updated: updatedCount };
+    });
 
     return NextResponse.json({ success: true, created, updated, total: rows.length });
   } catch (error) {

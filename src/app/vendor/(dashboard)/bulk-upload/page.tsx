@@ -33,8 +33,8 @@ import { toast } from 'sonner';
 /*  Constants                                                           */
 /* ------------------------------------------------------------------ */
 
-const TEMPLATE_HEADERS = ['name', 'basePrice', 'unit', 'packSize', 'sku', 'taxPercent', 'description'];
-const TEMPLATE_EXAMPLE_ROW = ['Fresh Tomatoes', '120', 'kg', '10kg bag', 'SKU-001', '5', 'Farm-fresh red tomatoes'];
+const TEMPLATE_HEADERS = ['name', 'basePrice', 'unit', 'packSize', 'sku', 'taxPercent', 'description', 'brand', 'category', 'hsn', 'stock', 'moq'];
+const TEMPLATE_EXAMPLE_ROW = ['Fresh Tomatoes', '120', 'kg', '10kg bag', 'SKU-TOM-01', '5', 'Farm-fresh red tomatoes', 'DailyFresh', 'Vegetables', '07020000', '150', '5'];
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -50,6 +50,11 @@ interface RawRow {
     sku: string;
     taxPercent: string;
     description: string;
+    brand: string;
+    category: string;
+    hsn: string;
+    stock: string;
+    moq: string;
 }
 
 type ValidationError = string;
@@ -66,6 +71,11 @@ interface ParsedRow {
     sku?: string;
     taxPercent?: number;
     description?: string;
+    brand?: string;
+    category?: string;
+    hsn?: string;
+    stock?: number;
+    moq?: number;
 }
 
 type UploadStatus = 'idle' | 'parsing' | 'previewing' | 'uploading' | 'done';
@@ -115,12 +125,43 @@ function parseCSV(raw: string): string[][] {
     });
 }
 
-function validateRows(dataRows: string[][]): ParsedRow[] {
+function validateRows(dataRows: string[][], headerMap: Record<string, number>): ParsedRow[] {
     return dataRows
         .filter((row) => row.some((cell) => cell !== ''))
         .map((row, idx): ParsedRow => {
-            const [name = '', basePrice = '', unit = '', packSize = '', sku = '', taxPercent = '', description = ''] = row;
-            const raw: RawRow = { rowIndex: idx + 2, name, basePrice, unit, packSize, sku, taxPercent, description };
+            const getValue = (key: string) => {
+                const colIdx = headerMap[key];
+                return colIdx !== undefined && colIdx !== -1 ? (row[colIdx] || '') : '';
+            };
+
+            const name = getValue('name');
+            const basePrice = getValue('basePrice');
+            const unit = getValue('unit');
+            const packSize = getValue('packSize');
+            const sku = getValue('sku');
+            const taxPercent = getValue('taxPercent');
+            const description = getValue('description');
+            const brand = getValue('brand');
+            const category = getValue('category');
+            const hsn = getValue('hsn');
+            const stock = getValue('stock');
+            const moq = getValue('moq');
+
+            const raw: RawRow = {
+                rowIndex: idx + 2,
+                name,
+                basePrice,
+                unit,
+                packSize,
+                sku,
+                taxPercent,
+                description,
+                brand,
+                category,
+                hsn,
+                stock,
+                moq
+            };
             const errors: ValidationError[] = [];
 
             // name — required
@@ -136,13 +177,33 @@ function validateRows(dataRows: string[][]): ParsedRow[] {
                 errors.push(`Base price must be a positive number (got "${basePrice}")`);
             }
 
-            // taxPercent — optional, 0-28
+            // taxPercent — optional, 0-100
             let parsedTax: number | undefined;
             if (taxPercent.trim()) {
                 parsedTax = parseFloat(taxPercent);
-                if (isNaN(parsedTax) || parsedTax < 0 || parsedTax > 28) {
-                    errors.push(`Tax percent must be a number between 0 and 28 (got "${taxPercent}")`);
+                if (isNaN(parsedTax) || parsedTax < 0 || parsedTax > 100) {
+                    errors.push(`Tax percent must be a number between 0 and 100 (got "${taxPercent}")`);
                     parsedTax = undefined;
+                }
+            }
+
+            // stock — optional, non-negative integer
+            let parsedStock: number | undefined;
+            if (stock.trim()) {
+                parsedStock = parseInt(stock, 10);
+                if (isNaN(parsedStock) || parsedStock < 0) {
+                    errors.push(`Stock must be a non-negative integer (got "${stock}")`);
+                    parsedStock = undefined;
+                }
+            }
+
+            // moq — optional, positive integer
+            let parsedMoq: number | undefined;
+            if (moq.trim()) {
+                parsedMoq = parseInt(moq, 10);
+                if (isNaN(parsedMoq) || parsedMoq <= 0) {
+                    errors.push(`MOQ must be a positive integer (got "${moq}")`);
+                    parsedMoq = undefined;
                 }
             }
 
@@ -161,6 +222,11 @@ function validateRows(dataRows: string[][]): ParsedRow[] {
                 sku: sku.trim() || undefined,
                 taxPercent: parsedTax ?? 0,
                 description: description.trim() || undefined,
+                brand: brand.trim() || undefined,
+                category: category.trim() || undefined,
+                hsn: hsn.trim() || undefined,
+                stock: parsedStock,
+                moq: parsedMoq,
             };
         });
 }
@@ -221,9 +287,32 @@ export default function BulkUploadPage() {
                 setStatus('idle');
                 return;
             }
+
+            const headers = allRows[0].map((h) => h.toLowerCase().trim());
+            const headerMap: Record<string, number> = {
+                name: headers.indexOf('name'),
+                basePrice: headers.indexOf('baseprice') !== -1 ? headers.indexOf('baseprice') : headers.indexOf('price'),
+                unit: headers.indexOf('unit'),
+                packSize: headers.indexOf('packsize'),
+                sku: headers.indexOf('sku'),
+                taxPercent: headers.indexOf('taxpercent') !== -1 ? headers.indexOf('taxpercent') : headers.indexOf('gst'),
+                description: headers.indexOf('description'),
+                brand: headers.indexOf('brand'),
+                category: headers.indexOf('category'),
+                hsn: headers.indexOf('hsn'),
+                stock: headers.indexOf('stock') !== -1 ? headers.indexOf('stock') : headers.indexOf('qtyavailable'),
+                moq: headers.indexOf('moq') !== -1 ? headers.indexOf('moq') : headers.indexOf('minorderqty'),
+            };
+
+            if (headerMap.name === -1 || headerMap.basePrice === -1) {
+                toast.error('CSV must contain "name" and "basePrice" (or "price") columns');
+                setStatus('idle');
+                return;
+            }
+
             // Skip header row (index 0)
             const dataRows = allRows.slice(1);
-            const rows = validateRows(dataRows);
+            const rows = validateRows(dataRows, headerMap);
             setParsedRows(rows);
             setStatus('previewing');
         };
@@ -262,48 +351,59 @@ export default function BulkUploadPage() {
         setStatus('uploading');
         setUploadProgress(0);
         const results: UploadResult[] = [];
+        const chunkSize = 500;
+        const totalRows = validRows.length;
 
-        for (let i = 0; i < validRows.length; i++) {
-            const row = validRows[i];
-            const name = row.name!;
-            const payload = {
-                name,
-                slug: slugify(name),
+        for (let i = 0; i < totalRows; i += chunkSize) {
+            const chunk = validRows.slice(i, i + chunkSize);
+            const payloadRows = chunk.map(row => ({
+                name: row.name!,
+                sku: row.sku || undefined,
                 basePrice: row.basePrice!,
                 unit: row.unit,
                 packSize: row.packSize,
-                sku: row.sku,
-                taxPercent: row.taxPercent ?? 0,
+                taxPercent: row.taxPercent,
                 description: row.description,
-            };
+                brand: row.brand,
+                category: row.category,
+                hsn: row.hsn,
+                stock: row.stock,
+                moq: row.moq,
+            }));
 
             try {
-                const res = await fetch('/api/v1/vendor/products', {
+                const res = await fetch('/api/v1/vendor/products/bulk-import', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
+                    body: JSON.stringify({ rows: payloadRows }),
                 });
-                const json = (await res.json()) as { success: boolean; message?: string; error?: string };
+                const json = (await res.json()) as { success: boolean; message?: string; error?: string; created?: number; updated?: number };
                 if (res.ok && json.success) {
-                    results.push({ rowIndex: row.rowIndex, name, success: true });
+                    chunk.forEach(row => {
+                        results.push({ rowIndex: row.rowIndex, name: row.name!, success: true });
+                    });
                 } else {
-                    results.push({
-                        rowIndex: row.rowIndex,
-                        name,
-                        success: false,
-                        error: json.message ?? json.error ?? `HTTP ${res.status}`,
+                    chunk.forEach(row => {
+                        results.push({
+                            rowIndex: row.rowIndex,
+                            name: row.name!,
+                            success: false,
+                            error: json.message ?? json.error ?? `HTTP ${res.status}`,
+                        });
                     });
                 }
             } catch (err) {
-                results.push({
-                    rowIndex: row.rowIndex,
-                    name,
-                    success: false,
-                    error: err instanceof Error ? err.message : 'Network error',
+                chunk.forEach(row => {
+                    results.push({
+                        rowIndex: row.rowIndex,
+                        name: row.name!,
+                        success: false,
+                        error: err instanceof Error ? err.message : 'Network error',
+                    });
                 });
             }
 
-            setUploadProgress(i + 1);
+            setUploadProgress(Math.min(i + chunkSize, totalRows));
         }
 
         setUploadResults(results);
@@ -542,7 +642,11 @@ export default function BulkUploadPage() {
                                             <th className="text-left px-4 py-3 font-bold text-[#7C7C7C] uppercase tracking-wide text-[10px]">Pack Size</th>
                                             <th className="text-left px-4 py-3 font-bold text-[#7C7C7C] uppercase tracking-wide text-[10px]">SKU</th>
                                             <th className="text-right px-4 py-3 font-bold text-[#7C7C7C] uppercase tracking-wide text-[10px]">Tax %</th>
-                                            <th className="text-left px-4 py-3 font-bold text-[#7C7C7C] uppercase tracking-wide text-[10px]">Description</th>
+                                            <th className="text-left px-4 py-3 font-bold text-[#7C7C7C] uppercase tracking-wide text-[10px]">Brand</th>
+                                            <th className="text-left px-4 py-3 font-bold text-[#7C7C7C] uppercase tracking-wide text-[10px]">Category</th>
+                                            <th className="text-left px-4 py-3 font-bold text-[#7C7C7C] uppercase tracking-wide text-[10px]">HSN</th>
+                                            <th className="text-right px-4 py-3 font-bold text-[#7C7C7C] uppercase tracking-wide text-[10px]">Stock</th>
+                                            <th className="text-right px-4 py-3 font-bold text-[#7C7C7C] uppercase tracking-wide text-[10px]">MOQ</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-[#EEEEEE]">
@@ -555,11 +659,13 @@ export default function BulkUploadPage() {
                                                 </td>
                                                 <td className="px-4 py-3 text-[#7C7C7C]">{row.unit || <span className="text-[#AEAEAE]">—</span>}</td>
                                                 <td className="px-4 py-3 text-[#7C7C7C]">{row.packSize || <span className="text-[#AEAEAE]">—</span>}</td>
-                                                <td className="px-4 py-3 text-[#7C7C7C]">{row.sku || <span className="text-[#AEAEAE]">—</span>}</td>
+                                                <td className="px-4 py-3 text-[#7C7C7C]">{row.sku || <span className="text-[#AEAEAE]">auto-generated</span>}</td>
                                                 <td className="px-4 py-3 text-right text-[#7C7C7C]">{row.taxPercent ?? 0}%</td>
-                                                <td className="px-4 py-3 text-[#7C7C7C] max-w-[200px] truncate">
-                                                    {row.description || <span className="text-[#AEAEAE]">—</span>}
-                                                </td>
+                                                <td className="px-4 py-3 text-[#7C7C7C]">{row.brand || <span className="text-[#AEAEAE]">—</span>}</td>
+                                                <td className="px-4 py-3 text-[#7C7C7C]">{row.category || <span className="text-[#AEAEAE]">—</span>}</td>
+                                                <td className="px-4 py-3 text-[#7C7C7C]">{row.hsn || <span className="text-[#AEAEAE]">—</span>}</td>
+                                                <td className="px-4 py-3 text-right text-[#7C7C7C]">{row.stock !== undefined ? row.stock : <span className="text-[#AEAEAE]">0</span>}</td>
+                                                <td className="px-4 py-3 text-right text-[#7C7C7C]">{row.moq !== undefined ? row.moq : <span className="text-[#AEAEAE]">1</span>}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -672,9 +778,14 @@ export default function BulkUploadPage() {
                                 { col: 'basePrice', req: true, note: 'Selling price — positive number (e.g. 120 or 120.50)' },
                                 { col: 'unit', req: false, note: 'Unit of measure — kg, litre, piece, box, etc.' },
                                 { col: 'packSize', req: false, note: 'Pack description — "10kg bag", "24-pack", etc.' },
-                                { col: 'sku', req: false, note: 'Your internal SKU code' },
-                                { col: 'taxPercent', req: false, note: 'GST rate: 0, 5, 12, 18, or 28 (defaults to 0)' },
+                                { col: 'sku', req: false, note: 'Your internal SKU code (auto-generated if blank)' },
+                                { col: 'taxPercent', req: false, note: 'GST rate: 0 to 100 (defaults to 0)' },
                                 { col: 'description', req: false, note: 'Short product description' },
+                                { col: 'brand', req: false, note: 'Brand name' },
+                                { col: 'category', req: false, note: 'Category or sub-category name to match' },
+                                { col: 'hsn', req: false, note: 'HSN code for tax invoicing' },
+                                { col: 'stock', req: false, note: 'Initial stock quantity (defaults to 0)' },
+                                { col: 'moq', req: false, note: 'Minimum Order Quantity (defaults to 1)' },
                             ].map(({ col, req, note }) => (
                                 <tr key={col}>
                                     <td className="py-2.5 pr-6 font-mono font-semibold text-[#181725]">{col}</td>

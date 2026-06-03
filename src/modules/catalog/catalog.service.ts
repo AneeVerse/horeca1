@@ -295,14 +295,6 @@ export class CatalogService {
     });
     if (!product) throw Errors.notFound('Product');
 
-    // Vendors cannot change name, brand, or images on approved products
-    if (product.approvalStatus === 'approved') {
-      delete data.name;
-      delete data.brand;
-      delete data.imageUrl;
-      delete data.images;
-    }
-
     // Pull categoryIds out of the main update payload — ProductCategory is a
     // separate table. When provided, replace the existing set and sync
     // Product.categoryId to the first entry (the new primary).

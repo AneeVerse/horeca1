@@ -1399,7 +1399,7 @@ export default function VendorProductsPage() {
                     {/* Panel */}
                     <div
                         ref={panelRef}
-                        className="fixed top-0 right-0 z-50 h-full w-full max-w-[680px] bg-[#F8F9FA] shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-300"
+                        className="fixed top-0 right-0 z-[10002] h-full w-full max-w-[680px] bg-[#F8F9FA] shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-300"
                     >
                         {/* Panel Header */}
                         <div className="sticky top-0 z-10 bg-white border-b border-[#EEEEEE] px-6 py-5 flex items-center justify-between">
@@ -1449,13 +1449,11 @@ export default function VendorProductsPage() {
                                     </div>
                                 )}
 
-                                {/* Locked fields notice for approved / based-on products */}
-                                {(editingProduct?.approvalStatus === 'approved' || basedOnProductId) && (
+                                {/* Locked fields notice for based-on products */}
+                                {basedOnProductId && (
                                     <div className="bg-[#FFF8E1] text-[#8B6914] text-[13px] font-medium p-3.5 rounded-[10px] flex items-center gap-2">
                                         <Info size={16} className="shrink-0" />
-                                        {editingProduct?.approvalStatus === 'approved'
-                                            ? 'Product Name, Brand, and Images are locked after approval. Contact admin to change them.'
-                                            : 'Name, Brand, and Images are pre-filled from the approved product and cannot be changed.'}
+                                        Name, Brand, and Images are pre-filled from the approved product and cannot be changed.
                                     </div>
                                 )}
 
@@ -1473,9 +1471,9 @@ export default function VendorProductsPage() {
                                                     value={form.name}
                                                     onChange={(e) => handleNameChange(e.target.value)}
                                                     onFocus={() => { if ((suggestions.length > 0 || brandSuggestions.length > 0) && !editingProduct) setShowSuggestions(true); }}
-                                                    className={cn(inputCls, (editingProduct?.approvalStatus === 'approved' || basedOnProductId) && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
+                                                    className={cn(inputCls, basedOnProductId && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
                                                     placeholder="e.g., Premium Basmati Rice"
-                                                    disabled={editingProduct?.approvalStatus === 'approved' || !!basedOnProductId}
+                                                    disabled={!!basedOnProductId}
                                                 />
                                                 {loadingSuggestions && (
                                                     <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-[#AEAEAE]" />
@@ -1674,9 +1672,9 @@ export default function VendorProductsPage() {
                                                         list="brand-options"
                                                         value={form.brand}
                                                         onChange={(e) => updateField('brand', e.target.value)}
-                                                        className={cn(inputCls, (editingProduct?.approvalStatus === 'approved' || basedOnProductId) && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
+                                                        className={cn(inputCls, basedOnProductId && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
                                                         placeholder="Select or type brand name"
-                                                        disabled={editingProduct?.approvalStatus === 'approved' || !!basedOnProductId}
+                                                        disabled={!!basedOnProductId}
                                                     />
                                                     <datalist id="brand-options">
                                                         {brands.map(b => (
@@ -1941,7 +1939,7 @@ export default function VendorProductsPage() {
                                             folder="products"
                                             label="Primary Image"
                                             size="lg"
-                                            disabled={editingProduct?.approvalStatus === 'approved' || !!basedOnProductId}
+                                            disabled={!!basedOnProductId}
                                         />
 
                                         {/* Additional Images */}
@@ -1951,7 +1949,7 @@ export default function VendorProductsPage() {
                                             folder="products"
                                             label="Additional Images"
                                             max={8}
-                                            disabled={editingProduct?.approvalStatus === 'approved' || !!basedOnProductId}
+                                            disabled={!!basedOnProductId}
                                         />
                                     </div>
                                 </div>
