@@ -77,16 +77,14 @@ export function BusinessAccountSwitcherDropdown() {
     }
   }, [isOpen]);
 
-  // While the session is hydrating just render the trigger silently
+  // Empty-accounts fallback — this is the path for super admins who have
+  // role='admin' but no BusinessAccountMember rows of their own. The bare
+  // "Sign out" button used to be the only affordance, which made the
+  // header look broken (no identity, no menu). Render a proper user menu
+  // here so the admin still sees who they're signed in as + has the same
+  // dropdown shape as any other portal.
   if (!loading && accounts.length === 0) {
-    return (
-      <button
-        onClick={signOut}
-        className="px-3 py-1.5 text-[13px] font-semibold text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-      >
-        Sign out
-      </button>
-    );
+    return <UserOnlyMenu session={session} signOut={signOut} hcidDisplay={hcidDisplay} />;
   }
 
   const displayName = currentAccount?.displayName ?? currentAccount?.legalName ?? 'Account';
@@ -351,6 +349,123 @@ export function BusinessAccountSwitcherDropdown() {
           isOpen={showCreateAccount}
           onClose={() => setShowCreateAccount(false)}
         />
+      )}
+    </div>
+  );
+}
+
+// ─── User-only fallback menu ───────────────────────────────────────────
+// Used when the signed-in user has zero BusinessAccountMember rows. The
+// typical case is super admin (User.role='admin') — they don't need a
+// vendor / customer BA to manage the platform but they still deserve to
+// see "who am I signed in as?" feedback at the top-right.
+
+type SessionLike = ReturnType<typeof useSession>['data'];
+
+interface RoleConf { color: string; bg: string; label: string }
+
+const ROLE_STYLE_FALLBACK: Record<string, RoleConf> = {
+  admin:    { color: '#DC2626', bg: '#FEE2E2', label: 'Admin' },
+  vendor:   { color: '#299E60', bg: '#DCFCE7', label: 'Vendor' },
+  brand:    { color: '#7C3AED', bg: '#EDE9FE', label: 'Brand' },
+  customer: { color: '#2563EB', bg: '#DBEAFE', label: 'Customer' },
+  delivery: { color: '#EA580C', bg: '#FED7AA', label: 'Delivery' },
+};
+
+function UserOnlyMenu({
+  session,
+  signOut,
+  hcidDisplay,
+}: {
+  session: SessionLike;
+  signOut: () => void;
+  hcidDisplay: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) {
+      document.addEventListener('mousedown', onMouseDown);
+      return () => document.removeEventListener('mousedown', onMouseDown);
+    }
+  }, [open]);
+
+  const u = (session?.user ?? {}) as { name?: string; fullName?: string; email?: string; role?: string };
+  const name = u.fullName || u.name || u.email || 'Signed in';
+  const email = u.email ?? '';
+  const role = (u.role ?? 'admin').toLowerCase();
+  const conf = ROLE_STYLE_FALLBACK[role] ?? ROLE_STYLE_FALLBACK.admin;
+  const initials = initialsOf(name);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-3 cursor-pointer group"
+      >
+        <div
+          className="w-[42px] h-[42px] rounded-full flex items-center justify-center shrink-0 ring-2 ring-white shadow-sm"
+          style={{ backgroundColor: conf.bg }}
+        >
+          <span className="text-[12px] font-bold" style={{ color: conf.color }}>{initials}</span>
+        </div>
+        <div className="flex flex-col items-start min-w-0">
+          <span className="text-[14px] font-bold text-[#181725] truncate max-w-[180px]">{name}</span>
+          <span className="text-[11px] text-[#666] truncate max-w-[180px]">{conf.label}</span>
+        </div>
+        <ChevronDown
+          size={16}
+          className={`text-[#AEAEAE] group-hover:text-[#181725] transition-all duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+8px)] w-[300px] bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-[#F0F0F0] z-50 overflow-hidden">
+          <div className="p-4 border-b border-[#F0F0F0]">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-[44px] h-[44px] rounded-full flex items-center justify-center shrink-0"
+                style={{ backgroundColor: conf.bg }}
+              >
+                <ShieldCheck size={20} style={{ color: conf.color }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-bold text-[#181725] truncate">{name}</p>
+                {email && <p className="text-[12px] text-[#666] truncate">{email}</p>}
+                {hcidDisplay && (
+                  <p className="text-[11px] text-[#AEAEAE] font-mono mt-0.5">{hcidDisplay}</p>
+                )}
+              </div>
+              <span
+                className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                style={{ color: conf.color, backgroundColor: conf.bg }}
+              >
+                {conf.label}
+              </span>
+            </div>
+          </div>
+          <div className="py-1">
+            <Link
+              href="/profile"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-3 px-4 py-3 hover:bg-[#FAFAFA] transition-colors"
+            >
+              <User size={16} className="text-[#7C7C7C]" />
+              <span className="text-[13px] font-semibold text-[#181725]">My profile</span>
+            </Link>
+            <button
+              onClick={signOut}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition-colors"
+            >
+              <LogOut size={16} className="text-red-500" />
+              <span className="text-[13px] font-semibold text-red-500">Sign out</span>
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
