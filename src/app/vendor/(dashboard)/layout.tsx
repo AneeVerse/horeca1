@@ -48,6 +48,7 @@ import {
     Tag,
     Gift,
     Upload,
+    BadgeIndianRupee,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
@@ -80,6 +81,7 @@ const SIDEBAR_LINKS: VendorSidebarLink[] = [
     { name: 'Reports',       icon: BarChart3,       href: '/vendor/reports',        requiredPerm: 'analytics.view' },
     { name: 'Notifications', icon: Bell,            href: '/vendor/notifications' },
     { name: 'Team',          icon: Users,           href: '/vendor/team',           requiredPerm: ['users.view', 'users.create', 'users.edit', 'users.delete'] },
+    { name: 'Sales Team',    icon: BadgeIndianRupee,href: '/vendor/sales-team',     requiredPerm: ['salespersons.view', 'commissions.view'] },
     { name: 'Settings',      icon: Settings,        href: '/vendor/settings',       requiredPerm: 'settings.view' },
 ];
 
