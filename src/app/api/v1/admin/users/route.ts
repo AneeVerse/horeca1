@@ -13,7 +13,7 @@ import { requirePermission } from '@/lib/permissions/engine';
 import { withRateLimit } from '@/middleware/withRateLimit';
 import { provisionDefaultAccount } from '@/lib/provisionAccount';
 import { uniqueHcid } from '@/lib/hcid';
-import type { Role } from '@prisma/client';
+import type { Role, CreditStatus } from '@prisma/client';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -27,10 +27,17 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
     const params = req.nextUrl.searchParams;
     const role = params.get('role') as Role | null;
     const search = params.get('search') || undefined;
+    const pincode = params.get('pincode') || undefined;
+    const salesExecutive = params.get('salesExecutive') || undefined;
+    const creditStatus = params.get('creditStatus') || undefined;
+    const area = params.get('area') || undefined;
+    const tag = params.get('tag') || undefined;
     const cursor = params.get('cursor') || undefined;
     const limit = Math.min(Number(params.get('limit')) || 20, 100);
 
-    // Build where clause
+    // Build where clause. `Record<string, unknown>` is enough — every
+    // shape we push in here is a valid Prisma where-clause fragment,
+    // and the runtime call validates the shape anyway.
     const where: Record<string, unknown> = {};
 
     if (role) {
@@ -43,7 +50,68 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
         { email: { contains: search, mode: 'insensitive' } },
         { phone: { contains: search } },
         { businessName: { contains: search, mode: 'insensitive' } },
+        { hcidDisplay: { contains: search, mode: 'insensitive' } },
       ];
+    }
+
+    const andConditions: Record<string, unknown>[] = [];
+
+    if (pincode) {
+      andConditions.push({
+        OR: [
+          { pincode: pincode },
+          { accountMemberships: { some: { businessAccount: { outlets: { some: { pincode } } } } } },
+        ],
+      });
+    }
+
+    if (salesExecutive) {
+      andConditions.push({
+        vendorCustomers: { some: { salesExecutive: { contains: salesExecutive, mode: 'insensitive' } } },
+      });
+    }
+
+    if (creditStatus) {
+      // creditStatus comes from the query string so it's typed `string`,
+      // but Prisma wants the CreditStatus enum. Validate at the edge,
+      // then narrow with the imported enum type.
+      andConditions.push({
+        creditAccounts: { some: { status: creditStatus as CreditStatus } },
+      });
+    }
+
+    if (area) {
+      andConditions.push({
+        OR: [
+          {
+            accountMemberships: {
+              some: {
+                businessAccount: {
+                  outlets: {
+                    some: {
+                      OR: [
+                        { city: { contains: area, mode: 'insensitive' } },
+                        { state: { contains: area, mode: 'insensitive' } },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          { vendorCustomers: { some: { territory: { contains: area, mode: 'insensitive' } } } },
+        ],
+      });
+    }
+
+    if (tag) {
+      andConditions.push({
+        vendorCustomers: { some: { tags: { has: tag } } },
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     const users = await prisma.user.findMany({
@@ -61,8 +129,63 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
         phone: true,
         role: true,
         businessName: true,
+        gstNumber: true,
+        pincode: true,
         isActive: true,
+        hcidDisplay: true,
         createdAt: true,
+        accountMemberships: {
+          select: {
+            isPrimary: true,
+            businessAccount: {
+              select: {
+                id: true,
+                legalName: true,
+                displayName: true,
+                gstin: true,
+                pan: true,
+                fssaiNumber: true,
+                billingAddressLine: true,
+                billingCity: true,
+                billingState: true,
+                billingPincode: true,
+                status: true,
+                outlets: {
+                  select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    addressLine: true,
+                    city: true,
+                    state: true,
+                    pincode: true,
+                    isActive: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        vendorCustomers: {
+          select: {
+            id: true,
+            vendorId: true,
+            status: true,
+            territory: true,
+            salesExecutive: true,
+            tags: true,
+            paymentTerms: true,
+          },
+        },
+        creditAccounts: {
+          select: {
+            id: true,
+            vendorId: true,
+            creditLimit: true,
+            creditUsed: true,
+            status: true,
+          },
+        },
       },
     });
 

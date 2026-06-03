@@ -37,6 +37,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
         pincode: true,
         image: true,
         isActive: true,
+        hcidDisplay: true,
         createdAt: true,
         updatedAt: true,
         vendors: {
@@ -46,6 +47,58 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
             isVerified: true,
             isActive: true,
             rating: true,
+          },
+        },
+        accountMemberships: {
+          select: {
+            isPrimary: true,
+            businessAccount: {
+              select: {
+                id: true,
+                legalName: true,
+                displayName: true,
+                gstin: true,
+                pan: true,
+                fssaiNumber: true,
+                billingAddressLine: true,
+                billingCity: true,
+                billingState: true,
+                billingPincode: true,
+                status: true,
+                outlets: {
+                  select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    addressLine: true,
+                    city: true,
+                    state: true,
+                    pincode: true,
+                    isActive: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        vendorCustomers: {
+          select: {
+            id: true,
+            vendorId: true,
+            status: true,
+            territory: true,
+            salesExecutive: true,
+            tags: true,
+            paymentTerms: true,
+          },
+        },
+        creditAccounts: {
+          select: {
+            id: true,
+            vendorId: true,
+            creditLimit: true,
+            creditUsed: true,
+            status: true,
           },
         },
         _count: {
@@ -74,6 +127,12 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     const id = extractId(req);
     const body = await req.json();
 
+    // Verify user exists
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) {
+      throw Errors.notFound('User');
+    }
+
     // Only allow updating specific admin-controlled fields
     const allowedFields: Record<string, unknown> = {};
     if (typeof body.isActive === 'boolean') {
@@ -83,9 +142,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       // Admin role transitions must go through /admin/team to ensure the
       // AdminTeamMember row + AccountRole assignment stay consistent. This
       // endpoint must not be a back-door for self-promotion.
-      const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
-      if (!target) throw Errors.notFound('User');
-      if (body.role === 'admin' || target.role === 'admin') {
+      if (body.role === 'admin' || existing.role === 'admin') {
         throw Errors.forbidden('Admin role transitions are managed via the admin team page');
       }
       allowedFields.role = body.role;
@@ -123,40 +180,146 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     }
     if (typeof body.password === 'string' && body.password.length > 0) {
       if (body.password.length < 6) throw Errors.badRequest('Password must be at least 6 characters');
-      // Password resets on admin users must go through /admin/team/[id]/password
-      // where the target's rank can be compared against the caller's. Allowing
-      // it here would let any admin with users.edit take over the super-admin.
-      const tgt = await prisma.user.findUnique({ where: { id }, select: { role: true } });
-      if (!tgt) throw Errors.notFound('User');
-      if (tgt.role === 'admin') {
+      if (existing.role === 'admin') {
         throw Errors.forbidden('Use /admin/team to reset another admin\'s password');
       }
       allowedFields.password = await bcrypt.hash(body.password, 10);
     }
 
-    if (Object.keys(allowedFields).length === 0) {
+    const hasBizAccountUpdates = !!(body.companyProfile || body.outlets || body.vendorMapping);
+    if (Object.keys(allowedFields).length === 0 && !hasBizAccountUpdates) {
       throw Errors.badRequest('No valid fields to update');
     }
 
-    // Verify user exists
-    const existing = await prisma.user.findUnique({ where: { id } });
-    if (!existing) {
-      throw Errors.notFound('User');
-    }
+    const updated = await prisma.$transaction(async (tx) => {
+      // 1. Update user if user fields are specified
+      let user = existing;
+      if (Object.keys(allowedFields).length > 0) {
+        user = await tx.user.update({
+          where: { id },
+          data: allowedFields,
+        });
+      }
 
-    const updated = await prisma.user.update({
-      where: { id },
-      data: allowedFields,
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        role: true,
-        businessName: true,
-        isActive: true,
-        updatedAt: true,
-      },
+      // 2. Update BusinessAccount if companyProfile is specified
+      if (body.companyProfile) {
+        const membership = await tx.businessAccountMember.findFirst({
+          where: { userId: id, isPrimary: true },
+          select: { businessAccountId: true },
+        });
+
+        if (membership) {
+          const cp = body.companyProfile;
+          await tx.businessAccount.update({
+            where: { id: membership.businessAccountId },
+            data: {
+              legalName: cp.legalName !== undefined ? cp.legalName : undefined,
+              displayName: cp.displayName !== undefined ? cp.displayName : undefined,
+              gstin: cp.gstin !== undefined ? cp.gstin : undefined,
+              pan: cp.pan !== undefined ? cp.pan : undefined,
+              fssaiNumber: cp.fssaiNumber !== undefined ? cp.fssaiNumber : undefined,
+              billingAddressLine: cp.billingAddressLine !== undefined ? cp.billingAddressLine : undefined,
+              billingCity: cp.billingCity !== undefined ? cp.billingCity : undefined,
+              billingState: cp.billingState !== undefined ? cp.billingState : undefined,
+              billingPincode: cp.billingPincode !== undefined ? cp.billingPincode : undefined,
+            },
+          });
+        }
+      }
+
+      // 3. Update/Create Outlets if outlets array is specified
+      if (Array.isArray(body.outlets)) {
+        const membership = await tx.businessAccountMember.findFirst({
+          where: { userId: id, isPrimary: true },
+          select: { businessAccountId: true },
+        });
+
+        if (membership) {
+          const bizAccountId = membership.businessAccountId;
+          for (const o of body.outlets) {
+            if (o.id) {
+              await tx.outlet.update({
+                where: { id: o.id, businessAccountId: bizAccountId },
+                data: {
+                  name: o.name !== undefined ? o.name : undefined,
+                  code: o.code !== undefined ? o.code : undefined,
+                  addressLine: o.addressLine !== undefined ? o.addressLine : undefined,
+                  city: o.city !== undefined ? o.city : undefined,
+                  state: o.state !== undefined ? o.state : undefined,
+                  pincode: o.pincode !== undefined ? o.pincode : undefined,
+                  isActive: typeof o.isActive === 'boolean' ? o.isActive : undefined,
+                },
+              });
+            } else {
+              await tx.outlet.create({
+                data: {
+                  businessAccountId: bizAccountId,
+                  name: o.name,
+                  code: o.code || null,
+                  addressLine: o.addressLine,
+                  city: o.city || null,
+                  state: o.state || null,
+                  pincode: o.pincode || null,
+                  isActive: typeof o.isActive === 'boolean' ? o.isActive : true,
+                },
+              });
+            }
+          }
+        }
+      }
+
+      // 4. Update vendor customer mapping if specified
+      if (body.vendorMapping && body.vendorMapping.vendorId) {
+        const vm = body.vendorMapping;
+        const vcData: Record<string, unknown> = {};
+        if (vm.salesExecutive !== undefined) {
+          vcData.salesExecutive = vm.salesExecutive || null;
+        }
+        if (vm.territory !== undefined) {
+          vcData.territory = vm.territory || null;
+        }
+        if (Array.isArray(vm.tags)) {
+          vcData.tags = vm.tags;
+        }
+        if (vm.status) {
+          vcData.status = vm.status;
+        }
+
+        await tx.vendorCustomer.upsert({
+          where: {
+            vendorId_userId: { vendorId: vm.vendorId, userId: id },
+          },
+          create: {
+            vendorId: vm.vendorId,
+            userId: id,
+            status: vm.status || 'active',
+            salesExecutive: vm.salesExecutive || null,
+            territory: vm.territory || null,
+            tags: vm.tags || [],
+          },
+          update: vcData,
+        });
+
+        // Sync credit account if credit settings are passed
+        if (vm.creditLimit !== undefined || vm.creditStatus !== undefined) {
+          await tx.creditAccount.upsert({
+            where: { userId_vendorId: { userId: id, vendorId: vm.vendorId } },
+            create: {
+              userId: id,
+              vendorId: vm.vendorId,
+              creditLimit: vm.creditLimit || 0,
+              creditUsed: 0,
+              status: vm.creditStatus || 'active',
+            },
+            update: {
+              creditLimit: vm.creditLimit !== undefined ? vm.creditLimit : undefined,
+              status: vm.creditStatus !== undefined ? vm.creditStatus : undefined,
+            },
+          });
+        }
+      }
+
+      return user;
     });
 
     return NextResponse.json({ success: true, data: updated });
