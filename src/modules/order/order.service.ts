@@ -3,6 +3,10 @@ import type { Prisma } from '@prisma/client';
 import { emitEvent } from '@/events/emitter';
 import { InventoryService } from '@/modules/inventory/inventory.service';
 import { Errors } from '@/middleware/errorHandler';
+import {
+  createAccrual as createCommissionAccrual,
+  findApplicableRule as findApplicableCommissionRule,
+} from '@/modules/commission/commission.service';
 
 interface VendorOrderInput {
   vendorId: string;
@@ -101,9 +105,13 @@ export class OrderService {
 
         // 3. Resolve customer-specific pricing (VendorCustomer → PriceList → PriceListItem)
         // Falls back to standard base/slab pricing when no custom pricing is configured.
+        // V2.2 Phase 1: also reads salespersonId so the order can be snapshotted
+        // with the rep at creation time. Commission attribution is then immune
+        // to the customer being later reassigned to a different rep.
         const vendorCustomer = await tx.vendorCustomer.findUnique({
           where: { vendorId_userId: { vendorId: vo.vendorId, userId } },
-          include: {
+          select: {
+            salespersonId: true,
             priceList: {
               select: {
                 discountPercent: true,
@@ -239,7 +247,9 @@ export class OrderService {
         // 4. Generate order number
         const orderNumber = `PO-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
 
-        // 5. Create order
+        // 5. Create order — salespersonId snapshotted from VendorCustomer
+        // (null if no rep assigned) so commission attribution survives later
+        // reassignment of the customer's salesperson.
         const order = await tx.order.create({
           data: {
             orderNumber,
@@ -256,6 +266,7 @@ export class OrderService {
             paymentMethod: input.paymentMethod,
             deliverySlotId: vo.deliverySlotId,
             notes: vo.notes,
+            salespersonId: vendorCustomer?.salespersonId ?? null,
             items: { create: itemDetails },
           },
           include: { items: true },
@@ -434,7 +445,17 @@ export class OrderService {
     return prisma.$transaction(async (tx) => {
       const order = await tx.order.findFirst({
         where: { id: orderId, vendorId },
-        include: { items: { select: { productId: true, quantity: true } } },
+        include: {
+          items: {
+            select: {
+              productId: true,
+              quantity: true,
+              // categoryId needed to resolve category-scoped commission rules
+              // at delivery time. Tiny extra row; cheap to include.
+              product: { select: { categoryId: true } },
+            },
+          },
+        },
       });
       if (!order) throw Errors.notFound('Order');
 
@@ -530,6 +551,67 @@ export class OrderService {
               });
             }
           }
+        }
+      }
+
+      // V2.2 Phase 1 — Commission accrual hook.
+      //
+      // When an order is delivered AND a salesperson was attributed at order
+      // creation, find the most-specific active commission rule and write
+      // a pending CommissionAccrual. Idempotent — the (orderId, salespersonId)
+      // unique constraint stops double-write if updateStatus is retried.
+      //
+      // The hook runs INSIDE the same transaction as the status update so
+      // an accrual is either written-with-delivery or not at all (no race
+      // window where the order is delivered but accrual missing). The
+      // service falls back silently if no rule matches — the brief says
+      // commissions are opt-in, not mandatory.
+      if (status === 'delivered' && order.salespersonId) {
+        const vendorCustomer = await tx.vendorCustomer.findUnique({
+          where: { vendorId_userId: { vendorId, userId: order.userId } },
+          select: { id: true },
+        });
+        // Category ids from the items. Brand resolution is deferred —
+        // Product.brand is a free-text name today; brand-scoped commission
+        // rules will activate once the brand-mapping layer is the source
+        // of truth (separate Phase task).
+        const categoryIds = Array.from(
+          new Set(
+            order.items
+              .map((i) => i.product?.categoryId)
+              .filter((id): id is string => !!id),
+          ),
+        );
+        const rule = await findApplicableCommissionRule(
+          {
+            vendorId,
+            salespersonId: order.salespersonId,
+            order: {
+              id: order.id,
+              totalAmount: order.totalAmount,
+              createdAt: order.createdAt,
+              userId: order.userId,
+            },
+            vendorCustomerId: vendorCustomer?.id ?? null,
+            brandIds: [],
+            categoryIds,
+          },
+          tx,
+        );
+        if (rule) {
+          await createCommissionAccrual(
+            {
+              order: {
+                id: order.id,
+                vendorId,
+                totalAmount: order.totalAmount,
+                createdAt: order.createdAt,
+                salespersonId: order.salespersonId,
+              },
+              rule,
+            },
+            tx,
+          );
         }
       }
 
