@@ -259,7 +259,7 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
       {/* Modal */}
       <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
         <div
-          className="bg-white rounded-[20px] border border-[#EEEEEE] shadow-2xl w-full max-w-[820px] max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200"
+          className="bg-white rounded-[20px] border border-[#EEEEEE] shadow-2xl w-full max-w-[1280px] max-h-[92vh] flex flex-col animate-in zoom-in-95 duration-200"
           onClick={e => e.stopPropagation()}
         >
           {/* ═══ Header ═══ */}
@@ -427,43 +427,80 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
                   </div>
                 )}
 
-                {/* ── List view ── */}
+                {/* ── List view ── full-detail table with old→new diff for
+                    update rows so admins see exactly what the import will
+                    change before clicking Confirm. Wider columns (Tax %,
+                    Stock, Slabs) become useful now that the modal is 1280px. */}
                 {viewMode === 'list' && preview.items.length > 0 && (
-                  <div className="border border-[#EEEEEE] rounded-[14px] overflow-hidden max-h-[340px] overflow-y-auto">
-                    <table className="w-full text-left text-[13px]">
+                  <div className="border border-[#EEEEEE] rounded-[14px] overflow-hidden max-h-[480px] overflow-y-auto">
+                    <table className="w-full text-left text-[12.5px]">
                       <thead className="bg-[#F8F9FB] sticky top-0 z-10">
                         <tr>
-                          <th className="px-4 py-3 font-bold text-[#7C7C7C] w-[50px]">Row</th>
-                          <th className="px-4 py-3 font-bold text-[#7C7C7C]">Product</th>
-                          <th className="px-4 py-3 font-bold text-[#7C7C7C] w-[90px]">Category</th>
-                          <th className="px-4 py-3 font-bold text-[#7C7C7C] w-[90px] text-right">Gross Rate</th>
-                          <th className="px-4 py-3 font-bold text-[#7C7C7C] w-[70px] text-center">Action</th>
-                          <th className="px-4 py-3 font-bold text-[#7C7C7C] w-[50px]"></th>
+                          <th className="px-3 py-3 font-bold text-[#7C7C7C] w-[44px]">Row</th>
+                          <th className="px-3 py-3 font-bold text-[#7C7C7C] w-[64px] text-center">Action</th>
+                          <th className="px-3 py-3 font-bold text-[#7C7C7C]">Product</th>
+                          <th className="px-3 py-3 font-bold text-[#7C7C7C] w-[110px]">SKU</th>
+                          <th className="px-3 py-3 font-bold text-[#7C7C7C] w-[110px]">Category</th>
+                          <th className="px-3 py-3 font-bold text-[#7C7C7C] w-[140px] text-right">Base Price</th>
+                          <th className="px-3 py-3 font-bold text-[#7C7C7C] w-[90px] text-right">Gross</th>
+                          <th className="px-3 py-3 font-bold text-[#7C7C7C] w-[64px] text-right">Tax %</th>
+                          <th className="px-3 py-3 font-bold text-[#7C7C7C] w-[110px] text-right">Stock</th>
+                          <th className="px-3 py-3 font-bold text-[#7C7C7C] w-[56px] text-center">Slabs</th>
+                          <th className="px-3 py-3 font-bold text-[#7C7C7C] w-[44px]"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#EEEEEE]">
                         {preview.items.map(item => {
                           const isSkipped = skipRows.has(item.row);
+                          const isUpdate = item.action === 'update' && item.existing;
                           return (
-                            <tr key={item.row} className={cn('transition-colors', isSkipped ? 'opacity-40 bg-[#FAFAFA]' : 'hover:bg-[#F8F9FB]')}>
-                              <td className="px-4 py-3 text-[#AEAEAE] font-mono text-[12px]">{item.row}</td>
-                              <td className="px-4 py-3">
-                                <p className={cn('font-semibold text-[#181725]', isSkipped && 'line-through')}>{item.name}</p>
-                                {item.sku && <p className="text-[11px] text-[#AEAEAE] font-medium">{item.sku}</p>}
-                              </td>
-                              <td className="px-4 py-3 text-[#7C7C7C] font-medium">{item.category || '—'}</td>
-                              <td className="px-4 py-3 text-right font-bold text-[#181725]">₹{item.grossRate.toFixed(2)}</td>
-                              <td className="px-4 py-3 text-center">
+                            <tr key={item.row} className={cn('transition-colors align-top', isSkipped ? 'opacity-40 bg-[#FAFAFA]' : 'hover:bg-[#F8F9FB]')}>
+                              <td className="px-3 py-3 text-[#AEAEAE] font-mono text-[11.5px] whitespace-nowrap">{item.row}</td>
+                              <td className="px-3 py-3 text-center">
                                 <span className={cn(
-                                  'inline-flex items-center gap-1 px-2 py-1 rounded-[6px] text-[11px] font-bold',
+                                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[10.5px] font-bold whitespace-nowrap',
                                   item.action === 'create' && 'bg-[#EEF8F1] text-[#299E60]',
                                   item.action === 'update' && 'bg-[#EFF6FF] text-[#3B82F6]',
                                 )}>
-                                  {item.action === 'create' && <><Plus size={10} /> New</>}
-                                  {item.action === 'update' && <><Pencil size={10} /> Update</>}
+                                  {item.action === 'create' ? <><Plus size={10} /> New</> : <><Pencil size={10} /> Update</>}
                                 </span>
                               </td>
-                              <td className="px-4 py-3">
+                              <td className="px-3 py-3">
+                                <p className={cn('font-semibold text-[#181725] leading-tight', isSkipped && 'line-through')}>{item.name}</p>
+                                {isUpdate && item.existing && item.existing.name !== item.name && (
+                                  <p className="text-[10.5px] text-[#AEAEAE] mt-0.5 line-through truncate">{item.existing.name}</p>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 font-mono text-[11.5px] text-[#7C7C7C]">{item.sku || '—'}</td>
+                              <td className="px-3 py-3 text-[#7C7C7C]">{item.category || '—'}</td>
+                              <td className="px-3 py-3 text-right">
+                                {isUpdate && item.existing ? (
+                                  <DiffNumber prefix="₹" old={item.existing.basePrice} next={item.basePrice} />
+                                ) : (
+                                  <span className="font-bold text-[#181725]">₹{item.basePrice.toFixed(2)}</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 text-right font-bold text-[#181725]">₹{item.grossRate.toFixed(2)}</td>
+                              <td className="px-3 py-3 text-right">
+                                {isUpdate && item.existing ? (
+                                  <DiffNumber suffix="%" old={item.existing.taxPercent} next={item.taxPercent} />
+                                ) : (
+                                  <span className="text-[#7C7C7C]">{item.taxPercent}%</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 text-right">
+                                {item.stock !== undefined ? (
+                                  isUpdate && item.existing ? (
+                                    <DiffNumber old={item.existing.stock} next={item.stock} />
+                                  ) : (
+                                    <span className="text-[#7C7C7C]">{item.stock}</span>
+                                  )
+                                ) : (
+                                  <span className="text-[#DDDDDD]">—</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 text-center text-[#7C7C7C]">{item.bulkSlabCount || '—'}</td>
+                              <td className="px-3 py-3">
                                 <button
                                   onClick={() => toggleSkip(item.row)}
                                   title={isSkipped ? 'Include this row' : 'Skip this row'}
@@ -728,5 +765,38 @@ function FieldRow({ label, value, changed }: { label: string; value: string; cha
         {value}
       </span>
     </div>
+  );
+}
+
+// ── DiffNumber ────────────────────────────────────────────────────────
+// Renders OLD → NEW with red/green tinting based on direction. Used on
+// the import review table so the admin sees exactly what an Update will
+// change. Unchanged values render plain so the eye filters to the deltas.
+function DiffNumber({
+  old: oldValue,
+  next: nextValue,
+  prefix = '',
+  suffix = '',
+}: {
+  old: number;
+  next: number;
+  prefix?: string;
+  suffix?: string;
+}) {
+  const fmt = (n: number) => {
+    const s = Number.isInteger(n) ? String(n) : n.toFixed(2);
+    return `${prefix}${s}${suffix}`;
+  };
+  if (oldValue === nextValue) {
+    return <span className="text-[#7C7C7C]">{fmt(nextValue)}</span>;
+  }
+  const dir = nextValue > oldValue ? 'up' : 'down';
+  return (
+    <span className="inline-flex items-center justify-end gap-1 whitespace-nowrap">
+      <span className="text-[#AEAEAE] line-through text-[11px]">{fmt(oldValue)}</span>
+      <span className={cn('font-bold', dir === 'up' ? 'text-[#299E60]' : 'text-[#E74C3C]')}>
+        {fmt(nextValue)}
+      </span>
+    </span>
   );
 }

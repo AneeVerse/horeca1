@@ -41,12 +41,16 @@ function toTaxable(gross: number, taxPercent: number): number {
 
 // Schema matches the spreadsheet column headers exactly
 const productImportRowSchema = z.object({
-  'SKU': z.string().optional(),
-  'Product Name': z.string().min(1, 'Product Name is required'),
+  // Coerce string fields — Excel often types pure-digit cells as numbers,
+  // so `'2013'` arrives as the number 2013. z.string().optional() rejects
+  // that with "expected string, received number" which is the #1 cause of
+  // import failure today. z.coerce.string() accepts both shapes.
+  'SKU': z.coerce.string().optional(),
+  'Product Name': z.coerce.string().min(1, 'Product Name is required'),
   'HSN': z.coerce.string().optional(),
-  'Unit': z.string().optional(),
-  'Brand': z.string().optional(),
-  'Category': z.string().optional(),
+  'Unit': z.coerce.string().optional(),
+  'Brand': z.coerce.string().optional(),
+  'Category': z.coerce.string().optional(),
   'Taxable Rate (Amt)': z.coerce.number().positive('Taxable Rate must be > 0'),
   'Tax %': z.coerce.number().min(0).max(100).optional(),
   'Gross Rate 1Pc (visible to the Customer)': z.coerce.number().optional(),
@@ -60,8 +64,8 @@ const productImportRowSchema = z.object({
   '6pm to 9am Bulk Rates 2 - Qty': z.coerce.number().int().min(1).optional(),
   '6pm to 9am Bulk Rates 2 - Gross Rate / Unit': z.coerce.number().positive().optional(),
   'Available Stock': z.coerce.number().int().min(0).optional(),
-  'product image url': z.string().optional(),
-  'Image Name': z.string().optional(),
+  'product image url': z.coerce.string().optional(),
+  'Image Name': z.coerce.string().optional(),
 });
 
 export type RawImportRow = z.infer<typeof productImportRowSchema>;
@@ -465,4 +469,108 @@ export function exportCategoriesToCsv(categories: CategoryExportRow[]): string {
   const ws = XLSX.utils.json_to_sheet(data);
   XLSX.utils.book_append_sheet(wb, ws, 'Categories');
   return XLSX.utils.sheet_to_csv(ws);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Customer Import
+// ══════════════════════════════════════════════════════════════════════════════
+
+const customerImportRowSchema = z.object({
+  'Name': z.string().min(1, 'Name is required'),
+  'Phone': z.coerce.string().min(5, 'Phone must be at least 5 characters'),
+  'Email': z.string().email('Invalid email address').optional(),
+  'Business Name': z.string().min(1, 'Business Name is required'),
+  'Trade Name': z.string().optional(),
+  'GSTIN': z.string().optional(),
+  'PAN': z.string().optional(),
+  'FSSAI': z.string().optional(),
+  'Billing Address': z.string().optional(),
+  'Billing City': z.string().optional(),
+  'Billing State': z.string().optional(),
+  'Billing Pincode': z.coerce.string().optional(),
+  'Delivery Address': z.string().min(1, 'Delivery Address is required'),
+  'Delivery Pincode': z.coerce.string().min(1, 'Delivery Pincode is required'),
+  'Territory': z.string().optional(),
+  'Sales Executive': z.string().optional(),
+  'Tags': z.string().optional(),
+});
+
+export interface ParsedCustomerRow {
+  name: string;
+  phone: string;
+  email?: string;
+  businessName: string;
+  tradeName?: string;
+  gstin?: string;
+  pan?: string;
+  fssai?: string;
+  billingAddress?: string;
+  billingCity?: string;
+  billingState?: string;
+  billingPincode?: string;
+  deliveryAddress: string;
+  deliveryPincode: string;
+  territory?: string;
+  salesExecutive?: string;
+  tags?: string[];
+}
+
+export interface CustomerImportResult {
+  rows: ParsedCustomerRow[];
+  errors: ImportError[];
+}
+
+export function parseCustomerImport(buffer: Buffer): CustomerImportResult {
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+  const sheetName = wb.SheetNames.find(n => n.toLowerCase() === 'customers') || wb.SheetNames[0];
+  const sheet = wb.Sheets[sheetName];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet);
+
+  const rows: ParsedCustomerRow[] = [];
+  const errors: ImportError[] = [];
+
+  rawRows.forEach((raw, idx) => {
+    const rowNum = idx + 2;
+    const cleaned = cleanRow(raw);
+    const result = customerImportRowSchema.safeParse(cleaned);
+
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        errors.push({
+          row: rowNum,
+          field: issue.path.join('.'),
+          message: issue.message,
+        });
+      }
+      return;
+    }
+
+    const r = result.data;
+    const parsedTags = r['Tags']
+      ? r['Tags'].split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0)
+      : [];
+
+    rows.push({
+      name: r['Name'],
+      phone: String(r['Phone']),
+      email: r['Email'],
+      businessName: r['Business Name'],
+      tradeName: r['Trade Name'],
+      gstin: r['GSTIN'],
+      pan: r['PAN'],
+      fssai: r['FSSAI'],
+      billingAddress: r['Billing Address'],
+      billingCity: r['Billing City'],
+      billingState: r['Billing State'],
+      billingPincode: r['Billing Pincode'] ? String(r['Billing Pincode']) : undefined,
+      deliveryAddress: r['Delivery Address'],
+      deliveryPincode: String(r['Delivery Pincode']),
+      territory: r['Territory'],
+      salesExecutive: r['Sales Executive'],
+      tags: parsedTags,
+    });
+  });
+
+  return { rows, errors };
 }
