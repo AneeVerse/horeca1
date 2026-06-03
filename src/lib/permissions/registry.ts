@@ -33,6 +33,11 @@ export const MODULES = {
   auditLogs:    ['view'],
   settings:     ['view', 'edit'],
   storefront:   ['view', 'order', 'pay'],
+  // V2.2 Phase 1 — Salesman Commission
+  salespersons: ['view', 'create', 'edit', 'delete'],
+  // commissions.edit = override rule / change accrual amount;
+  // commissions.approve = move state through pending→approved→paid/cancelled
+  commissions:  ['view', 'edit', 'approve'],
 } as const satisfies Record<string, readonly string[]>;
 
 export type Module = keyof typeof MODULES;
@@ -105,6 +110,8 @@ export const SCOPE_MODULES: Record<RoleScope, readonly Module[]> = {
     'outlets',
     'analytics',
     'promotions',
+    'salespersons',
+    'commissions',
     'settings',
   ],
   brand: [

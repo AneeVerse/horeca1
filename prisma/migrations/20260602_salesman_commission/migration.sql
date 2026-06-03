@@ -158,3 +158,71 @@ CREATE INDEX "orders_salesperson_id_idx" ON "orders"("salesperson_id");
 ALTER TABLE "orders"
     ADD CONSTRAINT "orders_salesperson_id_fkey"
     FOREIGN KEY ("salesperson_id") REFERENCES "salespersons"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- ── Seed new permissions into existing vendor role templates ──────────
+-- We can't re-run the seed.ts data-migration scripts on prod after every
+-- new module, so the migration patches the JSON in place. Idempotent
+-- because jsonb_set replaces the key (same value on retry = no-op).
+--
+-- Vendor Admin → full access to salespersons + commissions (matches the
+-- intent of allPermissions() the original seed used).
+UPDATE "account_roles"
+SET "permissions" = jsonb_set(
+    jsonb_set(
+        COALESCE("permissions", '{}'::jsonb),
+        '{salespersons}',
+        '{"view":true,"create":true,"edit":true,"delete":true}'::jsonb,
+        true
+    ),
+    '{commissions}',
+    '{"view":true,"edit":true,"approve":true}'::jsonb,
+    true
+)
+WHERE "name" = 'Vendor Admin' AND "scope" = 'vendor' AND "is_template" = true;
+
+-- Vendor Manager → view + create + edit on salespersons, view + approve
+-- on commissions (manage payouts but can't override rule amounts).
+UPDATE "account_roles"
+SET "permissions" = jsonb_set(
+    jsonb_set(
+        COALESCE("permissions", '{}'::jsonb),
+        '{salespersons}',
+        '{"view":true,"create":true,"edit":true}'::jsonb,
+        true
+    ),
+    '{commissions}',
+    '{"view":true,"approve":true}'::jsonb,
+    true
+)
+WHERE "name" = 'Vendor Manager' AND "scope" = 'vendor' AND "is_template" = true;
+
+-- Vendor Editor → view salespersons only (assigns them to customers),
+-- view commission accruals so they can see what's been earned.
+UPDATE "account_roles"
+SET "permissions" = jsonb_set(
+    jsonb_set(
+        COALESCE("permissions", '{}'::jsonb),
+        '{salespersons}',
+        '{"view":true}'::jsonb,
+        true
+    ),
+    '{commissions}',
+    '{"view":true}'::jsonb,
+    true
+)
+WHERE "name" = 'Vendor Editor' AND "scope" = 'vendor' AND "is_template" = true;
+
+-- Vendor Viewer → read-only on both.
+UPDATE "account_roles"
+SET "permissions" = jsonb_set(
+    jsonb_set(
+        COALESCE("permissions", '{}'::jsonb),
+        '{salespersons}',
+        '{"view":true}'::jsonb,
+        true
+    ),
+    '{commissions}',
+    '{"view":true}'::jsonb,
+    true
+)
+WHERE "name" = 'Vendor Viewer' AND "scope" = 'vendor' AND "is_template" = true;
