@@ -8,6 +8,11 @@ import { z } from 'zod';
 import { withAuth } from '@/middleware/auth';
 import { prisma } from '@/lib/prisma';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
+import {
+  GST_RE,
+  VendorDetailsSchema,
+  PrimaryOutletSchema,
+} from '@/lib/validators/vendor-kyc';
 
 export const GET = withAuth(async (_req: NextRequest, ctx) => {
   try {
@@ -19,7 +24,9 @@ export const GET = withAuth(async (_req: NextRequest, ctx) => {
         createdAt: true,
         businessAccount: {
           select: {
-            id: true, legalName: true, displayName: true, gstin: true, businessType: true,
+            id: true, legalName: true, displayName: true, gstin: true, pan: true,
+            fssaiNumber: true, billingAddressLine: true, billingCity: true,
+            billingState: true, billingPincode: true, businessType: true,
             isCustomer: true, isVendor: true, isBrand: true, status: true,
             primaryOutletId: true,
             outlets: { select: { id: true, name: true, pincode: true, requiresAddressUpdate: true } },
@@ -40,66 +47,24 @@ export const GET = withAuth(async (_req: NextRequest, ctx) => {
   }
 });
 
-// Regexes mirror the public /vendor/onboarding/submit endpoint so the two
-// onboarding paths accept identical KYC inputs.
-const GST_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-const PHONE_RE = /^\d{10}$/;
-const PINCODE_RE = /^\d{6}$/;
-
-const BillingAddress = z.object({
-  addressLine: z.string().min(5).max(500),
-  city: z.string().min(1).max(100),
-  state: z.string().min(1).max(100),
-  pincode: z.string().regex(PINCODE_RE, 'Invalid pincode'),
-});
-
-// Full vendor KYC block — must be supplied when isVendor=true AND the caller
-// wants a workable vendor profile (settlement, dispatch, invoicing depend on
-// these fields). Spec's 5 vendor types are the only accepted values.
-const VendorDetails = z.object({
-  vendorType: z.enum(['distributor', 'wholesaler', 'brand_store', 'manufacturer', 'dark_store']),
-  panNumber: z.string().regex(PAN_RE, 'Invalid PAN format'),
-  authorizedPersonName: z.string().min(2).max(255),
-  authorizedPersonPhone: z.string().regex(PHONE_RE, 'Invalid authorized person phone'),
-  authorizedPersonEmail: z.string().email().optional().or(z.literal('')),
-  // Billing / registered office address — shown as "Bill From" on tax
-  // invoices. The primaryOutlet doubles as the pickup/warehouse address;
-  // no separate pickup block is required.
-  billingAddress: BillingAddress,
-  bankAccountName: z.string().min(2).max(100),
-  bankAccountNumber: z.string().min(8).max(30),
-  bankIfsc: z.string().regex(IFSC_RE, 'Invalid IFSC format'),
-  bankName: z.string().min(2).max(100),
-  bankAccountType: z.enum(['savings', 'current']),
-  serviceablePincodes: z.array(z.string().regex(PINCODE_RE)).min(1, 'Add at least one pincode').max(200),
-  deliveryCapability: z.enum(['own_fleet', 'third_party', 'both']),
-  fssaiNumber: z.string().max(50).optional().or(z.literal('')),
-  udyamNumber: z.string().max(50).optional().or(z.literal('')),
-  cinNumber: z.string().max(50).optional().or(z.literal('')),
-});
-
+// All KYC validators live in src/lib/validators/vendor-kyc.ts so the
+// admin-side create-vendor endpoint can re-use the exact same schemas.
 const CreateBody = z.object({
   legalName: z.string().min(2).max(255),
   displayName: z.string().max(255).optional(),
   gstin: z.string().regex(GST_RE, 'Invalid GSTIN format').optional().or(z.literal('')),
   pan: z.string().max(20).optional(),
+  fssaiNumber: z.string().max(50).optional().or(z.literal('')),
+  billingAddressLine: z.string().optional(),
+  billingCity: z.string().optional(),
+  billingState: z.string().optional(),
+  billingPincode: z.string().optional(),
   businessType: z.string().max(50).optional(),
   isCustomer: z.boolean().optional().default(true),
   isVendor: z.boolean().optional().default(false),
   isBrand: z.boolean().optional().default(false),
-  primaryOutlet: z.object({
-    name: z.string().min(1).max(255),
-    addressLine: z.string().min(1),
-    city: z.string().optional(),
-    state: z.string().optional(),
-    pincode: z.string().optional(),
-    latitude: z.number().optional(),
-    longitude: z.number().optional(),
-    placeId: z.string().optional(),
-  }),
-  vendorDetails: VendorDetails.optional(),
+  primaryOutlet: PrimaryOutletSchema,
+  vendorDetails: VendorDetailsSchema.optional(),
 });
 
 function slugify(name: string, userId: string): string {
@@ -152,6 +117,11 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
           displayName: body.displayName,
           gstin: body.gstin,
           pan: body.pan,
+          fssaiNumber: body.fssaiNumber,
+          billingAddressLine: body.billingAddressLine,
+          billingCity: body.billingCity,
+          billingState: body.billingState,
+          billingPincode: body.billingPincode,
           businessType: body.businessType,
           isCustomer: body.isCustomer,
           isVendor: body.isVendor,
