@@ -423,7 +423,7 @@ export class OrderService {
     });
     if (!order) throw Errors.notFound('Order');
 
-    const allowed = ['confirmed', 'processing', 'shipped'];
+    const allowed = ['confirmed', 'processing', 'ready_for_dispatch', 'shipped'];
     if (!allowed.includes(order.status as string)) {
       throw Errors.badRequest(`A delivery OTP can only be generated for an in-progress order (current status: ${order.status}).`);
     }
