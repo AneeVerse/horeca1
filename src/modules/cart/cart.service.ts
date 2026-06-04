@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
+import { resolveUnitPrice, type CustomerContext } from '@/modules/pricing/pricing.service';
 
 /**
  * V2.2: cart is keyed by (userId, businessAccountId, outletId). Every method
@@ -18,6 +19,36 @@ export interface CartContext {
 }
 
 export class CartService {
+  /**
+   * Build the CustomerContext the pricing resolver needs. Pulls outlet
+   * geo data + the customer's per-vendor tags (used for segment matches).
+   * Cached per (vendorId) inside one cart operation to avoid re-fetching
+   * the same outlet when many items belong to the same vendor.
+   */
+  private async buildCustomerContext(
+    ctx: CartContext,
+    vendorId: string,
+    outletInfo?: { pincode: string | null; city: string | null; state: string | null },
+  ): Promise<CustomerContext> {
+    const outlet = outletInfo ?? await prisma.outlet.findUnique({
+      where: { id: ctx.outletId },
+      select: { pincode: true, city: true, state: true },
+    });
+    const vc = await prisma.vendorCustomer.findUnique({
+      where: { vendorId_userId: { vendorId, userId: ctx.userId } },
+      select: { tags: true },
+    });
+    return {
+      userId: ctx.userId,
+      businessAccountId: ctx.businessAccountId,
+      outletId: ctx.outletId,
+      outletPincode: outlet?.pincode ?? null,
+      outletCity: outlet?.city ?? null,
+      outletState: outlet?.state ?? null,
+      tags: vc?.tags ?? [],
+    };
+  }
+
   async getCart(ctx: CartContext) {
     const cart = await prisma.cart.findFirst({
       where: { userId: ctx.userId, businessAccountId: ctx.businessAccountId, outletId: ctx.outletId },
@@ -40,6 +71,46 @@ export class CartService {
     });
 
     if (!cart) return { vendorGroups: [], total: 0 };
+
+    // V2.2 Phase 4 — re-resolve every line through the PricingService so
+    // assignment / pricelist changes show up on cart load WITHOUT requiring
+    // the customer to re-add the item. Cache outlet + per-vendor context to
+    // avoid N+1 queries when many items belong to the same vendor.
+    const outletInfo = await prisma.outlet.findUnique({
+      where: { id: ctx.outletId },
+      select: { pincode: true, city: true, state: true },
+    });
+    const ctxCache = new Map<string, CustomerContext>();
+    const refreshes: Array<{ id: string; unitPrice: number }> = [];
+    for (const item of cart.items) {
+      let customer = ctxCache.get(item.vendorId);
+      if (!customer) {
+        customer = await this.buildCustomerContext(ctx, item.vendorId, outletInfo ?? undefined);
+        ctxCache.set(item.vendorId, customer);
+      }
+      try {
+        const resolved = await resolveUnitPrice({
+          productId: item.productId,
+          vendorId: item.vendorId,
+          quantity: item.quantity,
+          customer,
+        });
+        const next = Number(resolved.unitPrice);
+        if (next !== Number(item.unitPrice)) {
+          refreshes.push({ id: item.id, unitPrice: next });
+          item.unitPrice = resolved.unitPrice as unknown as typeof item.unitPrice;
+        }
+      } catch {
+        // Resolver throws if a product was deleted; leave the existing
+        // unitPrice as-is so the row still renders. The pre-checkout
+        // validation will catch dangling items.
+      }
+    }
+    if (refreshes.length > 0) {
+      await prisma.$transaction(
+        refreshes.map((r) => prisma.cartItem.update({ where: { id: r.id }, data: { unitPrice: r.unitPrice } })),
+      );
+    }
 
     // Group items by vendor
     const vendorMap = new Map<string, { vendor: (typeof cart.items)[0]['vendor']; items: typeof cart.items; subtotal: number }>();
@@ -80,10 +151,12 @@ export class CartService {
       });
     }
 
-    // Get product price
+    // Validate the product is purchasable; resolve unit price via the
+    // PricingService instead of touching basePrice / priceSlab directly
+    // so all V2.2 Phase 4 assignment + pricing-type rules apply.
     const product = await prisma.product.findUnique({
       where: { id: productId },
-      include: { priceSlabs: { orderBy: { minQty: 'asc' } } },
+      select: { id: true, approvalStatus: true, isActive: true, minOrderQty: true },
     });
     if (!product) throw Errors.notFound('Product');
     if (product.approvalStatus !== 'approved' || !product.isActive) {
@@ -91,12 +164,9 @@ export class CartService {
     }
     if (quantity < product.minOrderQty) throw Errors.badRequest(`Minimum order quantity for this product is ${product.minOrderQty}`);
 
-    let unitPrice = Number(product.basePrice);
-    for (const slab of product.priceSlabs) {
-      if (quantity >= slab.minQty && (slab.maxQty === null || quantity <= slab.maxQty)) {
-        unitPrice = Number(slab.price);
-      }
-    }
+    const customer = await this.buildCustomerContext(ctx, vendorId);
+    const { unitPrice: resolved } = await resolveUnitPrice({ productId, vendorId, quantity, customer });
+    const unitPrice = Number(resolved);
 
     return prisma.cartItem.upsert({
       where: { cartId_productId: { cartId: cart.id, productId } },
@@ -117,17 +187,19 @@ export class CartService {
 
     const product = await prisma.product.findUnique({
       where: { id: item.productId },
-      include: { priceSlabs: { orderBy: { minQty: 'asc' } } },
+      select: { minOrderQty: true },
     });
+    if (!product) throw Errors.notFound('Product');
+    if (quantity < product.minOrderQty) throw Errors.badRequest(`Minimum order quantity for this product is ${product.minOrderQty}`);
 
-    if (quantity < product!.minOrderQty) throw Errors.badRequest(`Minimum order quantity for this product is ${product!.minOrderQty}`);
-
-    let unitPrice = Number(product!.basePrice);
-    for (const slab of product!.priceSlabs) {
-      if (quantity >= slab.minQty && (slab.maxQty === null || quantity <= slab.maxQty)) {
-        unitPrice = Number(slab.price);
-      }
-    }
+    const customer = await this.buildCustomerContext(ctx, item.vendorId);
+    const { unitPrice: resolved } = await resolveUnitPrice({
+      productId: item.productId,
+      vendorId: item.vendorId,
+      quantity,
+      customer,
+    });
+    const unitPrice = Number(resolved);
 
     return prisma.cartItem.update({
       where: { id: itemId },

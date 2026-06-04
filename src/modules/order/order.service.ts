@@ -7,6 +7,7 @@ import {
   createAccrual as createCommissionAccrual,
   findApplicableRule as findApplicableCommissionRule,
 } from '@/modules/commission/commission.service';
+import { resolveUnitPrice, type CustomerContext } from '@/modules/pricing/pricing.service';
 
 interface VendorOrderInput {
   vendorId: string;
@@ -103,27 +104,26 @@ export class OrderService {
           }
         }
 
-        // 3. Resolve customer-specific pricing (VendorCustomer → PriceList → PriceListItem)
-        // Falls back to standard base/slab pricing when no custom pricing is configured.
-        // V2.2 Phase 1: also reads salespersonId so the order can be snapshotted
-        // with the rep at creation time. Commission attribution is then immune
-        // to the customer being later reassigned to a different rep.
+        // 3. V2.2 Phase 4 — single resolver call per line replaces the
+        //    inline base→slab→customer-pricelist chain. The resolver
+        //    honours every assignment type + the four pricing types in
+        //    one place; cart and storefront use the same function so
+        //    the price the customer sees IS the price the order writes.
+        //    Also fetch salespersonId from VendorCustomer for Phase 1
+        //    commission attribution at order creation time.
         const vendorCustomer = await tx.vendorCustomer.findUnique({
           where: { vendorId_userId: { vendorId: vo.vendorId, userId } },
-          select: {
-            salespersonId: true,
-            priceList: {
-              select: {
-                discountPercent: true,
-                items: { select: { productId: true, customPrice: true } },
-              },
-            },
-          },
+          select: { salespersonId: true, tags: true },
         });
-        const customPriceMap = new Map<string, number>(
-          vendorCustomer?.priceList?.items.map((i) => [i.productId, Number(i.customPrice)]) ?? []
-        );
-        const globalDiscount = Number(vendorCustomer?.priceList?.discountPercent ?? 0);
+        const customerCtx: CustomerContext = {
+          userId,
+          businessAccountId,
+          outletId,
+          outletPincode: outlet.pincode,
+          outletCity: outlet.city,
+          outletState: outlet.state,
+          tags: vendorCustomer?.tags ?? [],
+        };
 
         // 4. Calculate subtotal (GST-inclusive gross prices — DB prices are ex-GST taxable rates)
         let subtotal = 0;
@@ -132,24 +132,16 @@ export class OrderService {
         for (const item of vo.items) {
           const product = await tx.product.findUnique({
             where: { id: item.productId },
-            include: { priceSlabs: { orderBy: { minQty: 'asc' } } },
+            select: { id: true, name: true, taxPercent: true },
           });
           if (!product) throw Errors.notFound('Product');
 
-          // Find applicable price slab (ex-GST taxable rate)
-          let taxableUnitPrice = Number(product.basePrice);
-          for (const slab of product.priceSlabs) {
-            if (item.quantity >= slab.minQty && (slab.maxQty === null || item.quantity <= slab.maxQty)) {
-              taxableUnitPrice = Number(slab.price);
-            }
-          }
-
-          // Apply customer-specific price override (item-level beats global discount)
-          if (customPriceMap.has(item.productId)) {
-            taxableUnitPrice = customPriceMap.get(item.productId)!;
-          } else if (globalDiscount > 0) {
-            taxableUnitPrice = Math.round(taxableUnitPrice * (1 - globalDiscount / 100) * 100) / 100;
-          }
+          // Resolved taxable unit price — honours every assignment rule.
+          const { unitPrice: resolvedPrice } = await resolveUnitPrice(
+            { productId: item.productId, vendorId: vo.vendorId, quantity: item.quantity, customer: customerCtx },
+            tx,
+          );
+          const taxableUnitPrice = Number(resolvedPrice);
 
           // Apply GST to get gross (customer-facing) price
           const taxPercent = Number(product.taxPercent) || 0;
