@@ -273,7 +273,7 @@ Each chunk lands separately with its own diff so any regression is bisectable. S
 | 3.5 | ✅ Admin import UX + edits land | 2026-06-03 | 2026-06-03 | `54adec8..9741958` |
 | 3.6 | ✅ Admin customers bulk + import | 2026-06-03 | 2026-06-03 | `72851af` |
 | 4 | ✅ Code complete | 2026-06-03 | 2026-06-03 | `2c73ed2..884c17e` (5 chunks — schema, resolver, cart/order, API, UI) + bulk-upload unification `556012a` |
-| 5 | 🚧 In progress | 2026-06-05 | — | repeat-order + delivery-OTP first; structural pieces deferred |
+| 5 | 🚧 In progress | 2026-06-05 | — | shipped: reorder, delivery-OTP, richer states, partial-fulfilment correctness, reschedule (`bd745c8`,`0aeb0b1`,`bbeeab8`,`d328a5b`). Remaining: draft PO submit, admin edit, Shipment/multi-dispatch, split, reassign, substitutes |
 | 6 | Not started | — | — | — |
 | 7 | Not started | — | — | — |
 | 8 | Not started | — | — | — |
@@ -518,17 +518,22 @@ This row updates as each phase completes — commit hash + date.
 
 ## Sequenced chunks
 
-Risk-ordered so the safe, additive customer-facing work ships first and the money-path structural changes wait for review.
+Risk-ordered so the safe, additive work ships first and money-path structural changes wait for staged review.
 
-1. ✅ **Repeat order** — `POST /api/v1/orders/[id]/reorder`. Additive, customer-facing, no schema. *(this session)*
-2. ✅ **Delivery OTP** — `Order.deliveryOtp/deliveryOtpExpiresAt/deliveryOtpVerifiedAt` + migration; `POST /vendor/orders/[id]/delivery-otp` (generate+send) and OTP check folded into the existing delivered transition only when `proofType='otp'`. *(this session)*
-3. ⏳ **Draft PO** — `draft` enum value + `POST /orders/draft` (save) + `POST /orders/[id]/submit` (draft→pending). *(after review — touches OrderStatus + create path)*
-4. ⏳ **Shipment model + multi-dispatch** — new `Shipment`/`ShipmentItem` models, vendor dispatch endpoints, fulfilledQty as running sum. *(after review — structural, money-path)*
-5. ⏳ **Order splitting** — split remaining unfulfilled qty into a sibling order/shipment. *(after review)*
-6. ⏳ **Reassign vendor** — admin endpoint, price re-resolve + stock move, audit-logged. *(after review)*
-7. ⏳ **Approval gate** — config-flagged admin pre-approval. *(needs product decision)*
+1. ✅ **Repeat order** — `POST /api/v1/orders/[id]/reorder` (`bd745c8`).
+2. ✅ **Delivery OTP** — schema + `POST /vendor/orders/[id]/delivery-otp` + verify on delivered when `proofType='otp'` (`0aeb0b1`).
+3. ✅ **Richer order states** — `draft / ready_for_dispatch / partially_delivered / returned` enum values + migration; widened `VALID_TRANSITIONS`; validators + admin `VALID_STATUSES` + every order-status UI map relabelled to the client terminology (`bbeeab8`).
+4. ✅ **Partial-fulfilment correctness** — invoice bills `fulfilledQty` (drops unfulfilled lines); cancel/deliver release/finalize the fulfilled qty for partial orders (`bbeeab8`).
+5. ✅ **Reschedule delivery** — vendor `PATCH .../orders/[id]` with `deliverySlotId` / `deliveryDate` (`d328a5b`).
+6. ⏳ **Draft PO** — `draft` enum value already added. Remaining: `POST /orders/draft` (write draft Order rows from the cart with resolved prices, NO reservation) + `POST /orders/[id]/submit` (rebuild a CreateOrderInput from the draft and **delegate to the existing `create()`** so reservation/MOV/credit/pricing all reuse the battle-tested path, then delete the draft). Plus exclude `status='draft'` from vendor order queries. *(deferred — touches the checkout path; do with a staging walkthrough)*
+7. ⏳ **Admin edit order** — modify item quantities / notes with inventory re-reserve/release + total recalc + audit log; scope to pending/confirmed. *(deferred — money-path)*
+8. ⏳ **Shipment model + multi-dispatch + multiple schedules** — new `Shipment`/`ShipmentItem` models (orderId, status, per-line qty, dispatch/delivery timestamps, proof); `fulfilledQty` becomes the running sum across shipments. The big structural one. *(deferred)*
+9. ⏳ **Order splitting + balance order** — split unfulfilled qty into a sibling order so the balance stays trackable instead of being released-and-lost. *(deferred — pairs with #8)*
+10. ⏳ **Reassign vendor** — needs a cross-vendor product-equivalence mapping first (order items point at the old vendor's products); not well-defined until that exists. *(deferred — design dependency)*
+11. ⏳ **Substitute replacement at acceptance** — swap an item for one of `Product.substituteIds` during partial accept. *(deferred)*
+12. ⏳ **Approval gate** — config-flagged admin pre-approval between pending and vendor. *(needs product decision)*
 
-Chunks 1–2 land this session with `tsc`+lint clean and separate commits. Chunks 3–7 are specced above and implemented in follow-up sessions where each money-path change can be walked through on staging before deploy — per the "production-ready per phase" discipline.
+Chunks 1–5 shipped this session (`tsc`+lint clean, separate commits). 6–12 are specced for follow-up sessions where each money-path change is walked through on staging before deploy — per the "production-ready per phase" discipline. Deferral here is deliberate: rushing the checkout/inventory/Shipment changes blind would risk exactly the money-path errors we must avoid.
 
 ---
 
