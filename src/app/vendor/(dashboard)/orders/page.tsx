@@ -23,11 +23,15 @@ interface VendorOrder {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_STYLE: Record<string, string> = {
+    draft: 'bg-gray-50 text-gray-600',
     delivered: 'bg-[#EEF8F1] text-[#299E60]',
-    confirmed: 'bg-[#EEF8F1] text-[#299E60]',
-    processing: 'bg-[#FFF4E5] text-[#976538]',
+    confirmed: 'bg-blue-50 text-blue-600',
+    processing: 'bg-indigo-50 text-indigo-600',
     pending: 'bg-[#FFF4E5] text-[#976538]',
-    shipped: 'bg-blue-50 text-blue-600',
+    ready_for_dispatch: 'bg-cyan-50 text-cyan-600',
+    shipped: 'bg-purple-50 text-purple-600',
+    partially_delivered: 'bg-orange-50 text-orange-600',
+    returned: 'bg-rose-50 text-rose-600',
     cancelled: 'bg-[#FFF0F0] text-[#E74C3C]',
 };
 
@@ -38,7 +42,7 @@ const PAYMENT_STYLE: Record<string, string> = {
     refunded: 'bg-[#F3F4F6] text-[#6B7280]',
 };
 
-const STATUS_TABS = ['all', 'pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'] as const;
+const STATUS_TABS = ['all', 'pending', 'confirmed', 'processing', 'ready_for_dispatch', 'shipped', 'partially_delivered', 'delivered', 'returned', 'cancelled'] as const;
 const PAGE_SIZE = 20;
 
 function isOverSLA(dateStr: string): boolean {
@@ -246,7 +250,7 @@ export default function VendorOrdersPage() {
                                 : 'bg-white text-[#7C7C7C] border border-[#EEEEEE] hover:border-[#299E60]/30'
                         )}
                     >
-                        {tab}
+                        {tab.replace(/_/g, ' ')}
                     </button>
                 ))}
             </div>
@@ -375,7 +379,7 @@ export default function VendorOrdersPage() {
                                                     'inline-flex px-3 py-1 rounded-[8px] text-[12px] font-bold capitalize',
                                                     STATUS_STYLE[order.status] || 'bg-gray-100 text-gray-600'
                                                 )}>
-                                                    {order.status}
+                                                    {order.status.replace(/_/g, ' ')}
                                                 </span>
                                             </td>
                                             <td className="px-5 py-4 text-center">

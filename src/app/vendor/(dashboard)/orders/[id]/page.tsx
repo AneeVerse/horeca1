@@ -79,10 +79,12 @@ interface OrderData {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const STATUS_FLOW = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'] as const;
+const STATUS_FLOW = ['pending', 'confirmed', 'processing', 'ready_for_dispatch', 'shipped', 'delivered'] as const;
 const STATUS_LABELS: Record<string, string> = {
-    pending: 'Pending', confirmed: 'Accepted', processing: 'Packing',
-    shipped: 'Dispatched', delivered: 'Delivered', cancelled: 'Cancelled',
+    draft: 'Draft', pending: 'Pending Approval', confirmed: 'Accepted', processing: 'Packing',
+    ready_for_dispatch: 'Ready for Dispatch', shipped: 'Out for Delivery',
+    partially_delivered: 'Partially Delivered', delivered: 'Delivered',
+    returned: 'Returned', cancelled: 'Cancelled',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

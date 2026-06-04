@@ -597,11 +597,15 @@ model Order {
 }
 
 enum OrderStatus {
+  draft               // V2.2 Phase 5 — saved PO, not yet submitted (no reservation)
   pending
   confirmed
   processing
+  ready_for_dispatch  // V2.2 Phase 5 — packed, awaiting pickup
   shipped
+  partially_delivered // V2.2 Phase 5 — some lines delivered, balance pending
   delivered
+  returned            // V2.2 Phase 5 — goods returned after delivery
   cancelled
 }
 

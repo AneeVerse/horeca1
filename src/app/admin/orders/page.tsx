@@ -19,11 +19,15 @@ interface AdminOrder {
 }
 
 const STATUS_STYLE: Record<string, string> = {
+    draft: 'bg-gray-50 text-gray-600',
     delivered: 'bg-[#EEF8F1] text-[#299E60]',
-    confirmed: 'bg-[#EEF8F1] text-[#299E60]',
-    processing: 'bg-[#FFF4E5] text-[#976538]',
+    confirmed: 'bg-blue-50 text-blue-600',
+    processing: 'bg-indigo-50 text-indigo-600',
     pending: 'bg-[#FFF4E5] text-[#976538]',
-    shipped: 'bg-blue-50 text-blue-600',
+    ready_for_dispatch: 'bg-cyan-50 text-cyan-600',
+    shipped: 'bg-purple-50 text-purple-600',
+    partially_delivered: 'bg-orange-50 text-orange-600',
+    returned: 'bg-rose-50 text-rose-600',
     cancelled: 'bg-[#FFF0F0] text-[#E74C3C]',
 };
 

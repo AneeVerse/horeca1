@@ -523,13 +523,21 @@ export class OrderService {
   }
 
   // Valid status transitions — any move not in this map is rejected.
+  // V2.2 Phase 5 widened the graph with the richer client states. The old
+  // happy path (pending→confirmed→processing→shipped→delivered) still holds;
+  // ready_for_dispatch / partially_delivered / returned are optional stops.
+  // `draft` is handled by the submit endpoint (draft→pending), not here.
   private static readonly VALID_TRANSITIONS: Readonly<Record<string, string[]>> = {
-    pending:    ['confirmed', 'cancelled'],
-    confirmed:  ['processing', 'cancelled'],
-    processing: ['shipped', 'cancelled'],
-    shipped:    ['delivered'],
-    delivered:  [],
-    cancelled:  [],
+    draft:               ['pending', 'cancelled'],
+    pending:             ['confirmed', 'cancelled'],
+    confirmed:           ['processing', 'cancelled'],
+    processing:          ['ready_for_dispatch', 'shipped', 'cancelled'],
+    ready_for_dispatch:  ['shipped', 'cancelled'],
+    shipped:             ['delivered', 'partially_delivered'],
+    partially_delivered: ['delivered', 'returned'],
+    delivered:           ['returned'],
+    returned:            [],
+    cancelled:           [],
   };
 
   async updateStatus(
@@ -547,6 +555,7 @@ export class OrderService {
             select: {
               productId: true,
               quantity: true,
+              fulfilledQty: true,
               // categoryId needed to resolve category-scoped commission rules
               // at delivery time. Tiny extra row; cheap to include.
               product: { select: { categoryId: true } },
@@ -564,20 +573,23 @@ export class OrderService {
         );
       }
 
+      // For a partially-accepted order, only the fulfilled quantity stayed
+      // reserved (the rest was released at accept time), so release/finalize
+      // must act on the fulfilled qty — not the original ordered qty — or
+      // inventory over-corrects. Non-partial orders use the ordered qty.
+      const effectiveLines = order.items.map(i => ({
+        productId: i.productId,
+        quantity: order.isPartial ? i.fulfilledQty : i.quantity,
+      })).filter(l => l.quantity > 0);
+
       // Inventory side-effects
       if (status === 'cancelled') {
         // Release reserved stock so it becomes available for other orders
-        await this.inventoryService.releaseStock(
-          order.items.map(i => ({ productId: i.productId, quantity: i.quantity })),
-          tx,
-        );
+        await this.inventoryService.releaseStock(effectiveLines, tx);
       }
       if (status === 'delivered') {
         // Goods have left the warehouse — deduct from physical available stock
-        await this.inventoryService.finalizeStock(
-          order.items.map(i => ({ productId: i.productId, quantity: i.quantity })),
-          tx,
-        );
+        await this.inventoryService.finalizeStock(effectiveLines, tx);
       }
 
       // Timestamp fields

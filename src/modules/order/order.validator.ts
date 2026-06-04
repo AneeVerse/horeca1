@@ -18,14 +18,17 @@ export const createOrderSchema = z.object({
 });
 
 export const listOrdersSchema = z.object({
-  status: z.enum(['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled']).optional(),
+  status: z.enum(['draft', 'pending', 'confirmed', 'processing', 'ready_for_dispatch', 'shipped', 'partially_delivered', 'delivered', 'returned', 'cancelled']).optional(),
   vendorId: z.string().uuid().optional(),
   cursor: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 
+// Statuses a vendor/admin can move an order INTO via the status endpoint.
+// 'draft' and 'pending' are entry states (set by save-draft / submit), never
+// a transition target here.
 export const updateStatusSchema = z.object({
-  status: z.enum(['confirmed', 'processing', 'shipped', 'delivered', 'cancelled']),
+  status: z.enum(['confirmed', 'processing', 'ready_for_dispatch', 'shipped', 'partially_delivered', 'delivered', 'returned', 'cancelled']),
   reason: z.string().min(1).max(500).optional(),
   proof: z.object({
     proofType: z.enum(['otp', 'photo', 'signature', 'notes', 'none']).optional(),

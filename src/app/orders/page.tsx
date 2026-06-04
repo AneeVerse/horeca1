@@ -45,12 +45,16 @@ interface ApiOrder {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
-    pending:    { label: 'Pending',    color: 'text-amber-600',   bg: 'bg-amber-50',   icon: <Clock size={10} /> },
-    confirmed:  { label: 'Confirmed',  color: 'text-blue-600',    bg: 'bg-blue-50',    icon: <CheckCircle2 size={10} /> },
-    processing: { label: 'Processing', color: 'text-purple-600',  bg: 'bg-purple-50',  icon: <Loader2 size={10} /> },
-    shipped:    { label: 'Shipped',    color: 'text-indigo-600',  bg: 'bg-indigo-50',  icon: <Truck size={10} /> },
-    delivered:  { label: 'Delivered',  color: 'text-green-600',   bg: 'bg-green-50',   icon: <CheckCircle2 size={10} /> },
-    cancelled:  { label: 'Cancelled',  color: 'text-red-500',     bg: 'bg-red-50',     icon: <XCircle size={10} /> },
+    draft:                { label: 'Draft',               color: 'text-gray-600',    bg: 'bg-gray-50',    icon: <Clock size={10} /> },
+    pending:              { label: 'Pending Approval',    color: 'text-amber-600',   bg: 'bg-amber-50',   icon: <Clock size={10} /> },
+    confirmed:            { label: 'Accepted',            color: 'text-blue-600',    bg: 'bg-blue-50',    icon: <CheckCircle2 size={10} /> },
+    processing:           { label: 'Packing',             color: 'text-indigo-600',  bg: 'bg-indigo-50',  icon: <Loader2 size={10} /> },
+    ready_for_dispatch:   { label: 'Ready for Dispatch',  color: 'text-cyan-600',    bg: 'bg-cyan-50',    icon: <Package size={10} /> },
+    shipped:              { label: 'Out for Delivery',    color: 'text-purple-600',  bg: 'bg-purple-50',  icon: <Truck size={10} /> },
+    partially_delivered:  { label: 'Partially Delivered', color: 'text-orange-600',  bg: 'bg-orange-50',  icon: <Truck size={10} /> },
+    delivered:            { label: 'Delivered',           color: 'text-green-600',   bg: 'bg-green-50',   icon: <CheckCircle2 size={10} /> },
+    returned:             { label: 'Returned',            color: 'text-rose-600',    bg: 'bg-rose-50',    icon: <XCircle size={10} /> },
+    cancelled:            { label: 'Cancelled',           color: 'text-red-500',     bg: 'bg-red-50',     icon: <XCircle size={10} /> },
 };
 
 const PAYMENT_STATUS: Record<string, { label: string; color: string }> = {

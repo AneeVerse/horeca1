@@ -19,8 +19,11 @@ const VALID_STATUSES: OrderStatus[] = [
   'pending',
   'confirmed',
   'processing',
+  'ready_for_dispatch',
   'shipped',
+  'partially_delivered',
   'delivered',
+  'returned',
   'cancelled',
 ];
 
