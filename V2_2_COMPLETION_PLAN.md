@@ -272,8 +272,8 @@ Each chunk lands separately with its own diff so any regression is bisectable. S
 | 3 | ✅ Deployed (bundled with Phase 2) | 2026-06-03 | 2026-06-03 | category 1-parent enforcement |
 | 3.5 | ✅ Admin import UX + edits land | 2026-06-03 | 2026-06-03 | `54adec8..9741958` |
 | 3.6 | ✅ Admin customers bulk + import | 2026-06-03 | 2026-06-03 | `72851af` |
-| 4 | ✅ Code complete | 2026-06-03 | 2026-06-03 | `2c73ed2..884c17e` (5 chunks — schema, resolver, cart/order, API, UI) |
-| 5 | Not started | — | — | — |
+| 4 | ✅ Code complete | 2026-06-03 | 2026-06-03 | `2c73ed2..884c17e` (5 chunks — schema, resolver, cart/order, API, UI) + bulk-upload unification `556012a` |
+| 5 | 🚧 In progress | 2026-06-05 | — | repeat-order + delivery-OTP first; structural pieces deferred |
 | 6 | Not started | — | — | — |
 | 7 | Not started | — | — | — |
 | 8 | Not started | — | — | — |
@@ -484,6 +484,54 @@ This row updates as each phase completes — commit hash + date.
 
 ---
 
+# PHASE 5 — Section 7: Order Management
+
+**Scope (from the V2.2 brief):** order **approve state**, admin **edit / split / reassign**, **repeat order** (reorder), **draft PO**, **multi-dispatch** (partial shipments tracked over time), and **OTP delivery proof**.
+
+**Audit result (2026-06-05, 1 agent, read-only):** a surprising amount already exists, so Phase 5 is closing gaps, not greenfield:
+
+| Sub-feature | Today | Phase 5 action |
+|---|---|---|
+| Status lifecycle `pending→confirmed→processing→shipped→delivered/cancelled` | ✅ `order.service.updateStatus` + `VALID_TRANSITIONS` | keep as-is |
+| Partial fulfilment (reduce per-item qty on accept) | ✅ `partialAccept`, `OrderItem.fulfilledQty`, `Order.isPartial` | keep; multi-dispatch builds on it |
+| Delivery-proof **fields** (`deliveryProofType/Url/Notes`, type incl. `otp`) | ✅ schema + stored on delivered | **add OTP gen + verify** (this phase) |
+| E-way bill | ✅ `Order.ewayBillNo` + vendor PATCH | keep |
+| Reorder | ⚠️ UI button → quick-list flow, **no dedicated endpoint** | **add `POST /orders/[id]/reorder`** (this phase) |
+| Admin force status-change | ✅ `PATCH /admin/orders/[id]` | keep; extend for reassign later |
+| Commission accrual on `delivered` | ✅ Phase-1 hook | keep |
+| Credit debit on confirm / release on cancel | ✅ | keep |
+| Draft PO | ❌ no `draft` status, no save-as-draft | **plan below; implement after review** |
+| Multi-dispatch / Shipment history | ❌ single shipment only | **plan below (new `Shipment` model); implement after review** |
+| Order splitting | ❌ | **plan below; implement after review** |
+| Reassign to a different vendor | ❌ | **plan below; implement after review** |
+| Order approval gate | ❌ no `approved` state | **plan below; needs product decision** |
+
+## Ambiguities resolved (documented defaults)
+
+1. **Status enum naming** — schema's `shipped` is the source of truth; CLAUDE.md's "out_for_delivery" is treated as a *display label* for `shipped`. **No rename** (it would touch every status switch + historical rows). 
+2. **Reorder semantics** — re-add the past order's **exact items** to the caller's **active outlet cart at CURRENT resolved prices** (via `resolveUnitPrice`), not the historical snapshot. Unavailable / inactive / cross-outlet-unservable products are **skipped and reported**, never silently dropped. Quantities clamp to each product's current `minOrderQty`.
+3. **OTP delivery proof** — vendor (or delivery operator) generates a 4-digit OTP when moving an order to `shipped`; it's sent to the customer over the existing notification channel (SMS + email). On the `delivered` transition, if `proofType='otp'` the submitted code must match a non-expired stored OTP. **Strictly additive:** non-OTP delivery (photo/signature/notes/none) is unchanged, so the existing vendor "mark delivered" flow never breaks.
+4. **Draft PO** — a draft is an `Order` row with `status='draft'`: **no** inventory reservation, **no** credit debit, **no** payment, **not** shown in vendor queues. "Submit draft" transitions `draft→pending` and runs the normal reservation/MOV/credit checks at that point. Normal checkout is untouched.
+5. **Multi-dispatch** — introduce a `Shipment` model (one Order → N shipments), each carrying its own item-quantity lines, dispatch/delivery timestamps, and proof. `OrderItem.fulfilledQty` becomes the running sum across shipments. This is the one genuinely structural change.
+6. **Reassign** — admin-only `POST /admin/orders/[id]/reassign` moves an unfulfilled order to another vendor: re-resolves prices for the new vendor, releases the old vendor's reserved stock, reserves the new vendor's. Audit-logged. Blocked once any shipment exists.
+7. **Approve state** — interpret as an **optional admin pre-approval** gate (config-flagged, off by default) between `pending` and the vendor seeing the order. Deferred until the team confirms they want it (it adds friction to every order).
+
+## Sequenced chunks
+
+Risk-ordered so the safe, additive customer-facing work ships first and the money-path structural changes wait for review.
+
+1. ✅ **Repeat order** — `POST /api/v1/orders/[id]/reorder`. Additive, customer-facing, no schema. *(this session)*
+2. ✅ **Delivery OTP** — `Order.deliveryOtp/deliveryOtpExpiresAt/deliveryOtpVerifiedAt` + migration; `POST /vendor/orders/[id]/delivery-otp` (generate+send) and OTP check folded into the existing delivered transition only when `proofType='otp'`. *(this session)*
+3. ⏳ **Draft PO** — `draft` enum value + `POST /orders/draft` (save) + `POST /orders/[id]/submit` (draft→pending). *(after review — touches OrderStatus + create path)*
+4. ⏳ **Shipment model + multi-dispatch** — new `Shipment`/`ShipmentItem` models, vendor dispatch endpoints, fulfilledQty as running sum. *(after review — structural, money-path)*
+5. ⏳ **Order splitting** — split remaining unfulfilled qty into a sibling order/shipment. *(after review)*
+6. ⏳ **Reassign vendor** — admin endpoint, price re-resolve + stock move, audit-logged. *(after review)*
+7. ⏳ **Approval gate** — config-flagged admin pre-approval. *(needs product decision)*
+
+Chunks 1–2 land this session with `tsc`+lint clean and separate commits. Chunks 3–7 are specced above and implemented in follow-up sessions where each money-path change can be walked through on staging before deploy — per the "production-ready per phase" discipline.
+
+---
+
 ## Future-phase placeholders
 
-Detailed plans for Phases 2-9 will be written into this file when we begin each phase. The audit table at the top documents the scope; estimates in the sequence section are rough. We re-plan each phase fresh when we get there so decisions made in Phase N inform Phase N+1.
+Detailed plans for Phases 6-9 will be written into this file when we begin each phase. The audit table at the top documents the scope; estimates in the sequence section are rough. We re-plan each phase fresh when we get there so decisions made in Phase N inform Phase N+1.
