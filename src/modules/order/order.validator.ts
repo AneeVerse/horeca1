@@ -31,6 +31,9 @@ export const updateStatusSchema = z.object({
     proofType: z.enum(['otp', 'photo', 'signature', 'notes', 'none']).optional(),
     proofUrl: z.string().url().optional().nullable(),
     notes: z.string().max(500).optional(),
+    // V2.2 Phase 5 — the 4-digit code the customer reads out, checked
+    // against the OTP issued for this order when proofType='otp'.
+    otp: z.string().regex(/^\d{4}$/).optional(),
   }).optional(),
 }).refine(
   (d) => d.status !== 'cancelled' || (d.reason && d.reason.trim().length > 0),

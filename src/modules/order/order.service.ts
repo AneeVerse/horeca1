@@ -406,6 +406,49 @@ export class OrderService {
     return { vendorId: order.vendorId, added, skipped };
   }
 
+  /**
+   * Generate + dispatch a delivery OTP (Phase 5). The vendor/delivery operator
+   * calls this when the order is heading out; the customer receives a 4-digit
+   * code over SMS/email/in-app and reads it to the agent, who enters it on the
+   * delivered transition (proofType='otp') to confirm handover.
+   *
+   * Scoped to the order's vendor. Allowed only while the order is in flight
+   * (confirmed / processing / shipped) — never for delivered/cancelled/pending.
+   * The OTP is NOT returned to the caller; only the customer receives it.
+   */
+  async generateDeliveryOtp(orderId: string, vendorId: string) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, vendorId },
+      select: { id: true, userId: true, orderNumber: true, status: true },
+    });
+    if (!order) throw Errors.notFound('Order');
+
+    const allowed = ['confirmed', 'processing', 'shipped'];
+    if (!allowed.includes(order.status as string)) {
+      throw Errors.badRequest(`A delivery OTP can only be generated for an in-progress order (current status: ${order.status}).`);
+    }
+
+    // 4-digit code, zero-padded. Expires in 48h — comfortably covers same-day
+    // and next-day delivery windows.
+    const otp = String(Math.floor(1000 + Math.random() * 9000));
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { deliveryOtp: otp, deliveryOtpExpiresAt: expiresAt, deliveryOtpVerifiedAt: null },
+    });
+
+    emitEvent('OrderDeliveryOtp', {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      userId: order.userId,
+      vendorId,
+      otp,
+    });
+
+    return { sent: true, expiresAt };
+  }
+
   // Partial accept: vendor ships a subset of items/quantities.
   // Unfulfilled qty is released back to inventory; order total is recalculated.
   async partialAccept(
@@ -494,7 +537,7 @@ export class OrderService {
     vendorId: string,
     status: string,
     reason?: string,
-    proof?: { proofType?: string; proofUrl?: string | null; notes?: string },
+    proof?: { proofType?: string; proofUrl?: string | null; notes?: string; otp?: string },
   ) {
     return prisma.$transaction(async (tx) => {
       const order = await tx.order.findFirst({
@@ -550,6 +593,19 @@ export class OrderService {
         if (proof?.proofType) extraData.deliveryProofType = proof.proofType;
         if (proof?.proofUrl) extraData.deliveryProofUrl = proof.proofUrl;
         if (proof?.notes) extraData.deliveryNotes = proof.notes;
+        // Delivery OTP — only enforced when an OTP was actually issued for
+        // this order AND the agent is submitting OTP proof. Alternate proof
+        // types (photo/signature/notes) and orders with no OTP are unchanged,
+        // so this never blocks the existing "mark delivered" flow.
+        if (order.deliveryOtp && proof?.proofType === 'otp') {
+          if (!proof.otp || proof.otp !== order.deliveryOtp) {
+            throw Errors.badRequest('Delivery OTP does not match. Ask the customer to read the 4-digit code from their order updates.');
+          }
+          if (order.deliveryOtpExpiresAt && order.deliveryOtpExpiresAt < now) {
+            throw Errors.badRequest('Delivery OTP has expired. Generate a new one and retry.');
+          }
+          extraData.deliveryOtpVerifiedAt = now;
+        }
       }
 
       const updated = await tx.order.update({

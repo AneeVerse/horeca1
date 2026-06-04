@@ -558,6 +558,12 @@ model Order {
   deliveryProofType  String?      @map("delivery_proof_type") @db.VarChar(20)
   deliveryProofUrl   String?      @map("delivery_proof_url") @db.Text
   deliveryNotes      String?      @map("delivery_notes") @db.Text
+  // V2.2 Phase 5 — delivery OTP proof. Generated when the order goes out for
+  // delivery, sent to the customer, and verified on the delivered transition
+  // when proofType='otp'. Fully optional — alternate proof types ignore these.
+  deliveryOtp           String?   @map("delivery_otp") @db.VarChar(6)
+  deliveryOtpExpiresAt  DateTime? @map("delivery_otp_expires_at") @db.Timestamptz
+  deliveryOtpVerifiedAt DateTime? @map("delivery_otp_verified_at") @db.Timestamptz
   deliveredAt        DateTime?    @map("delivered_at") @db.Timestamptz
   ewayBillNo         String?      @map("eway_bill_no") @db.VarChar(30)
   // V2.2 Phase 1 — salesman attribution. Snapshotted at order creation

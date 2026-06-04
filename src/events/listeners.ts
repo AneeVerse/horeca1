@@ -151,6 +151,43 @@ export function registerEventListeners(): void {
     }
   });
 
+  eventBus.on('OrderDeliveryOtp', async (payload) => {
+    try {
+      const body = `Your delivery code for order ${payload.orderNumber} is ${payload.otp}. Share it with the delivery agent only when you receive your order.`;
+      await Promise.all([
+        notifications.send({
+          userId: payload.userId,
+          type: 'order',
+          channel: 'sms',
+          title: 'Delivery code',
+          body,
+          referenceId: payload.orderId,
+          referenceType: 'order',
+        }),
+        notifications.send({
+          userId: payload.userId,
+          type: 'order',
+          channel: 'email',
+          title: `Delivery code for order ${payload.orderNumber}`,
+          body,
+          referenceId: payload.orderId,
+          referenceType: 'order',
+        }),
+        notifications.send({
+          userId: payload.userId,
+          type: 'order',
+          channel: 'in_app',
+          title: 'Delivery code',
+          body: `Your delivery code is ${payload.otp}. Share it with the agent at handover.`,
+          referenceId: payload.orderId,
+          referenceType: 'order',
+        }),
+      ]);
+    } catch (error) {
+      console.error('[Events] OrderDeliveryOtp listener failed:', error);
+    }
+  });
+
   // ── Payments ────────────────────────────────────────────────────
 
   eventBus.on('PaymentReceived', async (payload) => {

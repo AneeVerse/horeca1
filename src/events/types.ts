@@ -35,6 +35,17 @@ export interface OrderCancelledPayload {
   reason?: string;
 }
 
+// V2.2 Phase 5 — delivery OTP issued to the customer. The listener delivers
+// the code over SMS + email + in-app so they can read it to the delivery
+// agent, who enters it to confirm handover.
+export interface OrderDeliveryOtpPayload {
+  orderId: string;
+  orderNumber: string;
+  userId: string;
+  vendorId: string;
+  otp: string;
+}
+
 export interface PaymentReceivedPayload {
   orderId: string;
   paymentId: string;
@@ -182,6 +193,7 @@ export interface EventMap {
   OrderShipped: OrderShippedPayload;
   OrderDelivered: OrderDeliveredPayload;
   OrderCancelled: OrderCancelledPayload;
+  OrderDeliveryOtp: OrderDeliveryOtpPayload;
   PaymentReceived: PaymentReceivedPayload;
   PaymentFailed: PaymentFailedPayload;
   StockUpdated: StockUpdatedPayload;
