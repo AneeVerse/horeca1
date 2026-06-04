@@ -17,7 +17,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-ENV NODE_OPTIONS="--max-old-space-size=1536"
+# Heap raised from 1536 → 3072 because Phase 4 grew the codebase past the
+# old ceiling — webpack was SIGABRT'ing at the end of the build with no
+# explicit OOM message. The droplet has 4G swap available so Node can
+# spill cleanly if it needs more than physical RAM.
+ENV NODE_OPTIONS="--max-old-space-size=3072"
 RUN npm run build
 
 # Worker image — runs notification.worker.ts via tsx (has full src + node_modules)
