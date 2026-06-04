@@ -4,12 +4,15 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Search, Plus, Loader2, Package, Pencil, X,
     ChevronRight, ChevronLeft, Info, ImageIcon, Settings, DollarSign, Trash2,
-    BarChart3, BoxIcon, Tag, Upload, Percent, Star,
+    BarChart3, BoxIcon, Tag, Upload, Percent, Star, Wand2,
+    ChevronDown, FileDown, FileSpreadsheet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ImageUpload, MultiImageUpload } from '@/components/ui/ImageUpload';
 import { CategoryMultiPickerById } from '@/components/features/brand/CategoryMultiPickerById';
+import VendorProductImportModal from '@/components/features/vendor/VendorProductImportModal';
+import VendorProductBulkUpdateModal from '@/components/features/vendor/VendorProductBulkUpdateModal';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -425,6 +428,10 @@ export default function VendorProductsPage() {
     const [importSaving, setImportSaving] = useState(false);
     const importFileRef = useRef<HTMLInputElement>(null);
 
+    // Export dropdown state
+    const [exportOpen, setExportOpen] = useState(false);
+    const exportRef = useRef<HTMLDivElement>(null);
+
     /* ---- Data fetching ---- */
 
     const fetchProducts = useCallback(async (showSpinner = true) => {
@@ -600,6 +607,17 @@ export default function VendorProductsPage() {
         }
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Close export dropdown when clicking outside
+    useEffect(() => {
+        function handleClick(e: MouseEvent) {
+            if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+                setExportOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
     }, []);
 
     /* ---- Panel open / close ---- */
@@ -1116,6 +1134,19 @@ export default function VendorProductsPage() {
         }
     };
 
+    const handleExport = (format: 'csv' | 'xlsx') => {
+        const params = new URLSearchParams();
+        params.set('format', format);
+        if (statusFilter !== 'all') {
+            if (statusFilter === 'active') params.set('isActive', 'true');
+            if (statusFilter === 'inactive') params.set('isActive', 'false');
+        }
+        if (searchQuery) params.set('search', searchQuery);
+
+        window.open(`/api/v1/vendor/products/export?${params.toString()}`, '_blank');
+        setExportOpen(false);
+    };
+
     /* ---- Derived values ---- */
 
     const grossRate = calcGrossRate(form.basePrice, form.taxPercent);
@@ -1145,19 +1176,50 @@ export default function VendorProductsPage() {
                             className="h-[40px] w-full bg-white border border-[#EEEEEE] rounded-[10px] pl-10 pr-4 text-[13px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 shadow-sm"
                         />
                     </div>
+                    
+                    {/* Export Dropdown */}
+                    <div className="relative" ref={exportRef}>
+                        <button
+                            onClick={() => setExportOpen(prev => !prev)}
+                            className="h-[40px] px-3.5 bg-white border border-[#EEEEEE] rounded-[10px] text-[12px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all flex items-center gap-1.5 shadow-sm"
+                        >
+                            <FileDown size={13} />
+                            Export
+                            <ChevronDown size={11} className={cn('transition-transform', exportOpen && 'rotate-180')} />
+                        </button>
+                        {exportOpen && (
+                            <div className="absolute right-0 top-[48px] w-[150px] bg-white border border-[#EEEEEE] rounded-[10px] shadow-lg z-50 overflow-hidden">
+                                <button
+                                    onClick={() => handleExport('csv')}
+                                    className="w-full flex items-center gap-2.5 px-4 py-3 text-[12px] font-semibold text-[#181725] hover:bg-[#F5F5F5] transition-colors text-left"
+                                >
+                                    <FileSpreadsheet size={13} className="text-[#299E60]" />
+                                    Export CSV
+                                </button>
+                                <button
+                                    onClick={() => handleExport('xlsx')}
+                                    className="w-full flex items-center gap-2.5 px-4 py-3 text-[12px] font-semibold text-[#181725] hover:bg-[#F5F5F5] transition-colors border-t border-[#EEEEEE] text-left"
+                                >
+                                    <FileSpreadsheet size={13} className="text-[#3B82F6]" />
+                                    Export Excel
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
                     <button
                         onClick={() => setShowBulkImport(true)}
                         className="h-[40px] px-3.5 border border-[#EEEEEE] bg-white rounded-[10px] text-[12px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all flex items-center gap-1.5 shrink-0"
                     >
                         <Upload size={13} />
-                        Import CSV
+                        Import
                     </button>
                     <button
                         onClick={() => setShowBulkPrice(true)}
                         className="h-[40px] px-3.5 border border-[#EEEEEE] bg-white rounded-[10px] text-[12px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all flex items-center gap-1.5 shrink-0"
                     >
-                        <Percent size={13} />
-                        Bulk Price
+                        <Wand2 size={13} className="text-[#299E60]" />
+                        Bulk Update
                     </button>
                     <button
                         onClick={openAddPanel}
@@ -2141,213 +2203,18 @@ export default function VendorProductsPage() {
                 </>
             )}
 
-            {/* ── Bulk Update Modal ──────────────────────────────── */}
-            {showBulkPrice && (
-                <>
-                    <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => !bulkPriceSaving && setShowBulkPrice(false)} />
-                    <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
-                        <div className="bg-white rounded-[16px] shadow-xl max-w-[460px] w-full">
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-[#F5F5F5]">
-                                <div>
-                                    <p className="text-[16px] font-bold text-[#181725]">Bulk Update</p>
-                                    <p className="text-[12px] text-[#AEAEAE]">Apply changes to all products (or by category)</p>
-                                </div>
-                                <button onClick={() => setShowBulkPrice(false)} className="p-1.5 rounded-[8px] hover:bg-[#F5F5F5]"><X size={16} className="text-[#7C7C7C]" /></button>
-                            </div>
-                            <div className="p-6 space-y-4">
-                                {/* Update type toggle */}
-                                <div className="flex gap-2 mb-4">
-                                    {(['price', 'status'] as const).map(t => (
-                                        <button
-                                            key={t}
-                                            onClick={() => setBulkUpdateType(t)}
-                                            className={`px-4 py-2 rounded-lg text-sm font-medium ${bulkUpdateType === t ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'}`}
-                                        >
-                                            {t === 'price' ? 'Update Price' : 'Update Status'}
-                                        </button>
-                                    ))}
-                                </div>
-                                {/* Category filter */}
-                                <div>
-                                    <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">Apply to category</label>
-                                    <select
-                                        value={bulkPriceCategoryId ?? ''}
-                                        onChange={e => setBulkPriceCategoryId(e.target.value || null)}
-                                        className="mt-1.5 w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/50"
-                                    >
-                                        <option value="">All products</option>
-                                        {categories.map(c => (
-                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                {bulkUpdateType === 'price' ? (
-                                    <>
-                                        {/* Type */}
-                                        <div>
-                                            <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">Adjustment type</label>
-                                            <div className="mt-1.5 flex gap-2">
-                                                {(['percent', 'fixed'] as const).map(t => (
-                                                    <button key={t} onClick={() => setBulkPriceType(t)}
-                                                        className={cn('flex-1 h-[36px] rounded-[8px] text-[12px] font-bold border transition-all',
-                                                            bulkPriceType === t ? 'bg-[#181725] text-white border-[#181725]' : 'bg-white text-[#7C7C7C] border-[#EEEEEE] hover:bg-[#F5F5F5]'
-                                                        )}>
-                                                        {t === 'percent' ? '% Percent' : '₹ Fixed amount'}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        {/* Value */}
-                                        <div>
-                                            <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">
-                                                Value {bulkPriceType === 'percent' ? '(negative to reduce, e.g. -5 for -5%)' : '(₹ delta, can be negative)'}
-                                            </label>
-                                            <input
-                                                type="number"
-                                                value={bulkPriceValue}
-                                                onChange={e => setBulkPriceValue(e.target.value)}
-                                                placeholder={bulkPriceType === 'percent' ? 'e.g. 5 or -10' : 'e.g. 10 or -5'}
-                                                className="mt-1.5 w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-bold outline-none focus:border-[#299E60]/50"
-                                            />
-                                        </div>
-                                        {/* Slabs toggle */}
-                                        <label className="flex items-center gap-2.5 cursor-pointer">
-                                            <input type="checkbox" checked={bulkPriceApplySlabs} onChange={e => setBulkPriceApplySlabs(e.target.checked)}
-                                                className="w-4 h-4 accent-[#299E60] rounded" />
-                                            <span className="text-[13px] font-medium text-[#181725]">Also adjust bulk price slabs</span>
-                                        </label>
-                                        <div className="flex gap-3 pt-1">
-                                            <button onClick={() => setShowBulkPrice(false)}
-                                                className="flex-1 h-[42px] rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all">
-                                                Cancel
-                                            </button>
-                                            <button onClick={handleBulkPriceUpdate} disabled={bulkPriceSaving || !bulkPriceValue}
-                                                className="flex-1 h-[42px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                                {bulkPriceSaving ? <Loader2 size={14} className="animate-spin" /> : <Percent size={14} />}
-                                                Update Prices
-                                            </button>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        {/* Status selector */}
-                                        <div>
-                                            <label className="text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wide">Set all matching products to:</label>
-                                            <div className="mt-2 flex flex-col gap-2">
-                                                <label className="flex items-center gap-2.5 cursor-pointer">
-                                                    <input
-                                                        type="radio"
-                                                        name="bulkStatus"
-                                                        checked={bulkStatus === true}
-                                                        onChange={() => setBulkStatus(true)}
-                                                        className="w-4 h-4 accent-[#299E60]"
-                                                    />
-                                                    <span className="text-[13px] font-medium text-[#181725]">Active</span>
-                                                </label>
-                                                <label className="flex items-center gap-2.5 cursor-pointer">
-                                                    <input
-                                                        type="radio"
-                                                        name="bulkStatus"
-                                                        checked={bulkStatus === false}
-                                                        onChange={() => setBulkStatus(false)}
-                                                        className="w-4 h-4 accent-[#299E60]"
-                                                    />
-                                                    <span className="text-[13px] font-medium text-[#181725]">Inactive</span>
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-3 pt-1">
-                                            <button onClick={() => setShowBulkPrice(false)}
-                                                className="flex-1 h-[42px] rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all">
-                                                Cancel
-                                            </button>
-                                            <button onClick={handleBulkStatusUpdate} disabled={bulkPriceSaving}
-                                                className="flex-1 h-[42px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                                {bulkPriceSaving ? <Loader2 size={14} className="animate-spin" /> : null}
-                                                Apply Status
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
+            {/* Vendor Premium Bulk Modals */}
+            <VendorProductImportModal
+                open={showBulkImport}
+                onClose={() => setShowBulkImport(false)}
+                onComplete={() => fetchProducts(false)}
+            />
 
-            {/* ── Bulk CSV Import Modal ────────────────────────────────── */}
-            {showBulkImport && (
-                <>
-                    <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => !importSaving && setShowBulkImport(false)} />
-                    <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
-                        <div className="bg-white rounded-[16px] shadow-xl max-w-[560px] w-full">
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-[#F5F5F5]">
-                                <div>
-                                    <p className="text-[16px] font-bold text-[#181725]">Import Products (CSV)</p>
-                                    <p className="text-[12px] text-[#AEAEAE]">Format: <span className="font-mono">name, sku, basePrice, packSize, unit</span></p>
-                                </div>
-                                <button onClick={() => { setShowBulkImport(false); setImportRows([]); }}
-                                    className="p-1.5 rounded-[8px] hover:bg-[#F5F5F5]"><X size={16} className="text-[#7C7C7C]" /></button>
-                            </div>
-                            <div className="p-6 space-y-4">
-                                {/* Drop zone */}
-                                <div
-                                    onDragOver={e => e.preventDefault()}
-                                    onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleImportFile(f); }}
-                                    onClick={() => importFileRef.current?.click()}
-                                    className="border-2 border-dashed border-[#EEEEEE] rounded-[12px] p-8 text-center cursor-pointer hover:border-[#299E60]/50 hover:bg-[#EEF8F1]/30 transition-all"
-                                >
-                                    <Upload size={24} className="text-[#AEAEAE] mx-auto mb-2" />
-                                    <p className="text-[13px] font-bold text-[#181725]">Drop CSV here or click to browse</p>
-                                    <p className="text-[11px] text-[#AEAEAE] mt-1">Existing SKUs will be updated; new SKUs will be created as pending</p>
-                                    <input ref={importFileRef} type="file" accept=".csv,text/csv" className="hidden"
-                                        onChange={e => e.target.files?.[0] && handleImportFile(e.target.files[0])} />
-                                </div>
-
-                                {/* Preview */}
-                                {importRows.length > 0 && (
-                                    <div className="rounded-[10px] border border-[#EEEEEE] overflow-hidden">
-                                        <div className="px-4 py-2.5 bg-[#FAFAFA] border-b border-[#EEEEEE] flex items-center justify-between">
-                                            <span className="text-[12px] font-bold text-[#181725]">{importRows.length} rows parsed</span>
-                                            {importRows.filter(r => r.error).length > 0 && (
-                                                <span className="text-[11px] font-bold text-[#E74C3C]">
-                                                    {importRows.filter(r => r.error).length} errors — will be skipped
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="max-h-[200px] overflow-y-auto divide-y divide-[#F5F5F5]">
-                                            {importRows.slice(0, 50).map((row, i) => (
-                                                <div key={i} className={cn('flex items-center justify-between px-4 py-2', row.error && 'bg-red-50/60')}>
-                                                    <div>
-                                                        <span className={cn('text-[12px] font-bold', row.error ? 'text-[#E74C3C]' : 'text-[#181725]')}>{row.name || '—'}</span>
-                                                        <span className="text-[11px] text-[#AEAEAE] ml-2 font-mono">{row.sku}</span>
-                                                    </div>
-                                                    {row.error
-                                                        ? <span className="text-[11px] text-[#E74C3C] font-bold">{row.error}</span>
-                                                        : <span className="text-[12px] font-bold text-[#299E60]">₹{row.basePrice}</span>
-                                                    }
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="flex gap-3 pt-1">
-                                    <button onClick={() => { setShowBulkImport(false); setImportRows([]); }}
-                                        className="flex-1 h-[42px] rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all">
-                                        Cancel
-                                    </button>
-                                    <button onClick={handleBulkImport} disabled={importSaving || importRows.filter(r => !r.error).length === 0}
-                                        className="flex-1 h-[42px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                        {importSaving ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                                        Import {importRows.filter(r => !r.error).length > 0 ? `${importRows.filter(r => !r.error).length} rows` : ''}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
+            <VendorProductBulkUpdateModal
+                open={showBulkPrice}
+                onClose={() => setShowBulkPrice(false)}
+                onComplete={() => fetchProducts(false)}
+            />
         </div>
     );
 }

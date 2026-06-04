@@ -748,7 +748,7 @@ export default function VendorDashboardPage() {
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             {[
                                 { label: 'Add Product', icon: '📦', href: '/vendor/products', color: '#EEF8F1', text: '#299E60' },
-                                { label: 'Upload Inventory', icon: '📊', href: '/vendor/bulk-upload', color: '#EFF6FF', text: '#3B82F6' },
+                                { label: 'Upload Inventory', icon: '📊', href: '/vendor/products', color: '#EFF6FF', text: '#3B82F6' },
                                 { label: 'Create Promotion', icon: '🎁', href: '/vendor/promotions', color: '#FFF7ED', text: '#F59E0B' },
                                 { label: 'Send Reminder', icon: '💬', href: '/vendor/collections', color: '#F3F0FF', text: '#8B5CF6' },
                                 { label: 'View Reports', icon: '📈', href: '/vendor/reports', color: '#FFF0F6', text: '#EC4899' },

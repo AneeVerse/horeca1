@@ -169,7 +169,7 @@ export default function SetupWizardPage() {
               <a href="/vendor/products" target="_blank" className="inline-flex items-center gap-2 bg-[#299E60] text-white px-6 py-3 rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] transition-colors">
                 Add Products <ChevronRight size={16} />
               </a>
-              <a href="/vendor/bulk-upload" target="_blank" className="inline-flex items-center gap-2 border border-[#299E60] text-[#299E60] px-6 py-3 rounded-[12px] text-[14px] font-bold hover:bg-[#EEF8F1] transition-colors">
+              <a href="/vendor/products" target="_blank" className="inline-flex items-center gap-2 border border-[#299E60] text-[#299E60] px-6 py-3 rounded-[12px] text-[14px] font-bold hover:bg-[#EEF8F1] transition-colors">
                 Bulk Upload
               </a>
             </div>

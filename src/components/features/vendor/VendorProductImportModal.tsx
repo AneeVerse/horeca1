@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * ProductImportModal — Admin-scoped Product Bulk Importer
+ * VendorProductImportModal — Vendor-scoped Product Bulk Importer
  * -------------------------------------------------------------
- * Premium dialog with vendor selection, drag-drop upload, server-side preview validation,
+ * Premium dialog with drag-drop upload, server-side preview validation,
  * inline cell editing, and transactional undo capability.
  */
 
@@ -24,7 +24,6 @@ type EditRow = Partial<{
   stock: number;
 }>;
 
-interface VendorOption { id: string; businessName: string }
 interface PreviewSlab { minQty: number; price: number; grossRate: number; promoPrice?: number | null }
 
 interface PreviewItem {
@@ -70,16 +69,14 @@ type Step = 'upload' | 'review' | 'result';
 interface Props {
   open: boolean;
   onClose: () => void;
-  vendors: VendorOption[];
   onComplete: () => void;
 }
 
-export default function ProductImportModal({ open, onClose, vendors, onComplete }: Props) {
+export default function VendorProductImportModal({ open, onClose, onComplete }: Props) {
   const [step, setStep] = useState<Step>('upload');
 
   // Upload step
   const [file, setFile] = useState<File | null>(null);
-  const [vendorId, setVendorId] = useState('');
   const [parsing, setParsing] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -91,17 +88,21 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
   const [edits, setEdits] = useState<Record<number, EditRow>>({});
 
-  // Categories loading
+  // Categories
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   useEffect(() => {
     if (!open || categories.length > 0) return;
-    fetch('/api/v1/admin/categories')
+    fetch('/api/v1/categories')
       .then((r) => r.json())
       .then((j) => {
-        if (j.success) {
-          const c = j.data?.categories ?? j.data ?? [];
-          setCategories(Array.isArray(c) ? c : []);
+        if (!j.success || !Array.isArray(j.data)) return;
+        type Cat = { id: string; name: string; children?: Cat[] };
+        const flat: Array<{ id: string; name: string }> = [];
+        for (const c of j.data as Cat[]) {
+          flat.push({ id: c.id, name: c.name });
+          for (const child of c.children ?? []) flat.push({ id: child.id, name: child.name });
         }
+        setCategories(flat);
       })
       .catch(() => {});
   }, [open, categories.length]);
@@ -117,7 +118,6 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
   const reset = useCallback(() => {
     setStep('upload');
     setFile(null);
-    setVendorId('');
     setParsing(false);
     setPreview(null);
     setSkipRows(new Set());
@@ -173,10 +173,9 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
     try {
       const fd = new FormData();
       fd.append('file', file);
-      if (vendorId) fd.append('vendorId', vendorId);
       fd.append('mode', 'preview');
 
-      const res = await fetch('/api/v1/admin/products/import', { method: 'POST', body: fd });
+      const res = await fetch('/api/v1/vendor/products/import', { method: 'POST', body: fd });
       const json = await res.json();
 
       if (json.success && json.data) {
@@ -211,7 +210,6 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
     try {
       const fd = new FormData();
       fd.append('file', file);
-      if (vendorId) fd.append('vendorId', vendorId);
       fd.append('mode', 'commit');
       if (skipRows.size > 0) {
         fd.append('skipRows', JSON.stringify([...skipRows]));
@@ -220,7 +218,7 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
         fd.append('edits', JSON.stringify(edits));
       }
 
-      const res = await fetch('/api/v1/admin/products/import', { method: 'POST', body: fd });
+      const res = await fetch('/api/v1/vendor/products/import', { method: 'POST', body: fd });
       const json = await res.json();
 
       if (json.success && json.data) {
@@ -251,7 +249,7 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
     try {
       const backup = JSON.parse(backupData);
       for (const p of backup) {
-        await fetch(`/api/v1/admin/products/${p.id}`, {
+        await fetch(`/api/v1/vendor/products/${p.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -287,8 +285,7 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
   };
 
   const downloadTemplate = () => {
-    const params = new URLSearchParams({ template: 'true', format: 'xlsx' });
-    window.open(`/api/v1/admin/products/export?${params}`, '_blank');
+    window.open('/api/v1/vendor/products/import?template=true', '_blank');
   };
 
   const toggleSkip = (row: number) => {
@@ -349,24 +346,7 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
             {step === 'upload' && (
               <div className="max-w-[620px] mx-auto space-y-6 py-6">
                 <div className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                  <h3 className="text-[16px] font-bold text-[#181725]">1. Select Vendor Scope</h3>
-                  <p className="text-[13px] text-[#7C7C7C] font-medium leading-relaxed">
-                    Choose which vendor catalog these products should be imported into, or leave blank to import into the global master catalog.
-                  </p>
-                  <select
-                    value={vendorId}
-                    onChange={e => setVendorId(e.target.value)}
-                    className="w-full h-[44px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-4 text-[13px] font-semibold outline-none transition-all focus:border-[#299E60]/40 focus:bg-white cursor-pointer text-[#181725]"
-                  >
-                    <option value="">Catalog (Global Master Catalog)</option>
-                    {vendors.map(v => (
-                      <option key={v.id} value={v.id}>{v.businessName}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                  <h3 className="text-[16px] font-bold text-[#181725]">2. Download template</h3>
+                  <h3 className="text-[16px] font-bold text-[#181725]">1. Download template</h3>
                   <p className="text-[13px] text-[#7C7C7C] font-medium leading-relaxed">
                     Download the Excel template to prepare your catalog sheet. Fill in fields like Product Name, SKU, Category, and base prices.
                   </p>
@@ -376,7 +356,7 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
                 </div>
 
                 <div className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                  <h3 className="text-[16px] font-bold text-[#181725]">3. Upload file</h3>
+                  <h3 className="text-[16px] font-bold text-[#181725]">2. Upload file</h3>
                   <div
                     onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
                     onDragLeave={() => setIsDragOver(false)}
@@ -491,6 +471,7 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
                                     {item.action === 'create' ? 'Create' : 'Update'}
                                   </span>
                                 </td>
+                                {/* Inline edits mapping cells */}
                                 <td className="px-6 py-4 truncate">
                                   <input type="text" value={nameVal} onChange={e => setEdit(item.row, 'name', e.target.value)} className="bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[#299E60] focus:bg-white px-1 py-0.5 rounded outline-none w-full" />
                                 </td>
@@ -539,6 +520,7 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
                 {/* Detail View */}
                 {viewMode === 'detail' && currentItem && (
                   <div className="flex-1 bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm p-8 flex flex-col md:flex-row gap-8 min-h-0 overflow-y-auto">
+                    {/* Left: Metadata Form */}
                     <div className="flex-1 space-y-6">
                       <div className="flex items-center justify-between border-b border-[#F5F5F5] pb-4">
                         <div className="flex items-center gap-3">
@@ -578,6 +560,7 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
                         </div>
                       </div>
 
+                      {/* Navigation controls */}
                       <div className="flex items-center gap-3 border-t border-[#F5F5F5] pt-6">
                         <button disabled={reviewIdx === 0} onClick={() => setReviewIdx(r => r - 1)} className="h-[40px] px-4 bg-[#F8F9FB] border border-[#EEEEEE] hover:bg-[#EEEEEE] disabled:opacity-40 rounded-[8px] text-[12px] font-bold text-[#181725] flex items-center gap-1.5">
                           <ChevronLeft size={14} /> Prev
@@ -588,7 +571,9 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
                       </div>
                     </div>
 
+                    {/* Right: Slabs preview and original diff */}
                     <div className="w-full md:w-[320px] bg-[#F8F9FB] rounded-[16px] border border-[#EEEEEE] p-6 space-y-6">
+                      {/* Slabs list */}
                       <div>
                         <h5 className="text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-3">Pricing slabs</h5>
                         {currentItem.bulkSlabs && currentItem.bulkSlabs.length > 0 ? (
@@ -605,6 +590,7 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
                         )}
                       </div>
 
+                      {/* Original diff comparison */}
                       {currentItem.existing && (
                         <div>
                           <h5 className="text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-3">Catalog comparison</h5>
@@ -671,6 +657,7 @@ export default function ProductImportModal({ open, onClose, vendors, onComplete 
                   </div>
                 )}
 
+                {/* Undo / Logs block */}
                 {backupData && !undone && (
                   <div className="bg-white border border-[#EEEEEE] rounded-[16px] p-5 shadow-sm space-y-3">
                     <div className="flex items-center justify-between">

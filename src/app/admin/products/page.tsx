@@ -26,10 +26,13 @@ import {
     BoxIcon,
     Settings as SettingsIcon,
     BarChart3,
+    Wand2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 import { ImageUpload, MultiImageUpload } from '@/components/ui/ImageUpload';
 import ProductImportModal from '@/components/features/admin/ProductImportModal';
+import ProductBulkUpdateModal from '@/components/features/admin/ProductBulkUpdateModal';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 import { CategoryMultiPickerById } from '@/components/features/brand/CategoryMultiPickerById';
 
@@ -346,6 +349,7 @@ export default function ProductsPage() {
 
     // Import modal
     const [importOpen, setImportOpen] = useState(false);
+    const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
 
     // Export dropdown
     const [exportOpen, setExportOpen] = useState(false);
@@ -891,6 +895,17 @@ export default function ProductsPage() {
                         </button>
                     )}
 
+                    {/* Bulk Update Button */}
+                    {perms.canWriteProducts && (
+                        <button
+                            onClick={() => setBulkUpdateOpen(true)}
+                            className="h-[44px] px-5 bg-white border border-[#EEEEEE] rounded-[12px] text-[13px] font-bold text-[#181725] hover:bg-[#F8F9FB] transition-all flex items-center gap-2 shadow-sm"
+                        >
+                            <Wand2 size={16} className="text-[#299E60]" />
+                            Bulk Update
+                        </button>
+                    )}
+
                     {/* Add Product Button */}
                     {perms.canWriteProducts && (
                         <button
@@ -1304,7 +1319,7 @@ export default function ProductsPage() {
                                     </select>
                                     {brands.length === 0 && (
                                         <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
-                                            No brands yet — add one in <a href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</a>
+                                            No brands yet — add one in <Link href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</Link>
                                         </p>
                                     )}
                                 </div>
@@ -1794,6 +1809,15 @@ export default function ProductsPage() {
                 open={importOpen}
                 onClose={() => setImportOpen(false)}
                 vendors={vendors}
+                onComplete={handleImportComplete}
+            />
+
+            {/* ============================================================= */}
+            {/* Bulk Update Modal                                               */}
+            {/* ============================================================= */}
+            <ProductBulkUpdateModal
+                open={bulkUpdateOpen}
+                onClose={() => setBulkUpdateOpen(false)}
                 onComplete={handleImportComplete}
             />
 

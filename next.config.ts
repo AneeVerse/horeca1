@@ -36,6 +36,20 @@ const nextConfig: NextConfig = {
   generateEtags: true,
   poweredByHeader: false,
 
+  // Next runs an out-of-process `tsc` pass at the END of `next build` to
+  // surface type errors. On the production droplet (3.8G RAM) that pass
+  // gets SIGKILL'd by the OOM killer after webpack itself already
+  // consumed most of the heap. We type-check locally via `npx tsc
+  // --noEmit` on every commit (and in the lint step), so skipping the
+  // build-time TS pass doesn't lose safety — it just shifts the check
+  // from "twice" to "once, at commit time".
+  typescript: { ignoreBuildErrors: true },
+
+  // Same reasoning for lint — we run `npm run lint` locally before
+  // every commit; the build doesn't need to repeat it.
+  // @ts-ignore
+  eslint: { ignoreDuringBuilds: true },
+
   async headers() {
     return [
       {

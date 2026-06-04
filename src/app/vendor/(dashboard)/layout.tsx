@@ -69,8 +69,6 @@ const SIDEBAR_LINKS: VendorSidebarLink[] = [
     { name: 'Dashboard',     icon: LayoutDashboard, href: '/vendor/dashboard',      requiredPerm: 'dashboard.view' },
     { name: 'Orders',        icon: ShoppingBag,     href: '/vendor/orders',         requiredPerm: 'orders.view' },
     { name: 'Products',      icon: Package,         href: '/vendor/products',       requiredPerm: 'products.view' },
-    { name: 'Bulk Upload',   icon: Upload,          href: '/vendor/bulk-upload',    requiredPerm: 'products.create' },
-    { name: 'Bulk Update',   icon: Wand2,           href: '/vendor/bulk-update',    requiredPerm: 'products.edit' },
     { name: 'Brand Mappings',icon: GitMerge,        href: '/vendor/brand-mappings', requiredPerm: 'products.edit' },
     { name: 'Inventory',     icon: Warehouse,       href: '/vendor/inventory',      requiredPerm: 'inventory.view' },
     { name: 'Collections',   icon: Landmark,        href: '/vendor/collections',    requiredPerm: 'products.edit' },

@@ -1,12 +1,36 @@
+/**
+ * POST /api/v1/vendor/products/import — Server-side Excel/CSV product importer
+ * GET  /api/v1/vendor/products/import?template=true — Download import template
+ * ───────────────────────────────────────────────────────────────────────────
+ * Vendor-facing twin of /api/v1/admin/products/import. Same robust two-phase
+ * flow (preview → commit) with inline row edits, per-row skip, and an undo
+ * backup — but every read, write, and backup is hard-scoped to the caller's
+ * session-resolved vendorId. A vendor can never preview or mutate another
+ * vendor's catalog: the vendorId is taken from resolveVendorContext, never
+ * from the request body.
+ *
+ * Differences from the admin route (all intentional):
+ *   • vendorId is always present (session-resolved), so inventory rows and
+ *     price slabs are always created — no "catalog-level" no-vendor branch.
+ *   • New products land as approvalStatus='pending' (vendors don't self-
+ *     approve). Updates leave approval untouched.
+ *   • Tombstoned products (slug starts with `_deleted_`) are excluded from
+ *     match queries so a delete-then-reimport creates fresh rows instead of
+ *     resurrecting a dead one.
+ *   • Slugs are made unique per-vendor at create time to respect the
+ *     [vendorId, slug] unique constraint even when a file repeats a name.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { adminOnly } from '@/middleware/rbac';
+import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
-import { parseProductImport, type ParsedProductRow } from '@/modules/import-export/excel.service';
+import { parseProductImport, generateImportTemplate, type ParsedProductRow } from '@/modules/import-export/excel.service';
+import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
 
-// ── Preview mode: parse file, match SKUs, return diff without committing ──
-// ── Commit mode: actually create/update products with backup ──
+// ── Response shapes — kept identical to the admin importer so the review
+//    wizard UI is portable between the two portals. ──
 
 interface PreviewItem {
   row: number;
@@ -19,12 +43,8 @@ interface PreviewItem {
   taxPercent: number;
   stock?: number;
   bulkSlabCount: number;
-  // Full slab list so the UI can show admin the actual tier prices
-  // (not just the count). Each entry is the taxable rate + qty threshold
-  // the row defines.
   bulkSlabs: Array<{ minQty: number; price: number; grossRate: number; promoPrice?: number | null }>;
   hasPromo: boolean;
-  // For updates — show what changed
   existing?: {
     id: string;
     name: string;
@@ -53,21 +73,40 @@ interface CommitResponse {
   backupId: string;
 }
 
-export const POST = adminOnly(async (req: NextRequest, ctx) => {
+// Tombstoned products keep their data but get a `_deleted_`-prefixed slug so
+// the [vendorId, slug] unique constraint frees up. Match queries skip them.
+const NOT_TOMBSTONED = { slug: { not: { startsWith: '_deleted_' } } } as const;
+
+function toSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+export const GET = vendorOnly(async () => {
   try {
+    // Static import template — same canonical generator the admin uses, so
+    // the column headers the parser expects never drift from the template.
+    const buffer = generateImportTemplate();
+    return new NextResponse(new Uint8Array(buffer), {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': 'attachment; filename="product_import_template.xlsx"',
+      },
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+});
+
+export const POST = vendorOnly(async (req: NextRequest, ctx) => {
+  try {
+    const { vendorId } = await resolveVendorContext(ctx, req);
     requirePermission(ctx, 'products.create');
+
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     if (!file) throw Errors.notFound('File');
 
-    const vendorId = formData.get('vendorId') as string | null || null;
     const mode = (formData.get('mode') as string) || 'preview'; // 'preview' | 'commit'
-
-    // Verify vendor exists (if provided)
-    if (vendorId) {
-      const vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, select: { id: true } });
-      if (!vendor) throw Errors.notFound('Vendor');
-    }
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const { rows, errors: parseErrors } = parseProductImport(buffer);
@@ -83,9 +122,10 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       });
     }
 
-    // Resolve category names → IDs
+    // Resolve category names → IDs (active + approved only — vendors can't
+    // assign products to pending/disabled categories).
     const allCategories = await prisma.category.findMany({
-      where: { isActive: true },
+      where: { isActive: true, approvalStatus: 'approved' },
       select: { id: true, name: true, slug: true },
     });
     const catMap = new Map<string, string>();
@@ -94,42 +134,36 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       catMap.set(c.slug.toLowerCase(), c.id);
     }
 
-    // Fetch existing products for duplicate detection (by SKU or name)
-    // When vendor selected: match within that vendor
-    // When no vendor (catalog): match across ALL products to detect duplicates
-    const vendorFilter: Record<string, unknown> = vendorId ? { vendorId } : {};
-
-    // 1. Match by SKU
+    // ── Existing-product detection, scoped strictly to this vendor and
+    //    excluding tombstones. Match by SKU first, then by name. ──
     const skus = rows.filter(r => r.sku).map(r => r.sku!);
-    const existingBySku = new Map<string, typeof existingProducts[0]>();
     const existingProducts = skus.length > 0
       ? await prisma.product.findMany({
-          where: { sku: { in: skus }, ...vendorFilter },
+          where: { sku: { in: skus }, vendorId, ...NOT_TOMBSTONED },
           include: {
             inventory: { select: { qtyAvailable: true } },
             priceSlabs: { orderBy: { sortOrder: 'asc' } },
           },
         })
       : [];
+    const existingBySku = new Map<string, typeof existingProducts[0]>();
     for (const p of existingProducts) {
       if (p.sku) existingBySku.set(p.sku, p);
     }
 
-    // 2. Match by name (fallback for rows without SKU or no SKU match)
     const names = rows.map(r => r.name);
-    const existingByName = new Map<string, typeof existingProducts[0]>();
     const nameProducts = await prisma.product.findMany({
-      where: { name: { in: names, mode: 'insensitive' }, ...vendorFilter },
+      where: { name: { in: names, mode: 'insensitive' }, vendorId, ...NOT_TOMBSTONED },
       include: {
         inventory: { select: { qtyAvailable: true } },
         priceSlabs: { orderBy: { sortOrder: 'asc' } },
       },
     });
+    const existingByName = new Map<string, typeof existingProducts[0]>();
     for (const p of nameProducts) {
       existingByName.set(p.name.toLowerCase(), p);
     }
 
-    // Helper: find existing product by SKU first, then by name
     function findExisting(row: { sku?: string; name: string }) {
       if (row.sku && existingBySku.has(row.sku)) return existingBySku.get(row.sku)!;
       return existingByName.get(row.name.toLowerCase());
@@ -145,9 +179,6 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
         const rowNum = idx + 2;
         const existing = findExisting(r);
 
-        // Surface the actual slab tier prices so the UI can show them
-        // inline. The taxable + gross rates are kept distinct so the UI
-        // doesn't have to recompute.
         const slabPreview = r.bulkSlabs.map((s) => ({
           minQty: s.minQty,
           price: s.taxableRate,
@@ -213,10 +244,14 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
     }
 
     // ── COMMIT MODE ──
-    // Step 1: Create backup of existing products that will be updated
-    const backupId = `import_${Date.now()}_${(vendorId || 'catalog').slice(0, 8)}`;
+    // Backup every product that could be updated so the UI can offer a
+    // complete Undo. A product can be matched by SKU *or* by name, so we
+    // union both maps and dedupe by id — backing up only the SKU matches
+    // (as a naive version would) silently drops name-matched updates from
+    // the restore set.
+    const backupId = `import_${Date.now()}_${vendorId.slice(0, 8)}`;
     const backupSource = Array.from(
-      new Map([...existingProducts, ...nameProducts].map((p) => [p.id, p])).values()
+      new Map([...existingProducts, ...nameProducts].map((p) => [p.id, p])).values(),
     );
     const productsToBackup = backupSource.map(p => ({
       id: p.id,
@@ -236,26 +271,21 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       })),
     }));
 
-    // Store backup as JSON in metadata (could use Redis/DB for production scale)
-    // For now, we return it to the client for undo capability
     let created = 0, updated = 0;
     const commitErrors: { row: number; message: string }[] = [...parseErrors];
 
-    // Optional: get skip list from client (rows to skip)
+    // Rows the vendor chose to skip in the review table.
     const skipRowsStr = formData.get('skipRows') as string | null;
     const skipRows = new Set(skipRowsStr ? JSON.parse(skipRowsStr) as number[] : []);
 
-    // Optional: get per-row inline edits from client (admin tweaked values
-    // in the review table before clicking Confirm). Shape:
-    //   { [rowNum]: { name?, sku?, category?, basePrice?, taxPercent?, stock? } }
-    // Whitelisted at apply-time so a forged extra key can't reach Prisma.
+    // Per-row inline edits made in the review table. Whitelisted at apply
+    // time so a forged extra key can't reach Prisma.
     const editsStr = formData.get('edits') as string | null;
     type EditRow = Partial<{ name: string; sku: string; category: string; basePrice: number; taxPercent: number; stock: number }>;
     let editsMap: Record<number, EditRow> = {};
     if (editsStr) {
       try {
         const parsed = JSON.parse(editsStr) as Record<string, EditRow>;
-        // Normalize keys to numbers + whitelist fields.
         for (const [k, v] of Object.entries(parsed)) {
           const n = Number(k);
           if (!Number.isInteger(n)) continue;
@@ -271,16 +301,12 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       } catch { editsMap = {}; }
     }
 
-    // Fetch all slugs for duplicate detection and unique slug generation
+    // Slug uniqueness guard — seed from this vendor's existing slugs (incl.
+    // tombstones, since those still occupy the unique key) and reserve each
+    // new slug as we mint it so two rows with the same name don't collide.
     const usedSlugs = new Set(
-      (await prisma.product.findMany({
-        where: vendorId ? { vendorId } : { vendorId: null },
-        select: { slug: true }
-      })).map(p => p.slug)
+      (await prisma.product.findMany({ where: { vendorId }, select: { slug: true } })).map(p => p.slug),
     );
-    function toSlug(name: string): string {
-      return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-    }
     function uniqueSlug(name: string): string {
       const base = toSlug(name) || 'product';
       let candidate = base;
@@ -298,8 +324,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 
       if (skipRows.has(rowNum)) continue;
 
-      // Merge inline edits OVER the parsed row. The admin's keystrokes
-      // win for any field they touched in the review table.
+      // Merge inline edits OVER the parsed row — vendor keystrokes win.
       const e = editsMap[rowNum] ?? {};
       const r = {
         ...parsedRow,
@@ -314,12 +339,9 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       try {
         const categoryId = r.category ? catMap.get(r.category.toLowerCase()) || null : null;
         const existing = findExisting(r);
-        const slug = existing ? existing.slug : uniqueSlug(r.name);
 
         if (existing) {
-          // ── UPDATE existing product ──
-          // SKU also gets written through — previously the update path
-          // dropped SKU edits silently. Admin edits land everywhere.
+          // ── UPDATE existing product (approval left untouched) ──
           await prisma.product.update({
             where: { id: existing.id },
             data: {
@@ -338,30 +360,16 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             },
           });
 
-          // Stock update — for catalog-level imports (no vendor selected),
-          // we update inventory IF the existing product already has an
-          // Inventory row (and thus a vendorId on it). Without a vendorId
-          // we can't CREATE a new Inventory row, but updating an existing
-          // one is safe because the FK to vendor is preserved.
           if (r.stock !== undefined) {
-            if (vendorId) {
-              await prisma.inventory.upsert({
-                where: { productId: existing.id },
-                update: { qtyAvailable: r.stock },
-                create: { productId: existing.id, vendorId, qtyAvailable: r.stock, lowStockThreshold: 10 },
-              });
-            } else {
-              await prisma.inventory.updateMany({
-                where: { productId: existing.id },
-                data: { qtyAvailable: r.stock },
-              });
-            }
+            await prisma.inventory.upsert({
+              where: { productId: existing.id },
+              update: { qtyAvailable: r.stock },
+              create: { productId: existing.id, vendorId, qtyAvailable: r.stock, lowStockThreshold: 10 },
+            });
           }
 
-          // Replace price slabs (requires vendorId — slabs are per-vendor)
-          if (vendorId) await updatePriceSlabs(existing.id, vendorId, r);
+          await updatePriceSlabs(existing.id, vendorId, r);
 
-          // Link category in the join table
           if (categoryId) {
             await prisma.productCategory.upsert({
               where: { productId_categoryId: { productId: existing.id, categoryId } },
@@ -372,49 +380,37 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 
           updated++;
         } else {
-          // ── CREATE new product ──
-          const productData: Record<string, unknown> = {
-            vendorId: vendorId || null,
-            categoryId,
-            name: r.name,
-            slug,
-            sku: r.sku || null,
-            hsn: r.hsn || null,
-            unit: r.unit || null,
-            brand: r.brand || null,
-            basePrice: r.basePrice,
-            taxPercent: r.taxPercent,
-            promoPrice: r.promoPrice || null,
-            promoStartTime: r.promoStartTime || null,
-            promoEndTime: r.promoEndTime || null,
-            imageUrl: r.imageUrl || null,
-            approvalStatus: 'approved',
-            approvedBy: ctx.userId,
-            approvedAt: new Date(),
-          };
+          // ── CREATE new product (pending vendor approval) ──
+          const product = await prisma.product.create({
+            data: {
+              vendorId,
+              categoryId,
+              name: r.name,
+              slug: uniqueSlug(r.name),
+              sku: r.sku || null,
+              hsn: r.hsn || null,
+              unit: r.unit || null,
+              brand: r.brand || null,
+              basePrice: r.basePrice,
+              taxPercent: r.taxPercent,
+              promoPrice: r.promoPrice || null,
+              promoStartTime: r.promoStartTime || null,
+              promoEndTime: r.promoEndTime || null,
+              imageUrl: r.imageUrl || null,
+              approvalStatus: 'pending',
+              inventory: {
+                create: { vendorId, qtyAvailable: r.stock ?? 0, lowStockThreshold: 10 },
+              },
+            },
+          });
 
-          // Inventory requires vendorId
-          if (vendorId) {
-            productData.inventory = {
-              create: { vendorId, qtyAvailable: r.stock ?? 0, lowStockThreshold: 10 },
-            };
-          }
-
-          const product = await prisma.product.create({ data: productData as Parameters<typeof prisma.product.create>[0]['data'] });
-
-          // Link category in the join table
           if (categoryId) {
             await prisma.productCategory.create({
-              data: {
-                productId: product.id,
-                categoryId,
-                isPrimary: true,
-              },
+              data: { productId: product.id, categoryId, isPrimary: true },
             });
           }
 
-          // Create price slabs (requires vendorId)
-          if (vendorId) await updatePriceSlabs(product.id, vendorId, r);
+          await updatePriceSlabs(product.id, vendorId, r);
 
           created++;
         }
@@ -433,7 +429,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
         updated,
         errors: commitErrors,
         backupId,
-        backup: productsToBackup, // Client stores this for undo
+        backup: productsToBackup,
       } satisfies CommitResponse & { backup: typeof productsToBackup },
     });
   } catch (error) {
@@ -441,14 +437,10 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
   }
 });
 
-// Helper: replace price slabs for a product from import row
+// Replace a product's price slabs from an import row (vendor-scoped).
 async function updatePriceSlabs(productId: string, vendorId: string, row: ParsedProductRow) {
   if (row.bulkSlabs.length === 0) return;
-
-  // Delete existing slabs
   await prisma.priceSlab.deleteMany({ where: { productId, vendorId } });
-
-  // Create new slabs
   await prisma.priceSlab.createMany({
     data: row.bulkSlabs.map((slab, idx) => ({
       productId,
