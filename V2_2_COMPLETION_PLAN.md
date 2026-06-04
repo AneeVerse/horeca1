@@ -266,11 +266,13 @@ Each chunk lands separately with its own diff so any regression is bisectable. S
 | Phase | Status | Started | Completed | Commit range |
 |---|---|---|---|---|
 | 0 | ✅ Done | — | 2026-06-02 | `aa89e18..bef4f61` |
-| 1 | ✅ Code complete — awaiting deploy | 2026-06-02 | 2026-06-02 | `aa40fd3..e91ab6f` (6 commits + plan) |
+| 1 | ✅ Deployed | 2026-06-02 | 2026-06-02 | `aa40fd3..e91ab6f` (6 commits + plan) |
 | 1.5 | ✅ Admin Add-Vendor full KYC wizard | 2026-06-03 | 2026-06-03 | `9b78b0b` (+ `cdd2934` switcher fix) |
-| 2 | ✅ Code complete | 2026-06-03 | 2026-06-03 | bulk-update endpoint + count endpoint + UI |
-| 3 | ✅ Code complete (bundled with Phase 2) | 2026-06-03 | 2026-06-03 | category 1-parent enforcement |
-| 4 | Not started | — | — | — |
+| 2 | ✅ Deployed | 2026-06-03 | 2026-06-03 | `5a72d9c` (bulk-update + count + UI) |
+| 3 | ✅ Deployed (bundled with Phase 2) | 2026-06-03 | 2026-06-03 | category 1-parent enforcement |
+| 3.5 | ✅ Admin import UX + edits land | 2026-06-03 | 2026-06-03 | `54adec8..9741958` |
+| 3.6 | ✅ Admin customers bulk + import | 2026-06-03 | 2026-06-03 | `72851af` |
+| 4 | 🟡 In progress | 2026-06-03 | — | PriceList Mgmt — assignments + pricing types + bulk + resolver |
 | 5 | Not started | — | — | — |
 | 6 | Not started | — | — | — |
 | 7 | Not started | — | — | — |
@@ -302,6 +304,181 @@ Each chunk lands separately with its own diff so any regression is bisectable. S
 **Known follow-ups (next phase)**
 - Bulk-update for **Inventory** stock quantities — Inventory is a separate model; better fits a dedicated bulk action on `/vendor/inventory`. Phase 4 PriceList work will revisit.
 - Extending the Excel `bulk-import` to write `isActive`, `minOrderQty`, `creditEligible`, `description`, `vegNonVeg`, `storageType` columns — current scope is intentionally limited to creating products; "update on existing SKU" already happens via the importer but only for the original column set. Will fold into Phase 4 since pricelist work touches the same import pipeline.
+
+---
+
+# PHASE 4 — Section 6: PriceList Management
+
+**Scope:** unlimited price lists per vendor + assignment by Customer / Outlet / Pincode / Area / Customer-segment / Brand + four pricing types (Fixed / Discount-% / Special / Scheme) + bulk price upload + a **runtime price-resolver** that cart and checkout both call so the assignment + override layer is honoured everywhere a price is shown.
+
+**Why this is the marquee phase:** without the resolver, every other piece (assignments, pricing types, bulk upload) is just paperwork — products still display Product.basePrice. The resolver is the single binding point that turns the data model into actual differential pricing.
+
+## Schema — [prisma/schema.prisma](prisma/schema.prisma)
+
+### 1) New enum `PricingType`
+```
+enum PricingType {
+  fixed     // hard set: PriceListItem.customPrice replaces basePrice
+  discount  // multiplicative: basePrice × (1 − discountPercent / 100)
+  special   // same write semantics as fixed, but flagged as "promo/limited"
+            // so the UI can badge it differently. No different math.
+  scheme    // qty-gated: kicks in when cart qty ≥ schemeMinQty; price drops
+            // to customPrice; schemeFreeQty optionally adds N free units
+}
+```
+
+### 2) New enum `PriceListAssignmentType`
+```
+enum PriceListAssignmentType {
+  customer   // points at a specific User (1:1 customer relationship)
+  outlet     // points at a specific Outlet (deliver-to address)
+  pincode    // free-text pincode string
+  area       // free-text area / city / state string
+  segment    // free-text tag, matched against VendorCustomer.tags
+  brand      // Brand row id OR brand-name string fallback
+  // (no `distributor` — out of scope per V2.2 clarifications)
+}
+```
+
+### 3) New model `PriceListAssignment`
+```
+PriceListAssignment
+  id          Uuid @id
+  priceListId Uuid    FK → PriceList.id   onDelete: Cascade
+  type        PriceListAssignmentType
+  // Exactly one of the targeting columns is populated per row. The
+  // service-layer resolver checks the appropriate column based on
+  // `type`. We don't FK every column because brand+pincode+area+segment
+  // don't have referential targets in our schema today.
+  userId           Uuid?    FK → User.id              onDelete: Cascade
+  businessAccountId Uuid?   FK → BusinessAccount.id   onDelete: Cascade
+  outletId         Uuid?    FK → Outlet.id            onDelete: Cascade
+  brandId          Uuid?    FK → Brand.id             onDelete: Cascade
+  pincode          String?  @db.VarChar(10)
+  area             String?  @db.VarChar(100)
+  segment          String?  @db.VarChar(100)
+  brandName        String?  @db.VarChar(150)   // fallback when brand isn't in our Brand table
+  createdAt        DateTime
+  @@index([priceListId, type])
+  @@index([userId])
+  @@index([outletId])
+  @@index([pincode])
+```
+
+### 4) Extend `PriceListItem`
+```
++ pricingType      PricingType  @default(fixed)
++ discountPercent  Decimal?  @db.Decimal(5, 2)
++ schemeMinQty     Int?
++ schemeFreeQty    Int?
+// existing customPrice column reused; for type='discount' it's null
+```
+
+### 5) Opposite-side relations
+`User`, `BusinessAccount`, `Outlet`, `Brand`, `PriceList` all add a back-relation `priceListAssignments PriceListAssignment[]` so `findFirst` queries with `assignments: { some: ... }` work both ways.
+
+## Runtime resolver — `src/modules/pricing/pricing.service.ts` (NEW)
+
+Single exported function `resolveUnitPrice` invoked everywhere a product price is computed (cart add, cart update, cart read, checkout subtotal, order line-write).
+
+**Signature:**
+```
+resolveUnitPrice(input: {
+  productId: string;
+  vendorId: string;
+  quantity: number;
+  customer: {
+    userId: string;
+    businessAccountId: string;
+    outletId: string;
+    outletPincode: string | null;
+    outletCity: string | null;
+    outletState: string | null;
+    tags: readonly string[];             // VendorCustomer.tags for the (vendor, user) pair
+  };
+}): Promise<{ unitPrice: Decimal; source: ResolutionSource }>
+```
+
+**Priority chain** (first match wins, falls through to next on no match):
+
+1. **Outlet-specific** assignment matching customer's `outletId`
+2. **Customer-specific** assignment matching `userId` OR `businessAccountId`
+3. **Customer-segment** assignment whose `segment` value is in `customer.tags`
+4. **Pincode** assignment matching `outletPincode`
+5. **Area** assignment matching `outletCity` or `outletState`
+6. **Brand** assignment matching the product's `brand` field
+7. **Legacy `VendorCustomer.priceListId`** (the existing customer-pricelist mapping)
+8. **`VendorCustomerPrice`** per-product override (existing system)
+9. **Quantity slabs** from `PriceSlab` (existing)
+10. **`Product.basePrice`** (final fallback)
+
+Within whichever PriceList wins, the resolver applies the matching `PriceListItem`:
+- `fixed` / `special` → `customPrice` is the new unit price
+- `discount` → `basePrice × (1 - discountPercent / 100)`
+- `scheme` → if `quantity >= schemeMinQty`, use `customPrice`; else fall through
+
+If no `PriceListItem` row exists for the product but the PriceList itself has a global `discountPercent`, that applies on `basePrice`.
+
+**Idempotent + cacheable:** resolver takes no state. Caller passes context. Tests can mock the customer record cleanly.
+
+## Service integration
+
+### `cart.service.ts` (MODIFY)
+- `addItem(productId, quantity)` and `updateQuantity` → call `resolveUnitPrice` instead of reading `product.basePrice` directly. Result stored in `CartItem.unitPrice`.
+- `getCart()` → re-resolves every line so price changes (e.g. admin lowers a pricelist) reflect on next read without needing a cart mutation. Stale `unitPrice` on the row is rewritten via `updateMany`.
+
+### `order.service.ts` (MODIFY)
+- Subtotal calc and `OrderItem.unitPrice` writes go through `resolveUnitPrice` using the order's `(userId, businessAccountId, outletId)` context. Order rows preserve the resolved snapshot — admin changing a pricelist later doesn't retroactively change historical orders.
+
+## API endpoints
+
+### `GET /api/v1/vendor/price-lists` (MODIFY)
+- Each list now includes `assignments` (array of assignment rows) so the UI can show how each list is targeted without an N+1.
+- Includes `_count.items` and `_count.assignments`.
+
+### `GET/PATCH /api/v1/vendor/price-lists/[id]` (MODIFY)
+- GET returns full assignments + items array.
+- PATCH accepts:
+  - `items: Array<{ productId|sku, customPrice?, pricingType, discountPercent?, schemeMinQty?, schemeFreeQty? }>` — upserts on `(priceListId, productId)`. SKU is resolved to productId on the server scoped to the caller's vendor (no cross-vendor leak).
+  - `assignments: Array<{ type, userId?|outletId?|pincode?|area?|segment?|brandId?|brandName? }>` — transactional clear-and-recreate so the list always reflects the body. Server validates the right column is set per type.
+
+### `POST /api/v1/vendor/price-lists/[id]/bulk-upload` (NEW)
+- Accepts a JSON array `rows: Array<{ sku?: string; productId?: string; customPrice?: number; pricingType?: PricingType; discountPercent?: number; schemeMinQty?: number; schemeFreeQty?: number }>`
+- Resolves each row's SKU → productId scoped to vendorId; rows that don't match are returned in `errors` (not silently dropped).
+- Upserts in a single `$transaction`. Returns `{ updated, created, skipped, errors }`.
+- Mirrors the design of the existing product `bulk-import` so vendors can paste an Excel sheet of pricing rules in one go.
+
+## Vendor portal UI — `/vendor/price-lists/[id]` (MODIFY)
+
+- Per-item row gets a **Pricing Type** dropdown. Picking `discount` reveals a `%` input; picking `scheme` reveals `schemeMinQty` + `schemeFreeQty` inputs; `fixed`/`special` keep the existing `customPrice` field.
+- New **Assignments** card listing all attached rules with delete + add. Add-rule shows a type-picker → contextual control (customer dropdown / outlet dropdown / pincode text / area text / segment-tag input / brand picker).
+- New **Bulk Upload** strip — drag-drop or pick a `.xlsx`/`.csv`, parse client-side using existing `XLSX` lib, preview rows + errors, then submit to the new bulk-upload endpoint.
+
+## Multi-tenant + RBAC hardening
+
+- Every server-side read/write scopes by `vendorId` resolved via `resolveVendorContext`.
+- `commissions.*` perms stay independent of pricing perms. Pricing CRUD uses `products.edit` (existing) since pricing is a sub-concern of catalog.
+- The assignment FK columns use `onDelete: Cascade` — when a customer / outlet / brand goes away the matching assignments are auto-cleared. Pincode / area / segment columns are free-text so they can't dangle; manual cleanup if needed.
+
+## Verification checklist
+
+1. Migration applied locally + on prod tunnel.
+2. As vendor: create a PriceList "Mumbai 5%", assign by `pincode='400001'`, add one product with `pricingType='discount', discountPercent=5`.
+3. As customer in Mumbai (outlet pincode 400001): visit the vendor store. Product shows 5% less than `basePrice`.
+4. Add to cart → cart line `unitPrice` is the discounted value.
+5. Change outlet to a non-400001 pincode → reload product page → original `basePrice` is back.
+6. Bulk-upload a CSV with 20 rows of mixed pricing types → all 20 land + invalid rows surface as errors.
+7. Scheme: PriceList with item `pricingType='scheme', customPrice=80, schemeMinQty=10`. Quantity 5 → basePrice. Quantity 10 → 80. Quantity 15 → 80.
+8. Multi-tenant: vendor B's customer can't see vendor A's pricelists in API responses; per-vendor scoping verified.
+9. Orders placed today preserve their `unitPrice` even after the pricelist is later edited.
+
+## Commit chunks (planned)
+
+1. `feat(pricelist): schema + migration for assignments + pricing types`
+2. `feat(pricelist): PricingService resolveUnitPrice`
+3. `feat(pricelist): cart + order services use the resolver`
+4. `feat(pricelist): vendor API — GET/PATCH/bulk-upload with assignments + pricing types`
+5. `feat(pricelist): vendor portal UI — pricing-type picker + assignments card + bulk upload`
 
 This row updates as each phase completes — commit hash + date.
 

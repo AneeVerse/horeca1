@@ -108,6 +108,9 @@ model User {
   salespersonProfile     Salesperson[]        @relation("UserSalespersonProfile")
   approvedAccruals       CommissionAccrual[]  @relation("CommissionApprover")
 
+  // V2.2 Phase 4 — Pricelist assignments targeting this user
+  priceListAssignments   PriceListAssignment[] @relation("PriceListAssignmentUser")
+
   @@index([email])
   @@index([phone])
   @@index([pincode])
@@ -871,6 +874,8 @@ model Brand {
   productMappings BrandProductMapping[]
   teamMembers     BrandTeamMember[]
   distributorInvites BrandDistributorInvite[]
+  // V2.2 Phase 4 — pricelists assigned to this brand
+  priceListAssignments PriceListAssignment[] @relation("PriceListAssignmentBrand")
 
   @@index([slug])
   @@index([approvalStatus])
@@ -1233,6 +1238,8 @@ model BusinessAccount {
   carts           Cart[]
   quickOrderLists QuickOrderList[]
   customerVendors CustomerVendor[]
+  // V2.2 Phase 4 — pricelists assigned to this BA
+  priceListAssignments PriceListAssignment[] @relation("PriceListAssignmentBA")
 
   @@index([isVendor])
   @@index([isBrand])
@@ -1286,6 +1293,8 @@ model Outlet {
   carts           Cart[]
   userRoles       UserRole[]
   savedAddresses  SavedAddress[]
+  // V2.2 Phase 4 — pricelists assigned to this outlet
+  priceListAssignments PriceListAssignment[] @relation("PriceListAssignmentOutlet")
 
   @@index([businessAccountId])
   @@index([pincode])
@@ -1488,14 +1497,18 @@ model PriceList {
   id              String   @id @default(uuid()) @db.Uuid
   vendorId        String   @map("vendor_id") @db.Uuid
   name            String   @db.VarChar(255)
+  // Global fallback discount applied when no PriceListItem matches a
+  // given product. Items override this per-product via customPrice or
+  // their own discountPercent.
   discountPercent Decimal  @default(0) @map("discount_percent") @db.Decimal(5, 2)
   isActive        Boolean  @default(true) @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  vendor    Vendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  items     PriceListItem[]
-  customers VendorCustomer[]
+  vendor      Vendor                @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  items       PriceListItem[]
+  customers   VendorCustomer[]
+  assignments PriceListAssignment[]
 
   @@unique([vendorId, name])
   @@index([vendorId])
@@ -1506,7 +1519,18 @@ model PriceListItem {
   id          String   @id @default(uuid()) @db.Uuid
   priceListId String   @map("price_list_id") @db.Uuid
   productId   String   @map("product_id") @db.Uuid
-  customPrice Decimal  @map("custom_price") @db.Decimal(10, 2)
+  // customPrice is the resolved unit price for `fixed` / `special`, and
+  // the post-threshold price for `scheme`. Nullable for `discount` rows
+  // (where discountPercent is the source of truth) so the schema rejects
+  // a half-built row that has neither.
+  customPrice Decimal? @map("custom_price") @db.Decimal(10, 2)
+
+  // V2.2 Phase 4 — pricing-type discriminator + per-type knobs.
+  pricingType     PricingType @default(fixed) @map("pricing_type")
+  discountPercent Decimal?    @map("discount_percent") @db.Decimal(5, 2)
+  schemeMinQty    Int?        @map("scheme_min_qty")
+  schemeFreeQty   Int?        @map("scheme_free_qty")
+
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -1516,6 +1540,69 @@ model PriceListItem {
   @@unique([priceListId, productId])
   @@index([priceListId])
   @@map("price_list_items")
+}
+
+// V2.2 Phase 4 — Pricing model discriminator.
+//   fixed    — customPrice replaces basePrice.
+//   discount — basePrice × (1 − discountPercent/100).
+//   special  — same math as fixed; UI flags it differently (badge).
+//   scheme   — qty-gated: customPrice applies when quantity ≥ schemeMinQty.
+enum PricingType {
+  fixed
+  discount
+  special
+  scheme
+
+  @@map("pricing_type")
+}
+
+// V2.2 Phase 4 — Targeting rule for a PriceList. Exactly one of the
+// targeting columns on PriceListAssignment should be populated per row;
+// the column used is implied by `type`. The resolver picks the most-
+// specific matching rule per the priority chain in pricing.service.ts.
+enum PriceListAssignmentType {
+  customer
+  outlet
+  pincode
+  area
+  segment
+  brand
+
+  @@map("price_list_assignment_type")
+}
+
+model PriceListAssignment {
+  id                String                  @id @default(uuid()) @db.Uuid
+  priceListId       String                  @map("price_list_id") @db.Uuid
+  type              PriceListAssignmentType
+  // Targeting columns — service layer picks the right one based on `type`.
+  // Cascade on the FK columns so when a User / Outlet / Brand / BA is
+  // deleted, the orphaned assignments disappear too. Free-text columns
+  // (pincode / area / segment / brandName) don't have a referential
+  // target so they can't dangle.
+  userId            String?                 @map("user_id") @db.Uuid
+  businessAccountId String?                 @map("business_account_id") @db.Uuid
+  outletId          String?                 @map("outlet_id") @db.Uuid
+  brandId           String?                 @map("brand_id") @db.Uuid
+  pincode           String?                 @db.VarChar(10)
+  area              String?                 @db.VarChar(100)
+  segment           String?                 @db.VarChar(100)
+  brandName         String?                 @map("brand_name") @db.VarChar(150)
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz
+
+  priceList       PriceList        @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  user            User?            @relation("PriceListAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  businessAccount BusinessAccount? @relation("PriceListAssignmentBA", fields: [businessAccountId], references: [id], onDelete: Cascade)
+  outlet          Outlet?          @relation("PriceListAssignmentOutlet", fields: [outletId], references: [id], onDelete: Cascade)
+  brand           Brand?           @relation("PriceListAssignmentBrand", fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@index([priceListId, type])
+  @@index([userId])
+  @@index([businessAccountId])
+  @@index([outletId])
+  @@index([pincode])
+  @@index([brandId])
+  @@map("price_list_assignments")
 }
 
 // ═══ PROMOTIONS ═══════════════════════════════════════
