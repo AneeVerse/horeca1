@@ -8,6 +8,7 @@ import {
   findApplicableRule as findApplicableCommissionRule,
 } from '@/modules/commission/commission.service';
 import { resolveUnitPrice, type CustomerContext } from '@/modules/pricing/pricing.service';
+import { CartService, type CartContext } from '@/modules/cart/cart.service';
 
 interface VendorOrderInput {
   vendorId: string;
@@ -34,6 +35,7 @@ export interface OrderContext {
 
 export class OrderService {
   private inventoryService = new InventoryService();
+  private cartService = new CartService();
 
   async create(ctx: OrderContext, input: CreateOrderInput) {
     const { userId, businessAccountId, outletId } = ctx;
@@ -342,6 +344,66 @@ export class OrderService {
     });
     if (!order) throw Errors.notFound('Order');
     return order;
+  }
+
+  /**
+   * Repeat order (Phase 5) — re-add a past order's exact items to the caller's
+   * active outlet cart at CURRENT resolved prices. Products that are gone /
+   * unapproved / inactive are skipped and reported rather than silently
+   * dropped, so the customer knows exactly what carried over. Quantities are
+   * clamped up to each product's current minimum order quantity.
+   *
+   * cartCtx is the caller's resolved (userId, businessAccountId, outletId) —
+   * the same context the cart routes use, so the reorder lands in whichever
+   * outlet cart is active. We re-verify the order belongs to the user.
+   */
+  async reorder(orderId: string, cartCtx: CartContext) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, userId: cartCtx.userId },
+      select: {
+        id: true,
+        vendorId: true,
+        items: { select: { productId: true, productName: true, quantity: true } },
+      },
+    });
+    if (!order) throw Errors.notFound('Order');
+
+    // One round-trip for current purchasability + minOrderQty of every item.
+    const productIds = order.items.map((i) => i.productId);
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, name: true, isActive: true, approvalStatus: true, minOrderQty: true },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+
+    const added: Array<{ productId: string; name: string; quantity: number }> = [];
+    const skipped: Array<{ productId: string; name: string; reason: string }> = [];
+
+    for (const item of order.items) {
+      const product = byId.get(item.productId);
+      const name = product?.name ?? item.productName;
+      if (!product) {
+        skipped.push({ productId: item.productId, name, reason: 'No longer available' });
+        continue;
+      }
+      if (product.approvalStatus !== 'approved' || !product.isActive) {
+        skipped.push({ productId: item.productId, name, reason: 'Not currently available for purchase' });
+        continue;
+      }
+      const quantity = Math.max(item.quantity, product.minOrderQty);
+      try {
+        await this.cartService.addItem(cartCtx, item.productId, order.vendorId, quantity);
+        added.push({ productId: item.productId, name, quantity });
+      } catch (err) {
+        skipped.push({
+          productId: item.productId,
+          name,
+          reason: err instanceof Error ? err.message : 'Could not add to cart',
+        });
+      }
+    }
+
+    return { vendorId: order.vendorId, added, skipped };
   }
 
   // Partial accept: vendor ships a subset of items/quantities.
