@@ -199,6 +199,27 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
           where: { id },
           data: allowedFields,
         });
+
+        // Sync businessName/gstNumber to primary BusinessAccount if modified
+        if (allowedFields.businessName !== undefined || allowedFields.gstNumber !== undefined) {
+          const membership = await tx.businessAccountMember.findFirst({
+            where: { userId: id, isPrimary: true },
+            select: { businessAccountId: true },
+          });
+          if (membership) {
+            await tx.businessAccount.update({
+              where: { id: membership.businessAccountId },
+              data: {
+                ...(allowedFields.businessName !== undefined && {
+                  legalName: ((allowedFields.businessName as string | null) || user.fullName || 'My Business') as string,
+                }),
+                ...(allowedFields.gstNumber !== undefined && {
+                  gstin: (allowedFields.gstNumber as string | null) || null,
+                }),
+              },
+            });
+          }
+        }
       }
 
       // 2. Update BusinessAccount if companyProfile is specified

@@ -68,6 +68,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
           role: 'brand',
           isActive: true,
           hcidDisplay,
+          businessName: input.name,
         },
       });
       const provision = await provisionDefaultAccount({

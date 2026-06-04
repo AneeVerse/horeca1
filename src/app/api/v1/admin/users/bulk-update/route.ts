@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { VendorCustomerStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
@@ -27,47 +28,49 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 
       // 2. Vendor-customer specific updates
       if (vendorId) {
-        // If updating tags
-        if (tagsAction && Array.isArray(tags)) {
-          for (const uId of userIds) {
-            const vc = await tx.vendorCustomer.findUnique({
-              where: { vendorId_userId: { vendorId, userId: uId } },
-              select: { tags: true },
-            });
-            if (vc) {
-              let nextTags = [...vc.tags];
-              if (tagsAction === 'add') {
-                nextTags = Array.from(new Set([...nextTags, ...tags]));
-              } else if (tagsAction === 'remove') {
-                nextTags = nextTags.filter(t => !tags.includes(t));
-              } else if (tagsAction === 'set') {
-                nextTags = tags;
-              }
-              await tx.vendorCustomer.update({
-                where: { vendorId_userId: { vendorId, userId: uId } },
-                data: { tags: nextTags },
-              });
+        for (const uId of userIds) {
+          const vc = await tx.vendorCustomer.findUnique({
+            where: { vendorId_userId: { vendorId, userId: uId } },
+            select: { id: true, tags: true, status: true, salesExecutive: true, territory: true },
+          });
+
+          let nextTags = vc ? [...vc.tags] : [];
+          if (tagsAction && Array.isArray(tags)) {
+            if (tagsAction === 'add') {
+              nextTags = Array.from(new Set([...nextTags, ...tags]));
+            } else if (tagsAction === 'remove') {
+              nextTags = nextTags.filter(t => !tags.includes(t));
+            } else if (tagsAction === 'set') {
+              nextTags = tags;
             }
           }
-        }
 
-        // If updating status, salesExecutive, or territory
-        const vcData: Record<string, unknown> = {};
-        if (status) {
-          vcData.status = status;
-        }
-        if (typeof salesExecutive === 'string') {
-          vcData.salesExecutive = salesExecutive || null;
-        }
-        if (typeof territory === 'string') {
-          vcData.territory = territory || null;
-        }
+          const resolvedStatus = status || vc?.status || 'active';
+          const resolvedSalesExecutive = typeof salesExecutive === 'string' ? (salesExecutive || null) : (vc?.salesExecutive ?? null);
+          const resolvedTerritory = typeof territory === 'string' ? (territory || null) : (vc?.territory ?? null);
 
-        if (Object.keys(vcData).length > 0) {
-          await tx.vendorCustomer.updateMany({
-            where: { vendorId, userId: { in: userIds } },
-            data: vcData,
-          });
+          if (vc) {
+            await tx.vendorCustomer.update({
+              where: { id: vc.id },
+              data: {
+                status: resolvedStatus as VendorCustomerStatus,
+                salesExecutive: resolvedSalesExecutive,
+                territory: resolvedTerritory,
+                tags: nextTags,
+              },
+            });
+          } else {
+            await tx.vendorCustomer.create({
+              data: {
+                vendorId,
+                userId: uId,
+                status: resolvedStatus as VendorCustomerStatus,
+                salesExecutive: resolvedSalesExecutive,
+                territory: resolvedTerritory,
+                tags: nextTags,
+              },
+            });
+          }
         }
       }
     });

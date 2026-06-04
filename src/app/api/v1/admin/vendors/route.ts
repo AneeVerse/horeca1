@@ -200,6 +200,8 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           phone: phoneDigits,
           isActive: true,
           hcidDisplay,
+          businessName: input.businessName,
+          gstNumber: input.gstin || null,
         },
       });
 
