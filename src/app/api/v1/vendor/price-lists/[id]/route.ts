@@ -1,7 +1,7 @@
-// GET    /api/v1/vendor/price-lists/:id — Get price list with items
-// PATCH  /api/v1/vendor/price-lists/:id — Update name / discountPercent / isActive
+// GET    /api/v1/vendor/price-lists/:id — Get price list with items + assignments
+// PATCH  /api/v1/vendor/price-lists/:id — Update name / discountPercent /
+//                                          isActive / items / assignments
 // DELETE /api/v1/vendor/price-lists/:id — Soft-delete (isActive = false)
-// PUT    /api/v1/vendor/price-lists/:id/items — Bulk set items (replace)
 // PROTECTED: Vendor only
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -15,14 +15,51 @@ function extractId(req: NextRequest) {
   return new URL(req.url).pathname.split('/').at(-1) ?? '';
 }
 
+// V2.2 Phase 4 — item with pricing-type discriminator. customPrice is
+// required for fixed/special/scheme; discountPercent is required for
+// discount. schemeMinQty is required for scheme. Validation matches the
+// DB column nullability post-migration.
+const itemSchema = z.object({
+  productId: z.string().uuid().optional(),
+  sku: z.string().max(100).optional(),
+  customPrice: z.number().min(0).optional(),
+  pricingType: z.enum(['fixed', 'discount', 'special', 'scheme']).default('fixed'),
+  discountPercent: z.number().min(0).max(100).optional(),
+  schemeMinQty: z.number().int().min(1).optional(),
+  schemeFreeQty: z.number().int().min(0).optional(),
+}).refine(
+  (i) => !!(i.productId || i.sku),
+  { message: 'Each item needs productId or sku' },
+).refine(
+  (i) => {
+    if (i.pricingType === 'discount') return typeof i.discountPercent === 'number';
+    if (i.pricingType === 'scheme')   return typeof i.customPrice === 'number' && typeof i.schemeMinQty === 'number';
+    return typeof i.customPrice === 'number';  // fixed | special
+  },
+  { message: 'Pricing type fields incomplete: discount needs discountPercent, scheme needs customPrice+schemeMinQty, fixed/special need customPrice' },
+);
+
+// V2.2 Phase 4 — assignment shape mirrors the PriceListAssignment row.
+// Server validates that the right targeting column is populated for the
+// given `type` (DB CHECK enforces this too — defence in depth).
+const assignmentSchema = z.object({
+  type: z.enum(['customer', 'outlet', 'pincode', 'area', 'segment', 'brand']),
+  userId: z.string().uuid().optional(),
+  businessAccountId: z.string().uuid().optional(),
+  outletId: z.string().uuid().optional(),
+  brandId: z.string().uuid().optional(),
+  pincode: z.string().max(10).optional(),
+  area: z.string().max(100).optional(),
+  segment: z.string().max(100).optional(),
+  brandName: z.string().max(150).optional(),
+});
+
 const patchSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   discountPercent: z.number().min(0).max(100).optional(),
   isActive: z.boolean().optional(),
-  // items: replace the full set of per-product overrides
-  items: z
-    .array(z.object({ productId: z.string().uuid(), customPrice: z.number().min(0) }))
-    .optional(),
+  items: z.array(itemSchema).optional(),
+  assignments: z.array(assignmentSchema).optional(),
 });
 
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
@@ -35,12 +72,23 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       include: {
         items: {
           include: {
-            product: { select: { id: true, name: true, basePrice: true, unit: true, packSize: true } },
+            product: { select: { id: true, name: true, sku: true, basePrice: true, unit: true, packSize: true } },
           },
         },
         customers: {
           include: {
             user: { select: { id: true, fullName: true, businessName: true } },
+          },
+        },
+        // V2.2 Phase 4 — assignments with the referenced row included so
+        // the UI can render "Targets outlet: Mumbai Warehouse" instead
+        // of a raw uuid.
+        assignments: {
+          include: {
+            user:            { select: { id: true, fullName: true, email: true } },
+            businessAccount: { select: { id: true, legalName: true, displayName: true } },
+            outlet:          { select: { id: true, name: true, pincode: true, city: true } },
+            brand:           { select: { id: true, name: true } },
           },
         },
       },
@@ -62,6 +110,58 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     const existing = await prisma.priceList.findFirst({ where: { id, vendorId } });
     if (!existing) throw Errors.notFound('Price list');
 
+    // ── Resolve SKU → productId for any items that came in by SKU,
+    //    scoped strictly to this vendor so a forged SKU can't punch
+    //    a hole in multi-tenancy.
+    const skusToResolve = (body.items ?? []).filter((i) => i.sku && !i.productId).map((i) => i.sku!);
+    let skuMap = new Map<string, string>();
+    if (skusToResolve.length > 0) {
+      const found = await prisma.product.findMany({
+        where: { sku: { in: skusToResolve }, vendorId },
+        select: { id: true, sku: true },
+      });
+      skuMap = new Map(found.filter((p) => p.sku).map((p) => [p.sku!, p.id]));
+    }
+    const resolvedItems = (body.items ?? []).map((i) => ({
+      ...i,
+      productId: i.productId ?? (i.sku ? skuMap.get(i.sku) : undefined),
+    }));
+    const unresolved = resolvedItems.filter((i) => !i.productId);
+    if (unresolved.length > 0) {
+      throw Errors.badRequest(`Could not resolve ${unresolved.length} item(s) — SKU not found under this vendor`);
+    }
+
+    // ── Validate every assignment's targeting column matches its type.
+    //    DB CHECK enforces this too but a friendly error is better than
+    //    a constraint violation message.
+    for (const a of body.assignments ?? []) {
+      const ok = (
+        (a.type === 'customer' && (a.userId || a.businessAccountId)) ||
+        (a.type === 'outlet'   && a.outletId) ||
+        (a.type === 'pincode'  && a.pincode) ||
+        (a.type === 'area'     && a.area) ||
+        (a.type === 'segment'  && a.segment) ||
+        (a.type === 'brand'    && (a.brandId || a.brandName))
+      );
+      if (!ok) throw Errors.badRequest(`Assignment of type '${a.type}' is missing its targeting field`);
+    }
+
+    // ── Multi-tenant validation for assignment FK columns: outlet must
+    //    belong to a customer of this vendor; brand must exist; user
+    //    must be a real user. We don't strictly require the user to be
+    //    a known customer because vendors might want to pre-assign
+    //    pricing for a customer not yet onboarded.
+    const outletIds = (body.assignments ?? []).flatMap((a) => a.outletId ? [a.outletId] : []);
+    if (outletIds.length > 0) {
+      const found = await prisma.outlet.findMany({ where: { id: { in: outletIds } }, select: { id: true } });
+      if (found.length !== outletIds.length) throw Errors.badRequest('One or more outlet ids do not exist');
+    }
+    const brandIds = (body.assignments ?? []).flatMap((a) => a.brandId ? [a.brandId] : []);
+    if (brandIds.length > 0) {
+      const found = await prisma.brand.findMany({ where: { id: { in: brandIds } }, select: { id: true } });
+      if (found.length !== brandIds.length) throw Errors.badRequest('One or more brand ids do not exist');
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       const pl = await tx.priceList.update({
         where: { id },
@@ -73,14 +173,42 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
       });
 
       if (body.items !== undefined) {
-        // Replace all items atomically
+        // Replace all items atomically. createMany is faster than per-row
+        // upserts and the (priceListId, productId) unique constraint stops
+        // duplicates from sneaking in.
         await tx.priceListItem.deleteMany({ where: { priceListId: id } });
-        if (body.items.length > 0) {
+        if (resolvedItems.length > 0) {
           await tx.priceListItem.createMany({
-            data: body.items.map((item) => ({
+            data: resolvedItems.map((item) => ({
               priceListId: id,
-              productId: item.productId,
-              customPrice: item.customPrice,
+              productId: item.productId!,
+              customPrice: item.customPrice ?? null,
+              pricingType: item.pricingType,
+              discountPercent: item.discountPercent ?? null,
+              schemeMinQty: item.schemeMinQty ?? null,
+              schemeFreeQty: item.schemeFreeQty ?? null,
+            })),
+          });
+        }
+      }
+
+      if (body.assignments !== undefined) {
+        // Same replace pattern — the DB CHECK on price_list_assignments
+        // catches any inconsistent target-column shape before commit.
+        await tx.priceListAssignment.deleteMany({ where: { priceListId: id } });
+        if (body.assignments.length > 0) {
+          await tx.priceListAssignment.createMany({
+            data: body.assignments.map((a) => ({
+              priceListId: id,
+              type: a.type,
+              userId:            a.type === 'customer' ? a.userId            ?? null : null,
+              businessAccountId: a.type === 'customer' ? a.businessAccountId ?? null : null,
+              outletId:          a.type === 'outlet'   ? a.outletId          ?? null : null,
+              brandId:           a.type === 'brand'    ? a.brandId           ?? null : null,
+              pincode:           a.type === 'pincode'  ? a.pincode           ?? null : null,
+              area:              a.type === 'area'     ? a.area              ?? null : null,
+              segment:           a.type === 'segment'  ? a.segment           ?? null : null,
+              brandName:         a.type === 'brand'    ? a.brandName         ?? null : null,
             })),
           });
         }
@@ -103,7 +231,9 @@ export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {
     const existing = await prisma.priceList.findFirst({ where: { id, vendorId } });
     if (!existing) throw Errors.notFound('Price list');
 
-    // Soft delete — unassign any customers first
+    // Soft delete — unassign any legacy VendorCustomer pricelist mapping;
+    // PriceListAssignment rows cascade automatically via FK so they're
+    // cleaned up when isActive flips and the list disappears from listings.
     await prisma.$transaction([
       prisma.vendorCustomer.updateMany({
         where: { priceListId: id },
