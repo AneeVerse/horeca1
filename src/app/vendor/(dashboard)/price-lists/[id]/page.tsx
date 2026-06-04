@@ -1,30 +1,73 @@
 'use client';
 
+// Vendor → Price Lists → Edit page.
+//
+// V2.2 Phase 4 update: per-item pricing type picker (fixed / discount /
+// special / scheme) with the contextual sub-inputs each type needs,
+// plus an Assignments card to wire the list to customers / outlets /
+// pincodes / areas / segments / brands, plus a Bulk Upload strip that
+// parses an XLSX/CSV client-side and submits to the new endpoint.
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  ArrowLeft, Save, Loader2, Search, Plus, Trash2, Tag, Users, Package
+  ArrowLeft, Save, Loader2, Search, Plus, Trash2, Tag, Users, Package,
+  Upload, AlertCircle, X, MapPin, Sparkles,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-interface Product {
+// ── Types ─────────────────────────────────────────────────────────────
+
+type PricingType = 'fixed' | 'discount' | 'special' | 'scheme';
+type AssignmentType = 'customer' | 'outlet' | 'pincode' | 'area' | 'segment' | 'brand';
+
+interface ProductSummary {
   id: string;
   name: string;
+  sku?: string | null;
   basePrice: number;
   unit: string | null;
   packSize: string | null;
 }
 
-interface PriceListItem {
-  id: string;
+interface ItemDraft {
   productId: string;
-  customPrice: number;
-  product: Product;
+  customPrice: string;
+  pricingType: PricingType;
+  discountPercent: string;
+  schemeMinQty: string;
+  schemeFreeQty: string;
+  product: ProductSummary;
 }
 
-interface Customer {
+interface ApiPriceListItem {
   id: string;
-  user: { fullName: string; businessName: string | null };
+  productId: string;
+  customPrice: number | string | null;
+  pricingType: PricingType;
+  discountPercent: number | string | null;
+  schemeMinQty: number | null;
+  schemeFreeQty: number | null;
+  product: ProductSummary;
+}
+
+interface ApiAssignment {
+  id: string;
+  type: AssignmentType;
+  userId: string | null;
+  businessAccountId: string | null;
+  outletId: string | null;
+  brandId: string | null;
+  pincode: string | null;
+  area: string | null;
+  segment: string | null;
+  brandName: string | null;
+  user: { id: string; fullName: string; email: string | null } | null;
+  businessAccount: { id: string; legalName: string; displayName: string | null } | null;
+  outlet: { id: string; name: string; pincode: string | null; city: string | null } | null;
+  brand: { id: string; name: string } | null;
 }
 
 interface PriceListDetail {
@@ -32,18 +75,29 @@ interface PriceListDetail {
   name: string;
   discountPercent: number;
   isActive: boolean;
-  items: PriceListItem[];
-  customers: Customer[];
+  items: ApiPriceListItem[];
+  customers: Array<{ id: string; user: { fullName: string; businessName: string | null } }>;
+  assignments: ApiAssignment[];
 }
 
-interface VendorProduct {
-  id: string;
-  name: string;
-  basePrice: number;
-  unit: string | null;
-  packSize: string | null;
-  sku: string | null;
+interface AssignmentDraft {
+  type: AssignmentType;
+  userId?: string;
+  outletId?: string;
+  brandId?: string;
+  brandName?: string;
+  pincode?: string;
+  area?: string;
+  segment?: string;
+  /** Free-text label rendered in the chip; computed locally when we add. */
+  label: string;
 }
+
+interface VendorCustomerOption { userId: string; label: string }
+interface OutletOption { id: string; name: string; city: string | null; pincode: string | null }
+interface BrandOption { id: string; name: string }
+
+// ── Component ─────────────────────────────────────────────────────────
 
 export default function PriceListDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -56,32 +110,63 @@ export default function PriceListDetailPage() {
   // Edit state
   const [name, setName] = useState('');
   const [discountPercent, setDiscountPercent] = useState('0');
-  const [items, setItems] = useState<Array<{ productId: string; customPrice: string; product: Product }>>([]);
+  const [items, setItems] = useState<ItemDraft[]>([]);
+  const [assignments, setAssignments] = useState<AssignmentDraft[]>([]);
 
   // Product search
   const [productSearch, setProductSearch] = useState('');
-  const [searchResults, setSearchResults] = useState<VendorProduct[]>([]);
+  const [searchResults, setSearchResults] = useState<ProductSummary[]>([]);
   const [searching, setSearching] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Assignment-add UI state
+  const [addingAssign, setAddingAssign] = useState(false);
+  const [newAssignType, setNewAssignType] = useState<AssignmentType>('pincode');
+  const [newAssignValue, setNewAssignValue] = useState('');
+  const [outletOpts, setOutletOpts] = useState<OutletOption[]>([]);
+  const [brandOpts, setBrandOpts] = useState<BrandOption[]>([]);
+  const [customerOpts, setCustomerOpts] = useState<VendorCustomerOption[]>([]);
+
+  // Bulk upload state
+  const bulkFileRef = useRef<HTMLInputElement>(null);
+  const [bulkResult, setBulkResult] = useState<{ matched: number; upserted: number; errors: Array<{ row: number; message: string }> } | null>(null);
+  const [bulkUploading, setBulkUploading] = useState(false);
+
+  // ── Fetch + hydrate ────────────────────────────────────────────────
   const fetchPriceList = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/v1/vendor/price-lists/${id}`);
       const json = await res.json();
-      if (json.success) {
-        const pl: PriceListDetail = json.data;
-        setPriceList(pl);
-        setName(pl.name);
-        setDiscountPercent(String(pl.discountPercent));
-        setItems(
-          pl.items.map((item) => ({
-            productId: item.productId,
-            customPrice: String(item.customPrice),
-            product: item.product,
-          }))
-        );
-      }
+      if (!json.success) return;
+      const pl: PriceListDetail = json.data;
+      setPriceList(pl);
+      setName(pl.name);
+      setDiscountPercent(String(pl.discountPercent));
+      setItems(
+        pl.items.map((item) => ({
+          productId: item.productId,
+          customPrice: item.customPrice != null ? String(item.customPrice) : '',
+          pricingType: item.pricingType ?? 'fixed',
+          discountPercent: item.discountPercent != null ? String(item.discountPercent) : '',
+          schemeMinQty: item.schemeMinQty != null ? String(item.schemeMinQty) : '',
+          schemeFreeQty: item.schemeFreeQty != null ? String(item.schemeFreeQty) : '',
+          product: item.product,
+        }))
+      );
+      setAssignments(
+        pl.assignments.map((a) => ({
+          type: a.type,
+          userId:    a.userId ?? undefined,
+          outletId:  a.outletId ?? undefined,
+          brandId:   a.brandId ?? undefined,
+          brandName: a.brandName ?? undefined,
+          pincode:   a.pincode ?? undefined,
+          area:      a.area ?? undefined,
+          segment:   a.segment ?? undefined,
+          label: assignmentChipLabel(a),
+        }))
+      );
     } finally {
       setLoading(false);
     }
@@ -89,7 +174,28 @@ export default function PriceListDetailPage() {
 
   useEffect(() => { fetchPriceList(); }, [fetchPriceList]);
 
-  // Debounced product search
+  // Outlets + brands + customers — fetched on demand when the vendor
+  // opens the "Add assignment" picker so we don't pay for them on first
+  // paint.
+  const ensureOptionsLoaded = useCallback(async (type: AssignmentType) => {
+    if (type === 'outlet' && outletOpts.length === 0) {
+      const j = await fetch('/api/v1/vendor/outlets').then((r) => r.json());
+      if (j.success) setOutletOpts(j.data.outlets ?? j.data ?? []);
+    }
+    if (type === 'brand' && brandOpts.length === 0) {
+      const j = await fetch('/api/v1/brands').then((r) => r.json());
+      if (j.success) setBrandOpts(j.data ?? []);
+    }
+    if (type === 'customer' && customerOpts.length === 0) {
+      const j = await fetch('/api/v1/vendor/customers').then((r) => r.json());
+      if (j.success) {
+        const list = (j.data ?? []) as Array<{ userId: string; user?: { fullName?: string; businessName?: string; email?: string } }>;
+        setCustomerOpts(list.map((c) => ({ userId: c.userId, label: c.user?.businessName ?? c.user?.fullName ?? c.user?.email ?? c.userId })));
+      }
+    }
+  }, [outletOpts.length, brandOpts.length, customerOpts.length]);
+
+  // ── Product search (debounced) ─────────────────────────────────────
   useEffect(() => {
     if (!productSearch.trim()) { setSearchResults([]); return; }
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -98,20 +204,28 @@ export default function PriceListDetailPage() {
       try {
         const res = await fetch(`/api/v1/vendor/products?search=${encodeURIComponent(productSearch)}&limit=10`);
         const json = await res.json();
-        if (json.success) {
-          const alreadyAdded = new Set(items.map((i) => i.productId));
-          setSearchResults((json.data.products ?? json.data ?? []).filter((p: VendorProduct) => !alreadyAdded.has(p.id)));
-        }
+        if (!json.success) return;
+        const alreadyAdded = new Set(items.map((i) => i.productId));
+        const raw: ProductSummary[] = json.data.products ?? json.data ?? [];
+        setSearchResults(raw.filter((p) => !alreadyAdded.has(p.id)));
       } finally {
         setSearching(false);
       }
     }, 400);
   }, [productSearch, items]);
 
-  const addProduct = (product: VendorProduct) => {
+  const addProduct = (product: ProductSummary) => {
     setItems((prev) => [
       ...prev,
-      { productId: product.id, customPrice: String(product.basePrice), product: product as Product },
+      {
+        productId: product.id,
+        customPrice: String(product.basePrice),
+        pricingType: 'fixed',
+        discountPercent: '',
+        schemeMinQty: '',
+        schemeFreeQty: '',
+        product,
+      },
     ]);
     setProductSearch('');
     setSearchResults([]);
@@ -121,23 +235,144 @@ export default function PriceListDetailPage() {
     setItems((prev) => prev.filter((i) => i.productId !== productId));
   };
 
+  const updateItem = (productId: string, patch: Partial<ItemDraft>) => {
+    setItems((prev) => prev.map((i) => (i.productId === productId ? { ...i, ...patch } : i)));
+  };
+
+  // ── Assignments management ────────────────────────────────────────
+  const addAssignment = () => {
+    const draft = buildAssignmentDraft(newAssignType, newAssignValue, { outletOpts, brandOpts, customerOpts });
+    if (!draft) {
+      toast.error('Pick or type a value for the assignment');
+      return;
+    }
+    // Dedupe identical assignments — strip the label (UI-only) before
+    // serializing so identical rules with different labels still match.
+    const fingerprint = (a: AssignmentDraft) => {
+      const { label: _label, ...rest } = a;
+      void _label;
+      return JSON.stringify(rest);
+    };
+    const key = fingerprint(draft);
+    if (assignments.some((a) => fingerprint(a) === key)) {
+      toast.error('That assignment is already on this list');
+      return;
+    }
+    setAssignments((prev) => [...prev, draft]);
+    setNewAssignValue('');
+    setAddingAssign(false);
+  };
+
+  const removeAssignment = (idx: number) => {
+    setAssignments((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // ── Bulk upload ───────────────────────────────────────────────────
+  const handleBulkFile = async (file: File) => {
+    setBulkResult(null);
+    setBulkUploading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      type RawRow = Record<string, unknown>;
+      const raw = XLSX.utils.sheet_to_json<RawRow>(sheet);
+      if (raw.length === 0) {
+        toast.error('No rows found in the file');
+        return;
+      }
+      // Normalize headers (case-insensitive). Accept common aliases.
+      const rows = raw.map((r) => {
+        const lower: Record<string, unknown> = {};
+        for (const k of Object.keys(r)) lower[k.toLowerCase().trim()] = r[k];
+        const type = String(lower['type'] ?? lower['pricingtype'] ?? lower['pricing_type'] ?? 'fixed').toLowerCase();
+        return {
+          sku: lower['sku'] != null ? String(lower['sku']) : undefined,
+          customPrice: lower['price'] != null ? Number(lower['price']) :
+                        lower['customprice'] != null ? Number(lower['customprice']) :
+                        lower['custom_price'] != null ? Number(lower['custom_price']) : undefined,
+          pricingType: (['fixed', 'discount', 'special', 'scheme'].includes(type) ? type : 'fixed') as PricingType,
+          discountPercent: lower['discount'] != null ? Number(lower['discount']) :
+                            lower['discountpercent'] != null ? Number(lower['discountpercent']) : undefined,
+          schemeMinQty: lower['schememinqty'] != null ? Number(lower['schememinqty']) :
+                         lower['minqty'] != null ? Number(lower['minqty']) : undefined,
+          schemeFreeQty: lower['schemefreeqty'] != null ? Number(lower['schemefreeqty']) :
+                          lower['freeqty'] != null ? Number(lower['freeqty']) : undefined,
+        };
+      });
+      const res = await fetch(`/api/v1/vendor/price-lists/${id}/bulk-upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        toast.error(json.error?.message || 'Bulk upload failed');
+        return;
+      }
+      setBulkResult(json.data);
+      toast.success(`Upserted ${json.data.upserted} of ${rows.length} rows`);
+      await fetchPriceList();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Bulk upload failed');
+    } finally {
+      setBulkUploading(false);
+      if (bulkFileRef.current) bulkFileRef.current.value = '';
+    }
+  };
+
+  // ── Save ───────────────────────────────────────────────────────────
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Build the API payload, only sending the fields the chosen
+      // pricingType actually uses. Server will reject malformed combos.
+      const itemsPayload = items.map((i) => {
+        const base: Record<string, unknown> = {
+          productId: i.productId,
+          pricingType: i.pricingType,
+        };
+        if (i.pricingType === 'fixed' || i.pricingType === 'special') {
+          base.customPrice = parseFloat(i.customPrice) || 0;
+        } else if (i.pricingType === 'discount') {
+          base.discountPercent = parseFloat(i.discountPercent) || 0;
+        } else if (i.pricingType === 'scheme') {
+          base.customPrice = parseFloat(i.customPrice) || 0;
+          base.schemeMinQty = parseInt(i.schemeMinQty, 10) || 1;
+          if (i.schemeFreeQty) base.schemeFreeQty = parseInt(i.schemeFreeQty, 10) || 0;
+        }
+        return base;
+      });
+
+      const assignmentsPayload = assignments.map((a) => {
+        const out: Record<string, unknown> = { type: a.type };
+        if (a.userId)    out.userId = a.userId;
+        if (a.outletId)  out.outletId = a.outletId;
+        if (a.brandId)   out.brandId = a.brandId;
+        if (a.brandName) out.brandName = a.brandName;
+        if (a.pincode)   out.pincode = a.pincode;
+        if (a.area)      out.area = a.area;
+        if (a.segment)   out.segment = a.segment;
+        return out;
+      });
+
       const res = await fetch(`/api/v1/vendor/price-lists/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
           discountPercent: parseFloat(discountPercent) || 0,
-          items: items.map((i) => ({
-            productId: i.productId,
-            customPrice: parseFloat(i.customPrice) || 0,
-          })),
+          items: itemsPayload,
+          assignments: assignmentsPayload,
         }),
       });
       const json = await res.json();
-      if (json.success) await fetchPriceList();
+      if (!json.success) {
+        toast.error(json.error?.message || 'Save failed');
+        return;
+      }
+      toast.success('Price list saved');
+      await fetchPriceList();
     } finally {
       setSaving(false);
     }
@@ -160,7 +395,7 @@ export default function PriceListDetailPage() {
   }
 
   return (
-    <div className="space-y-6 pb-10 max-w-4xl">
+    <div className="space-y-6 pb-10 max-w-5xl">
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -172,7 +407,7 @@ export default function PriceListDetailPage() {
           </button>
           <div>
             <h1 className="text-[22px] font-bold text-[#181725]">{priceList.name}</h1>
-            <p className="text-[12px] text-[#AEAEAE]">Edit pricing rules and product overrides</p>
+            <p className="text-[12px] text-[#AEAEAE]">Edit pricing rules, assignments, and product overrides</p>
           </div>
         </div>
         <button
@@ -201,13 +436,10 @@ export default function PriceListDetailPage() {
           <div>
             <label className="block text-[12px] font-semibold text-[#7C7C7C] mb-1">
               Global Discount (%)
-              <span className="ml-1 text-[#AEAEAE] font-normal">— applies to products without a specific override</span>
+              <span className="ml-1 text-[#AEAEAE] font-normal">— fallback when a product has no item-level override</span>
             </label>
             <input
-              type="number"
-              min="0"
-              max="100"
-              step="0.5"
+              type="number" min="0" max="100" step="0.5"
               value={discountPercent}
               onChange={(e) => setDiscountPercent(e.target.value)}
               className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
@@ -218,20 +450,170 @@ export default function PriceListDetailPage() {
         <div className="flex items-center gap-6 pt-1 text-[12px] text-[#7C7C7C]">
           <div className="flex items-center gap-1.5">
             <Package size={13} />
-            <span>{items.length} product override{items.length !== 1 ? 's' : ''}</span>
+            <span>{items.length} item{items.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <MapPin size={13} />
+            <span>{assignments.length} assignment{assignments.length !== 1 ? 's' : ''}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Users size={13} />
-            <span>{priceList.customers.length} customer{priceList.customers.length !== 1 ? 's' : ''} assigned</span>
+            <span>{priceList.customers.length} legacy customer mapping{priceList.customers.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
       </div>
 
-      {/* Product overrides */}
+      {/* ── Assignments card ────────────────────────────────────────── */}
       <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-[#F5F5F5] flex items-center justify-between">
-          <h2 className="text-[14px] font-bold text-[#181725]">Product Price Overrides</h2>
-          <p className="text-[12px] text-[#AEAEAE]">Set a fixed price per product that overrides the global discount</p>
+          <div>
+            <h2 className="text-[14px] font-bold text-[#181725]">Assignments</h2>
+            <p className="text-[12px] text-[#AEAEAE]">Targets that make this list apply automatically — by pincode, area, customer, outlet, segment-tag, or brand.</p>
+          </div>
+          {!addingAssign && (
+            <button
+              onClick={() => setAddingAssign(true)}
+              className="flex items-center gap-1.5 px-3 h-[34px] rounded-[10px] border border-[#EEEEEE] hover:border-[#299E60]/40 text-[12.5px] font-bold text-[#181725] transition-colors"
+            >
+              <Plus size={13} /> Add assignment
+            </button>
+          )}
+        </div>
+
+        {addingAssign && (
+          <div className="px-5 py-4 bg-[#F8FAFC] border-b border-[#F5F5F5] space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Target by</label>
+                <select
+                  value={newAssignType}
+                  onChange={(e) => {
+                    const t = e.target.value as AssignmentType;
+                    setNewAssignType(t);
+                    setNewAssignValue('');
+                    ensureOptionsLoaded(t);
+                  }}
+                  className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] bg-white"
+                >
+                  <option value="pincode">Pincode</option>
+                  <option value="area">Area (City/State)</option>
+                  <option value="segment">Customer segment (tag)</option>
+                  <option value="customer">Specific customer</option>
+                  <option value="outlet">Specific outlet</option>
+                  <option value="brand">Brand</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Value</label>
+                <AssignmentValuePicker
+                  type={newAssignType}
+                  value={newAssignValue}
+                  onChange={setNewAssignValue}
+                  outletOpts={outletOpts}
+                  brandOpts={brandOpts}
+                  customerOpts={customerOpts}
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={addAssignment}
+                className="px-4 h-[34px] rounded-[10px] bg-[#299E60] text-white text-[12.5px] font-bold hover:bg-[#238a54] transition-colors"
+              >
+                Add rule
+              </button>
+              <button
+                onClick={() => { setAddingAssign(false); setNewAssignValue(''); }}
+                className="text-[12px] font-bold text-[#7C7C7C] hover:text-[#181725]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {assignments.length === 0 ? (
+          <div className="py-12 text-center">
+            <MapPin size={28} className="text-[#E5E7EB] mx-auto mb-3" />
+            <p className="text-[13px] font-bold text-[#AEAEAE]">No assignments yet</p>
+            <p className="text-[12px] text-[#AEAEAE] mt-1">Add a rule above to make this list auto-apply for matching customers.</p>
+          </div>
+        ) : (
+          <div className="px-5 py-4 flex flex-wrap gap-2">
+            {assignments.map((a, idx) => (
+              <span
+                key={idx}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold',
+                  ASSIGN_STYLE[a.type].bg,
+                  ASSIGN_STYLE[a.type].text,
+                )}
+              >
+                <span className="opacity-70 uppercase tracking-wider text-[10px]">{a.type}</span>
+                <span>{a.label}</span>
+                <button
+                  onClick={() => removeAssignment(idx)}
+                  className="ml-1 hover:opacity-60 transition-opacity"
+                  title="Remove assignment"
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Bulk upload strip ──────────────────────────────────────── */}
+      <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-[14px] font-bold text-[#181725]">Bulk Upload</h2>
+            <p className="text-[12px] text-[#AEAEAE]">
+              Upload a CSV/XLSX with columns: <code className="bg-[#F5F5F5] px-1 rounded">sku</code>,
+              <code className="bg-[#F5F5F5] px-1 rounded mx-1">type</code> (fixed/discount/special/scheme),
+              <code className="bg-[#F5F5F5] px-1 rounded">price</code>,
+              <code className="bg-[#F5F5F5] px-1 rounded mx-1">discount</code>,
+              <code className="bg-[#F5F5F5] px-1 rounded">minQty</code>,
+              <code className="bg-[#F5F5F5] px-1 rounded ml-1">freeQty</code>
+            </p>
+          </div>
+          <label className="flex items-center gap-2 px-4 h-[38px] rounded-[10px] border border-[#EEEEEE] hover:border-[#299E60]/40 cursor-pointer text-[12.5px] font-bold text-[#181725] transition-colors">
+            {bulkUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+            {bulkUploading ? 'Uploading…' : 'Choose file'}
+            <input
+              ref={bulkFileRef}
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
+              disabled={bulkUploading}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleBulkFile(f);
+              }}
+            />
+          </label>
+        </div>
+        {bulkResult && (
+          <div className="mt-3 text-[12.5px] text-[#181725]">
+            Uploaded <strong>{bulkResult.upserted}</strong> rows.
+            {bulkResult.errors.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-[#E74C3C] font-bold">{bulkResult.errors.length} error{bulkResult.errors.length !== 1 ? 's' : ''} — click to view</summary>
+                <ul className="mt-1.5 text-[11.5px] text-[#7C7C7C] max-h-[160px] overflow-y-auto pl-4 list-disc">
+                  {bulkResult.errors.map((e, i) => <li key={i}>Row {e.row}: {e.message}</li>)}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Items ──────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#F5F5F5] flex items-center justify-between">
+          <h2 className="text-[14px] font-bold text-[#181725]">Items</h2>
+          <p className="text-[12px] text-[#AEAEAE]">Per-product pricing with type discriminator. Falls back to global discount when a product isn&apos;t listed here.</p>
         </div>
 
         {/* Add product */}
@@ -242,7 +624,7 @@ export default function PriceListDetailPage() {
               type="text"
               value={productSearch}
               onChange={(e) => setProductSearch(e.target.value)}
-              placeholder="Search products to add override…"
+              placeholder="Search products to add…"
               className="w-full h-[38px] pl-8 pr-4 rounded-[10px] border border-[#EEEEEE] text-[12px] outline-none focus:border-[#299E60]/40 bg-white"
             />
             {searching && (
@@ -271,84 +653,37 @@ export default function PriceListDetailPage() {
           )}
         </div>
 
-        {/* Items list */}
         {items.length === 0 ? (
           <div className="py-12 text-center">
             <Tag size={32} className="text-[#E5E7EB] mx-auto mb-3" />
-            <p className="text-[13px] font-bold text-[#AEAEAE]">No product overrides</p>
+            <p className="text-[13px] font-bold text-[#AEAEAE]">No items yet</p>
             <p className="text-[12px] text-[#AEAEAE] mt-1">
               {Number(discountPercent) > 0
-                ? `All products will get ${discountPercent}% off (global discount)`
-                : 'Search above to add specific product price overrides'}
+                ? `All products get ${discountPercent}% off (global discount)`
+                : 'Search above to add per-product pricing'}
             </p>
           </div>
         ) : (
-          <>
-            <div className="px-5 py-2 bg-[#FAFAFA] border-b border-[#F5F5F5] grid grid-cols-12 gap-3 text-[11px] font-semibold text-[#AEAEAE]">
-              <div className="col-span-5">Product</div>
-              <div className="col-span-2 text-right">Base Price</div>
-              <div className="col-span-3 text-right">Custom Price (excl. GST)</div>
-              <div className="col-span-2 text-right">Saving</div>
-            </div>
-            <div className="divide-y divide-[#F5F5F5]">
-              {items.map((item) => {
-                const base = item.product.basePrice;
-                const custom = parseFloat(item.customPrice) || 0;
-                const saving = base > 0 ? Math.round(((base - custom) / base) * 100) : 0;
-                return (
-                  <div key={item.productId} className="px-5 py-3 grid grid-cols-12 gap-3 items-center hover:bg-[#FAFAFA] transition-colors">
-                    <div className="col-span-5 min-w-0">
-                      <p className="text-[13px] font-semibold text-[#181725] truncate">{item.product.name}</p>
-                      <p className="text-[11px] text-[#AEAEAE]">{item.product.packSize ?? item.product.unit ?? ''}</p>
-                    </div>
-                    <div className="col-span-2 text-right text-[12px] text-[#AEAEAE]">
-                      ₹{Number(base).toFixed(2)}
-                    </div>
-                    <div className="col-span-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <span className="text-[12px] text-[#7C7C7C]">₹</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.customPrice}
-                          onChange={(e) =>
-                            setItems((prev) =>
-                              prev.map((i) =>
-                                i.productId === item.productId ? { ...i, customPrice: e.target.value } : i
-                              )
-                            )
-                          }
-                          className="w-24 h-[32px] px-2 rounded-[8px] border border-[#EEEEEE] text-[12px] text-right outline-none focus:border-[#299E60]/50 bg-white"
-                        />
-                      </div>
-                    </div>
-                    <div className="col-span-2 flex items-center justify-end gap-2">
-                      {saving > 0 && (
-                        <span className="text-[11px] font-bold text-[#299E60]">{saving}% off</span>
-                      )}
-                      {saving < 0 && (
-                        <span className="text-[11px] font-bold text-[#E74C3C]">{Math.abs(saving)}% up</span>
-                      )}
-                      <button
-                        onClick={() => removeItem(item.productId)}
-                        className="w-6 h-6 flex items-center justify-center rounded-[6px] hover:bg-[#FFF0F0] transition-colors text-[#E74C3C]"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
+          <div className="divide-y divide-[#F5F5F5]">
+            {items.map((item) => (
+              <ItemRow
+                key={item.productId}
+                item={item}
+                onUpdate={(patch) => updateItem(item.productId, patch)}
+                onRemove={() => removeItem(item.productId)}
+              />
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Assigned customers */}
+      {/* Legacy customer mappings (kept visible for migration awareness) */}
       {priceList.customers.length > 0 && (
         <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
-          <h2 className="text-[14px] font-bold text-[#181725] mb-3">Assigned Customers</h2>
+          <h2 className="text-[14px] font-bold text-[#181725] mb-1">Legacy customer mappings</h2>
+          <p className="text-[12px] text-[#AEAEAE] mb-3">
+            Direct VendorCustomer → PriceList links (pre-V2.2). These still resolve via the priority chain after the new assignment rules above.
+          </p>
           <div className="flex flex-wrap gap-2">
             {priceList.customers.map((c) => (
               <span key={c.id} className="px-3 py-1.5 bg-[#F5F5F5] rounded-full text-[12px] font-semibold text-[#181725]">
@@ -356,11 +691,218 @@ export default function PriceListDetailPage() {
               </span>
             ))}
           </div>
-          <p className="text-[11px] text-[#AEAEAE] mt-3">
-            Manage assignments from the <a href="/vendor/customers" className="text-[#299E60] hover:underline">Customers page</a>.
-          </p>
         </div>
       )}
     </div>
   );
 }
+
+// ── Item row ──────────────────────────────────────────────────────────
+function ItemRow({
+  item, onUpdate, onRemove,
+}: {
+  item: ItemDraft;
+  onUpdate: (patch: Partial<ItemDraft>) => void;
+  onRemove: () => void;
+}) {
+  const base = item.product.basePrice;
+  return (
+    <div className="px-5 py-4 hover:bg-[#FAFAFA] transition-colors">
+      <div className="flex items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-[#181725] truncate">{item.product.name}</p>
+          <p className="text-[11px] text-[#AEAEAE]">
+            {item.product.sku ? <span className="font-mono">{item.product.sku} · </span> : null}
+            {item.product.packSize ?? item.product.unit ?? ''} · Base ₹{Number(base).toFixed(2)}
+          </p>
+        </div>
+
+        <div className="flex items-start gap-3">
+          {/* Pricing type picker */}
+          <div>
+            <label className="block text-[10.5px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1">Type</label>
+            <select
+              value={item.pricingType}
+              onChange={(e) => onUpdate({ pricingType: e.target.value as PricingType })}
+              className="h-[32px] px-2 rounded-[8px] border border-[#EEEEEE] text-[12px] bg-white"
+            >
+              <option value="fixed">Fixed</option>
+              <option value="discount">Discount %</option>
+              <option value="special">Special</option>
+              <option value="scheme">Scheme</option>
+            </select>
+          </div>
+
+          {/* Conditional fields per type */}
+          {(item.pricingType === 'fixed' || item.pricingType === 'special') && (
+            <div>
+              <label className="block text-[10.5px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1">Price (₹)</label>
+              <input
+                type="number" min="0" step="0.01"
+                value={item.customPrice}
+                onChange={(e) => onUpdate({ customPrice: e.target.value })}
+                className="w-[110px] h-[32px] px-2 rounded-[8px] border border-[#EEEEEE] text-[12px] text-right outline-none focus:border-[#299E60]/50 bg-white"
+              />
+            </div>
+          )}
+          {item.pricingType === 'discount' && (
+            <div>
+              <label className="block text-[10.5px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1">Discount (%)</label>
+              <input
+                type="number" min="0" max="100" step="0.1"
+                value={item.discountPercent}
+                onChange={(e) => onUpdate({ discountPercent: e.target.value })}
+                className="w-[110px] h-[32px] px-2 rounded-[8px] border border-[#EEEEEE] text-[12px] text-right outline-none focus:border-[#299E60]/50 bg-white"
+              />
+            </div>
+          )}
+          {item.pricingType === 'scheme' && (
+            <>
+              <div>
+                <label className="block text-[10.5px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1">Min Qty</label>
+                <input
+                  type="number" min="1" step="1"
+                  value={item.schemeMinQty}
+                  onChange={(e) => onUpdate({ schemeMinQty: e.target.value })}
+                  className="w-[80px] h-[32px] px-2 rounded-[8px] border border-[#EEEEEE] text-[12px] text-right outline-none focus:border-[#299E60]/50 bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[10.5px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1">Then ₹</label>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={item.customPrice}
+                  onChange={(e) => onUpdate({ customPrice: e.target.value })}
+                  className="w-[100px] h-[32px] px-2 rounded-[8px] border border-[#EEEEEE] text-[12px] text-right outline-none focus:border-[#299E60]/50 bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[10.5px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1">Free Qty</label>
+                <input
+                  type="number" min="0" step="1"
+                  value={item.schemeFreeQty}
+                  onChange={(e) => onUpdate({ schemeFreeQty: e.target.value })}
+                  className="w-[80px] h-[32px] px-2 rounded-[8px] border border-[#EEEEEE] text-[12px] text-right outline-none focus:border-[#299E60]/50 bg-white"
+                />
+              </div>
+            </>
+          )}
+
+          <button
+            onClick={onRemove}
+            className="w-[32px] h-[32px] flex items-center justify-center rounded-[8px] hover:bg-[#FFF0F0] transition-colors text-[#E74C3C] mt-[18px]"
+            title="Remove from list"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Assignment value picker ──────────────────────────────────────────
+function AssignmentValuePicker({
+  type, value, onChange, outletOpts, brandOpts, customerOpts,
+}: {
+  type: AssignmentType;
+  value: string;
+  onChange: (v: string) => void;
+  outletOpts: OutletOption[];
+  brandOpts: BrandOption[];
+  customerOpts: VendorCustomerOption[];
+}) {
+  const base = 'w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] bg-white';
+  if (type === 'pincode') {
+    return (
+      <input
+        type="text" maxLength={10}
+        value={value} onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        placeholder="400001" inputMode="numeric"
+        className={base}
+      />
+    );
+  }
+  if (type === 'area') {
+    return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Mumbai" className={base} />;
+  }
+  if (type === 'segment') {
+    return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder="vip / cafe / school" className={base} />;
+  }
+  if (type === 'outlet') {
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={base}>
+        <option value="">— select outlet —</option>
+        {outletOpts.map((o) => <option key={o.id} value={o.id}>{o.name}{o.pincode ? ` · ${o.pincode}` : ''}</option>)}
+      </select>
+    );
+  }
+  if (type === 'brand') {
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={base}>
+        <option value="">— select brand —</option>
+        {brandOpts.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+      </select>
+    );
+  }
+  if (type === 'customer') {
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={base}>
+        <option value="">— select customer —</option>
+        {customerOpts.map((c) => <option key={c.userId} value={c.userId}>{c.label}</option>)}
+      </select>
+    );
+  }
+  return null;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+const ASSIGN_STYLE: Record<AssignmentType, { bg: string; text: string }> = {
+  customer: { bg: 'bg-blue-50',    text: 'text-blue-700' },
+  outlet:   { bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  pincode:  { bg: 'bg-amber-50',   text: 'text-amber-700' },
+  area:     { bg: 'bg-purple-50',  text: 'text-purple-700' },
+  segment:  { bg: 'bg-pink-50',    text: 'text-pink-700' },
+  brand:    { bg: 'bg-indigo-50',  text: 'text-indigo-700' },
+};
+
+function assignmentChipLabel(a: ApiAssignment): string {
+  switch (a.type) {
+    case 'customer': return a.user?.fullName ?? a.businessAccount?.legalName ?? a.userId ?? a.businessAccountId ?? '?';
+    case 'outlet':   return a.outlet?.name ?? a.outletId ?? '?';
+    case 'pincode':  return a.pincode ?? '?';
+    case 'area':     return a.area ?? '?';
+    case 'segment':  return a.segment ?? '?';
+    case 'brand':    return a.brand?.name ?? a.brandName ?? '?';
+  }
+}
+
+function buildAssignmentDraft(
+  type: AssignmentType,
+  value: string,
+  opts: { outletOpts: OutletOption[]; brandOpts: BrandOption[]; customerOpts: VendorCustomerOption[] },
+): AssignmentDraft | null {
+  const v = value.trim();
+  if (!v) return null;
+  switch (type) {
+    case 'pincode': return { type, pincode: v, label: v };
+    case 'area':    return { type, area: v, label: v };
+    case 'segment': return { type, segment: v, label: v };
+    case 'outlet': {
+      const o = opts.outletOpts.find((x) => x.id === v);
+      return { type, outletId: v, label: o?.name ?? v };
+    }
+    case 'brand': {
+      const b = opts.brandOpts.find((x) => x.id === v);
+      return { type, brandId: v, label: b?.name ?? v };
+    }
+    case 'customer': {
+      const c = opts.customerOpts.find((x) => x.userId === v);
+      return { type, userId: v, label: c?.label ?? v };
+    }
+  }
+}
+
+void Sparkles;  // currently unused but reserved for "Special" badge in future UI
+void AlertCircle;
