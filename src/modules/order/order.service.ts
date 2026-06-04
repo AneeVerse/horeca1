@@ -449,6 +449,44 @@ export class OrderService {
     return { sent: true, expiresAt };
   }
 
+  /**
+   * Reschedule an order's delivery (Phase 5). Vendor changes the delivery slot
+   * and/or date while the order is still in flight. A supplied slot must belong
+   * to this vendor. Closed orders (delivered/returned/cancelled) are locked.
+   */
+  async updateDelivery(
+    orderId: string,
+    vendorId: string,
+    input: { deliverySlotId?: string | null; deliveryDate?: string | null },
+  ) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, vendorId },
+      select: { id: true, status: true },
+    });
+    if (!order) throw Errors.notFound('Order');
+    if (['delivered', 'returned', 'cancelled'].includes(order.status as string)) {
+      throw Errors.badRequest(`Cannot reschedule a ${order.status} order.`);
+    }
+
+    if (input.deliverySlotId) {
+      const slot = await prisma.deliverySlot.findFirst({
+        where: { id: input.deliverySlotId, vendorId },
+        select: { id: true },
+      });
+      if (!slot) throw Errors.badRequest('Delivery slot not found for this vendor');
+    }
+
+    const data: { deliverySlotId?: string | null; deliveryDate?: Date | null } = {};
+    if (input.deliverySlotId !== undefined) data.deliverySlotId = input.deliverySlotId;
+    if (input.deliveryDate !== undefined) data.deliveryDate = input.deliveryDate ? new Date(input.deliveryDate) : null;
+
+    return prisma.order.update({
+      where: { id: orderId },
+      data,
+      select: { id: true, deliverySlotId: true, deliveryDate: true },
+    });
+  }
+
   // Partial accept: vendor ships a subset of items/quantities.
   // Unfulfilled qty is released back to inventory; order total is recalculated.
   async partialAccept(

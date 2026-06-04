@@ -57,3 +57,13 @@ export const saveAsListSchema = z.object({
 export const ewayBillSchema = z.object({
   ewayBillNo: z.string().min(1).max(30),
 });
+
+// V2.2 Phase 5 — vendor reschedules an in-flight order. At least one of the
+// two fields must be present; either may be explicitly null to clear it.
+export const updateDeliverySchema = z.object({
+  deliverySlotId: z.string().uuid().nullable().optional(),
+  deliveryDate: z.string().datetime().nullable().optional(),
+}).refine(
+  (d) => d.deliverySlotId !== undefined || d.deliveryDate !== undefined,
+  { message: 'Provide deliverySlotId and/or deliveryDate' },
+);

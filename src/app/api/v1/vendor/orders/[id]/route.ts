@@ -9,7 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { OrderService } from '@/modules/order/order.service';
-import { updateStatusSchema, partialAcceptSchema, ewayBillSchema } from '@/modules/order/order.validator';
+import { updateStatusSchema, partialAcceptSchema, ewayBillSchema, updateDeliverySchema } from '@/modules/order/order.validator';
 import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
 
@@ -125,6 +125,13 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
         data: { ewayBillNo },
         select: { id: true, ewayBillNo: true },
       });
+      return NextResponse.json({ success: true, data: updated });
+    }
+
+    // Reschedule path — body carries deliverySlotId and/or deliveryDate
+    if (('deliverySlotId' in body || 'deliveryDate' in body) && !('status' in body)) {
+      const input = updateDeliverySchema.parse(body);
+      const updated = await orderService.updateDelivery(orderId, vendorId, input);
       return NextResponse.json({ success: true, data: updated });
     }
 
