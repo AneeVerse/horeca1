@@ -272,7 +272,7 @@ Each chunk lands separately with its own diff so any regression is bisectable. S
 | 3 | ✅ Deployed (bundled with Phase 2) | 2026-06-03 | 2026-06-03 | category 1-parent enforcement |
 | 3.5 | ✅ Admin import UX + edits land | 2026-06-03 | 2026-06-03 | `54adec8..9741958` |
 | 3.6 | ✅ Admin customers bulk + import | 2026-06-03 | 2026-06-03 | `72851af` |
-| 4 | 🟡 In progress | 2026-06-03 | — | PriceList Mgmt — assignments + pricing types + bulk + resolver |
+| 4 | ✅ Code complete | 2026-06-03 | 2026-06-03 | `2c73ed2..884c17e` (5 chunks — schema, resolver, cart/order, API, UI) |
 | 5 | Not started | — | — | — |
 | 6 | Not started | — | — | — |
 | 7 | Not started | — | — | — |
