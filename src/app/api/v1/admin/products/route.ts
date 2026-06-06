@@ -9,8 +9,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
-import { errorResponse } from '@/middleware/errorHandler';
+import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
+import { assertLeafCategory, findOrCreateMaster } from '@/modules/catalog/catalog.service';
 
 // Validation schema for admin product creation
 // vendorId is optional — admin can create catalog products without a vendor
@@ -18,6 +19,9 @@ const createProductSchema = z.object({
   vendorId: z.string().uuid().optional(),
   name: z.string().min(1),
   slug: z.string().optional(),
+  // Maps to a Horeca1 master SKU (P0-1). Optional — auto-linked/created by
+  // (name, brand) when omitted.
+  masterProductId: z.string().uuid().optional(),
   basePrice: z.number().positive(),
   categoryId: z.string().uuid().optional(),
   categoryIds: z.array(z.string().uuid()).optional(),
@@ -88,6 +92,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
         vendor: { select: { id: true, businessName: true } },
         category: { select: { id: true, name: true } },
         inventory: { select: { qtyAvailable: true } },
+        masterProduct: { select: { sku: true, name: true } },
       },
     });
 
@@ -140,7 +145,9 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
     }>();
 
     for (const p of allProducts) {
-      const key = p.name.toLowerCase().trim();
+      // Group by the real Horeca1 master SKU (P0-1). Falls back to normalized
+      // name only for any product not yet backfilled to a master.
+      const key = p.masterProductId ?? p.name.toLowerCase().trim();
       const qty = p.inventory?.qtyAvailable ?? 0;
       const existing = catalogMap.get(key);
       if (existing) {
@@ -225,14 +232,42 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       .replace(/^-|-$/g, '')
       + '-' + Date.now().toString(36);
 
+    // Inherit the master's (leaf) category only when a master is supplied and
+    // no category was given.
+    let masterCategoryId: string | null = null;
+    if (productData.masterProductId) {
+      const master = await prisma.masterProduct.findUnique({
+        where: { id: productData.masterProductId },
+        select: { categoryId: true },
+      });
+      if (!master) throw Errors.badRequest('Master product not found.');
+      masterCategoryId = master.categoryId;
+    }
+
     // Resolve multi-category inputs. The denormalized Product.categoryId
     // always mirrors the primary category so existing indexed filters still work.
     const multiIds = categoryIds && categoryIds.length > 0 ? Array.from(new Set(categoryIds)) : [];
     const primaryId = primaryCategoryId
       ?? productData.categoryId
-      ?? multiIds[0];
+      ?? multiIds[0]
+      ?? masterCategoryId
+      ?? undefined;
     if (multiIds.length > 0 && primaryId && !multiIds.includes(primaryId)) multiIds.push(primaryId);
     if (primaryId) productData.categoryId = primaryId;
+
+    // Req 5: mandatory + leaf (level-2) sub-category, enforced server-side.
+    const leafIds = multiIds.length > 0 ? multiIds : (primaryId ? [primaryId] : []);
+    if (leafIds.length === 0) throw Errors.badRequest('Product must be mapped to at least one sub-category.');
+    await assertLeafCategory(leafIds);
+
+    // P0-1: guarantee a master SKU — auto-link/create by (name, brand) when omitted.
+    if (!productData.masterProductId) {
+      productData.masterProductId = await findOrCreateMaster({
+        name: productData.name,
+        brand: productData.brand ?? null,
+        categoryId: leafIds[0],
+      });
+    }
 
     // Build unchecked create data (raw IDs — vendorId is optional after migration)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

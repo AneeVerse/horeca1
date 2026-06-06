@@ -10,7 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
-import { CatalogService } from '@/modules/catalog/catalog.service';
+import { CatalogService, assertLeafCategory } from '@/modules/catalog/catalog.service';
 
 // Helper: extract the [id] segment from the URL
 function extractId(req: NextRequest): string {
@@ -23,6 +23,7 @@ function extractId(req: NextRequest): string {
 const updateProductSchema = z.object({
   name: z.string().min(1).optional(),
   slug: z.string().min(1).optional(),
+  masterProductId: z.string().uuid().optional(),
   categoryId: z.string().uuid().optional(),
   categoryIds: z.array(z.string().uuid()).optional(),
   primaryCategoryId: z.string().uuid().optional(),
@@ -76,6 +77,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
         categoryLinks: {
           include: { category: { select: { id: true, name: true, slug: true } } },
         },
+        masterProduct: { select: { id: true, sku: true, name: true, brand: true } },
       },
     });
 
@@ -113,6 +115,13 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       ?? multiIds[0];
     if (multiIds.length > 0 && primaryId && !multiIds.includes(primaryId)) multiIds.push(primaryId);
     if (categoriesChanged && primaryId) productData.categoryId = primaryId;
+
+    // Req 5: a changed category set must remain mapped to leaf (level-2) sub-categories.
+    if (categoriesChanged) {
+      const joinIds = multiIds.length > 0 ? multiIds : (primaryId ? [primaryId] : []);
+      if (joinIds.length === 0) throw Errors.badRequest('Product must remain mapped to at least one sub-category.');
+      await assertLeafCategory(joinIds);
+    }
 
     const product = await prisma.$transaction(async (tx) => {
       const updated = await tx.product.update({

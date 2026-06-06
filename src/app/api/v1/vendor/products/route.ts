@@ -19,6 +19,10 @@ import { requirePermission } from '@/lib/permissions/engine';
 const createProductSchema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1),
+  // Maps to a Horeca1 master SKU (P0-1). Optional here — the service auto-links
+  // or creates one by (name, brand) when omitted, so the central catalog stays
+  // populated. Supply it to map onto an existing master explicitly.
+  masterProductId: z.string().uuid().optional(),
   categoryId: z.string().uuid().optional(),
   // Multi-category — vendor picks 1..N categories. First entry becomes the
   // primary (mirrored into Product.categoryId). Empty array is allowed for

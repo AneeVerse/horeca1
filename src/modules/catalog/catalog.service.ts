@@ -1,7 +1,64 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
 import { runMappingForVendorProduct, embedDistributorProduct } from '@/modules/brand/brand-mapper';
+import { nextMasterSku } from '@/lib/sku';
+
+type Db = Prisma.TransactionClient | typeof prisma;
+
+/**
+ * Every vendor Product maps to a Horeca1 master SKU (P0-1). When a caller doesn't
+ * supply one, link to (or create) the canonical master keyed on (name, brand) so
+ * the same logical item across vendors collapses to one master — without forcing
+ * a picker into every create path. `categoryId` must already be a leaf.
+ */
+export async function findOrCreateMaster(input: { name: string; brand: string | null; categoryId: string }): Promise<string> {
+  const existing = await prisma.masterProduct.findFirst({
+    where: {
+      name: { equals: input.name, mode: 'insensitive' },
+      brand: input.brand ? { equals: input.brand, mode: 'insensitive' } : null,
+    },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  return prisma.$transaction(async (tx) => {
+    const sku = await nextMasterSku(tx);
+    const master = await tx.masterProduct.create({
+      data: { sku, name: input.name, brand: input.brand, categoryId: input.categoryId },
+      select: { id: true },
+    });
+    return master.id;
+  });
+}
+
+/**
+ * Enforce the "Item MUST map to a sub-category" rule (Req 5): every id must be an
+ * existing LEAF category — i.e. a level-2 node (has a parent) with no children of
+ * its own. Used by product create/update and master-product create/update so the
+ * rule is enforced uniformly server-side, not just in the UI.
+ */
+export async function assertLeafCategory(categoryIds: string[], db: Db = prisma): Promise<void> {
+  if (categoryIds.length === 0) return;
+  const unique = [...new Set(categoryIds)];
+  const cats = await db.category.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, name: true, parentId: true, _count: { select: { children: true } } },
+  });
+  const found = new Set(cats.map((c) => c.id));
+  for (const id of unique) {
+    if (!found.has(id)) throw Errors.badRequest(`Category not found: ${id}`);
+  }
+  for (const c of cats) {
+    if (c.parentId === null) {
+      throw Errors.badRequest(`"${c.name}" is a top-level category — pick a sub-category (level 2).`);
+    }
+    if (c._count.children > 0) {
+      throw Errors.badRequest(`"${c.name}" has sub-categories under it — pick a leaf sub-category.`);
+    }
+  }
+}
 
 // Tombstone prefix used when a product can't be hard-deleted (has order/cart/list refs)
 // and we instead rename its slug to free the [vendorId, slug] unique constraint so the
@@ -172,20 +229,43 @@ export class CatalogService {
     taxPercent?: number;
     minOrderQty?: number;
     creditEligible?: boolean;
+    masterProductId?: string;
     basedOnProductId?: string;
     basedOnBrandMasterProductId?: string;
   }) {
     const { basedOnProductId, basedOnBrandMasterProductId, categoryIds, ...productData } = data;
 
     // Resolve the category set: prefer the explicit multi-category array, fall
-    // back to the single legacy categoryId so existing callers keep working.
+    // back to the single legacy categoryId, then inherit the master's category.
     // The first entry is the "primary" — mirrored into Product.categoryId and
     // flagged isPrimary=true in the join table so existing single-category
     // queries (filtering, breadcrumbs) keep working unchanged.
-    const resolvedCategoryIds = categoryIds && categoryIds.length > 0
+    let resolvedCategoryIds = categoryIds && categoryIds.length > 0
       ? categoryIds
       : (data.categoryId ? [data.categoryId] : []);
-    productData.categoryId = resolvedCategoryIds[0] ?? productData.categoryId;
+    if (resolvedCategoryIds.length === 0 && productData.masterProductId) {
+      const m = await prisma.masterProduct.findUnique({
+        where: { id: productData.masterProductId },
+        select: { categoryId: true },
+      });
+      if (m) resolvedCategoryIds = [m.categoryId];
+    }
+    // Req 5: a product MUST map to at least one leaf (level-2) sub-category.
+    if (resolvedCategoryIds.length === 0) {
+      throw Errors.badRequest('Product must be mapped to at least one sub-category.');
+    }
+    await assertLeafCategory(resolvedCategoryIds);
+    productData.categoryId = resolvedCategoryIds[0];
+
+    // P0-1: guarantee a Horeca1 master SKU — use the supplied one or auto-link/create
+    // by (name, brand). Keeps product creation working without a picker.
+    if (!productData.masterProductId) {
+      productData.masterProductId = await findOrCreateMaster({
+        name: productData.name,
+        brand: productData.brand ?? null,
+        categoryId: resolvedCategoryIds[0],
+      });
+    }
 
     // If based on an existing approved product, auto-approve and lock name/brand/images
     let approvalStatus: 'pending' | 'approved' = 'pending';
@@ -301,6 +381,12 @@ export class CatalogService {
     const categoryIds = Array.isArray(data.categoryIds) ? (data.categoryIds as string[]) : undefined;
     delete data.categoryIds;
     if (categoryIds !== undefined) {
+      // Changing the category set still has to obey the leaf rule (Req 5).
+      // Empty array would orphan the product, so reject it on update too.
+      if (categoryIds.length === 0) {
+        throw Errors.badRequest('Product must remain mapped to at least one sub-category.');
+      }
+      await assertLeafCategory(categoryIds);
       data.categoryId = categoryIds[0] ?? null;
     }
 

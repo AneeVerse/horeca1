@@ -39,6 +39,8 @@ const updateProductSchema = z.object({
   isFeatured: z.boolean().optional(),
   vegNonVeg: z.enum(['veg', 'nonveg', 'egg']).optional(),
   storageType: z.string().max(50).optional(),
+  // Allow re-linking to a different Horeca1 master SKU on edit (not forced).
+  masterProductId: z.string().uuid().optional(),
   categoryId: z.string().uuid().optional(),
   // Multi-category — when provided, replaces the existing category set. First
   // entry becomes the new primary (mirrored into Product.categoryId).
@@ -114,6 +116,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
           orderBy: { isPrimary: 'desc' },
           include: { category: { select: { id: true, name: true, slug: true } } },
         },
+        masterProduct: { select: { id: true, sku: true, name: true, brand: true } },
       },
     });
     if (!product) throw Errors.notFound('Product');
