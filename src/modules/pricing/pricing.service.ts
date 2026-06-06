@@ -79,6 +79,10 @@ export interface ResolutionResult {
   source: ResolutionSource;
   priceListId?: string;
   priceListItemId?: string;
+  // B-5: present only when a 'scheme' pricelist item matched. The caller
+  // (order.create) uses these to grant free goods ("buy X get Y free").
+  schemeMinQty?: number | null;
+  schemeFreeQty?: number | null;
 }
 
 /**
@@ -99,7 +103,15 @@ export async function resolveUnitPrice(
     await Promise.all([
       db.product.findFirst({
         where: { id: input.productId, vendorId: input.vendorId },
-        select: { id: true, basePrice: true, brand: true },
+        select: {
+          id: true, basePrice: true, brand: true,
+          // P0-5: lets brand-targeted pricelists match by canonical brandId
+          // (via the verified/auto brand mapping), not just the free-text brand.
+          brandMappings: {
+            where: { status: { in: ['verified', 'auto_mapped'] } },
+            select: { brandId: true },
+          },
+        },
       }),
       db.vendorCustomer.findUnique({
         where: { vendorId_userId: { vendorId: input.vendorId, userId: input.customer.userId } },
@@ -168,6 +180,7 @@ export async function resolveUnitPrice(
 
   const basePrice = product.basePrice;
   const productBrand = product.brand?.toLowerCase() ?? null;
+  const mappedBrandIds = new Set((product.brandMappings ?? []).map((m) => m.brandId));
   const customerTags = new Set(
     [...(input.customer.tags ?? []), ...(vendorCustomer?.tags ?? [])].map((t) => t.toLowerCase()),
   );
@@ -205,13 +218,10 @@ export async function resolveUnitPrice(
         );
       }
       case 'brand':
-        // Brand id match (canonical) OR free-text brand-name fallback —
-        // products store brand as a string until the brand-mapping layer
-        // becomes authoritative.
+        // P0-5: canonical brandId match (via the product's brand mapping),
+        // with a free-text brand-name fallback for products not yet mapped.
+        if (a.brandId && mappedBrandIds.has(a.brandId)) return true;
         if (a.brandName && productBrand) return a.brandName.toLowerCase() === productBrand;
-        // brandId would match against Product.brand only if products
-        // were FK-linked to Brand, which they aren't today. Once they
-        // are, this branch lights up automatically.
         return false;
       default:
         return false;
@@ -234,6 +244,10 @@ export async function resolveUnitPrice(
           source: sourceKey,
           priceListId: list.id,
           priceListItemId: item.id,
+          // Surface scheme parameters so the order layer can grant free goods.
+          ...(item.pricingType === 'scheme'
+            ? { schemeMinQty: item.schemeMinQty, schemeFreeQty: item.schemeFreeQty }
+            : {}),
         };
       }
       // scheme miss falls through to the next priority level
