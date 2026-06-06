@@ -69,16 +69,19 @@ This closes the 7 P0 blockers + 8 functional bugs from [GO_LIVE_READINESS_AUDIT.
 
 ---
 
-## 3. Remaining UI surfaces (backend APIs are all DONE)
+## 3. UI surfaces
 
-These are admin/customer-facing screens that still need wiring to the finished APIs. None block the data/logic; they make the features usable end-to-end:
+### ✅ Now wired (done)
+- **Customer detail edit form** — PAN/FSSAI/billing + 13 master-datasheet attributes editable via `companyProfile`. `src/app/admin/customers/[id]/page.tsx`
+- **Vendor KYC card** — KYC/bank/pickup/authorized-person fields rendered. `src/app/admin/vendors/[id]/page.tsx`
+- **Order ops — Modify Quantities** — inline qty editing on pending orders → `/modify`. `src/app/admin/orders/[id]/page.tsx`
+- **Checkout order notes** — per-vendor notes textarea threaded into the order payload. `src/app/checkout/page.tsx`
+- **Repeat order** — uses the server reorder endpoint. `src/app/orders/page.tsx`
 
-- **Customer detail edit form** (`src/app/admin/customers/[id]/page.tsx`) — add inputs for the 13 new attributes + PAN/FSSAI/billing (API `PATCH /admin/users/:id` `companyProfile` already accepts them; GET already returns them).
-- **Vendor KYC card** (`src/app/admin/vendors/[id]/page.tsx`) — render the KYC/bank/pickup/authorized-person fields the GET already returns.
-- **Order ops buttons** (`src/app/admin/orders/[id]/page.tsx`) — Edit-qty / Split / Reassign actions calling `/admin/orders/:id/{modify,split,reassign}`.
-- **Checkout order notes** (`src/app/checkout/page.tsx`) — per-vendor notes textarea → include `notes` in the `vendorOrders` payload (validator + service already persist it).
-- **Draft PO** — "Save as Draft" (POST `/orders` with `saveDraft:true`) + a Drafts list with a "Submit" action (PATCH `/orders/:id/submit`).
-- **Master SKU picker** (optional) — `/master-products?search=` powers a picker in the product forms for explicit mapping; not required since the service auto-links.
+### ⏳ Follow-up UI (backend APIs all DONE — low priority)
+- **Order Split / Reassign buttons** — endpoints `/admin/orders/:id/{split,reassign}` ready; need an item-selection modal + vendor picker.
+- **Draft PO save/submit UI** — `POST /orders {saveDraft:true}` + `PATCH /orders/:id/submit` ready; need a "Save as Draft" button + a drafts list with Submit.
+- **Master SKU picker** (optional) — `/master-products?search=` ready; not required since the service auto-links/creates a master on every product create.
 
 ---
 
