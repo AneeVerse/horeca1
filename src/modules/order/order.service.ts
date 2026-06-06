@@ -20,6 +20,9 @@ interface VendorOrderInput {
 interface CreateOrderInput {
   vendorOrders: VendorOrderInput[];
   paymentMethod: string;
+  // Draft PO (Req 7): persist the order(s) without reserving stock, running the
+  // credit check, or clearing the cart. Submitted later via submitDraft().
+  saveDraft?: boolean;
 }
 
 /**
@@ -55,6 +58,7 @@ export class OrderService {
       throw Errors.badRequest('Active outlet needs its address completed before placing orders');
     }
     const deliveryAddressSnapshot: Prisma.InputJsonValue = { ...outlet };
+    const isDraft = input.saveDraft === true;
     return prisma.$transaction(async (tx) => {
       const orders: Array<{
         id: string;
@@ -65,11 +69,13 @@ export class OrderService {
       }> = [];
 
       for (const vo of input.vendorOrders) {
-        // 1. Validate stock
-        const stockCheck = await this.inventoryService.bulkCheck(vo.items, tx);
-        const outOfStock = stockCheck.find((s) => !s.available);
-        if (outOfStock) {
-          throw Errors.outOfStock(outOfStock.productName, outOfStock.qtyAvailable);
+        // 1. Validate stock (skipped for drafts — no reservation happens yet)
+        if (!isDraft) {
+          const stockCheck = await this.inventoryService.bulkCheck(vo.items, tx);
+          const outOfStock = stockCheck.find((s) => !s.available);
+          if (outOfStock) {
+            throw Errors.outOfStock(outOfStock.productName, outOfStock.qtyAvailable);
+          }
         }
 
         // 2. Validate MOV
@@ -96,7 +102,7 @@ export class OrderService {
           const istDay = dayMap[istParts.find(p => p.type === 'weekday')?.value ?? ''] ?? -1;
           const istHour = Number(istParts.find(p => p.type === 'hour')?.value ?? 0);
           const istMin = Number(istParts.find(p => p.type === 'minute')?.value ?? 0);
-          if (istDay === slot.dayOfWeek) {
+          if (!isDraft && istDay === slot.dayOfWeek) {
             const [hh, mm] = slot.cutoffTime.split(':').map(Number);
             const nowMins = istHour * 60 + istMin;
             const cutoffMins = (hh || 0) * 60 + (mm || 0);
@@ -139,16 +145,25 @@ export class OrderService {
           if (!product) throw Errors.notFound('Product');
 
           // Resolved taxable unit price — honours every assignment rule.
-          const { unitPrice: resolvedPrice } = await resolveUnitPrice(
+          const resolved = await resolveUnitPrice(
             { productId: item.productId, vendorId: vo.vendorId, quantity: item.quantity, customer: customerCtx },
             tx,
           );
-          const taxableUnitPrice = Number(resolvedPrice);
+          const taxableUnitPrice = Number(resolved.unitPrice);
 
           // Apply GST to get gross (customer-facing) price
           const taxPercent = Number(product.taxPercent) || 0;
           const grossUnitPrice = Math.round(taxableUnitPrice * (1 + taxPercent / 100) * 100) / 100;
-          const totalPrice = Math.round(grossUnitPrice * item.quantity * 100) / 100;
+
+          // B-5: scheme free-goods — when a 'scheme' pricelist item matched, grant
+          // `schemeFreeQty` free units for every `schemeMinQty` ordered. The line
+          // still ships the full quantity; only the billed units are charged.
+          let billedQty = item.quantity;
+          if (resolved.schemeMinQty && resolved.schemeFreeQty && item.quantity >= resolved.schemeMinQty) {
+            const freeQty = Math.floor(item.quantity / resolved.schemeMinQty) * resolved.schemeFreeQty;
+            billedQty = Math.max(0, item.quantity - freeQty);
+          }
+          const totalPrice = Math.round(grossUnitPrice * billedQty * 100) / 100;
           subtotal += totalPrice;
 
           itemDetails.push({
@@ -160,7 +175,7 @@ export class OrderService {
           });
         }
 
-        if (subtotal < Number(vendor.minOrderValue)) {
+        if (!isDraft && subtotal < Number(vendor.minOrderValue)) {
           throw Errors.belowMOV(vendor.businessName, Number(vendor.minOrderValue), subtotal);
         }
 
@@ -195,8 +210,8 @@ export class OrderService {
         }
         const totalAmount = Math.max(0, subtotal - promoDiscount);
 
-        // 4b. Credit check — only when paymentMethod is 'credit'
-        if (input.paymentMethod === 'credit') {
+        // 4b. Credit check — only when paymentMethod is 'credit' (skipped for drafts)
+        if (!isDraft && input.paymentMethod === 'credit') {
           const creditAcc = await tx.creditAccount.findUnique({
             where: { userId_vendorId: { userId, vendorId: vo.vendorId } },
           });
@@ -252,7 +267,7 @@ export class OrderService {
             businessAccountId,
             outletId,
             deliveryAddressSnapshot,
-            status: 'pending',
+            status: isDraft ? 'draft' : 'pending',
             subtotal,
             promoDiscount,
             promotionId: appliedPromoId,
@@ -266,34 +281,38 @@ export class OrderService {
           include: { items: true },
         });
 
-        // 6. Reserve inventory
-        await this.inventoryService.reserveStock(vo.items, tx);
+        // 6. Reserve inventory (drafts reserve nothing until submitted)
+        if (!isDraft) await this.inventoryService.reserveStock(vo.items, tx);
 
         orders.push(order);
       }
 
-      // 7. Clear the (user, account, outlet)-scoped cart
-      const cart = await tx.cart.findFirst({
-        where: { userId, businessAccountId, outletId },
-        select: { id: true },
-      });
-      if (cart) {
-        await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+      // 7. Clear the (user, account, outlet)-scoped cart — but keep it for drafts.
+      if (!isDraft) {
+        const cart = await tx.cart.findFirst({
+          where: { userId, businessAccountId, outletId },
+          select: { id: true },
+        });
+        if (cart) {
+          await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+        }
       }
 
-      // 8. Emit events after transaction
-      setImmediate(() => {
-        for (const order of orders) {
-          emitEvent('OrderCreated', {
-            orderId: order.id,
-            orderNumber: order.orderNumber,
-            userId,
-            vendorId: order.vendorId,
-            totalAmount: Number(order.totalAmount),
-            items: order.items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
-          });
-        }
-      });
+      // 8. Emit events after transaction (not for drafts — nothing to notify yet)
+      if (!isDraft) {
+        setImmediate(() => {
+          for (const order of orders) {
+            emitEvent('OrderCreated', {
+              orderId: order.id,
+              orderNumber: order.orderNumber,
+              userId,
+              vendorId: order.vendorId,
+              totalAmount: Number(order.totalAmount),
+              items: order.items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+            });
+          }
+        });
+      }
 
       return { orders };
     }, { isolationLevel: 'Serializable' });
@@ -404,6 +423,256 @@ export class OrderService {
     }
 
     return { vendorId: order.vendorId, added, skipped };
+  }
+
+  // ── Draft PO + Operations controls (Req 7) ─────────────────────────────
+  // modify / split / reassign operate ONLY on `pending` orders. At pending,
+  // stock is reserved (so we adjust reservations) but no credit debit or
+  // commission accrual has run yet — keeping these edits ledger-safe.
+
+  /** Build a pricing CustomerContext from an order + its snapshotted outlet address. */
+  private buildCustomerCtx(
+    order: { userId: string; businessAccountId: string; outletId: string; deliveryAddressSnapshot: Prisma.JsonValue },
+    tags: string[],
+  ): CustomerContext {
+    const snap = (order.deliveryAddressSnapshot ?? {}) as { pincode?: string | null; city?: string | null; state?: string | null };
+    return {
+      userId: order.userId,
+      businessAccountId: order.businessAccountId,
+      outletId: order.outletId,
+      outletPincode: snap.pincode ?? null,
+      outletCity: snap.city ?? null,
+      outletState: snap.state ?? null,
+      tags,
+    };
+  }
+
+  /** Resolve gross unit price + line total (with GST + scheme free-goods) for one line. */
+  private async priceLine(
+    tx: Prisma.TransactionClient,
+    vendorId: string,
+    productId: string,
+    quantity: number,
+    customer: CustomerContext,
+  ): Promise<{ grossUnitPrice: number; totalPrice: number }> {
+    const product = await tx.product.findUnique({ where: { id: productId }, select: { taxPercent: true } });
+    const resolved = await resolveUnitPrice({ productId, vendorId, quantity, customer }, tx);
+    const taxableUnitPrice = Number(resolved.unitPrice);
+    const taxPercent = Number(product?.taxPercent) || 0;
+    const grossUnitPrice = Math.round(taxableUnitPrice * (1 + taxPercent / 100) * 100) / 100;
+    let billedQty = quantity;
+    if (resolved.schemeMinQty && resolved.schemeFreeQty && quantity >= resolved.schemeMinQty) {
+      const freeQty = Math.floor(quantity / resolved.schemeMinQty) * resolved.schemeFreeQty;
+      billedQty = Math.max(0, quantity - freeQty);
+    }
+    return { grossUnitPrice, totalPrice: Math.round(grossUnitPrice * billedQty * 100) / 100 };
+  }
+
+  /** Submit a draft PO: draft → pending. Re-validates stock/MOV/credit, reserves, notifies. */
+  async submitDraft(orderId: string, ctx: OrderContext) {
+    return prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({
+        where: { id: orderId, userId: ctx.userId, status: 'draft' },
+        include: { items: true },
+      });
+      if (!order) throw Errors.notFound('Draft order');
+
+      const items = order.items.map((i) => ({ productId: i.productId, quantity: i.quantity }));
+      const stock = await this.inventoryService.bulkCheck(items, tx);
+      const oos = stock.find((s) => !s.available);
+      if (oos) throw Errors.outOfStock(oos.productName, oos.qtyAvailable);
+
+      const vendor = await tx.vendor.findUnique({ where: { id: order.vendorId } });
+      if (!vendor) throw Errors.notFound('Vendor');
+      if (Number(order.subtotal) < Number(vendor.minOrderValue)) {
+        throw Errors.belowMOV(vendor.businessName, Number(vendor.minOrderValue), Number(order.subtotal));
+      }
+
+      if (order.paymentMethod === 'credit') {
+        const creditAcc = await tx.creditAccount.findUnique({
+          where: { userId_vendorId: { userId: ctx.userId, vendorId: order.vendorId } },
+        });
+        if (!creditAcc || creditAcc.status !== 'active') throw Errors.badRequest('No active credit account with this vendor');
+        if (Number(creditAcc.creditLimit) - Number(creditAcc.creditUsed) < Number(order.totalAmount)) {
+          throw Errors.badRequest('Insufficient credit to submit this draft.');
+        }
+      }
+
+      await this.inventoryService.reserveStock(items, tx);
+      const updated = await tx.order.update({ where: { id: orderId }, data: { status: 'pending' } });
+
+      setImmediate(() => emitEvent('OrderCreated', {
+        orderId: order.id, orderNumber: order.orderNumber, userId: ctx.userId,
+        vendorId: order.vendorId, totalAmount: Number(order.totalAmount), items,
+      }));
+      return updated;
+    }, { isolationLevel: 'Serializable' });
+  }
+
+  /** Ops: change line quantities on a pending order (0 removes the line). Re-prices + re-balances reservation. */
+  async modifyOrderQuantities(orderId: string, vendorId: string, lines: Array<{ itemId: string; quantity: number }>) {
+    return prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({ where: { id: orderId, vendorId, status: 'pending' }, include: { items: true } });
+      if (!order) throw Errors.badRequest('Order not found or not editable (only pending orders can be modified).');
+      const vendor = await tx.vendor.findUnique({ where: { id: vendorId } });
+      if (!vendor) throw Errors.notFound('Vendor');
+      const vc = await tx.vendorCustomer.findUnique({ where: { vendorId_userId: { vendorId, userId: order.userId } }, select: { tags: true } });
+      const customer = this.buildCustomerCtx(order, vc?.tags ?? []);
+
+      const itemMap = new Map(order.items.map((i) => [i.id, i]));
+      const newQty = new Map(order.items.map((i) => [i.id, i.quantity]));
+      for (const line of lines) {
+        if (!itemMap.has(line.itemId)) throw Errors.badRequest(`Item ${line.itemId} not in this order`);
+        if (line.quantity < 0) throw Errors.badRequest('Quantity cannot be negative');
+        newQty.set(line.itemId, line.quantity);
+      }
+
+      const reserveDeltas: Array<{ productId: string; quantity: number }> = [];
+      const releaseDeltas: Array<{ productId: string; quantity: number }> = [];
+      let subtotal = 0;
+
+      for (const item of order.items) {
+        const q = newQty.get(item.id) ?? item.quantity;
+        const delta = q - item.quantity;
+        if (delta > 0) reserveDeltas.push({ productId: item.productId, quantity: delta });
+        else if (delta < 0) releaseDeltas.push({ productId: item.productId, quantity: -delta });
+        if (q === 0) { await tx.orderItem.delete({ where: { id: item.id } }); continue; }
+        const priced = await this.priceLine(tx, vendorId, item.productId, q, customer);
+        await tx.orderItem.update({ where: { id: item.id }, data: { quantity: q, unitPrice: priced.grossUnitPrice, totalPrice: priced.totalPrice } });
+        subtotal += priced.totalPrice;
+      }
+
+      if (subtotal <= 0) throw Errors.badRequest('Order would have no items left. Cancel the order instead.');
+      if (subtotal < Number(vendor.minOrderValue)) throw Errors.belowMOV(vendor.businessName, Number(vendor.minOrderValue), subtotal);
+
+      if (reserveDeltas.length) {
+        const check = await this.inventoryService.bulkCheck(reserveDeltas, tx);
+        const oos = check.find((s) => !s.available);
+        if (oos) throw Errors.outOfStock(oos.productName, oos.qtyAvailable);
+        await this.inventoryService.reserveStock(reserveDeltas, tx);
+      }
+      if (releaseDeltas.length) await this.inventoryService.releaseStock(releaseDeltas, tx);
+
+      return tx.order.update({
+        where: { id: orderId },
+        data: { subtotal, totalAmount: Math.max(0, subtotal - Number(order.promoDiscount)) },
+      });
+    }, { isolationLevel: 'Serializable' });
+  }
+
+  /** Ops: split selected quantities off a pending order into a new sibling PO (same vendor/outlet/customer). */
+  async splitOrder(orderId: string, vendorId: string, lines: Array<{ itemId: string; quantity: number }>) {
+    return prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({ where: { id: orderId, vendorId, status: 'pending' }, include: { items: true } });
+      if (!order) throw Errors.badRequest('Order not found or not splittable (only pending orders).');
+      if (!lines.length) throw Errors.badRequest('Specify at least one line to split off.');
+
+      const itemMap = new Map(order.items.map((i) => [i.id, i]));
+      for (const line of lines) {
+        const item = itemMap.get(line.itemId);
+        if (!item) throw Errors.badRequest(`Item ${line.itemId} not in this order`);
+        if (line.quantity <= 0 || line.quantity > item.quantity) throw Errors.badRequest(`Invalid split quantity for "${item.productName}"`);
+      }
+
+      let parentSubtotal = 0;
+      let childSubtotal = 0;
+      const childItems: Array<{ productId: string; productName: string; quantity: number; unitPrice: Prisma.Decimal; totalPrice: number }> = [];
+
+      for (const item of order.items) {
+        const moveQty = lines.find((l) => l.itemId === item.id)?.quantity ?? 0;
+        const keepQty = item.quantity - moveQty;
+        const unit = Number(item.unitPrice);
+        if (moveQty > 0) {
+          const childTotal = Math.round(unit * moveQty * 100) / 100;
+          childItems.push({ productId: item.productId, productName: item.productName, quantity: moveQty, unitPrice: item.unitPrice, totalPrice: childTotal });
+          childSubtotal += childTotal;
+        }
+        if (keepQty > 0) {
+          const parentTotal = Math.round(unit * keepQty * 100) / 100;
+          await tx.orderItem.update({ where: { id: item.id }, data: { quantity: keepQty, totalPrice: parentTotal } });
+          parentSubtotal += parentTotal;
+        } else {
+          await tx.orderItem.delete({ where: { id: item.id } });
+        }
+      }
+      if (!childItems.length) throw Errors.badRequest('Nothing to split off.');
+      if (parentSubtotal <= 0) throw Errors.badRequest('Cannot split off the entire order — modify quantities instead.');
+
+      const orderNumber = `PO-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}S`;
+      const child = await tx.order.create({
+        data: {
+          orderNumber, userId: order.userId, vendorId, businessAccountId: order.businessAccountId,
+          outletId: order.outletId, deliveryAddressSnapshot: order.deliveryAddressSnapshot as Prisma.InputJsonValue,
+          status: 'pending', subtotal: childSubtotal, totalAmount: childSubtotal,
+          paymentMethod: order.paymentMethod, deliverySlotId: order.deliverySlotId, salespersonId: order.salespersonId,
+          notes: order.notes, items: { create: childItems },
+        },
+      });
+      await tx.order.update({
+        where: { id: orderId },
+        data: { subtotal: parentSubtotal, totalAmount: Math.max(0, parentSubtotal - Number(order.promoDiscount)) },
+      });
+      // Reservation total is unchanged — the same units now span two orders.
+      return { parentId: orderId, childId: child.id, childOrderNumber: child.orderNumber };
+    }, { isolationLevel: 'Serializable' });
+  }
+
+  /** Ops: reassign a pending order to a different vendor. Remaps each line to the new vendor's product with the same master SKU, re-prices, and moves reservations. */
+  async reassignOrderVendor(orderId: string, fromVendorId: string, newVendorId: string) {
+    return prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({ where: { id: orderId, vendorId: fromVendorId, status: 'pending' }, include: { items: true } });
+      if (!order) throw Errors.badRequest('Order not found or not reassignable (only pending orders).');
+      if (newVendorId === fromVendorId) throw Errors.badRequest('Order already belongs to this vendor.');
+      const newVendor = await tx.vendor.findUnique({ where: { id: newVendorId } });
+      if (!newVendor || !newVendor.isActive) throw Errors.badRequest('Target vendor not found or inactive.');
+
+      const oldProducts = await tx.product.findMany({
+        where: { id: { in: order.items.map((i) => i.productId) } },
+        select: { id: true, masterProductId: true },
+      });
+      const masterByOld = new Map(oldProducts.map((p) => [p.id, p.masterProductId]));
+      const vc = await tx.vendorCustomer.findUnique({ where: { vendorId_userId: { vendorId: newVendorId, userId: order.userId } }, select: { tags: true, salespersonId: true } });
+      const customer = this.buildCustomerCtx(order, vc?.tags ?? []);
+
+      const releaseOld: Array<{ productId: string; quantity: number }> = [];
+      const reserveNew: Array<{ productId: string; quantity: number }> = [];
+      let subtotal = 0;
+
+      for (const item of order.items) {
+        const masterId = masterByOld.get(item.productId);
+        if (!masterId) throw Errors.badRequest(`"${item.productName}" has no master SKU — cannot reassign.`);
+        const newProduct = await tx.product.findFirst({
+          where: { vendorId: newVendorId, masterProductId: masterId, isActive: true, approvalStatus: 'approved' },
+          select: { id: true, name: true },
+        });
+        if (!newProduct) throw Errors.badRequest(`Target vendor does not carry "${item.productName}".`);
+        const priced = await this.priceLine(tx, newVendorId, newProduct.id, item.quantity, customer);
+        await tx.orderItem.update({ where: { id: item.id }, data: { productId: newProduct.id, productName: newProduct.name, unitPrice: priced.grossUnitPrice, totalPrice: priced.totalPrice } });
+        subtotal += priced.totalPrice;
+        releaseOld.push({ productId: item.productId, quantity: item.quantity });
+        reserveNew.push({ productId: newProduct.id, quantity: item.quantity });
+      }
+
+      if (subtotal < Number(newVendor.minOrderValue)) throw Errors.belowMOV(newVendor.businessName, Number(newVendor.minOrderValue), subtotal);
+
+      const check = await this.inventoryService.bulkCheck(reserveNew, tx);
+      const oos = check.find((s) => !s.available);
+      if (oos) throw Errors.outOfStock(oos.productName, oos.qtyAvailable);
+      await this.inventoryService.releaseStock(releaseOld, tx);
+      await this.inventoryService.reserveStock(reserveNew, tx);
+
+      // Delivery slot belonged to the old vendor — clear it; the new vendor's slot is re-picked later.
+      return tx.order.update({
+        where: { id: orderId },
+        data: {
+          vendorId: newVendorId,
+          salespersonId: vc?.salespersonId ?? null,
+          deliverySlotId: null,
+          subtotal,
+          totalAmount: Math.max(0, subtotal - Number(order.promoDiscount)),
+        },
+      });
+    }, { isolationLevel: 'Serializable' });
   }
 
   /**
@@ -775,8 +1044,20 @@ export class OrderService {
         }
       }
 
-      const eventName = `Order${status.charAt(0).toUpperCase() + status.slice(1)}` as 'OrderConfirmed';
-      emitEvent(eventName, { orderId, userId: updated.userId, vendorId });
+      // B-4: explicit status→event map so every transition has a real,
+      // listener-backed event (no more silently-dropped dynamic emits).
+      const STATUS_EVENT = {
+        confirmed: 'OrderConfirmed',
+        processing: 'OrderProcessing',
+        ready_for_dispatch: 'OrderReadyForDispatch',
+        shipped: 'OrderShipped',
+        partially_delivered: 'OrderPartiallyDelivered',
+        delivered: 'OrderDelivered',
+        returned: 'OrderReturned',
+        cancelled: 'OrderCancelled',
+      } as const;
+      const eventName = STATUS_EVENT[status as keyof typeof STATUS_EVENT];
+      if (eventName) emitEvent(eventName, { orderId, userId: updated.userId, vendorId });
 
       return updated;
     });

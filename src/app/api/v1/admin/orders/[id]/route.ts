@@ -10,10 +10,7 @@ import { adminOnly } from '@/middleware/rbac';
 import { ApiError, errorResponse, Errors } from '@/middleware/errorHandler';
 import type { OrderStatus } from '@prisma/client';
 import { requirePermission } from '@/lib/permissions/engine';
-import { emitEvent } from '@/events/emitter';
-import { InventoryService } from '@/modules/inventory/inventory.service';
-
-const inventoryService = new InventoryService();
+import { OrderService } from '@/modules/order/order.service';
 
 const VALID_STATUSES: OrderStatus[] = [
   'pending',
@@ -117,7 +114,11 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     const id = extractId(req);
     const body = await req.json();
 
-    const { status } = body as { status?: OrderStatus };
+    const { status, reason, proof } = body as {
+      status?: OrderStatus;
+      reason?: string;
+      proof?: { proofType?: string; proofUrl?: string | null; notes?: string; otp?: string };
+    };
 
     if (!status || !VALID_STATUSES.includes(status)) {
       throw new ApiError(
@@ -127,54 +128,22 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       );
     }
 
-    // Verify order exists + grab items so we can release stock on cancel
-    const existing = await prisma.order.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        status: true,
-        userId: true,
-        vendorId: true,
-        orderNumber: true,
-        items: { select: { productId: true, quantity: true } },
-      },
-    });
+    // updateStatus is vendor-scoped — look up the order's vendor.
+    const existing = await prisma.order.findUnique({ where: { id }, select: { vendorId: true } });
+    if (!existing) throw Errors.notFound('Order');
 
-    if (!existing) {
-      throw Errors.notFound('Order');
-    }
-
-    const isCancelTransition = status === 'cancelled' && existing.status !== 'cancelled';
-
-    const updated = await prisma.$transaction(async (tx) => {
-      // 1. Release reserved inventory if we're moving into 'cancelled'
-      if (isCancelTransition && existing.items.length > 0) {
-        await inventoryService.releaseStock(existing.items, tx);
-      }
-      // 2. Update the order itself
-      return tx.order.update({
-        where: { id },
-        data: { status },
-        select: {
-          id: true,
-          orderNumber: true,
-          status: true,
-          totalAmount: true,
-          paymentStatus: true,
-          updatedAt: true,
-          vendor: { select: { id: true, businessName: true } },
-          user: { select: { id: true, fullName: true, email: true } },
-        },
-      });
-    });
-
-    // 3. Fan out the appropriate event (after the transaction commits) so the
-    //    notification worker sends an SMS / email / push to the customer.
-    const basePayload = { orderId: existing.id, userId: existing.userId, vendorId: existing.vendorId };
-    if (status === 'confirmed') emitEvent('OrderConfirmed', basePayload);
-    else if (status === 'shipped') emitEvent('OrderShipped', basePayload);
-    else if (status === 'delivered') emitEvent('OrderDelivered', basePayload);
-    else if (status === 'cancelled') emitEvent('OrderCancelled', { ...basePayload, reason: 'Cancelled by admin' });
+    // P0-3: route admin status changes through the guarded state machine so the
+    // same side-effects fire as the vendor path — inventory finalize/release,
+    // credit debit/reversal, commission accrual, and the matching event. A raw
+    // `order.update({ status })` here previously desynced stock + credit ledgers.
+    const orderService = new OrderService();
+    const updated = await orderService.updateStatus(
+      id,
+      existing.vendorId,
+      status,
+      reason ?? 'Updated by admin',
+      proof,
+    );
 
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {

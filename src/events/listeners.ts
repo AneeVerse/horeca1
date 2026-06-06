@@ -121,6 +121,52 @@ export function registerEventListeners(): void {
     }
   });
 
+  // B-4: previously these transitions emitted events with no listener, so the
+  // customer was never told. Each now sends an in-app update.
+  eventBus.on('OrderProcessing', async (payload) => {
+    try {
+      await notifications.send({
+        userId: payload.userId, type: 'order', channel: 'in_app',
+        title: 'Order Being Packed',
+        body: `Your order ${payload.orderId} is being packed.`,
+        referenceId: payload.orderId, referenceType: 'order',
+      });
+    } catch (error) { console.error('[Events] OrderProcessing listener failed:', error); }
+  });
+
+  eventBus.on('OrderReadyForDispatch', async (payload) => {
+    try {
+      await notifications.send({
+        userId: payload.userId, type: 'order', channel: 'in_app',
+        title: 'Order Ready for Dispatch',
+        body: `Your order ${payload.orderId} is packed and awaiting pickup.`,
+        referenceId: payload.orderId, referenceType: 'order',
+      });
+    } catch (error) { console.error('[Events] OrderReadyForDispatch listener failed:', error); }
+  });
+
+  eventBus.on('OrderPartiallyDelivered', async (payload) => {
+    try {
+      await notifications.send({
+        userId: payload.userId, type: 'order', channel: 'in_app',
+        title: 'Order Partially Delivered',
+        body: `Part of your order ${payload.orderId} has been delivered; the balance is on its way.`,
+        referenceId: payload.orderId, referenceType: 'order',
+      });
+    } catch (error) { console.error('[Events] OrderPartiallyDelivered listener failed:', error); }
+  });
+
+  eventBus.on('OrderReturned', async (payload) => {
+    try {
+      await notifications.send({
+        userId: payload.userId, type: 'order', channel: 'in_app',
+        title: 'Order Returned',
+        body: `Your order ${payload.orderId} has been marked as returned.`,
+        referenceId: payload.orderId, referenceType: 'order',
+      });
+    } catch (error) { console.error('[Events] OrderReturned listener failed:', error); }
+  });
+
   eventBus.on('OrderCancelled', async (payload) => {
     try {
       const reasonSuffix = payload.reason ? ` Reason: ${payload.reason}` : '';

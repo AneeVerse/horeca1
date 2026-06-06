@@ -11,10 +11,32 @@ export const createOrderSchema = z.object({
         })
       ).min(1),
       deliverySlotId: z.string().uuid().optional(),
-      notes: z.string().optional(),
+      notes: z.string().max(1000).optional(),
     })
   ).min(1),
   paymentMethod: z.string().min(1),
+  // Draft PO (Req 7): persist without reserving stock / charging credit /
+  // clearing the cart. Submitted later via PATCH /orders/:id/submit.
+  saveDraft: z.boolean().optional(),
+});
+
+// Ops controls (Req 7) — admin order management.
+export const modifyQuantitiesSchema = z.object({
+  lines: z.array(z.object({
+    itemId: z.string().uuid(),
+    quantity: z.number().int().min(0),  // 0 removes the line
+  })).min(1),
+});
+
+export const splitOrderSchema = z.object({
+  lines: z.array(z.object({
+    itemId: z.string().uuid(),
+    quantity: z.number().int().positive(),
+  })).min(1),
+});
+
+export const reassignVendorSchema = z.object({
+  newVendorId: z.string().uuid(),
 });
 
 export const listOrdersSchema = z.object({

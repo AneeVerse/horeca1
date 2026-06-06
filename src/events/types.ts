@@ -35,6 +35,13 @@ export interface OrderCancelledPayload {
   reason?: string;
 }
 
+// B-4: the remaining lifecycle transitions now carry events + listeners so
+// every status change notifies the customer (no more silently-dropped emits).
+export interface OrderProcessingPayload { orderId: string; userId: string; vendorId: string; }
+export interface OrderReadyForDispatchPayload { orderId: string; userId: string; vendorId: string; }
+export interface OrderPartiallyDeliveredPayload { orderId: string; userId: string; vendorId: string; }
+export interface OrderReturnedPayload { orderId: string; userId: string; vendorId: string; }
+
 // V2.2 Phase 5 — delivery OTP issued to the customer. The listener delivers
 // the code over SMS + email + in-app so they can read it to the delivery
 // agent, who enters it to confirm handover.
@@ -190,8 +197,12 @@ export interface BrandDistributorInviteCreatedPayload {
 export interface EventMap {
   OrderCreated: OrderCreatedPayload;
   OrderConfirmed: OrderConfirmedPayload;
+  OrderProcessing: OrderProcessingPayload;
+  OrderReadyForDispatch: OrderReadyForDispatchPayload;
   OrderShipped: OrderShippedPayload;
+  OrderPartiallyDelivered: OrderPartiallyDeliveredPayload;
   OrderDelivered: OrderDeliveredPayload;
+  OrderReturned: OrderReturnedPayload;
   OrderCancelled: OrderCancelledPayload;
   OrderDeliveryOtp: OrderDeliveryOtpPayload;
   PaymentReceived: PaymentReceivedPayload;

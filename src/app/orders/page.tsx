@@ -140,18 +140,28 @@ export default function OrderHistoryPage() {
         } catch { toast.error('Failed to save as order list'); }
     };
 
-    const handleOrderAgain = (order: ApiOrder, e?: React.MouseEvent) => {
+    const handleOrderAgain = async (order: ApiOrder, e?: React.MouseEvent) => {
         e?.stopPropagation();
-        let added = 0;
-        for (const item of order.items) {
-            const product = allProducts.find(p => p.id === item.productId);
-            if (product) { addToCart(product, item.quantity); added++; }
-        }
-        if (added > 0) {
-            toast.success(`${added} item${added > 1 ? 's' : ''} added to cart`);
-            router.push('/cart');
-        } else {
-            toast.error('Products not found in current catalog');
+        // Use the server reorder endpoint — it re-resolves current prices +
+        // availability and adds to the active outlet cart, instead of matching
+        // against a stale client-side product list.
+        try {
+            const res = await fetch(`/api/v1/orders/${order.id}/reorder`, { method: 'POST' });
+            const json = await res.json();
+            if (!res.ok || !json.success) {
+                toast.error(json.error?.message || 'Could not reorder');
+                return;
+            }
+            const added = json.data?.added?.length ?? 0;
+            const skipped = json.data?.skipped?.length ?? 0;
+            if (added > 0) {
+                toast.success(`${added} item${added > 1 ? 's' : ''} added to cart${skipped ? ` · ${skipped} unavailable` : ''}`);
+                window.location.href = '/cart';
+            } else {
+                toast.error(skipped ? 'Those items are no longer available' : 'Nothing to reorder');
+            }
+        } catch {
+            toast.error('Could not reorder');
         }
     };
 
