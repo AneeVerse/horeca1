@@ -56,6 +56,7 @@ export class SearchService {
         { category: { name: { contains: query, mode: 'insensitive' } } },
         { vendor: { businessName: { contains: query, mode: 'insensitive' } } },
         { tags: { has: query.toLowerCase() } },
+        { aliasNames: { has: query.toLowerCase() } },
       ],
     };
 

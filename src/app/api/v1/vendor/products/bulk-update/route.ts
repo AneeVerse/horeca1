@@ -32,6 +32,7 @@ import { vendorOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { resolveVendorId } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
+import { assertLeafCategory } from '@/modules/catalog/catalog.service';
 
 // ── Schemas ─────────────────────────────────────────────────────────────
 
@@ -61,12 +62,26 @@ const setSchema = z.object({
   taxPercent:      z.number().min(0).max(100).optional(),
   creditEligible:  z.boolean().optional(),
   isFeatured:      z.boolean().optional(),
-  vegNonVeg:       z.enum(['veg', 'non_veg', 'egg']).nullable().optional(),
+  // B-1: enum value must match Prisma VegType ('nonveg', not 'non_veg').
+  vegNonVeg:       z.enum(['veg', 'nonveg', 'egg']).nullable().optional(),
   storageType:     z.string().max(50).nullable().optional(),
   shelfLifeDays:   z.number().int().min(0).max(3650).nullable().optional(),
   description:     z.string().max(2000).nullable().optional(),
   brand:           z.string().max(150).optional(),
   countryOfOrigin: z.string().max(100).optional(),
+  // P0-6: "update ANY field".
+  name:            z.string().min(1).max(255).optional(),
+  sku:             z.string().max(100).nullable().optional(),
+  hsn:             z.string().max(50).nullable().optional(),
+  unit:            z.string().max(50).nullable().optional(),
+  packSize:        z.string().max(100).nullable().optional(),
+  barcode:         z.string().max(100).nullable().optional(),
+  fssaiRef:        z.string().max(50).nullable().optional(),
+  imageUrl:        z.string().url().nullable().optional(),
+  tags:            z.array(z.string()).optional(),
+  aliasNames:      z.array(z.string()).optional(),
+  images:          z.array(z.string().url()).optional(),
+  categoryIds:     z.array(z.string().uuid()).min(1).max(5).optional(),
 
   // Price adjustments
   basePrice:       priceAdjustSchema.optional(),
@@ -117,6 +132,9 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     // single SQL statement and skip the per-row read).
     const needsRowFetch = body.set.basePrice || body.set.originalPrice || body.set.applyToSlabs;
 
+    const newCategoryIds = body.set.categoryIds;
+    if (newCategoryIds) await assertLeafCategory(newCategoryIds);
+
     // Pre-flight count so the caller knows what they would have hit even
     // if the eventual updates affect zero rows.
     const matchedCount = await prisma.product.count({ where });
@@ -137,11 +155,23 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     if (body.set.description     !== undefined) direct.description = body.set.description;
     if (body.set.brand           !== undefined) direct.brand = body.set.brand;
     if (body.set.countryOfOrigin !== undefined) direct.countryOfOrigin = body.set.countryOfOrigin;
+    if (body.set.name            !== undefined) direct.name = body.set.name;
+    if (body.set.sku             !== undefined) direct.sku = body.set.sku;
+    if (body.set.hsn             !== undefined) direct.hsn = body.set.hsn;
+    if (body.set.unit            !== undefined) direct.unit = body.set.unit;
+    if (body.set.packSize        !== undefined) direct.packSize = body.set.packSize;
+    if (body.set.barcode         !== undefined) direct.barcode = body.set.barcode;
+    if (body.set.fssaiRef        !== undefined) direct.fssaiRef = body.set.fssaiRef;
+    if (body.set.imageUrl        !== undefined) direct.imageUrl = body.set.imageUrl;
+    if (body.set.tags            !== undefined) direct.tags = body.set.tags;
+    if (body.set.aliasNames      !== undefined) direct.aliasNames = body.set.aliasNames;
+    if (body.set.images          !== undefined) direct.images = body.set.images;
     if (body.set.clearPromo) {
       direct.promoPrice = null;
       direct.promoStartTime = null;
       direct.promoEndTime = null;
     }
+    if (newCategoryIds) direct.categoryId = newCategoryIds[0];
 
     let updatedCount = 0;
 
@@ -150,6 +180,19 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
       if (Object.keys(direct).length > 0) {
         const r = await tx.product.updateMany({ where, data: direct });
         updatedCount = Math.max(updatedCount, r.count);
+      }
+
+      // 1b. Replace multi-category join rows for every matched product (vendor-scoped).
+      if (newCategoryIds) {
+        const matched = await tx.product.findMany({ where, select: { id: true } });
+        for (const { id } of matched) {
+          await tx.productCategory.deleteMany({ where: { productId: id } });
+          await tx.productCategory.createMany({
+            data: newCategoryIds.map((cid, idx) => ({ productId: id, categoryId: cid, isPrimary: idx === 0 })),
+            skipDuplicates: true,
+          });
+        }
+        updatedCount = Math.max(updatedCount, matched.length);
       }
 
       // 2. Price adjustments — need per-row read + per-row write because

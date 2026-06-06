@@ -49,6 +49,20 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             createErrors.push({ row: rowNum, message: `Parent slug "${row.parentSlug}" not found` });
             continue;
           }
+          // Enforce the strict 2-level tree (B-3): the parent must itself be a root
+          // (no parent of its own). Mirrors the POST/PATCH guards so import can't
+          // smuggle in level-3 categories.
+          const parent = await prisma.category.findUnique({
+            where: { id: parentId },
+            select: { parentId: true },
+          });
+          if (parent?.parentId) {
+            createErrors.push({
+              row: rowNum,
+              message: `Parent "${row.parentSlug}" is itself a sub-category. Categories are a strict 2-level tree — only root categories can have children.`,
+            });
+            continue;
+          }
         }
 
         const cat = await prisma.category.create({
