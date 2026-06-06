@@ -1,12 +1,11 @@
-# Build the production image on GitHub's runners (fast + cached) and push to GHCR,
-# then SSH to the droplet to pull + migrate + restart. This moves the slow
-# `next build` OFF the $29 droplet, cutting deploys from ~6 min to ~30–60s.
+# Build the production image on GitHub's runners (fast + cached), push to GHCR,
+# then SSH to the droplet to pull the SHA-pinned image + migrate + restart.
+# Deploys go from ~6 min (on-droplet build) to ~40s, never starve the droplet CPU,
+# and can't run stale code (image is pinned to the commit SHA).
 #
-# One-time setup (repo → Settings → Secrets and variables → Actions):
-#   SSH_PRIVATE_KEY  – private key whose public key is in the droplet's authorized_keys
-#   DEPLOY_HOST      – 64.227.187.210   (or set as a Variable)
-#   DEPLOY_USER      – root
-# Until SSH_PRIVATE_KEY is set, the image still builds + pushes; the deploy step is skipped.
+# Uses the EXISTING `DO_SSH_PRIVATE_KEY` secret (no new secret needed). The image
+# is published under this repo's owner's GHCR namespace, and the droplet pulls it
+# using the workflow's own ephemeral token — no long-lived registry creds stored.
 
 name: Deploy
 
@@ -20,7 +19,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/team-horeca1/horeca1
+  # Resolves to ghcr.io/<owner>/horeca1 for whichever repo runs this.
+  IMAGE: ghcr.io/${{ github.repository_owner }}/horeca1
 
 jobs:
   build:
@@ -72,30 +72,32 @@ jobs:
       - name: Check deploy secret
         id: check
         env:
-          KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          KEY: ${{ secrets.DO_SSH_PRIVATE_KEY }}
         run: |
           if [ -z "$KEY" ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::SSH_PRIVATE_KEY not set — image built & pushed, but auto-deploy skipped. Add the secret to enable it."
+            echo "::warning::DO_SSH_PRIVATE_KEY not set — image built & pushed, auto-deploy skipped."
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Deploy over SSH
+      - name: Deploy over SSH (pull SHA-pinned image)
         if: steps.check.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER || 'root' }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: 64.227.187.210
+          username: root
+          key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
           command_timeout: 10m
-          envs: GHCR_TOKEN,GHCR_USER,GIT_SHA
+          envs: GHCR_TOKEN,GHCR_USER,DEPLOY_IMAGE,DEPLOY_SHA
           script: |
             set -e
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            export DEPLOY_IMAGE DEPLOY_SHA
             cd /opt/horeca1
-            GIT_SHA="$GIT_SHA" bash deploy.sh
+            bash deploy.sh
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
-          GIT_SHA: ${{ github.sha }}
+          DEPLOY_IMAGE: ${{ env.IMAGE }}
+          DEPLOY_SHA: ${{ github.sha }}

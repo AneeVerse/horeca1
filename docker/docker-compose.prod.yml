@@ -3,9 +3,9 @@
 
 services:
   app:
-    # CI pushes this prebuilt image; `docker compose pull` fetches it (fast path).
-    # `build:` is kept so a manual `docker compose build` still works as a fallback.
-    image: ghcr.io/team-horeca1/horeca1:latest
+    # CI (.github/workflows/deploy.yml) pushes this prebuilt image; the droplet
+    # pulls it. `build:` is kept so a manual `docker compose build` still works.
+    image: ghcr.io/aneeverse/horeca1:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -26,7 +26,7 @@ services:
         condition: service_healthy
 
   worker:
-    image: ghcr.io/team-horeca1/horeca1-worker:latest
+    image: ghcr.io/aneeverse/horeca1-worker:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile
