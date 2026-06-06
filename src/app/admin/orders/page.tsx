@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Search, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 interface AdminOrder {
@@ -31,10 +32,40 @@ const STATUS_STYLE: Record<string, string> = {
     cancelled: 'bg-[#FFF0F0] text-[#E74C3C]',
 };
 
+// Statuses an admin can set directly from the list (draft is customer-side only).
+const STATUS_OPTIONS = [
+    'pending', 'confirmed', 'processing', 'ready_for_dispatch',
+    'shipped', 'partially_delivered', 'delivered', 'returned', 'cancelled',
+];
+
 export default function OrdersPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [orders, setOrders] = useState<AdminOrder[]>([]);
     const [loading, setLoading] = useState(true);
+    const [busyId, setBusyId] = useState<string | null>(null);
+
+    // Inline status change straight from the list (admin force override on the API).
+    const updateOrderStatus = async (orderId: string, newStatus: string) => {
+        const prev = orders.find(o => o.id === orderId)?.status;
+        if (!prev || prev === newStatus) return;
+        setBusyId(orderId);
+        setOrders(os => os.map(o => o.id === orderId ? { ...o, status: newStatus } : o)); // optimistic
+        try {
+            const res = await fetch(`/api/v1/admin/orders/${orderId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus }),
+            });
+            const json = await res.json();
+            if (!res.ok || !json.success) throw new Error(json.error?.message || json.message || 'Failed to update status');
+            toast.success(`Order set to ${newStatus.replace(/_/g, ' ')}`);
+        } catch (e) {
+            setOrders(os => os.map(o => o.id === orderId ? { ...o, status: prev } : o)); // revert
+            toast.error(e instanceof Error ? e.message : 'Failed to update status');
+        } finally {
+            setBusyId(null);
+        }
+    };
 
     useEffect(() => {
         let cancelled = false;
@@ -109,12 +140,25 @@ export default function OrdersPage() {
                                         <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-semibold">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                                         <td className="py-5 px-6 text-center">
                                             <div className="flex justify-center">
-                                                <span className={cn(
-                                                    "inline-flex items-center justify-center rounded-[8px] text-[14px] font-semibold capitalize px-7 py-2",
-                                                    STATUS_STYLE[order.status] || 'bg-gray-100 text-gray-600'
-                                                )}>
-                                                    {order.status}
-                                                </span>
+                                                <select
+                                                    value={order.status}
+                                                    disabled={busyId === order.id}
+                                                    onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                                                    title="Change status"
+                                                    className={cn(
+                                                        "cursor-pointer rounded-[8px] text-[13px] font-semibold capitalize px-4 py-2 outline-none border border-transparent hover:border-black/10 focus:border-[#299E60]/40 disabled:opacity-50 transition-colors",
+                                                        STATUS_STYLE[order.status] || 'bg-gray-100 text-gray-600'
+                                                    )}
+                                                >
+                                                    {/* keep a non-settable status (e.g. draft) visible for that row */}
+                                                    {!STATUS_OPTIONS.includes(order.status) && (
+                                                        <option value={order.status} disabled className="bg-white text-gray-800 capitalize">{order.status.replace(/_/g, ' ')}</option>
+                                                    )}
+                                                    {STATUS_OPTIONS.map((s) => (
+                                                        <option key={s} value={s} className="bg-white text-gray-800 capitalize">{s.replace(/_/g, ' ')}</option>
+                                                    ))}
+                                                </select>
+                                                {busyId === order.id && <Loader2 size={14} className="animate-spin text-gray-400 ml-1 self-center" />}
                                             </div>
                                         </td>
                                         <td className="py-5 px-6 text-center">
