@@ -251,6 +251,8 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
     const [placedOrderIds, setPlacedOrderIds] = useState<string[]>([]);
     const [excludedVendorIds, setExcludedVendorIds] = useState<Set<string>>(new Set());
     const [slotByVendor, setSlotByVendor] = useState<Record<string, string | null>>({});
+    // Per-vendor order notes / delivery instructions (Req 7).
+    const [notesByVendor, setNotesByVendor] = useState<Record<string, string>>({});
 
     const selectedGroups = useMemo(
         () => groups.filter(g => !excludedVendorIds.has(g.vendorId) && g.meetsMinOrder),
@@ -319,6 +321,7 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
                     quantity: item.quantity,
                 })),
                 ...(slotByVendor[group.vendorId] ? { deliverySlotId: slotByVendor[group.vendorId] as string } : {}),
+                ...(notesByVendor[group.vendorId]?.trim() ? { notes: notesByVendor[group.vendorId].trim() } : {}),
             }));
 
             // 1. Create orders in DB (same for all payment methods)
@@ -557,8 +560,9 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
                                     </div>
                                 ))}
 
-                                {/* Delivery slot picker */}
+                                {/* Delivery slot picker + order notes */}
                                 {isSelected && (
+                                    <>
                                     <div className="px-4 py-3 bg-gray-50/50 border-t border-gray-100">
                                         <DeliverySlotPicker
                                             vendorId={group.vendorId}
@@ -566,6 +570,18 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
                                             onChange={(slotId) => setSlotByVendor(prev => ({ ...prev, [group.vendorId]: slotId }))}
                                         />
                                     </div>
+                                    <div className="px-4 py-3 bg-gray-50/50 border-t border-gray-100">
+                                        <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">Order notes / instructions (optional)</label>
+                                        <textarea
+                                            value={notesByVendor[group.vendorId] ?? ''}
+                                            onChange={(e) => setNotesByVendor(prev => ({ ...prev, [group.vendorId]: e.target.value }))}
+                                            rows={2}
+                                            maxLength={1000}
+                                            placeholder="e.g. deliver before noon, call on arrival…"
+                                            className="w-full text-[12px] rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#299e60] resize-none"
+                                        />
+                                    </div>
+                                    </>
                                 )}
                             </div>
                             );
