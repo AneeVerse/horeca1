@@ -148,6 +148,21 @@ export default function OrderDetailsPage() {
     // Ops: edit line quantities on a pending order (Req 7 / P0-2).
     const [editedQty, setEditedQty] = useState<Record<string, number>>({});
     const [savingQty, setSavingQty] = useState(false);
+    // Ops: split + reassign (pending only).
+    const [splitQty, setSplitQty] = useState<Record<string, number>>({});
+    const [reassignTo, setReassignTo] = useState('');
+    const [vendorOptions, setVendorOptions] = useState<{ id: string; businessName: string }[]>([]);
+    const [opsBusy, setOpsBusy] = useState(false);
+
+    useEffect(() => {
+        fetch('/api/v1/admin/vendors?limit=200')
+            .then((r) => r.json())
+            .then((j) => {
+                const list = (j?.data?.vendors ?? j?.data ?? []) as { id: string; businessName: string }[];
+                setVendorOptions(list.map((v) => ({ id: v.id, businessName: v.businessName })));
+            })
+            .catch(() => {});
+    }, []);
 
     useEffect(() => {
         async function fetchOrder() {
@@ -227,6 +242,40 @@ export default function OrderDetailsPage() {
         } finally {
             setSavingQty(false);
         }
+    }
+
+    async function handleSplit() {
+        if (!order) return;
+        const lines = order.items.map((i) => ({ itemId: i.id, quantity: splitQty[i.id] || 0 })).filter((l) => l.quantity > 0);
+        if (lines.length === 0) { toast.message('Enter quantities to split off'); return; }
+        try {
+            setOpsBusy(true);
+            const res = await fetch(`/api/v1/admin/orders/${orderId}/split`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lines }),
+            });
+            const json = await res.json();
+            if (!res.ok || !json.success) throw new Error(json.error?.message || json.message || 'Failed to split order');
+            toast.success(`Split into ${json.data?.childOrderNumber ?? 'a new order'}`);
+            window.location.reload();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to split order');
+        } finally { setOpsBusy(false); }
+    }
+
+    async function handleReassign() {
+        if (!order || !reassignTo) return;
+        try {
+            setOpsBusy(true);
+            const res = await fetch(`/api/v1/admin/orders/${orderId}/reassign`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ newVendorId: reassignTo }),
+            });
+            const json = await res.json();
+            if (!res.ok || !json.success) throw new Error(json.error?.message || json.message || 'Failed to reassign order');
+            toast.success('Order reassigned');
+            window.location.reload();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to reassign order');
+        } finally { setOpsBusy(false); }
     }
 
     // Loading state
@@ -431,6 +480,38 @@ export default function OrderDetailsPage() {
                         <button onClick={handleSaveQuantities} disabled={savingQty} className="bg-[#299e60] text-white text-[13px] font-bold px-4 py-2 rounded-lg disabled:opacity-50 whitespace-nowrap">
                             {savingQty ? 'Saving…' : 'Save quantity changes'}
                         </button>
+                    </div>
+                )}
+
+                {/* Ops: split + reassign (pending only) — P0-2 */}
+                {order.status === 'pending' && (
+                    <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="border border-gray-200 rounded-lg p-4">
+                            <p className="text-[13px] font-bold text-[#181725] mb-1">Split order</p>
+                            <p className="text-[11px] text-gray-500 mb-3">Move quantities into a new PO (same vendor).</p>
+                            <div className="space-y-2 max-h-44 overflow-auto">
+                                {order.items.map((i) => (
+                                    <div key={i.id} className="flex items-center justify-between gap-2">
+                                        <span className="text-[12px] text-[#4B4B4B] truncate">{i.productName} <span className="text-gray-400">(have {i.quantity})</span></span>
+                                        <input type="number" min={0} max={i.quantity} value={splitQty[i.id] || 0}
+                                            onChange={(e) => setSplitQty((p) => ({ ...p, [i.id]: Math.max(0, Math.min(i.quantity, parseInt(e.target.value, 10) || 0)) }))}
+                                            className="w-16 text-center border border-gray-200 rounded-md py-1 text-[12px]" />
+                                    </div>
+                                ))}
+                            </div>
+                            <button onClick={handleSplit} disabled={opsBusy} className="mt-3 bg-[#181725] text-white text-[12px] font-bold px-3 py-2 rounded-lg disabled:opacity-50">Create split order</button>
+                        </div>
+                        <div className="border border-gray-200 rounded-lg p-4">
+                            <p className="text-[13px] font-bold text-[#181725] mb-1">Reassign vendor</p>
+                            <p className="text-[11px] text-gray-500 mb-3">Move to another vendor that carries these items (matched by master SKU).</p>
+                            <select value={reassignTo} onChange={(e) => setReassignTo(e.target.value)} className="w-full border border-gray-200 rounded-md py-2 px-2 text-[12px]">
+                                <option value="">Select vendor…</option>
+                                {vendorOptions.filter((v) => v.id !== order.vendor?.id).map((v) => (
+                                    <option key={v.id} value={v.id}>{v.businessName}</option>
+                                ))}
+                            </select>
+                            <button onClick={handleReassign} disabled={opsBusy || !reassignTo} className="mt-3 bg-[#181725] text-white text-[12px] font-bold px-3 py-2 rounded-lg disabled:opacity-50">Reassign</button>
+                        </div>
                     </div>
                 )}
 
