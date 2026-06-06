@@ -20,6 +20,21 @@ ssh root@64.227.187.210 "bash /opt/horeca1/deploy.sh"
 
 That's it. The script pulls code, rebuilds the Docker image, runs any new migrations, and restarts the app.
 
+### ⚡ Fast deploys (CI/CD) — recommended
+
+Building `next build` on the droplet is the slow part (~5 min). The pipeline in
+`.github/workflows/deploy.yml` builds the image on GitHub's runners (cached) and
+pushes it to **GHCR**; the droplet just **pulls + migrates + restarts** → **~30–60s**.
+
+- On every push to `master`, CI builds + pushes `ghcr.io/team-horeca1/horeca1`,
+  then SSHes to the droplet and runs the pull-based `deploy.sh`.
+- **One-time setup:** add a `SSH_PRIVATE_KEY` secret (+ `DEPLOY_HOST` variable) in
+  GitHub → Settings → Secrets and variables → Actions. Full steps: see the
+  top of `.github/workflows/deploy.yml`. Until then, CI still builds + pushes the
+  image; only the auto-deploy step is skipped.
+- The manual `deploy.sh` above is the fallback — it now **pulls the prebuilt image
+  first** and only builds (cached, no `--no-cache`) if no image is available.
+
 ### Step-by-Step (what the script does)
 
 ```
