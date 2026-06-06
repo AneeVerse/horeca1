@@ -90,6 +90,27 @@ interface VendorData {
     minOrderValue: number;
     deliveryFee: number;
     freeDeliveryAbove: number | null;
+    // KYC / onboarding fields (returned by the admin vendor GET via `include`).
+    tradeName: string | null;
+    vendorType: string | null;
+    gstNumber: string | null;
+    panNumber: string | null;
+    fssaiNumber: string | null;
+    udyamNumber: string | null;
+    cinNumber: string | null;
+    deliveryCapability: string | null;
+    authorizedPersonName: string | null;
+    authorizedPersonPhone: string | null;
+    authorizedPersonEmail: string | null;
+    pickupAddressLine: string | null;
+    pickupCity: string | null;
+    pickupState: string | null;
+    pickupPincode: string | null;
+    bankAccountName: string | null;
+    bankAccountNumber: string | null;
+    bankIfsc: string | null;
+    bankName: string | null;
+    bankAccountType: string | null;
     user: VendorUser;
     products: VendorProduct[];
     serviceAreas: ServiceArea[];
@@ -731,6 +752,40 @@ export default function VendorDetailsPage() {
                             </div>
                         </div>
                     )}
+                </div>
+            </div>
+
+            {/* KYC & Bank Details (P0-7) */}
+            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                <div className="p-6 flex items-center gap-2 border-b border-[#EEEEEE]">
+                    <ShieldCheck size={20} className="text-[#299E60]" />
+                    <h3 className="text-[18px] font-extrabold text-[#181725]">KYC &amp; Bank Details</h3>
+                </div>
+                <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+                    {([
+                        { label: 'Trade Name', value: vendor.tradeName },
+                        { label: 'Vendor Type', value: vendor.vendorType },
+                        { label: 'GSTIN', value: vendor.gstNumber },
+                        { label: 'PAN', value: vendor.panNumber },
+                        { label: 'FSSAI', value: vendor.fssaiNumber },
+                        { label: 'Udyam', value: vendor.udyamNumber },
+                        { label: 'CIN', value: vendor.cinNumber },
+                        { label: 'Delivery Capability', value: vendor.deliveryCapability },
+                        { label: 'Authorized Person', value: vendor.authorizedPersonName },
+                        { label: 'Authorized Phone', value: vendor.authorizedPersonPhone },
+                        { label: 'Authorized Email', value: vendor.authorizedPersonEmail },
+                        { label: 'Pickup Address', value: [vendor.pickupAddressLine, vendor.pickupCity, vendor.pickupState, vendor.pickupPincode].filter(Boolean).join(', ') || null },
+                        { label: 'Bank Account Name', value: vendor.bankAccountName },
+                        { label: 'Bank Account No.', value: vendor.bankAccountNumber },
+                        { label: 'IFSC', value: vendor.bankIfsc },
+                        { label: 'Bank Name', value: vendor.bankName },
+                        { label: 'Account Type', value: vendor.bankAccountType },
+                    ] as { label: string; value: string | null }[]).map((f) => (
+                        <div key={f.label}>
+                            <p className="text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-0.5">{f.label}</p>
+                            <p className="text-[14px] font-semibold text-[#181725] break-words">{f.value || 'Not provided'}</p>
+                        </div>
+                    ))}
                 </div>
             </div>
 
