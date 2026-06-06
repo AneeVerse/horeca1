@@ -145,6 +145,9 @@ export default function OrderDetailsPage() {
     const [error, setError] = useState<string | null>(null);
     const [updatingStatus, setUpdatingStatus] = useState(false);
     const [selectedStatus, setSelectedStatus] = useState('');
+    // Ops: edit line quantities on a pending order (Req 7 / P0-2).
+    const [editedQty, setEditedQty] = useState<Record<string, number>>({});
+    const [savingQty, setSavingQty] = useState(false);
 
     useEffect(() => {
         async function fetchOrder() {
@@ -199,6 +202,30 @@ export default function OrderDetailsPage() {
             setSelectedStatus(order.status);
         } finally {
             setUpdatingStatus(false);
+        }
+    }
+
+    async function handleSaveQuantities() {
+        if (!order) return;
+        const lines = order.items
+            .map((i) => ({ itemId: i.id, quantity: editedQty[i.id] ?? i.quantity }))
+            .filter((l) => l.quantity !== order.items.find((i) => i.id === l.itemId)?.quantity);
+        if (lines.length === 0) { toast.message('No quantity changes to save'); return; }
+        try {
+            setSavingQty(true);
+            const res = await fetch(`/api/v1/admin/orders/${orderId}/modify`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lines }),
+            });
+            const json = await res.json();
+            if (!res.ok || !json.success) throw new Error(json.error?.message || json.message || 'Failed to modify order');
+            toast.success('Order quantities updated');
+            window.location.reload();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to modify order');
+        } finally {
+            setSavingQty(false);
         }
     }
 
@@ -378,7 +405,15 @@ export default function OrderDetailsPage() {
                                         {formatCurrency(item.unitPrice)}
                                     </td>
                                     <td className="py-6 border-t border-[#EEEEEE] text-[15px] font-bold text-[#181725] text-center">
-                                        {item.quantity}
+                                        {order.status === 'pending' ? (
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                value={editedQty[item.id] ?? item.quantity}
+                                                onChange={(e) => setEditedQty((prev) => ({ ...prev, [item.id]: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
+                                                className="w-16 text-center border border-gray-200 rounded-md py-1"
+                                            />
+                                        ) : item.quantity}
                                     </td>
                                     <td className="py-6 border-t border-[#EEEEEE] text-[15px] font-bold text-[#181725] text-right">
                                         {formatCurrency(item.totalPrice)}
@@ -388,6 +423,16 @@ export default function OrderDetailsPage() {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Ops: modify quantities (pending only) — P0-2 */}
+                {order.status === 'pending' && (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                        <p className="text-[12px] text-amber-800 font-medium">Ops: edit quantities above (0 removes a line), then save. Available only while pending. Split &amp; vendor-reassign are available via the API.</p>
+                        <button onClick={handleSaveQuantities} disabled={savingQty} className="bg-[#299e60] text-white text-[13px] font-bold px-4 py-2 rounded-lg disabled:opacity-50 whitespace-nowrap">
+                            {savingQty ? 'Saving…' : 'Save quantity changes'}
+                        </button>
+                    </div>
+                )}
 
                 {/* Summary Section */}
                 <div className="border-t border-[#EEEEEE] pt-8 flex justify-end">
