@@ -34,6 +34,9 @@ const BRAND_ROLE_TO_ENUM: Record<string, TeamRole> = {
 export const GET = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
     const { brandId } = await resolveBrandContext(ctx, req);
+    // B-7: gate team enumeration (emails/phones/HCIDs) behind users.view,
+    // mirroring the vendor team GET. Prevents a viewer-scope member leaking PII.
+    requirePermission(ctx, 'users.view');
 
     const brand = await prisma.brand.findUnique({
       where: { id: brandId },

@@ -26,7 +26,7 @@ export default function OrderSuccessPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (orderIds.length === 0) { setLoading(false); return; }
+        if (orderIds.length === 0) { Promise.resolve().then(() => setLoading(false)); return; }
         Promise.all(orderIds.map(id =>
             fetch(`/api/v1/orders/${id}`).then(r => r.json())
         ))

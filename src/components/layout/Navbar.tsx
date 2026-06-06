@@ -128,6 +128,7 @@ export function Navbar() {
     const desktopNavItems = [
         ...(isLoggedIn && userRole === 'vendor' ? [{ name: 'Dashboard', href: '/vendor/dashboard', Icon: LayoutDashboard }] : []),
         ...(isLoggedIn && userRole === 'admin' ? [{ name: 'Dashboard', href: '/admin/dashboard', Icon: LayoutDashboard }] : []),
+        ...(isLoggedIn && userRole === 'brand' ? [{ name: 'Brand Portal', href: '/brand/portal', Icon: LayoutDashboard }] : []),
         ...DESKTOP_NAV,
     ];
 

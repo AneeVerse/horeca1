@@ -47,7 +47,7 @@ const nextConfig: NextConfig = {
 
   // Same reasoning for lint — we run `npm run lint` locally before
   // every commit; the build doesn't need to repeat it.
-  // @ts-ignore
+  // @ts-expect-error — `eslint` is a valid Next build key but absent from the NextConfig type.
   eslint: { ignoreDuringBuilds: true },
 
   async headers() {

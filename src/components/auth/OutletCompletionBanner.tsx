@@ -25,12 +25,13 @@ import { usePathname } from 'next/navigation';
 export function OutletCompletionBanner() {
   const { status } = useSession();
   const { currentOutlet, activeBusinessAccountId } = useBusinessAccountSwitcher();
+  // B-2: hooks must run unconditionally on every render — call usePathname()
+  // before any early return, not after.
+  const pathname = usePathname();
 
   if (status !== 'authenticated') return null;
   if (!currentOutlet) return null;
   if (!currentOutlet.requiresAddressUpdate) return null;
-
-  const pathname = usePathname();
   if (
     pathname?.startsWith('/account') ||
     pathname?.startsWith('/admin') ||

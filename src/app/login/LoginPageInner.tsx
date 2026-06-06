@@ -41,6 +41,7 @@ export default function LoginPageInner() {
     const role = (session?.user as { role?: string } | undefined)?.role;
     if (role === 'vendor') window.location.href = '/vendor/dashboard';
     else if (role === 'admin') window.location.href = '/admin/dashboard';
+    else if (role === 'brand') window.location.href = '/brand/portal';
     else window.location.href = '/';
   }, [sessionStatus, session, redirectTo]);
 

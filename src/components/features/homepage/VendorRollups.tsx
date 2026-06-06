@@ -83,7 +83,7 @@ export function FrequentlyOrderedVendors() {
         if (pincode && /^\d{6}$/.test(pincode)) params.set('pincode', pincode);
         fetch(`/api/v1/vendors?${params.toString()}`)
             .then(r => r.json())
-            .then(d => setVendors((d.data?.vendors || []).map((v: any) => ({
+            .then(d => setVendors((d.data?.vendors || []).map((v: { id: string; businessName?: string; slug?: string; logoUrl?: string; rating?: number | string; minOrderValue?: number | string; creditEnabled?: boolean; categories?: string[]; bannerUrl?: string }) => ({
                 id: v.id,
                 name: v.businessName || '',
                 slug: v.slug || '',
@@ -170,7 +170,7 @@ export function TopRatedVendors() {
         if (pincode) params.set('pincode', pincode);
         fetch(`/api/v1/vendors?${params}`)
             .then(r => r.json())
-            .then(d => setVendors((d.data?.vendors || []).map((v: any) => ({
+            .then(d => setVendors((d.data?.vendors || []).map((v: { id: string; businessName?: string; slug?: string; logoUrl?: string; rating?: number | string; minOrderValue?: number | string; creditEnabled?: boolean; categories?: string[]; bannerUrl?: string }) => ({
                 id: v.id,
                 name: v.businessName || '',
                 slug: v.slug || '',
