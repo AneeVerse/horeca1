@@ -35,9 +35,12 @@ export async function findOrCreateMaster(input: { name: string; brand: string | 
 
 /**
  * Enforce the "Item MUST map to a sub-category" rule (Req 5): every id must be an
- * existing LEAF category — i.e. a level-2 node (has a parent) with no children of
- * its own. Used by product create/update and master-product create/update so the
- * rule is enforced uniformly server-side, not just in the UI.
+ * existing TERMINAL category — i.e. the most-specific node, one with no children
+ * of its own. This rejects mapping to a parent/intermediate category (you must
+ * pick its sub-category), and once a 2-level tree exists it effectively requires
+ * level-2 — while NOT breaking a still-flat catalog that only has top-level
+ * categories yet. Used by product + master-product create/update so the rule is
+ * enforced uniformly server-side, not just in the UI.
  */
 export async function assertLeafCategory(categoryIds: string[], db: Db = prisma): Promise<void> {
   if (categoryIds.length === 0) return;
@@ -51,11 +54,8 @@ export async function assertLeafCategory(categoryIds: string[], db: Db = prisma)
     if (!found.has(id)) throw Errors.badRequest(`Category not found: ${id}`);
   }
   for (const c of cats) {
-    if (c.parentId === null) {
-      throw Errors.badRequest(`"${c.name}" is a top-level category — pick a sub-category (level 2).`);
-    }
     if (c._count.children > 0) {
-      throw Errors.badRequest(`"${c.name}" has sub-categories under it — pick a leaf sub-category.`);
+      throw Errors.badRequest(`"${c.name}" has sub-categories under it — pick a more specific sub-category.`);
     }
   }
 }

@@ -66,11 +66,15 @@ async function ensureUncategorizedLeaf(): Promise<string> {
 async function main() {
   console.log(`\n=== MasterProduct backfill ${DRY_RUN ? '(DRY RUN)' : ''} ===`);
 
-  // 1. Leaf-category lookup: a category is a leaf if it has a parent and no children.
+  // 1. Leaf-category lookup: a category is a leaf (terminal) if it has no children.
+  // Matches assertLeafCategory — a flat top-level category with no children is a
+  // valid terminal category, so products keep their real category instead of
+  // defaulting to Uncategorized.
   const categories = await prisma.category.findMany({ select: { id: true, parentId: true } });
   const hasChildren = new Set(categories.map((c) => c.parentId).filter((p): p is string => !!p));
+  const knownIds = new Set(categories.map((c) => c.id));
   const isLeaf = (id: string | null | undefined): boolean =>
-    !!id && categories.some((c) => c.id === id && c.parentId !== null) && !hasChildren.has(id);
+    !!id && knownIds.has(id) && !hasChildren.has(id);
 
   // 2. Load every product with the fields a master needs.
   const products = await prisma.product.findMany({
