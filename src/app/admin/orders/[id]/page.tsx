@@ -524,7 +524,7 @@ export default function OrderDetailsPage() {
                         </div>
                         <div className="flex justify-between text-[14px] font-medium pb-4 border-b border-dotted border-[#DCDCDC]">
                             <span className="text-[#7C7C7C]">Delivery Fee</span>
-                            <span className="text-[#181725] font-bold">{formatCurrency(order.deliveryFee)}</span>
+                            <span className="text-[#181725] font-bold">{formatCurrency(order.deliveryFee || 0)}</span>
                         </div>
                         <div className="flex justify-between items-center pt-2">
                             <span className="text-[16px] font-bold text-[#181725]">Grand Total</span>

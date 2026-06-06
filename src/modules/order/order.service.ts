@@ -853,6 +853,10 @@ export class OrderService {
     status: string,
     reason?: string,
     proof?: { proofType?: string; proofUrl?: string | null; notes?: string; otp?: string },
+    // Admin override (P0-3): set any status directly. The transition guard is
+    // skipped, but the stock/credit side-effects below are idempotent + guarded
+    // by the order's current state so a forced jump can't corrupt the ledgers.
+    force = false,
   ) {
     return prisma.$transaction(async (tx) => {
       const order = await tx.order.findFirst({
@@ -873,11 +877,15 @@ export class OrderService {
       if (!order) throw Errors.notFound('Order');
 
       const validNext = OrderService.VALID_TRANSITIONS[order.status as string] ?? [];
-      if (!validNext.includes(status)) {
+      if (!force && !validNext.includes(status)) {
         throw Errors.badRequest(
           `Cannot move order from "${order.status}" to "${status}". ` +
           `Allowed next states: ${validNext.length ? validNext.join(', ') : 'none'}.`
         );
+      }
+      if (order.status === status) {
+        // No-op: nothing to change (avoids a spurious side-effect re-run).
+        return order;
       }
 
       // For a partially-accepted order, only the fulfilled quantity stayed
@@ -889,12 +897,16 @@ export class OrderService {
         quantity: order.isPartial ? i.fulfilledQty : i.quantity,
       })).filter(l => l.quantity > 0);
 
-      // Inventory side-effects
-      if (status === 'cancelled') {
+      // Inventory side-effects. Stock is only held in `qtyReserved` while the
+      // order is in one of these states; only then is it safe to release/finalize
+      // it (guards forced admin jumps from double-decrementing).
+      const RESERVED_STATES = ['pending', 'confirmed', 'processing', 'ready_for_dispatch', 'shipped', 'partially_delivered'];
+      const stockReserved = RESERVED_STATES.includes(order.status as string);
+      if (status === 'cancelled' && stockReserved) {
         // Release reserved stock so it becomes available for other orders
         await this.inventoryService.releaseStock(effectiveLines, tx);
       }
-      if (status === 'delivered') {
+      if (status === 'delivered' && stockReserved) {
         // Goods have left the warehouse — deduct from physical available stock
         await this.inventoryService.finalizeStock(effectiveLines, tx);
       }
@@ -939,13 +951,19 @@ export class OrderService {
         });
         if (creditAcc) {
           const orderTotal = Number(order.totalAmount);
-          if (status === 'confirmed') {
+          // Idempotent: debit at most once (on the first confirm OR deliver),
+          // reverse at most once (on cancel). This keeps the ledger correct even
+          // for a forced admin jump that skips the normal step sequence.
+          const existingDebit = await tx.creditTransaction.findFirst({
+            where: { orderId, type: 'debit', vendorId },
+          });
+          if ((status === 'confirmed' || status === 'delivered') && !existingDebit) {
             const newUsed = Number(creditAcc.creditUsed) + orderTotal;
             await tx.creditAccount.update({
               where: { id: creditAcc.id },
               data: { creditUsed: newUsed },
             });
-            // Default payment due 30 days from confirmation
+            // Default payment due 30 days out
             const dueDate = new Date(now);
             dueDate.setDate(dueDate.getDate() + 30);
             await tx.creditTransaction.create({
@@ -959,13 +977,13 @@ export class OrderService {
                 dueDate,
               },
             });
-          } else if (status === 'cancelled') {
-            // Reverse any debit written when order was confirmed
-            const debit = await tx.creditTransaction.findFirst({
-              where: { orderId, type: 'debit', vendorId },
+          } else if (status === 'cancelled' && existingDebit) {
+            // Reverse the debit once (guard against double-reversal).
+            const existingReversal = await tx.creditTransaction.findFirst({
+              where: { orderId, type: 'credit', vendorId },
             });
-            if (debit) {
-              const newUsed = Math.max(0, Number(creditAcc.creditUsed) - Number(debit.amount));
+            if (!existingReversal) {
+              const newUsed = Math.max(0, Number(creditAcc.creditUsed) - Number(existingDebit.amount));
               await tx.creditAccount.update({ where: { id: creditAcc.id }, data: { creditUsed: newUsed } });
               await tx.creditTransaction.create({
                 data: {
@@ -973,7 +991,7 @@ export class OrderService {
                   orderId,
                   vendorId,
                   type: 'credit',
-                  amount: Number(debit.amount),
+                  amount: Number(existingDebit.amount),
                   balanceAfter: newUsed,
                   notes: `Reversal — order ${orderId} cancelled`,
                 },
