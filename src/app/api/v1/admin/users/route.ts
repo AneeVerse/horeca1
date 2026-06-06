@@ -32,6 +32,11 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
     const creditStatus = params.get('creditStatus') || undefined;
     const area = params.get('area') || undefined;
     const tag = params.get('tag') || undefined;
+    // P0-4: master-datasheet attribute filters.
+    const businessType = params.get('businessType') || undefined;
+    const businessSize = params.get('businessSize') || undefined;
+    const leadStatus = params.get('leadStatus') || undefined;
+    const cuisine = params.get('cuisine') || undefined;
     const cursor = params.get('cursor') || undefined;
     const limit = Math.min(Number(params.get('limit')) || 20, 100);
 
@@ -106,9 +111,25 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 
     if (tag) {
       andConditions.push({
-        vendorCustomers: { some: { tags: { has: tag } } },
+        OR: [
+          { vendorCustomers: { some: { tags: { has: tag } } } },
+          { accountMemberships: { some: { businessAccount: {
+            OR: [{ manualTags: { has: tag } }, { aiTags: { has: tag } }, { behaviourTags: { has: tag } }],
+          } } } },
+        ],
       });
     }
+
+    // P0-4: filter by the new BusinessAccount attribute columns.
+    const attrFilter = (field: string, value: string) => {
+      andConditions.push({
+        accountMemberships: { some: { businessAccount: { [field]: { contains: value, mode: 'insensitive' } } } },
+      });
+    };
+    if (businessType) attrFilter('businessType', businessType);
+    if (businessSize) attrFilter('businessSize', businessSize);
+    if (leadStatus) attrFilter('leadStatus', leadStatus);
+    if (cuisine) attrFilter('cuisine', cuisine);
 
     if (andConditions.length > 0) {
       where.AND = andConditions;
@@ -150,6 +171,20 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
                 billingState: true,
                 billingPincode: true,
                 status: true,
+                businessType: true,
+                subType: true,
+                cuisine: true,
+                businessSize: true,
+                businessStructure: true,
+                serviceModel: true,
+                monthlyPurchaseBand: true,
+                procurementFrequency: true,
+                designation: true,
+                leadStatus: true,
+                creditType: true,
+                manualTags: true,
+                aiTags: true,
+                behaviourTags: true,
                 outlets: {
                   select: {
                     id: true,

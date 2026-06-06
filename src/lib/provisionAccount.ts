@@ -23,6 +23,10 @@ interface ProvisionInput {
   businessName?: string | null;
   fullName?: string | null;
   gstNumber?: string | null;
+  // P0-4: real business type (Restaurant/Hotel/Caterer/…) when the signup
+  // flow collects it. Falls back to the kind default only when unset, so we
+  // stop blindly stamping every customer as 'customer'.
+  businessType?: string | null;
 }
 
 interface ProvisionResult {
@@ -95,7 +99,7 @@ export async function provisionDefaultAccount(
       legalName,
       displayName: input.businessName?.trim() ?? null,
       gstin: input.gstNumber?.trim() ?? null,
-      businessType: flags.businessType,
+      businessType: input.businessType?.trim() || flags.businessType,
       isCustomer: flags.isCustomer,
       isVendor: flags.isVendor,
       isBrand: flags.isBrand,

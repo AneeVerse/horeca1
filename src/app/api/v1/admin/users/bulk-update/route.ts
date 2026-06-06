@@ -26,6 +26,30 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
         });
       }
 
+      // 1b. P0-6: bulk-update BusinessAccount profile attributes across the
+      // selected users' primary accounts (GST/PAN/FSSAI/billing + master-sheet attrs).
+      if (body.companyProfile && typeof body.companyProfile === 'object') {
+        const cp = body.companyProfile as Record<string, unknown>;
+        const data: Record<string, unknown> = {};
+        const scalarFields = [
+          'gstin', 'pan', 'fssaiNumber', 'billingAddressLine', 'billingCity', 'billingState', 'billingPincode',
+          'businessType', 'subType', 'cuisine', 'businessSize', 'businessStructure', 'serviceModel',
+          'monthlyPurchaseBand', 'procurementFrequency', 'designation', 'leadStatus', 'creditType',
+        ];
+        for (const f of scalarFields) if (cp[f] !== undefined) data[f] = cp[f] || null;
+        if (Array.isArray(cp.manualTags)) data.manualTags = cp.manualTags;
+        if (Array.isArray(cp.aiTags)) data.aiTags = cp.aiTags;
+        if (Array.isArray(cp.behaviourTags)) data.behaviourTags = cp.behaviourTags;
+        if (Object.keys(data).length > 0) {
+          const memberships = await tx.businessAccountMember.findMany({
+            where: { userId: { in: userIds }, isPrimary: true },
+            select: { businessAccountId: true },
+          });
+          const accountIds = memberships.map((m) => m.businessAccountId);
+          if (accountIds.length) await tx.businessAccount.updateMany({ where: { id: { in: accountIds } }, data });
+        }
+      }
+
       // 2. Vendor-customer specific updates
       if (vendorId) {
         for (const uId of userIds) {

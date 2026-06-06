@@ -493,6 +493,20 @@ const customerImportRowSchema = z.object({
   'Territory': z.string().optional(),
   'Sales Executive': z.string().optional(),
   'Tags': z.string().optional(),
+  // P0-4: customer master-datasheet attributes.
+  'Business Type': z.string().optional(),
+  'Sub-Type': z.string().optional(),
+  'Cuisine': z.string().optional(),
+  'Business Size': z.string().optional(),
+  'Business Structure': z.string().optional(),
+  'Service Model': z.string().optional(),
+  'Monthly Purchase Band': z.string().optional(),
+  'Procurement Frequency': z.string().optional(),
+  'Designation': z.string().optional(),
+  'Lead Status': z.string().optional(),
+  'Credit Type': z.string().optional(),
+  'AI Tags': z.string().optional(),
+  'Behaviour Tags': z.string().optional(),
 });
 
 export interface ParsedCustomerRow {
@@ -513,6 +527,19 @@ export interface ParsedCustomerRow {
   territory?: string;
   salesExecutive?: string;
   tags?: string[];
+  businessType?: string;
+  subType?: string;
+  cuisine?: string;
+  businessSize?: string;
+  businessStructure?: string;
+  serviceModel?: string;
+  monthlyPurchaseBand?: string;
+  procurementFrequency?: string;
+  designation?: string;
+  leadStatus?: string;
+  creditType?: string;
+  aiTags?: string[];
+  behaviourTags?: string[];
 }
 
 export interface CustomerImportResult {
@@ -547,9 +574,8 @@ export function parseCustomerImport(buffer: Buffer): CustomerImportResult {
     }
 
     const r = result.data;
-    const parsedTags = r['Tags']
-      ? r['Tags'].split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0)
-      : [];
+    const splitTags = (v?: string): string[] =>
+      v ? v.split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0) : [];
 
     rows.push({
       name: r['Name'],
@@ -568,7 +594,20 @@ export function parseCustomerImport(buffer: Buffer): CustomerImportResult {
       deliveryPincode: String(r['Delivery Pincode']),
       territory: r['Territory'],
       salesExecutive: r['Sales Executive'],
-      tags: parsedTags,
+      tags: splitTags(r['Tags']),
+      businessType: r['Business Type'],
+      subType: r['Sub-Type'],
+      cuisine: r['Cuisine'],
+      businessSize: r['Business Size'],
+      businessStructure: r['Business Structure'],
+      serviceModel: r['Service Model'],
+      monthlyPurchaseBand: r['Monthly Purchase Band'],
+      procurementFrequency: r['Procurement Frequency'],
+      designation: r['Designation'],
+      leadStatus: r['Lead Status'],
+      creditType: r['Credit Type'],
+      aiTags: splitTags(r['AI Tags']),
+      behaviourTags: splitTags(r['Behaviour Tags']),
     });
   });
 
