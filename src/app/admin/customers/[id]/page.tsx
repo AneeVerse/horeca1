@@ -47,6 +47,32 @@ interface UserData {
     createdAt: string;
     updatedAt: string;
     vendor: VendorProfile | null;
+    accountMemberships?: Array<{
+        isPrimary: boolean;
+        businessAccount: {
+            id: string;
+            legalName: string | null;
+            displayName: string | null;
+            gstin: string | null;
+            pan: string | null;
+            fssaiNumber: string | null;
+            billingAddressLine: string | null;
+            billingCity: string | null;
+            billingState: string | null;
+            billingPincode: string | null;
+            businessType: string | null;
+            subType: string | null;
+            cuisine: string | null;
+            businessSize: string | null;
+            businessStructure: string | null;
+            serviceModel: string | null;
+            monthlyPurchaseBand: string | null;
+            procurementFrequency: string | null;
+            designation: string | null;
+            leadStatus: string | null;
+            creditType: string | null;
+        };
+    }>;
     _count: {
         orders: number;
         quickOrderLists: number;
@@ -92,7 +118,9 @@ export default function CustomerDetailsPage() {
         fullName: string; email: string; phone: string;
         businessName: string; gstNumber: string; pincode: string;
         password: string;
-    }>({ fullName: '', email: '', phone: '', businessName: '', gstNumber: '', pincode: '', password: '' });
+        // P0-4 master-datasheet attributes (BusinessAccount companyProfile).
+        cp: Record<string, string>;
+    }>({ fullName: '', email: '', phone: '', businessName: '', gstNumber: '', pincode: '', password: '', cp: {} });
 
     useEffect(() => {
         async function fetchUser() {
@@ -122,6 +150,7 @@ export default function CustomerDetailsPage() {
 
     function startEdit() {
         if (!user) return;
+        const ba = user.accountMemberships?.find((m) => m.isPrimary)?.businessAccount;
         setDraft({
             fullName: user.fullName || '',
             email: user.email || '',
@@ -130,6 +159,16 @@ export default function CustomerDetailsPage() {
             gstNumber: user.gstNumber || '',
             pincode: user.pincode || '',
             password: '',
+            cp: {
+                pan: ba?.pan || '', fssaiNumber: ba?.fssaiNumber || '',
+                billingAddressLine: ba?.billingAddressLine || '', billingCity: ba?.billingCity || '',
+                billingState: ba?.billingState || '', billingPincode: ba?.billingPincode || '',
+                businessType: ba?.businessType || '', subType: ba?.subType || '',
+                cuisine: ba?.cuisine || '', businessSize: ba?.businessSize || '',
+                businessStructure: ba?.businessStructure || '', serviceModel: ba?.serviceModel || '',
+                monthlyPurchaseBand: ba?.monthlyPurchaseBand || '', procurementFrequency: ba?.procurementFrequency || '',
+                designation: ba?.designation || '', leadStatus: ba?.leadStatus || '', creditType: ba?.creditType || '',
+            },
         });
         setEditing(true);
     }
@@ -147,10 +186,12 @@ export default function CustomerDetailsPage() {
                 pincode: draft.pincode.trim(),
             };
             if (draft.password) payload.password = draft.password;
+            const companyProfile: Record<string, string> = {};
+            for (const [k, v] of Object.entries(draft.cp)) companyProfile[k] = v.trim();
             const res = await fetch(`/api/v1/admin/users/${userId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+                body: JSON.stringify({ ...payload, companyProfile }),
             });
             const json = await res.json();
             if (!json.success) {
@@ -384,6 +425,22 @@ export default function CustomerDetailsPage() {
                                             placeholder="(none)"
                                             className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] outline-none focus:border-[#299E60]" />
                                     </EditRow>
+                                    {([
+                                        ['pan', 'PAN'], ['fssaiNumber', 'FSSAI'],
+                                        ['billingAddressLine', 'Billing address'], ['billingCity', 'Billing city'],
+                                        ['billingState', 'Billing state'], ['billingPincode', 'Billing pincode'],
+                                        ['businessType', 'Business type'], ['subType', 'Sub-type'],
+                                        ['cuisine', 'Cuisine / category'], ['businessSize', 'Business size'],
+                                        ['businessStructure', 'Business structure'], ['serviceModel', 'Service model'],
+                                        ['monthlyPurchaseBand', 'Monthly purchase band'], ['procurementFrequency', 'Procurement frequency'],
+                                        ['designation', 'Designation'], ['leadStatus', 'Lead status'], ['creditType', 'Credit type'],
+                                    ] as [string, string][]).map(([key, label]) => (
+                                        <EditRow key={key} label={label}>
+                                            <input value={draft.cp[key] ?? ''} onChange={e => setDraft(d => ({ ...d, cp: { ...d.cp, [key]: e.target.value } }))}
+                                                placeholder="(none)"
+                                                className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] outline-none focus:border-[#299E60]" />
+                                        </EditRow>
+                                    ))}
                                     <EditRow label="Set new password">
                                         <input type="password" value={draft.password} onChange={e => setDraft(d => ({ ...d, password: e.target.value }))}
                                             placeholder="Leave blank to keep existing" autoComplete="new-password"
