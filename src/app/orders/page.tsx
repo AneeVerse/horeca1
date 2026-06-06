@@ -165,6 +165,19 @@ export default function OrderHistoryPage() {
         }
     };
 
+    const handleSubmitDraft = async (order: ApiOrder, e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        try {
+            const res = await fetch(`/api/v1/orders/${order.id}/submit`, { method: 'PATCH' });
+            const json = await res.json();
+            if (!res.ok || !json.success) { toast.error(json.error?.message || 'Could not submit order'); return; }
+            toast.success('Draft submitted');
+            window.location.reload();
+        } catch {
+            toast.error('Could not submit order');
+        }
+    };
+
     const openRatingModal = (orderId: string, e?: React.MouseEvent) => {
         e?.stopPropagation();
         setSelectedStars(0); setRatingComment(''); setRatingModal({ orderId });
@@ -332,6 +345,15 @@ export default function OrderHistoryPage() {
                                                     Rate Order
                                                 </button>
                                                 <div className="w-px h-7 bg-gray-100" />
+                                            </>
+                                        )}
+                                        {order.status === 'draft' && (
+                                            <>
+                                            <button onClick={(e) => handleSubmitDraft(order, e)}
+                                                className="flex-1 py-3 text-center text-[11px] font-bold text-white bg-[#299e60] hover:bg-[#22844f] transition-colors uppercase tracking-wide">
+                                                Submit Order
+                                            </button>
+                                            <div className="w-px h-7 bg-gray-100" />
                                             </>
                                         )}
                                         <button onClick={(e) => handleSaveAsOrderList(order, e)}

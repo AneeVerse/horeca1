@@ -359,12 +359,17 @@ export const dal = {
   },
 
   orders: {
-    /** Create new order(s) from cart */
-    async create(vendorOrders: Array<{ vendorId: string; items: Array<{ productId: string; quantity: number }>; deliverySlotId?: string; notes?: string }>, paymentMethod: string) {
+    /** Create new order(s) from cart. Pass saveDraft to persist as draft PO(s). */
+    async create(vendorOrders: Array<{ vendorId: string; items: Array<{ productId: string; quantity: number }>; deliverySlotId?: string; notes?: string }>, paymentMethod: string, saveDraft = false) {
       return apiFetch('/api/v1/orders', {
         method: 'POST',
-        body: JSON.stringify({ vendorOrders, paymentMethod }),
+        body: JSON.stringify({ vendorOrders, paymentMethod, ...(saveDraft ? { saveDraft: true } : {}) }),
       });
+    },
+
+    /** Submit a saved draft PO (draft -> pending). */
+    async submitDraft(orderId: string) {
+      return apiFetch(`/api/v1/orders/${orderId}/submit`, { method: 'PATCH' });
     },
 
     /** List user's orders */

@@ -397,6 +397,28 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
         }
     };
 
+    // Draft PO (Req 7): persist the selected vendor POs without reserving stock /
+    // charging / clearing the cart. Submitted later from My Orders.
+    const handleSaveDraft = async () => {
+        if (selectedGroups.length === 0) { setOrderError('Select at least one vendor PO to save.'); return; }
+        setIsPlacingOrder(true);
+        setOrderError(null);
+        try {
+            const vendorOrders = selectedGroups.map(group => ({
+                vendorId: group.vendorId,
+                items: group.items.map(item => ({ productId: item.productId, quantity: item.quantity })),
+                ...(slotByVendor[group.vendorId] ? { deliverySlotId: slotByVendor[group.vendorId] as string } : {}),
+                ...(notesByVendor[group.vendorId]?.trim() ? { notes: notesByVendor[group.vendorId].trim() } : {}),
+            }));
+            await dal.orders.create(vendorOrders, selectedPayment || 'cod', true);
+            window.location.href = '/orders?status=draft';
+        } catch (err: unknown) {
+            setOrderError(err instanceof Error ? err.message : 'Failed to save draft.');
+        } finally {
+            setIsPlacingOrder(false);
+        }
+    };
+
     if (groups.length === 0) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50/50">
@@ -621,6 +643,13 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
                             }`}
                         >
                             Continue to Payment →
+                        </button>
+                        <button
+                            onClick={handleSaveDraft}
+                            disabled={selectedVendorCount === 0 || isPlacingOrder}
+                            className="w-full mt-2 py-3 text-[13px] font-bold rounded-xl border border-[#299e60] text-[#299e60] hover:bg-[#299e60]/5 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        >
+                            Save as Draft
                         </button>
                     </div>
                 )}
