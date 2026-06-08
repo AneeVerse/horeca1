@@ -1,6 +1,9 @@
 import { Prisma, CreditRepaymentMode, BillingModelType, CreditWalletStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
+import { NotificationService } from '@/modules/notification/notification.service';
+
+const notifications = new NotificationService();
 
 type Tx = Prisma.TransactionClient;
 
@@ -416,6 +419,48 @@ export class CreditWalletService {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return;
       throw e;
     }
+  }
+
+  // ── Reminders + daily runner ────────────────────────────────────────────────
+
+  /** Send repayment reminders (2d/1d/0d before due, day 3 + day 10 overdue) over
+   *  in-app + SMS + WhatsApp. Meant to run once daily. */
+  async sendDueReminders(): Promise<{ sent: number }> {
+    const wallets = await prisma.creditWallet.findMany({
+      where: { outstandingAmount: { gt: 0 }, currentDueDate: { not: null }, status: { not: 'BLACKLISTED' } },
+      select: { id: true, userId: true, outstandingAmount: true, currentDueDate: true },
+    });
+    const dayMs = 86_400_000;
+    let sent = 0;
+    for (const w of wallets) {
+      if (!w.currentDueDate) continue;
+      const diff = Math.round((w.currentDueDate.getTime() - Date.now()) / dayMs);
+      let phrase: string | null = null;
+      if (diff === 2) phrase = 'is due in 2 days';
+      else if (diff === 1) phrase = 'is due tomorrow';
+      else if (diff === 0) phrase = 'is due today';
+      else if (diff < 0 && (-diff === 3 || -diff === 10)) phrase = `is ${-diff} days overdue`;
+      if (!phrase) continue;
+
+      const amount = num(w.outstandingAmount);
+      const body = `Your Horeca1 credit payment of ₹${amount} ${phrase}. Pay now from your wallet: /account/wallet`;
+      for (const channel of ['in_app', 'sms', 'whatsapp'] as const) {
+        await notifications.send({
+          userId: w.userId, type: 'credit', channel,
+          title: 'Credit repayment reminder', body,
+          referenceId: w.id, referenceType: 'credit_wallet',
+        }).catch(() => {});
+      }
+      sent++;
+    }
+    return { sent };
+  }
+
+  /** Daily scheduler entrypoint: accrue interest/penalties + blacklist, then remind. */
+  async runDailyCreditTasks(): Promise<{ accruals: number; reminders: number }> {
+    const accr = await this.processOverdueAccounts();
+    const rem = await this.sendDueReminders();
+    return { accruals: accr.processed, reminders: rem.sent };
   }
 
   // ── Manual reactivation ─────────────────────────────────────────────────────
