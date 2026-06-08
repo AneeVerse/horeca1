@@ -1,10 +1,22 @@
 name: CI / Deploy
 
+# One pipeline: type-check + lint (gate) -> build image on GitHub (cached) ->
+# push to GHCR -> SSH to the droplet and pull the SHA-pinned image + migrate +
+# restart. Builds off the droplet so deploys are ~40s, never starve the droplet
+# CPU, and can't run stale code. Reuses the existing DO_SSH_PRIVATE_KEY secret.
+
 on:
   push:
     branches: [master]
   pull_request:
     branches: [master]
+
+concurrency:
+  group: deploy-master
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/horeca1
 
 jobs:
   ci:
@@ -12,36 +24,86 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-
       - name: Install dependencies
         run: npm ci
-
       - name: Generate Prisma client
         run: npx prisma generate
-
       - name: Type check
         run: npx tsc --noEmit
-
       - name: Lint
         run: npm run lint
 
-  deploy:
-    name: Deploy to production
+  build:
+    name: Build & push image
     needs: ci
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - name: SSH deploy
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: runner
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build & push worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: worker
+          push: true
+          tags: |
+            ${{ env.IMAGE }}-worker:latest
+            ${{ env.IMAGE }}-worker:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to production
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    steps:
+      - name: SSH deploy (pull SHA-pinned image)
         uses: appleboy/ssh-action@v1
         with:
           host: 64.227.187.210
           username: root
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
-          fingerprint: SHA256:zyqvn4dhznL9eHr1+31BEaI40EkJwCXHSUGyto3LXno
+          # No `fingerprint:` — the droplet's host key rotated and a pinned value
+          # breaks every deploy. We control this static-IP box, so host-key pinning
+          # adds little here; re-add a current fingerprint later if desired.
           command_timeout: 15m
-          script: bash -e /opt/horeca1/deploy.sh
+          envs: GHCR_TOKEN,GHCR_USER,DEPLOY_IMAGE,DEPLOY_SHA
+          script: |
+            set -e
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            export DEPLOY_IMAGE DEPLOY_SHA
+            cd /opt/horeca1
+            bash deploy.sh
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          DEPLOY_IMAGE: ${{ env.IMAGE }}
+          DEPLOY_SHA: ${{ github.sha }}
