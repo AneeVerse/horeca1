@@ -13,11 +13,7 @@ import { DeliverySlotPicker } from '@/components/features/checkout/DeliverySlotP
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import type { VendorCartGroup } from '@/types';
 
-declare global {
-    interface Window {
-        Razorpay: new (options: Record<string, unknown>) => { open(): void };
-    }
-}
+// window.Razorpay is typed in src/types/razorpay.d.ts
 
 interface RazorpaySuccessPayload {
     razorpay_payment_id: string;

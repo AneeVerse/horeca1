@@ -443,7 +443,7 @@ export class CreditWalletService {
       if (!phrase) continue;
 
       const amount = num(w.outstandingAmount);
-      const body = `Your Horeca1 credit payment of ₹${amount} ${phrase}. Pay now from your wallet: /account/wallet`;
+      const body = `Your Horeca1 credit payment of ₹${amount} ${phrase}. Pay now from your wallet: /wallet`;
       for (const channel of ['in_app', 'sms', 'whatsapp'] as const) {
         await notifications.send({
           userId: w.userId, type: 'credit', channel,
