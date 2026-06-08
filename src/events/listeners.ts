@@ -1,6 +1,7 @@
 import { eventBus } from './emitter';
 import { NotificationService } from '@/modules/notification/notification.service';
 import { prisma } from '@/lib/prisma';
+import { creditWalletService } from '@/modules/credit/creditWallet.service';
 
 const notifications = new NotificationService();
 
@@ -116,6 +117,9 @@ export function registerEventListeners(): void {
         referenceId: payload.orderId,
         referenceType: 'order',
       });
+      // Credit unlock: a delivered order may push the customer over the
+      // "X successful orders" threshold → auto-provision their H1 wallet.
+      await creditWalletService.maybeAutoUnlockH1Wallet(payload.userId).catch(() => {});
     } catch (error) {
       console.error('[Events] OrderDelivered listener failed:', error);
     }

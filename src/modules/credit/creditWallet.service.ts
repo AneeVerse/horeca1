@@ -239,6 +239,34 @@ export class CreditWalletService {
     return db ? run(db) : prisma.$transaction(run);
   }
 
+  /** Release an order's credit debit when the order is cancelled. Idempotent
+   *  (no-ops if there was no debit or it's already been reversed). Runs in the
+   *  caller's transaction. */
+  async reverseOrderDebit(orderId: string, userId: string, vendorId: string | null, db: Tx): Promise<void> {
+    const wallet = await db.creditWallet.findFirst({ where: { userId, vendorId } });
+    if (!wallet) return;
+    const debit = await db.creditWalletTxn.findFirst({ where: { walletId: wallet.id, type: 'ORDER_DEBIT', referenceId: orderId } });
+    if (!debit) return;
+    const already = await db.creditWalletTxn.findFirst({ where: { walletId: wallet.id, type: 'REVERSAL', referenceId: orderId } });
+    if (already) return;
+
+    const amount = debit.amount;
+    const newUsed = Prisma.Decimal.max(D(0), wallet.usedCredit.minus(amount));
+    const newOutstanding = Prisma.Decimal.max(D(0), wallet.outstandingAmount.minus(amount));
+    const newAvailable = wallet.creditLimit.minus(newUsed);
+    const cleared = newOutstanding.equals(0);
+    await db.creditWallet.update({
+      where: { id: wallet.id },
+      data: {
+        usedCredit: newUsed, outstandingAmount: newOutstanding, availableCredit: newAvailable,
+        ...(cleared ? { currentDueDate: null, overdueDays: 0, overdueBaseAmount: null } : {}),
+      },
+    });
+    await db.creditWalletTxn.create({
+      data: { walletId: wallet.id, type: 'REVERSAL', amount, balanceAfterTxn: newAvailable, referenceId: orderId, note: `Order ${orderId} cancelled — credit released` },
+    });
+  }
+
   // ── Repayment ───────────────────────────────────────────────────────────────
 
   /** Apply a (full/partial) repayment. Idempotent on razorpayPaymentId. */
