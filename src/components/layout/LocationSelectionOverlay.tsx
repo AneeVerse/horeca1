@@ -125,9 +125,10 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
                     await switchOutlet(targetOutletId);
                     await refreshAccounts();
                 }
-            } catch (err: any) {
+            } catch (err) {
                 console.error('Error syncing address to outlet:', err);
-                toast.error(err.message || 'Failed to sync outlet address');
+                const msg = err instanceof Error ? err.message : 'Failed to sync outlet address';
+                toast.error(msg);
             }
         }
         onClose();
