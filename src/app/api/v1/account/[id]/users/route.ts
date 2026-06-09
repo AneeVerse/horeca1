@@ -14,6 +14,7 @@ import { assertAccountMember, assertAccountPermission } from '@/lib/accountAcces
 import { uniqueHcid } from '@/lib/hcid';
 import { sendEmail } from '@/lib/providers/email';
 import { buildInviteEmail } from '@/lib/email-templates/invite';
+import { sendSms } from '@/lib/providers/sms';
 
 export const GET = withAuth(async (req: NextRequest, ctx) => {
   try {
@@ -126,13 +127,13 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     const phoneDigits = phoneRaw.length === 12 ? phoneRaw.replace(/^91/, '') : phoneRaw;
     const normalizedEmail = looksEmail ? body.identifier.toLowerCase() : null;
 
-    let invitee: { id: string; email: string | null; fullName: string } | null = null;
+    let invitee: { id: string; email: string | null; fullName: string; phone: string | null } | null = null;
     let tempPassword: string | null = null;
 
     if (looksEmail && normalizedEmail) {
       const existing = await prisma.user.findUnique({
         where: { email: normalizedEmail },
-        select: { id: true, email: true, fullName: true },
+        select: { id: true, email: true, fullName: true, phone: true },
       });
       if (existing) {
         invitee = existing;
@@ -157,7 +158,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
             isActive: true,
             hcidDisplay,
           },
-          select: { id: true, email: true, fullName: true },
+          select: { id: true, email: true, fullName: true, phone: true },
         });
         invitee = created;
         tempPassword = body.password;
@@ -165,7 +166,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     } else if (phoneDigits.length === 10) {
       const existing = await prisma.user.findUnique({
         where: { phone: phoneDigits },
-        select: { id: true, email: true, fullName: true },
+        select: { id: true, email: true, fullName: true, phone: true },
       });
       if (!existing) {
         throw Errors.notFound('Phone-based invites require the user to already have an account. Use an email to invite a new user.');
@@ -209,7 +210,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
       return { membership, assignments };
     });
 
-    // Fire-and-forget invite email. Never let a mail-send failure roll back the user creation.
+    // Fire-and-forget invite notification. Never let notification-send failure roll back the user creation.
     if (tempPassword && inviteeUser.email) {
       try {
         const [account, inviter] = await Promise.all([
@@ -230,6 +231,32 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
         await sendEmail({ to: inviteeUser.email, subject, text, html, name: inviteeUser.fullName });
       } catch (err) {
         console.error('[invite-email]', err);
+      }
+    } else {
+      // Existing user invited — send notification of access
+      try {
+        const [account, inviter] = await Promise.all([
+          prisma.businessAccount.findUnique({ where: { id }, select: { legalName: true, displayName: true } }),
+          prisma.user.findUnique({ where: { id: ctx.userId }, select: { fullName: true } }),
+        ]);
+        const businessName = account?.displayName || account?.legalName || 'your business';
+        const loginUrl = (process.env.AUTH_URL ?? 'http://localhost:3000') + '/login';
+        const inviterName = inviter?.fullName?.trim() || 'Admin';
+        const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c));
+
+        if (inviteeUser.email) {
+          const subject = `Access granted to ${businessName} on HoReCa Hub`;
+          const text = `Hello ${inviteeUser.fullName},\n\n${inviterName} has added you to the business account "${businessName}" on HoReCa Hub.\n\nYou can now log in and access this account.\n\nLogin URL: ${loginUrl}\n\n— The HoReCa Hub team`;
+          const html = `<p>Hello <strong>${esc(inviteeUser.fullName)}</strong>,</p><p>${esc(inviterName)} has added you to the business account <strong>${esc(businessName)}</strong> on HoReCa Hub.</p><p>You can now log in and access this account.</p><p><a href="${esc(loginUrl)}">Sign in to HoReCa Hub</a></p><p>— The HoReCa Hub team</p>`;
+          await sendEmail({ to: inviteeUser.email, subject, text, html, name: inviteeUser.fullName });
+        }
+
+        if (inviteeUser.phone) {
+          const smsBody = `Hello ${inviteeUser.fullName}, you have been added to the business account "${businessName}" on HoReCa Hub by ${inviterName}. Log in to access: ${loginUrl}`;
+          await sendSms({ to: inviteeUser.phone, body: smsBody, channel: 'sms' });
+        }
+      } catch (err) {
+        console.error('[invite-notification]', err);
       }
     }
 

@@ -17,6 +17,7 @@ import { uniqueHcid } from '@/lib/hcid';
 import { toTeamMemberDTO, teamMemberInclude, type TeamMemberDTO } from '@/lib/teamMemberShape';
 import { sendEmail } from '@/lib/providers/email';
 import { buildInviteEmail } from '@/lib/email-templates/invite';
+import { sendSms } from '@/lib/providers/sms';
 import type { AuthContext } from '@/middleware/auth';
 import type { TeamRole } from '@prisma/client';
 
@@ -281,7 +282,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
       roleRef: member.roleRef,
     });
 
-    // Send credential email if invitee has an email + a freshly-set password.
+    // Notify the user.
     if (user.email && tempPassword) {
       try {
         const inviter = await prisma.user.findUnique({
@@ -300,6 +301,31 @@ export const POST = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
         await sendEmail({ to: user.email, subject, text, html });
       } catch (err) {
         console.error('[invite-email] failed to send vendor invite email', err);
+      }
+    } else {
+      // Existing user invited — send notification of access
+      try {
+        const inviter = await prisma.user.findUnique({
+          where: { id: ctx.userId },
+          select: { fullName: true },
+        });
+        const inviterName = inviter?.fullName?.trim() || 'Admin';
+        const loginUrl = (process.env.AUTH_URL ?? 'http://localhost:3000') + '/login';
+        const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c));
+
+        if (user.email) {
+          const subject = `Access granted to vendor team ${vendor.businessName} on HoReCa Hub`;
+          const text = `Hello ${user.fullName ?? ''},\n\n${inviterName} has added you to the vendor team "${vendor.businessName}" on HoReCa Hub.\n\nYou can now log in and access the vendor portal.\n\nLogin URL: ${loginUrl}\n\n— The HoReCa Hub team`;
+          const html = `<p>Hello <strong>${esc(user.fullName ?? '')}</strong>,</p><p>${esc(inviterName)} has added you to the vendor team <strong>${esc(vendor.businessName)}</strong> on HoReCa Hub.</p><p>You can now log in and access the vendor portal.</p><p><a href="${esc(loginUrl)}">Sign in to HoReCa Hub</a></p><p>— The HoReCa Hub team</p>`;
+          await sendEmail({ to: user.email, subject, text, html });
+        }
+
+        if (user.phone) {
+          const smsBody = `Hello ${user.fullName ?? ''}, you have been added to the vendor team "${vendor.businessName}" on HoReCa Hub by ${inviterName}. Log in to access: ${loginUrl}`;
+          await sendSms({ to: user.phone, body: smsBody, channel: 'sms' });
+        }
+      } catch (err) {
+        console.error('[invite-notification] failed to send vendor invite notification', err);
       }
     }
 

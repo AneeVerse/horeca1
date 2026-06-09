@@ -182,7 +182,7 @@ function InviteModal({ accountId, roles, outlets, onClose, onInvited }: {
       body: JSON.stringify({
         identifier,
         roleId,
-        outletId: outletId || null,
+        outletIds: outletId ? [outletId] : [],
       }),
     });
     const json = await res.json();
