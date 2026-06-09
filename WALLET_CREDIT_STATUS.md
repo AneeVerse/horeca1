@@ -23,11 +23,16 @@
 ### Wave 3 (part) — customer UI
 - `/wallet` dashboard: limit/available/outstanding/due + **Repay-Now (Razorpay)** + history. (Razorpay global consolidated to `src/types/razorpay.d.ts`.)
 
+### Wave 3 UI — DONE
+- **Admin** `/admin/credit`: assign/edit-limit/reactivate credit lines, search wallets (`GET /admin/credit`), the 4 reports (overdue/utilization/interest/audit), editable global config + sidebar link.
+- **Checkout** "Pay via Credit": per-vendor available credit from `GET /api/v1/wallet`, blocks insufficient/blacklisted (server still does the debit).
+- **Vendor** `/vendor/collections`: outstanding/due-today/overdue/high-risk + aging buckets + customer table (`GET /api/v1/vendor/credit`).
+- **Legacy retired:** `/api/v1/credit/{check,apply,signup}` + `credit.service` now read `CreditWallet`; admin customer detail shows `creditWallets`. Verification script `prisma/scripts/verify-credit-wallet.ts`.
+
 ## ⏳ Remaining
-- **Wave 3 UI:** admin credit panel (assign/edit-limit/reactivate, Excel-style) + the 4 reports pages (overdue/utilization/interest/audit — API `GET /wallet/reports` ready) + vendor collections dashboard + **checkout "Pay via Credit" option** (repoint the checkout available-credit display from `/credit/check`→`CreditWallet`; the order backend already debits the wallet for `paymentMethod:'credit'`).
-- **Retire legacy surfaces:** repoint `/api/v1/credit/*` routes, `credit.service.ts`, and the admin user-detail credit display from `CreditAccount` → `CreditWallet`.
-- **Wave 4:** verification script; optional missed-webhook reconcile cron (webhook is already idempotent).
+- **Repoint residual legacy `CreditAccount` reads** (non-breaking — they read the still-present legacy table): vendor dashboard + ledger, the old `/api/v1/vendor/collections` route(s), admin users import/list/detail, `account/[id]`, admin vendor detail. The vendor **collections page** was replaced with a wallet-based version — legacy sub-features (ledger/statement download, mark-offline-collection, dispute notes) may need re-adding on the wallet model.
 - **Split payment** ("Pay Now + Credit mix") — deferred.
+- Optional missed-webhook reconcile cron (webhook is already idempotent).
 
 ## 🚀 Prod rollout (when merging to master)
 1. **Back up the DB** (`docker exec horeca1-db pg_dump -U horeca1 -d horeca1 > backup.sql`).
