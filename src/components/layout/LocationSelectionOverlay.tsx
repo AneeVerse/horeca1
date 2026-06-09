@@ -12,6 +12,9 @@ import { useGoogleMaps } from '@/components/providers/GoogleMapsProvider';
 import { AddNewAddressOverlay } from './AddNewAddressOverlay';
 import { EditAddressOverlay } from './EditAddressOverlay';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { useSession } from 'next-auth/react';
+import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
+import { toast } from 'sonner';
 
 interface LocationSelectionOverlayProps {
     isOpen: boolean;
@@ -39,6 +42,9 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
         isDetectingLocation,
     } = useAddress();
 
+    const { status } = useSession();
+    const { currentAccount, switchOutlet, refresh: refreshAccounts } = useBusinessAccountSwitcher();
+
     const [searchQuery, setSearchQuery] = useState('');
     const [isAddNewOpen, setIsAddNewOpen] = useState(false);
     const [initialCoords, setInitialCoords] = useState<{ lat?: number; lng?: number }>({});
@@ -49,38 +55,134 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
     const { predictions, isSearching, getPlaceDetails, clearPredictions } =
         useGooglePlacesAutocomplete(searchQuery);
 
-    // ─── Select a saved address ──────────────────────────────────────────
-    const handleSelectSaved = (addr: Address) => {
+    // ─── Sync selected address with active session outlet ────────────────
+    const handleSelectAddressAndSyncOutlet = async (addr: Address) => {
         setSelectedAddress(addr);
+
+        if (status === 'authenticated' && currentAccount) {
+            try {
+                // Fetch full outlets from database to match against the address
+                const res = await fetch(`/api/v1/account/${currentAccount.id}/outlets`);
+                if (!res.ok) throw new Error('Failed to fetch account outlets');
+                const json = await res.json();
+                const dbOutlets = (json.data || []) as Array<{
+                    id: string;
+                    placeId: string | null;
+                    latitude: number | null;
+                    longitude: number | null;
+                    pincode: string | null;
+                    addressLine: string;
+                }>;
+
+                // Match by placeId, close coordinates, or exact address + pincode
+                let matchingOutlet = dbOutlets.find(o => o.placeId && o.placeId === addr.placeId);
+                if (!matchingOutlet && addr.latitude && addr.longitude) {
+                    matchingOutlet = dbOutlets.find(o => 
+                        o.latitude && o.longitude &&
+                        Math.abs(o.latitude - addr.latitude) < 0.0001 &&
+                        Math.abs(o.longitude - addr.longitude) < 0.0001
+                    );
+                }
+                if (!matchingOutlet) {
+                    matchingOutlet = dbOutlets.find(o =>
+                        o.addressLine === addr.fullAddress &&
+                        o.pincode === addr.pincode
+                    );
+                }
+
+                let targetOutletId = matchingOutlet?.id;
+
+                if (!targetOutletId) {
+                    // Create a new outlet for the address
+                    const createRes = await fetch(`/api/v1/account/${currentAccount.id}/outlets`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: addr.businessName || addr.label || 'Branch Outlet',
+                            addressLine: addr.fullAddress,
+                            flatInfo: addr.flatInfo || null,
+                            landmark: addr.landmark || null,
+                            city: addr.city || null,
+                            state: addr.state || null,
+                            pincode: addr.pincode || null,
+                            latitude: addr.latitude,
+                            longitude: addr.longitude,
+                            placeId: addr.placeId || null,
+                        }),
+                    });
+
+                    if (!createRes.ok) {
+                        const errText = await createRes.text();
+                        console.error('Failed to create outlet:', errText);
+                        throw new Error('Failed to create outlet for address');
+                    }
+
+                    const createJson = await createRes.json();
+                    targetOutletId = createJson.data.id;
+                }
+
+                if (targetOutletId) {
+                    await switchOutlet(targetOutletId);
+                    await refreshAccounts();
+                }
+            } catch (err: any) {
+                console.error('Error syncing address to outlet:', err);
+                toast.error(err.message || 'Failed to sync outlet address');
+            }
+        }
         onClose();
     };
 
-    // ─── Select from autocomplete prediction ─────────────────────────────
+    // ─── Select a saved address ──────────────────────────────────────────
+    const handleSelectSaved = async (addr: Address) => {
+        await handleSelectAddressAndSyncOutlet(addr);
+    };
+
+    // ─── Select from autocomplete prediction (immediate 1-tap UX) ──────────
     const handleSelectPrediction = async (pred: PlacePrediction) => {
         const details = await getPlaceDetails(pred.placeId);
         if (details) {
-            setInitialCoords({ lat: details.latitude, lng: details.longitude });
             setSearchQuery('');
             clearPredictions();
-            setDefaultMode('map'); // address search → open in map mode with pin placed
-            setIsAddNewOpen(true);
+            
+            const addressInput: Omit<Address, 'id'> = {
+                label: 'Other',
+                businessName: details.businessName,
+                fullAddress: details.fullAddress,
+                shortAddress: details.shortAddress,
+                latitude: details.latitude,
+                longitude: details.longitude,
+                pincode: details.pincode,
+                city: details.city,
+                state: details.state,
+                placeId: details.placeId,
+                isDefault: false,
+            };
+
+            const saved = await addAddress(addressInput);
+            if (saved) {
+                await handleSelectAddressAndSyncOutlet(saved);
+            }
         }
     };
 
     // ─── Use current location ────────────────────────────────────────────
     const handleUseCurrentLocation = async () => {
         const detected = await detectCurrentLocation();
-        if (detected) onClose();
+        if (detected) {
+            await handleSelectAddressAndSyncOutlet(detected);
+        }
     };
 
     // ─── Save from AddNewAddressOverlay ──────────────────────────────────
     const handleSaveNewAddress = async (address: Omit<Address, 'id'>) => {
         const saved = await addAddress(address);
-        if (saved) {
-            setSelectedAddress(saved);
-        }
         setIsAddNewOpen(false);
-        onClose();
+        if (saved) {
+            await handleSelectAddressAndSyncOutlet(saved);
+        } else {
+            onClose();
+        }
     };
 
     if (!isOpen) return null;

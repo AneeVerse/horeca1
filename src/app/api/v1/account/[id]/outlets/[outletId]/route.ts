@@ -49,7 +49,29 @@ export const PATCH = withAuth(async (req: NextRequest, ctx) => {
       }
     }
 
-    const updated = await prisma.outlet.update({ where: { id: outletId }, data });
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.outlet.update({ where: { id: outletId }, data });
+
+      // Update corresponding SavedAddress if one exists
+      await tx.savedAddress.updateMany({
+        where: { outletId: outletId },
+        data: {
+          ...(body.name !== undefined && { label: body.name, businessName: body.name }),
+          ...(body.addressLine !== undefined && { fullAddress: body.addressLine, shortAddress: body.addressLine.split(',').slice(0, 2).join(', ') }),
+          ...(body.flatInfo !== undefined && { flatInfo: body.flatInfo }),
+          ...(body.landmark !== undefined && { landmark: body.landmark }),
+          ...(body.pincode !== undefined && { pincode: body.pincode }),
+          ...(body.city !== undefined && { city: body.city }),
+          ...(body.state !== undefined && { state: body.state }),
+          ...(body.latitude !== undefined && { latitude: body.latitude ?? 0 }),
+          ...(body.longitude !== undefined && { longitude: body.longitude ?? 0 }),
+          ...(body.placeId !== undefined && { placeId: body.placeId }),
+        },
+      });
+
+      return u;
+    });
+
     return NextResponse.json({ success: true, data: updated });
   } catch (err) { return errorResponse(err); }
 });
@@ -60,7 +82,13 @@ export const DELETE = withAuth(async (req: NextRequest, ctx) => {
     await assertAccountPermission(ctx.userId, id, 'outlets.delete');
     const existing = await prisma.outlet.findFirst({ where: { id: outletId, businessAccountId: id }, select: { id: true } });
     if (!existing) throw Errors.notFound('Outlet');
-    await prisma.outlet.update({ where: { id: outletId }, data: { isActive: false } });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.outlet.update({ where: { id: outletId }, data: { isActive: false } });
+      // Delete corresponding SavedAddress as well to keep it clean
+      await tx.savedAddress.deleteMany({ where: { outletId: outletId } });
+    });
+
     return NextResponse.json({ success: true });
   } catch (err) { return errorResponse(err); }
 });

@@ -28,6 +28,34 @@ const ALL_ROLES = ['customer', 'vendor', 'brand', 'admin'] as const;
 
 export const GET = withRole([...ALL_ROLES], async (req: NextRequest, ctx) => {
   try {
+    if (ctx.activeBusinessAccountId) {
+      const activeAccount = await prisma.businessAccount.findUnique({
+        where: { id: ctx.activeBusinessAccountId },
+        select: { primaryOutletId: true },
+      });
+      const outlets = await prisma.outlet.findMany({
+        where: { businessAccountId: ctx.activeBusinessAccountId, isActive: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      const addresses = outlets.map((o) => ({
+        id: o.id,
+        label: o.name,
+        businessName: o.name,
+        fullAddress: o.addressLine,
+        shortAddress: o.addressLine.split(',').slice(0, 2).join(', '),
+        flatInfo: o.flatInfo || undefined,
+        landmark: o.landmark || undefined,
+        pincode: o.pincode || undefined,
+        city: o.city || undefined,
+        state: o.state || undefined,
+        latitude: o.latitude ?? 0,
+        longitude: o.longitude ?? 0,
+        placeId: o.placeId || undefined,
+        isDefault: o.id === activeAccount?.primaryOutletId,
+      }));
+      return NextResponse.json({ success: true, data: addresses });
+    }
+
     const addresses = await prisma.savedAddress.findMany({
       where: { userId: ctx.userId },
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
@@ -44,6 +72,36 @@ export const POST = withRole([...ALL_ROLES], async (req: NextRequest, ctx) => {
     const input = createSchema.parse(body);
 
     const address = await prisma.$transaction(async (tx) => {
+      let outletId: string | undefined;
+
+      if (ctx.activeBusinessAccountId) {
+        const hasUsablePincode = !!input.pincode && /^\d{6}$/.test(input.pincode);
+        const outlet = await tx.outlet.create({
+          data: {
+            businessAccountId: ctx.activeBusinessAccountId,
+            name: input.businessName || input.label || 'Branch Outlet',
+            addressLine: input.fullAddress,
+            flatInfo: input.flatInfo || null,
+            landmark: input.landmark || null,
+            city: input.city || null,
+            state: input.state || null,
+            pincode: input.pincode || null,
+            latitude: input.latitude,
+            longitude: input.longitude,
+            placeId: input.placeId || null,
+            requiresAddressUpdate: !hasUsablePincode,
+          },
+        });
+        outletId = outlet.id;
+
+        if (input.isDefault) {
+          await tx.businessAccount.update({
+            where: { id: ctx.activeBusinessAccountId },
+            data: { primaryOutletId: outlet.id },
+          });
+        }
+      }
+
       // Unset any existing default if this one is flagged as default
       if (input.isDefault) {
         await tx.savedAddress.updateMany({
@@ -70,6 +128,7 @@ export const POST = withRole([...ALL_ROLES], async (req: NextRequest, ctx) => {
       return tx.savedAddress.create({
         data: {
           userId: ctx.userId,
+          outletId: outletId,
           label: input.label,
           businessName: input.businessName,
           fullAddress: input.fullAddress,

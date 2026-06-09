@@ -45,14 +45,41 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     // and checkout actually use; lat/lng is nice-to-have. Without this rule, every new
     // outlet would be permanently flagged "Address needed" because we have no geocoder yet.
     const hasUsablePincode = !!body.pincode && /^\d{6}$/.test(body.pincode);
-    const outlet = await prisma.outlet.create({
-      data: {
-        businessAccountId: id,
-        ...body,
-        requiresAddressUpdate: !hasUsablePincode,
-      },
+
+    const result = await prisma.$transaction(async (tx) => {
+      const outlet = await tx.outlet.create({
+        data: {
+          businessAccountId: id,
+          ...body,
+          requiresAddressUpdate: !hasUsablePincode,
+        },
+      });
+
+      // Create a corresponding SavedAddress for this user linked to the new outlet
+      await tx.savedAddress.create({
+        data: {
+          userId: ctx.userId,
+          outletId: outlet.id,
+          label: body.name || 'Branch Outlet',
+          businessName: body.name,
+          fullAddress: body.addressLine,
+          shortAddress: body.addressLine.split(',').slice(0, 2).join(', '),
+          flatInfo: body.flatInfo,
+          landmark: body.landmark,
+          pincode: body.pincode,
+          city: body.city,
+          state: body.state,
+          latitude: body.latitude ?? 0,
+          longitude: body.longitude ?? 0,
+          placeId: body.placeId,
+          isDefault: false,
+        },
+      });
+
+      return outlet;
     });
-    return NextResponse.json({ success: true, data: outlet }, { status: 201 });
+
+    return NextResponse.json({ success: true, data: result }, { status: 201 });
   } catch (err) { return errorResponse(err); }
 });
 

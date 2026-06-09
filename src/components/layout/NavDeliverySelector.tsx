@@ -143,6 +143,18 @@ export function NavDeliverySelector({ fallbackLabel, onFallbackClick, variant }:
                   {o.id === currentOutlet.id && <Check size={12} className="text-[#53B175] shrink-0" />}
                 </button>
               ))}
+              <div className="border-t border-gray-100 mt-1 pt-1.5 px-0.5">
+                <button
+                  onClick={() => {
+                    setOutletOpen(false);
+                    onFallbackClick();
+                  }}
+                  className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-green-50 text-left text-primary font-bold text-[11px] transition-colors"
+                >
+                  <MapPin size={11} className="shrink-0 text-primary" />
+                  Add/Select Location
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -229,6 +241,18 @@ export function NavDeliverySelector({ fallbackLabel, onFallbackClick, variant }:
                 {o.id === currentOutlet.id && <Check size={14} className="text-[#53B175] shrink-0" />}
               </button>
             ))}
+            <div className="border-t border-gray-100 mt-1.5 pt-1.5 px-1">
+              <button
+                onClick={() => {
+                  setOutletOpen(false);
+                  onFallbackClick();
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-green-50 text-left text-primary font-bold text-[12px] transition-colors"
+              >
+                <MapPin size={13} className="shrink-0 text-primary" />
+                Add/Select Location
+              </button>
+            </div>
           </div>
         )}
       </div>

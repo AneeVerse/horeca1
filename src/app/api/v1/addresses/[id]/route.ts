@@ -39,7 +39,27 @@ export const PATCH = withRole([...ALL_ROLES], async (req: NextRequest, ctx) => {
           where: { userId: ctx.userId, isDefault: true, id: { not: id } },
           data: { isDefault: false },
         });
+
+        if (ctx.activeBusinessAccountId && existing.outletId) {
+          await tx.businessAccount.update({
+            where: { id: ctx.activeBusinessAccountId },
+            data: { primaryOutletId: existing.outletId },
+          });
+        }
       }
+
+      // Sync with corresponding Outlet if one exists
+      if (existing.outletId) {
+        await tx.outlet.update({
+          where: { id: existing.outletId },
+          data: {
+            ...(input.label !== undefined && { name: input.businessName || input.label }),
+            ...(input.flatInfo !== undefined && { flatInfo: input.flatInfo }),
+            ...(input.landmark !== undefined && { landmark: input.landmark }),
+          },
+        });
+      }
+
       return tx.savedAddress.update({
         where: { id },
         data: {
@@ -63,10 +83,19 @@ export const DELETE = withRole([...ALL_ROLES], async (req: NextRequest, ctx) => 
     const id = extractId(req);
     const existing = await prisma.savedAddress.findFirst({
       where: { id, userId: ctx.userId },
+      select: { id: true, outletId: true }
     });
     if (!existing) throw Errors.notFound('Address');
 
-    await prisma.savedAddress.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      if (existing.outletId) {
+        await tx.outlet.update({
+          where: { id: existing.outletId },
+          data: { isActive: false },
+        });
+      }
+      await tx.savedAddress.delete({ where: { id } });
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
