@@ -23,7 +23,7 @@ import {
     AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
 interface VendorProduct {
@@ -169,7 +169,9 @@ function formatTime(time: string): string {
 export default function VendorDetailsPage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const vendorId = params.id as string;
+    const isInitialEdit = searchParams.get('edit') === 'true';
 
     const [vendor, setVendor] = useState<VendorData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -177,6 +179,153 @@ export default function VendorDetailsPage() {
     const [togglingVerification, setTogglingVerification] = useState(false);
     const [documents, setDocuments] = useState<VendorDocument[]>([]);
     const [updatingDoc, setUpdatingDoc] = useState<string | null>(null);
+
+    // Edit states
+    const [isEditing, setIsEditing] = useState(false);
+    const [savingEdits, setSavingEdits] = useState(false);
+
+    const [businessName, setBusinessName] = useState('');
+    const [description, setDescription] = useState('');
+    const [address, setAddress] = useState('');
+    const [city, setCity] = useState('');
+    const [stateVal, setStateVal] = useState('');
+    const [pincode, setPincode] = useState('');
+    const [minOrderValue, setMinOrderValue] = useState('');
+    const [deliveryFee, setDeliveryFee] = useState('');
+    const [freeDeliveryAbove, setFreeDeliveryAbove] = useState('');
+    const [isActive, setIsActive] = useState(true);
+
+    // KYC fields
+    const [tradeName, setTradeName] = useState('');
+    const [vendorType, setVendorType] = useState('');
+    const [gstNumber, setGstNumber] = useState('');
+    const [panNumber, setPanNumber] = useState('');
+    const [fssaiNumber, setFssaiNumber] = useState('');
+    const [udyamNumber, setUdyamNumber] = useState('');
+    const [cinNumber, setCinNumber] = useState('');
+    const [deliveryCapability, setDeliveryCapability] = useState('');
+    const [authorizedPersonName, setAuthorizedPersonName] = useState('');
+    const [authorizedPersonPhone, setAuthorizedPersonPhone] = useState('');
+    const [authorizedPersonEmail, setAuthorizedPersonEmail] = useState('');
+    const [pickupAddressLine, setPickupAddressLine] = useState('');
+    const [pickupCity, setPickupCity] = useState('');
+    const [pickupState, setPickupState] = useState('');
+    const [pickupPincode, setPickupPincode] = useState('');
+
+    // Bank details
+    const [bankAccountName, setBankAccountName] = useState('');
+    const [bankAccountNumber, setBankAccountNumber] = useState('');
+    const [bankIfsc, setBankIfsc] = useState('');
+    const [bankName, setBankName] = useState('');
+    const [bankAccountType, setBankAccountType] = useState('');
+
+    // User details
+    const [fullName, setFullName] = useState('');
+    const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
+    const [userGstNumber, setUserGstNumber] = useState('');
+
+    useEffect(() => {
+        if (isInitialEdit) {
+            setIsEditing(true);
+        }
+    }, [isInitialEdit]);
+
+    useEffect(() => {
+        if (vendor) {
+            setBusinessName(vendor.businessName || '');
+            setDescription(vendor.description || '');
+            setAddress(vendor.address || '');
+            setCity(vendor.city || '');
+            setStateVal(vendor.state || '');
+            setPincode(vendor.pincode || '');
+            setMinOrderValue(vendor.minOrderValue != null ? String(vendor.minOrderValue) : '0');
+            setDeliveryFee(vendor.deliveryFee != null ? String(vendor.deliveryFee) : '0');
+            setFreeDeliveryAbove(vendor.freeDeliveryAbove != null ? String(vendor.freeDeliveryAbove) : '');
+            setIsActive(vendor.isActive);
+            setTradeName(vendor.tradeName || '');
+            setVendorType(vendor.vendorType || '');
+            setGstNumber(vendor.gstNumber || '');
+            setPanNumber(vendor.panNumber || '');
+            setFssaiNumber(vendor.fssaiNumber || '');
+            setUdyamNumber(vendor.udyamNumber || '');
+            setCinNumber(vendor.cinNumber || '');
+            setDeliveryCapability(vendor.deliveryCapability || '');
+            setAuthorizedPersonName(vendor.authorizedPersonName || '');
+            setAuthorizedPersonPhone(vendor.authorizedPersonPhone || '');
+            setAuthorizedPersonEmail(vendor.authorizedPersonEmail || '');
+            setPickupAddressLine(vendor.pickupAddressLine || '');
+            setPickupCity(vendor.pickupCity || '');
+            setPickupState(vendor.pickupState || '');
+            setPickupPincode(vendor.pickupPincode || '');
+            setBankAccountName(vendor.bankAccountName || '');
+            setBankAccountNumber(vendor.bankAccountNumber || '');
+            setBankIfsc(vendor.bankIfsc || '');
+            setBankName(vendor.bankName || '');
+            setBankAccountType(vendor.bankAccountType || '');
+            setFullName(vendor.user.fullName || '');
+            setEmail(vendor.user.email || '');
+            setPhone(vendor.user.phone || '');
+            setUserGstNumber(vendor.user.gstNumber || '');
+        }
+    }, [vendor]);
+
+    const handleSaveVendor = async () => {
+        try {
+            setSavingEdits(true);
+            const res = await fetch(`/api/v1/admin/vendors/${vendorId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    businessName,
+                    description,
+                    address,
+                    city,
+                    state: stateVal,
+                    pincode,
+                    minOrderValue: parseFloat(minOrderValue) || 0,
+                    deliveryFee: parseFloat(deliveryFee) || 0,
+                    freeDeliveryAbove: freeDeliveryAbove ? parseFloat(freeDeliveryAbove) : null,
+                    isActive,
+                    tradeName,
+                    vendorType,
+                    gstNumber,
+                    panNumber,
+                    fssaiNumber,
+                    udyamNumber,
+                    cinNumber,
+                    deliveryCapability,
+                    authorizedPersonName,
+                    authorizedPersonPhone,
+                    authorizedPersonEmail,
+                    pickupAddressLine,
+                    pickupCity,
+                    pickupState,
+                    pickupPincode,
+                    bankAccountName,
+                    bankAccountNumber,
+                    bankIfsc,
+                    bankName,
+                    bankAccountType,
+                    fullName,
+                    email,
+                    phone,
+                    userGstNumber,
+                }),
+            });
+            const json = await res.json();
+            if (!res.ok || !json.success) {
+                throw new Error(json.message || 'Failed to update vendor');
+            }
+            toast.success('Vendor details updated successfully');
+            setIsEditing(false);
+            await fetchVendor();
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Failed to save changes');
+        } finally {
+            setSavingEdits(false);
+        }
+    };
 
     const fetchVendor = useCallback(async () => {
         try {
@@ -302,21 +451,65 @@ export default function VendorDetailsPage() {
     return (
         <div className="space-y-6 pb-10">
             {/* Header / Breadcrumbs */}
-            <div className="flex items-center gap-2 text-[14px] text-[#4B4B4B]">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[14px] text-[#4B4B4B]">
+                    <button
+                        onClick={() => router.back()}
+                        className="hover:text-[#299E60] flex items-center gap-1 transition-colors"
+                    >
+                        <ChevronLeft size={16} />
+                        Back
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <Link href="/admin/vendors" className="hover:text-[#299E60] transition-colors">
+                        Sellers
+                    </Link>
+                    <span className="text-gray-300">{'>'}</span>
+                    <span className="font-bold text-[#181725]">Seller Details</span>
+                </div>
                 <button
-                    onClick={() => router.back()}
-                    className="hover:text-[#299E60] flex items-center gap-1 transition-colors"
+                    onClick={() => setIsEditing(!isEditing)}
+                    className={cn(
+                        "px-4 py-2 rounded-[10px] text-[13px] font-bold border transition-colors",
+                        isEditing
+                            ? "bg-[#E74C3C] border-[#E74C3C] text-white hover:bg-[#c0392b]"
+                            : "bg-white border-[#EEEEEE] text-[#181725] hover:bg-[#FAFAFA]"
+                    )}
                 >
-                    <ChevronLeft size={16} />
-                    Back
+                    {isEditing ? "Cancel Edit" : "Edit Vendor Info"}
                 </button>
-                <span className="text-gray-300">|</span>
-                <Link href="/admin/vendors" className="hover:text-[#299E60] transition-colors">
-                    Sellers
-                </Link>
-                <span className="text-gray-300">{'>'}</span>
-                <span className="font-bold text-[#181725]">Seller Details</span>
             </div>
+
+            {isEditing && (
+                <div className="bg-amber-50 border border-amber-200 rounded-[14px] p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-[14px] font-semibold text-amber-800">
+                        <AlertCircle size={18} />
+                        You are in Edit Mode. Make your changes and click Save.
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setIsEditing(false)}
+                            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-[10px] text-[13px] font-bold hover:bg-gray-50 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSaveVendor}
+                            disabled={savingEdits}
+                            className="px-5 py-2 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                            {savingEdits ? (
+                                <>
+                                    <Loader2 size={14} className="animate-spin" />
+                                    Saving...
+                                </>
+                            ) : (
+                                "Save Changes"
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Top Section: Vendor Info */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
@@ -380,9 +573,18 @@ export default function VendorDetailsPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3">
-                                <h2 className="text-[22px] font-extrabold text-[#181725] leading-tight">
-                                    {vendor.businessName}
-                                </h2>
+                                {isEditing ? (
+                                    <input
+                                        type="text"
+                                        value={businessName}
+                                        onChange={(e) => setBusinessName(e.target.value)}
+                                        className="text-[18px] font-extrabold text-[#181725] border border-[#EEEEEE] rounded-[10px] px-3 py-1.5 w-full outline-none focus:border-[#299E60]/40"
+                                    />
+                                ) : (
+                                    <h2 className="text-[22px] font-extrabold text-[#181725] leading-tight">
+                                        {vendor.businessName}
+                                    </h2>
+                                )}
                                 {vendor.isVerified && (
                                     <CheckCircle2
                                         size={20}
@@ -392,7 +594,14 @@ export default function VendorDetailsPage() {
                                     />
                                 )}
                             </div>
-                            {vendor.description && (
+                            {isEditing ? (
+                                <textarea
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    rows={2}
+                                    className="text-[13px] text-[#7C7C7C] font-medium border border-[#EEEEEE] rounded-[10px] px-3 py-1.5 w-full outline-none focus:border-[#299E60]/40 mt-1 resize-none"
+                                />
+                            ) : vendor.description && (
                                 <p className="text-[13px] text-[#7C7C7C] font-medium mt-0.5 line-clamp-2">
                                     {vendor.description}
                                 </p>
@@ -421,11 +630,54 @@ export default function VendorDetailsPage() {
                                     <div className="w-[30px] h-[30px] rounded-full bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
                                         <User size={14} />
                                     </div>
-                                    <span className="text-[13px] font-bold text-[#4B4B4B]">
-                                        {vendor.user.fullName}
-                                    </span>
+                                    {isEditing ? (
+                                        <input
+                                            type="text"
+                                            value={fullName}
+                                            onChange={(e) => setFullName(e.target.value)}
+                                            className="text-[13px] font-bold text-[#4B4B4B] border border-[#EEEEEE] rounded-[8px] px-3 py-1 w-full outline-none focus:border-[#299E60]/40"
+                                        />
+                                    ) : (
+                                        <span className="text-[13px] font-bold text-[#4B4B4B]">
+                                            {vendor.user.fullName}
+                                        </span>
+                                    )}
                                 </div>
-                                {fullAddress && (
+                                {isEditing ? (
+                                    <div className="space-y-2 border border-[#EEEEEE] p-3 rounded-[10px] bg-[#FAFAFA] ml-[42px]">
+                                        <span className="text-[11px] uppercase font-bold text-gray-400">Registered Address</span>
+                                        <input
+                                            type="text"
+                                            placeholder="Address Line"
+                                            value={address}
+                                            onChange={(e) => setAddress(e.target.value)}
+                                            className="text-[13px] font-semibold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-3 py-1 w-full outline-none focus:border-[#299E60]/40 bg-white"
+                                        />
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <input
+                                                type="text"
+                                                placeholder="City"
+                                                value={city}
+                                                onChange={(e) => setCity(e.target.value)}
+                                                className="text-[13px] font-semibold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-2 py-1 w-full outline-none focus:border-[#299E60]/40 bg-white"
+                                            />
+                                            <input
+                                                type="text"
+                                                placeholder="State"
+                                                value={stateVal}
+                                                onChange={(e) => setStateVal(e.target.value)}
+                                                className="text-[13px] font-semibold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-2 py-1 w-full outline-none focus:border-[#299E60]/40 bg-white"
+                                            />
+                                            <input
+                                                type="text"
+                                                placeholder="Pincode"
+                                                value={pincode}
+                                                onChange={(e) => setPincode(e.target.value)}
+                                                className="text-[13px] font-semibold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-2 py-1 w-full outline-none focus:border-[#299E60]/40 bg-white"
+                                            />
+                                        </div>
+                                    </div>
+                                ) : fullAddress ? (
                                     <div className="flex items-center gap-3">
                                         <div className="w-[30px] h-[30px] rounded-full bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
                                             <MapPin size={14} />
@@ -434,22 +686,40 @@ export default function VendorDetailsPage() {
                                             {fullAddress}
                                         </span>
                                     </div>
-                                )}
+                                ) : null}
                                 <div className="flex items-center gap-3">
                                     <div className="w-[30px] h-[30px] rounded-full bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
                                         <Mail size={14} />
                                     </div>
-                                    <span className="text-[13px] font-bold text-[#4B4B4B]">
-                                        {vendor.user.email}
-                                    </span>
+                                    {isEditing ? (
+                                        <input
+                                            type="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            className="text-[13px] font-bold text-[#4B4B4B] border border-[#EEEEEE] rounded-[8px] px-3 py-1 w-full outline-none focus:border-[#299E60]/40"
+                                        />
+                                    ) : (
+                                        <span className="text-[13px] font-bold text-[#4B4B4B]">
+                                            {vendor.user.email}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="w-[30px] h-[30px] rounded-full bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
                                         <Phone size={14} />
                                     </div>
-                                    <span className="text-[13px] font-bold text-[#4B4B4B]">
-                                        {vendor.user.phone}
-                                    </span>
+                                    {isEditing ? (
+                                        <input
+                                            type="text"
+                                            value={phone}
+                                            onChange={(e) => setPhone(e.target.value)}
+                                            className="text-[13px] font-bold text-[#4B4B4B] border border-[#EEEEEE] rounded-[8px] px-3 py-1 w-full outline-none focus:border-[#299E60]/40"
+                                        />
+                                    ) : (
+                                        <span className="text-[13px] font-bold text-[#4B4B4B]">
+                                            {vendor.user.phone}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -463,54 +733,102 @@ export default function VendorDetailsPage() {
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <span className="text-[14px] font-medium text-[#7C7C7C]">
-                                    GST Number
+                                    GST Number (User)
                                 </span>
-                                <span className="text-[14px] font-bold text-[#181725]">
-                                    {vendor.user.gstNumber || 'Not provided'}
-                                </span>
+                                {isEditing ? (
+                                    <input
+                                        type="text"
+                                        value={userGstNumber}
+                                        onChange={(e) => setUserGstNumber(e.target.value.toUpperCase())}
+                                        className="text-[14px] font-bold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-3 py-1 max-w-[200px] outline-none focus:border-[#299E60]/40 text-right font-mono"
+                                    />
+                                ) : (
+                                    <span className="text-[14px] font-bold text-[#181725]">
+                                        {vendor.user.gstNumber || 'Not provided'}
+                                    </span>
+                                )}
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-[14px] font-medium text-[#7C7C7C]">
                                     Min Order Value
                                 </span>
-                                <span className="text-[14px] font-bold text-[#181725]">
-                                    {formatPrice(vendor.minOrderValue)}
-                                </span>
+                                {isEditing ? (
+                                    <input
+                                        type="number"
+                                        value={minOrderValue}
+                                        onChange={(e) => setMinOrderValue(e.target.value)}
+                                        className="text-[14px] font-bold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-3 py-1 max-w-[150px] outline-none focus:border-[#299E60]/40 text-right"
+                                    />
+                                ) : (
+                                    <span className="text-[14px] font-bold text-[#181725]">
+                                        {formatPrice(vendor.minOrderValue)}
+                                    </span>
+                                )}
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-[14px] font-medium text-[#7C7C7C]">
                                     Delivery Fee
                                 </span>
-                                <span className="text-[14px] font-bold text-[#181725]">
-                                    {vendor.deliveryFee === 0
-                                        ? 'Free'
-                                        : formatPrice(vendor.deliveryFee)}
-                                </span>
-                            </div>
-                            {vendor.freeDeliveryAbove !== null && vendor.freeDeliveryAbove > 0 && (
-                                <div className="flex items-center justify-between">
-                                    <span className="text-[14px] font-medium text-[#7C7C7C]">
-                                        Free Delivery Above
-                                    </span>
+                                {isEditing ? (
+                                    <input
+                                        type="number"
+                                        value={deliveryFee}
+                                        onChange={(e) => setDeliveryFee(e.target.value)}
+                                        className="text-[14px] font-bold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-3 py-1 max-w-[150px] outline-none focus:border-[#299E60]/40 text-right"
+                                    />
+                                ) : (
                                     <span className="text-[14px] font-bold text-[#181725]">
-                                        {formatPrice(vendor.freeDeliveryAbove)}
+                                        {vendor.deliveryFee === 0
+                                            ? 'Free'
+                                            : formatPrice(vendor.deliveryFee)}
                                     </span>
-                                </div>
-                            )}
+                                )}
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-[14px] font-medium text-[#7C7C7C]">
+                                    Free Delivery Above
+                                </span>
+                                {isEditing ? (
+                                    <input
+                                        type="number"
+                                        placeholder="optional"
+                                        value={freeDeliveryAbove}
+                                        onChange={(e) => setFreeDeliveryAbove(e.target.value)}
+                                        className="text-[14px] font-bold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-3 py-1 max-w-[150px] outline-none focus:border-[#299E60]/40 text-right"
+                                    />
+                                ) : (
+                                    <span className="text-[14px] font-bold text-[#181725]">
+                                        {vendor.freeDeliveryAbove !== null && vendor.freeDeliveryAbove > 0
+                                            ? formatPrice(vendor.freeDeliveryAbove)
+                                            : 'N/A'}
+                                    </span>
+                                )}
+                            </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-[14px] font-medium text-[#7C7C7C]">
                                     Account Status
                                 </span>
-                                <span
-                                    className={cn(
-                                        'text-[12px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase',
-                                        vendor.isActive
-                                            ? 'bg-[#E6F9ED] text-[#299E60]'
-                                            : 'bg-[#FDE2E2] text-[#EF4444]'
-                                    )}
-                                >
-                                    {vendor.isActive ? 'Active' : 'Inactive'}
-                                </span>
+                                {isEditing ? (
+                                    <select
+                                        value={isActive ? 'true' : 'false'}
+                                        onChange={(e) => setIsActive(e.target.value === 'true')}
+                                        className="text-[14px] font-bold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-3 py-1 outline-none focus:border-[#299E60]/40 bg-white"
+                                    >
+                                        <option value="true">Active</option>
+                                        <option value="false">Inactive</option>
+                                    </select>
+                                ) : (
+                                    <span
+                                        className={cn(
+                                            'text-[12px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase',
+                                            vendor.isActive
+                                                ? 'bg-[#E6F9ED] text-[#299E60]'
+                                                : 'bg-[#FDE2E2] text-[#EF4444]'
+                                        )}
+                                    >
+                                        {vendor.isActive ? 'Active' : 'Inactive'}
+                                    </span>
+                                )}
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-[14px] font-medium text-[#7C7C7C]">
@@ -761,31 +1079,220 @@ export default function VendorDetailsPage() {
                     <ShieldCheck size={20} className="text-[#299E60]" />
                     <h3 className="text-[18px] font-extrabold text-[#181725]">KYC &amp; Bank Details</h3>
                 </div>
-                <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
-                    {([
-                        { label: 'Trade Name', value: vendor.tradeName },
-                        { label: 'Vendor Type', value: vendor.vendorType },
-                        { label: 'GSTIN', value: vendor.gstNumber },
-                        { label: 'PAN', value: vendor.panNumber },
-                        { label: 'FSSAI', value: vendor.fssaiNumber },
-                        { label: 'Udyam', value: vendor.udyamNumber },
-                        { label: 'CIN', value: vendor.cinNumber },
-                        { label: 'Delivery Capability', value: vendor.deliveryCapability },
-                        { label: 'Authorized Person', value: vendor.authorizedPersonName },
-                        { label: 'Authorized Phone', value: vendor.authorizedPersonPhone },
-                        { label: 'Authorized Email', value: vendor.authorizedPersonEmail },
-                        { label: 'Pickup Address', value: [vendor.pickupAddressLine, vendor.pickupCity, vendor.pickupState, vendor.pickupPincode].filter(Boolean).join(', ') || null },
-                        { label: 'Bank Account Name', value: vendor.bankAccountName },
-                        { label: 'Bank Account No.', value: vendor.bankAccountNumber },
-                        { label: 'IFSC', value: vendor.bankIfsc },
-                        { label: 'Bank Name', value: vendor.bankName },
-                        { label: 'Account Type', value: vendor.bankAccountType },
-                    ] as { label: string; value: string | null }[]).map((f) => (
-                        <div key={f.label}>
-                            <p className="text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-0.5">{f.label}</p>
-                            <p className="text-[14px] font-semibold text-[#181725] break-words">{f.value || 'Not provided'}</p>
+                <div className="p-6">
+                    {isEditing ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Trade Name</label>
+                                <input
+                                    type="text"
+                                    value={tradeName}
+                                    onChange={(e) => setTradeName(e.target.value)}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Vendor Type</label>
+                                <input
+                                    type="text"
+                                    value={vendorType}
+                                    onChange={(e) => setVendorType(e.target.value)}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">GSTIN (Vendor)</label>
+                                <input
+                                    type="text"
+                                    value={gstNumber}
+                                    onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 font-mono"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">PAN Number</label>
+                                <input
+                                    type="text"
+                                    value={panNumber}
+                                    onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 font-mono"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">FSSAI Number</label>
+                                <input
+                                    type="text"
+                                    value={fssaiNumber}
+                                    onChange={(e) => setFssaiNumber(e.target.value)}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Udyam Number</label>
+                                <input
+                                    type="text"
+                                    value={udyamNumber}
+                                    onChange={(e) => setUdyamNumber(e.target.value)}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">CIN Number</label>
+                                <input
+                                    type="text"
+                                    value={cinNumber}
+                                    onChange={(e) => setCinNumber(e.target.value.toUpperCase())}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 font-mono"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Delivery Capability</label>
+                                <input
+                                    type="text"
+                                    value={deliveryCapability}
+                                    onChange={(e) => setDeliveryCapability(e.target.value)}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Authorized Person Name</label>
+                                <input
+                                    type="text"
+                                    value={authorizedPersonName}
+                                    onChange={(e) => setAuthorizedPersonName(e.target.value)}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Authorized Phone</label>
+                                <input
+                                    type="text"
+                                    value={authorizedPersonPhone}
+                                    onChange={(e) => setAuthorizedPersonPhone(e.target.value)}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Authorized Email</label>
+                                <input
+                                    type="email"
+                                    value={authorizedPersonEmail}
+                                    onChange={(e) => setAuthorizedPersonEmail(e.target.value)}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
+                                />
+                            </div>
+                            <div className="sm:col-span-2">
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Pickup Address</label>
+                                <div className="space-y-2 bg-[#FAFAFA] border border-[#EEEEEE] p-3 rounded-[8px]">
+                                    <input
+                                        type="text"
+                                        placeholder="Street Address"
+                                        value={pickupAddressLine}
+                                        onChange={(e) => setPickupAddressLine(e.target.value)}
+                                        className="w-full h-[36px] border border-[#EEEEEE] rounded-[6px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 bg-white"
+                                    />
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <input
+                                            type="text"
+                                            placeholder="City"
+                                            value={pickupCity}
+                                            onChange={(e) => setPickupCity(e.target.value)}
+                                            className="w-full h-[36px] border border-[#EEEEEE] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#299E60]/40 bg-white"
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="State"
+                                            value={pickupState}
+                                            onChange={(e) => setPickupState(e.target.value)}
+                                            className="w-full h-[36px] border border-[#EEEEEE] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#299E60]/40 bg-white"
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Pincode"
+                                            value={pickupPincode}
+                                            onChange={(e) => setPickupPincode(e.target.value)}
+                                            className="w-full h-[36px] border border-[#EEEEEE] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#299E60]/40 bg-white"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Bank Account Name</label>
+                                <input
+                                    type="text"
+                                    value={bankAccountName}
+                                    onChange={(e) => setBankAccountName(e.target.value)}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Bank Account Number</label>
+                                <input
+                                    type="text"
+                                    value={bankAccountNumber}
+                                    onChange={(e) => setBankAccountNumber(e.target.value)}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">IFSC Code</label>
+                                <input
+                                    type="text"
+                                    value={bankIfsc}
+                                    onChange={(e) => setBankIfsc(e.target.value.toUpperCase())}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 font-mono"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Bank Name</label>
+                                <input
+                                    type="text"
+                                    value={bankName}
+                                    onChange={(e) => setBankName(e.target.value)}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Account Type</label>
+                                <select
+                                    value={bankAccountType}
+                                    onChange={(e) => setBankAccountType(e.target.value)}
+                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 bg-white"
+                                >
+                                    <option value="">Select account type...</option>
+                                    <option value="current">Current</option>
+                                    <option value="savings">Savings</option>
+                                </select>
+                            </div>
                         </div>
-                    ))}
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+                            {([
+                                { label: 'Trade Name', value: vendor.tradeName },
+                                { label: 'Vendor Type', value: vendor.vendorType },
+                                { label: 'GSTIN', value: vendor.gstNumber },
+                                { label: 'PAN', value: vendor.panNumber },
+                                { label: 'FSSAI', value: vendor.fssaiNumber },
+                                { label: 'Udyam', value: vendor.udyamNumber },
+                                { label: 'CIN', value: vendor.cinNumber },
+                                { label: 'Delivery Capability', value: vendor.deliveryCapability },
+                                { label: 'Authorized Person', value: vendor.authorizedPersonName },
+                                { label: 'Authorized Phone', value: vendor.authorizedPersonPhone },
+                                { label: 'Authorized Email', value: vendor.authorizedPersonEmail },
+                                { label: 'Pickup Address', value: [vendor.pickupAddressLine, vendor.pickupCity, vendor.pickupState, vendor.pickupPincode].filter(Boolean).join(', ') || null },
+                                { label: 'Bank Account Name', value: vendor.bankAccountName },
+                                { label: 'Bank Account No.', value: vendor.bankAccountNumber },
+                                { label: 'IFSC', value: vendor.bankIfsc },
+                                { label: 'Bank Name', value: vendor.bankName },
+                                { label: 'Account Type', value: vendor.bankAccountType },
+                            ] as { label: string; value: string | null }[]).map((f) => (
+                                <div key={f.label}>
+                                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-0.5">{f.label}</p>
+                                    <p className="text-[14px] font-semibold text-[#181725] break-words">{f.value || 'Not provided'}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 

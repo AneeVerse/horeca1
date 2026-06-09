@@ -101,7 +101,38 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       allowedFields.isActive = body.isActive;
     }
 
-    if (Object.keys(allowedFields).length === 0) {
+    const vendorFields = [
+      'businessName', 'description', 'address', 'city', 'state', 'pincode',
+      'tradeName', 'vendorType', 'gstNumber', 'panNumber', 'fssaiNumber',
+      'udyamNumber', 'cinNumber', 'deliveryCapability', 'authorizedPersonName',
+      'authorizedPersonPhone', 'authorizedPersonEmail', 'pickupAddressLine',
+      'pickupCity', 'pickupState', 'pickupPincode', 'bankAccountName',
+      'bankAccountNumber', 'bankIfsc', 'bankName', 'bankAccountType'
+    ];
+
+    for (const field of vendorFields) {
+      if (body[field] !== undefined) {
+        allowedFields[field] = body[field];
+      }
+    }
+
+    if (body.minOrderValue !== undefined) {
+      allowedFields.minOrderValue = Number(body.minOrderValue);
+    }
+    if (body.deliveryFee !== undefined) {
+      allowedFields.deliveryFee = Number(body.deliveryFee);
+    }
+    if (body.freeDeliveryAbove !== undefined) {
+      allowedFields.freeDeliveryAbove = body.freeDeliveryAbove !== null ? Number(body.freeDeliveryAbove) : null;
+    }
+
+    const userUpdate: Record<string, string> = {};
+    if (body.fullName !== undefined) userUpdate.fullName = body.fullName;
+    if (body.email !== undefined) userUpdate.email = body.email;
+    if (body.phone !== undefined) userUpdate.phone = body.phone;
+    if (body.userGstNumber !== undefined) userUpdate.gstNumber = body.userGstNumber;
+
+    if (Object.keys(allowedFields).length === 0 && Object.keys(userUpdate).length === 0) {
       throw Errors.notFound('No valid fields to update');
     }
 
@@ -122,7 +153,14 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
 
     const updated = await prisma.vendor.update({
       where: { id },
-      data: allowedFields,
+      data: {
+        ...allowedFields,
+        ...(Object.keys(userUpdate).length > 0 && {
+          user: {
+            update: userUpdate
+          }
+        })
+      },
       select: {
         id: true,
         businessName: true,

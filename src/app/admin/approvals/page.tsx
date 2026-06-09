@@ -405,7 +405,7 @@ export default function ApprovalsPage() {
                                                         {actionLoading === vendor.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve
                                                     </button>
                                                 )}
-                                                <Link href={`/admin/vendors/${vendor.id}`}
+                                                <Link href={`/admin/vendors/${vendor.id}?edit=true`}
                                                     className="flex items-center gap-1 h-[34px] px-3 bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[8px] text-[12px] font-bold hover:bg-[#EEF8F1] hover:border-[#299E60]/40 hover:text-[#299E60] transition-colors">
                                                     <Pencil size={13} /> Edit
                                                 </Link>

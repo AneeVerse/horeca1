@@ -25,38 +25,45 @@ export function GoogleMapsProvider({ children }: { children: React.ReactNode }) 
     const loadingRef = useRef(false);
 
     useEffect(() => {
-        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-
-        if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
-            queueMicrotask(() => setLoadError('Google Maps API key not configured. Add it to .env.local'));
-            return;
-        }
-
         if (loadingRef.current || isLoaded) return;
         loadingRef.current = true;
 
-        // Set API options first
-        setOptions({
-            key: apiKey,
-            v: 'weekly',
-            libraries: ['places', 'geocoding', 'marker'],
-        });
+        const loadMaps = async () => {
+            try {
+                // Fetch key dynamically
+                const res = await fetch('/api/v1/config/maps-key');
+                if (!res.ok) {
+                    throw new Error('Failed to fetch maps API key configuration');
+                }
+                const json = await res.json();
+                if (!json.success || !json.apiKey) {
+                    throw new Error(json.error || 'Google Maps API key not configured on the server');
+                }
 
-        // Import all required libraries before marking as loaded
-        Promise.all([
-            importLibrary('core'),
-            importLibrary('places'),
-            importLibrary('marker'),
-            importLibrary('geocoding'),
-        ])
-            .then(() => {
+                // Set API options
+                setOptions({
+                    key: json.apiKey,
+                    v: 'weekly',
+                    libraries: ['places', 'geocoding', 'marker'],
+                });
+
+                // Import all required libraries
+                await Promise.all([
+                    importLibrary('core'),
+                    importLibrary('places'),
+                    importLibrary('marker'),
+                    importLibrary('geocoding'),
+                ]);
+
                 setIsLoaded(true);
-            })
-            .catch((err: Error) => {
+            } catch (err: unknown) {
                 console.error('Google Maps failed to load:', err);
-                setLoadError('Failed to load Google Maps');
+                setLoadError(err instanceof Error ? err.message : 'Failed to load Google Maps');
                 loadingRef.current = false;
-            });
+            }
+        };
+
+        loadMaps();
     }, [isLoaded]);
 
     // Once loaded, the global `google` namespace is available

@@ -6,7 +6,14 @@
       "Bash(ssh -o StrictHostKeyChecking=no root@68.183.85.111 \"cat /var/www/horeca1-prod/docker-compose.yml 2>/dev/null || cat /var/www/horeca1-prod/docker/docker-compose.yml 2>/dev/null\")",
       "Bash(ssh -o StrictHostKeyChecking=no root@68.183.85.111 \"docker exec horeca1-app env 2>&1\")",
       "PowerShell($out = \\(npx tsc --noEmit 2>&1\\) -join \"`n\"; $lines = $out -split \"`n\"; \"Total error lines:\"; \\($lines | Where-Object { $_ -match \"error TS\" }\\).Count; \"First 10 errors:\"; $lines | Where-Object { $_ -match \"error TS\" } | Select-Object -First 10)",
-      "PowerShell($out = \\(npm run lint 2>&1\\) -join \"`n\"; $lines = $out -split \"`n\"; $lines | Where-Object { $_ -match \"admin.team.route|vendor.team.route|brand.team.route\" } | Select-Object -First 30)"
+      "PowerShell($out = \\(npm run lint 2>&1\\) -join \"`n\"; $lines = $out -split \"`n\"; $lines | Where-Object { $_ -match \"admin.team.route|vendor.team.route|brand.team.route\" } | Select-Object -First 30)",
+      "Bash(find /c/Users/Roger/Desktop/horeca1-prod/src/app/api/v1/cart -type f)",
+      "Read(//c/Users/Roger/Desktop/horeca1-prod/src/app/api/v1/cart/**)",
+      "Bash(find /c/Users/Roger/Desktop/horeca1-prod/src -type f -name \"*settlement*\" -o -name \"*vendor*settlement*\" 2>/dev/null)",
+      "Read(//c/Users/Roger/Desktop/horeca1-prod/src/**)",
+      "Bash(find /c/Users/Roger/Desktop/horeca1-prod/src/app -type f -path \"*settlement*\" 2>/dev/null)",
+      "Read(//c/Users/Roger/Desktop/horeca1-prod/src/app/**)",
+      "Bash(grep -r \"VendorSettlement\" /c/Users/Roger/Desktop/horeca1-prod/src --include=\"*.ts\" | head -20)"
     ]
   }
 }
