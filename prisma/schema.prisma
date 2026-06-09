@@ -962,7 +962,7 @@ model CreditWallet {
   overridePenaltyFreqDays Int?                @map("override_penalty_freq_days")
 
   createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt             DateTime            @default(now()) @updatedAt @db.Timestamptz
+  updatedAt             DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   user                  User                @relation(fields: [userId], references: [id])
   vendor                Vendor?             @relation(fields: [vendorId], references: [id])
