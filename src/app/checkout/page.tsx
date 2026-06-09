@@ -13,11 +13,7 @@ import { DeliverySlotPicker } from '@/components/features/checkout/DeliverySlotP
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import type { VendorCartGroup } from '@/types';
 
-declare global {
-    interface Window {
-        Razorpay: new (options: Record<string, unknown>) => { open(): void };
-    }
-}
+// window.Razorpay is typed in src/types/razorpay.d.ts
 
 interface RazorpaySuccessPayload {
     razorpay_payment_id: string;
@@ -60,6 +56,20 @@ function openRazorpayPopup(opts: {
 }
 
 type CheckoutStep = 'review' | 'payment' | 'confirmation';
+
+// Shape returned by GET /api/v1/wallet — one row per credit line the customer
+// holds (the H1 platform wallet has `vendor: null`, vendor-specific lines have
+// `vendorId` + `vendor`). Decimal fields arrive as strings over JSON.
+interface CustomerCreditWallet {
+    id: string;
+    vendorId: string | null;
+    vendor: { id: string; businessName: string } | null;
+    status: 'ACTIVE' | 'BLOCKED' | 'BLACKLISTED';
+    creditLimit: string;
+    availableCredit: string;
+    outstandingAmount: string;
+    currentDueDate: string | null;
+}
 
 const PAYMENT_OPTIONS = [
     { id: 'credit', name: 'DiSCCO Credit Line', desc: 'Pay later with credit', icon: CreditCard, color: 'purple' },
@@ -240,9 +250,11 @@ export default function CheckoutPage() {
     const [step, setStep] = useState<CheckoutStep>('review');
     const [selectedPayment, setSelectedPayment] = useState('');
     const [orderSnapshot, setOrderSnapshot] = useState<{ groups: VendorCartGroup[], total: number, count: number } | null>(null);
-const [availableCredit, setAvailableCredit] = useState<number | null>(null);
-    const [creditDueDate, setCreditDueDate] = useState<string | null>(null);
-    const [creditUpcomingDates, setCreditUpcomingDates] = useState<string[]>([]);
+    // Vendor credit lines (DiSCCO), keyed by vendorId — fetched once from
+    // GET /api/v1/wallet and used to show available credit / block placement
+    // per vendor group when "Pay via Credit" is selected.
+    const [creditWalletsByVendor, setCreditWalletsByVendor] = useState<Record<string, CustomerCreditWallet>>({});
+    const [creditWalletsLoaded, setCreditWalletsLoaded] = useState(false);
     const [walletBalance, setWalletBalance] = useState<number | null>(null);
     const [bankTransferInput, setBankTransferInput] = useState('');
     const [poNumberInput, setPoNumberInput] = useState('');
@@ -277,27 +289,60 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
         });
     };
 
-    // Load real credit info when payment step is reached
+    // Load the customer's credit wallets (DiSCCO lines, one per vendor + the
+    // H1 platform wallet) when the payment step is reached. Fetched once per
+    // session and indexed by vendorId so each vendor group can show its own
+    // available-credit summary under "Pay via Credit".
     React.useEffect(() => {
-        if (step !== 'payment' || sessionStatus !== 'authenticated') return;
-        fetch('/api/v1/credit/check')
-            .then(r => r.json())
-            .then(d => {
-                if (d.data) {
-                    setAvailableCredit(d.data.availableCredit ?? d.data.creditLimit ?? null);
-                    setCreditDueDate(d.data.nextDueDate ?? null);
-                    setCreditUpcomingDates(d.data.upcomingDueDates ?? []);
-                }
-            })
-.catch(() => {});
-        // Fetch wallet balance
+        if (step !== 'payment' || sessionStatus !== 'authenticated' || creditWalletsLoaded) return;
         fetch('/api/v1/wallet')
             .then(r => r.json())
-            .then(d => {
-                if (d.data) { setWalletBalance(d.data.balance ?? 0); }
+            .then((d: { data?: CustomerCreditWallet[] }) => {
+                const wallets = d.data ?? [];
+                const byVendor: Record<string, CustomerCreditWallet> = {};
+                let platformBalance: number | null = null;
+                for (const w of wallets) {
+                    if (w.vendorId) {
+                        byVendor[w.vendorId] = w;
+                    } else if (platformBalance === null) {
+                        platformBalance = Number(w.availableCredit) || 0;
+                    }
+                }
+                setCreditWalletsByVendor(byVendor);
+                setWalletBalance(platformBalance);
             })
-            .catch(() => {});
-    }, [step, sessionStatus]);
+            .catch(() => {})
+            .finally(() => setCreditWalletsLoaded(true));
+    }, [step, sessionStatus, creditWalletsLoaded]);
+
+    // For each selected vendor group, resolve its credit line (vendor-specific
+    // wallet, falling back to the H1 platform wallet) and whether placing the
+    // order via credit is allowed for that group.
+    const creditEligibility = useMemo(() => {
+        return selectedGroups.map(group => {
+            const wallet = creditWalletsByVendor[group.vendorId] ?? null;
+            const available = wallet ? Number(wallet.availableCredit) || 0 : 0;
+            const blocked = wallet ? wallet.status === 'BLACKLISTED' || wallet.status === 'BLOCKED' : false;
+            const insufficient = !wallet || available < group.subtotal;
+            return {
+                group,
+                wallet,
+                available,
+                remaining: available - group.subtotal,
+                blocked,
+                ok: !!wallet && !blocked && available >= group.subtotal,
+                reason: !wallet
+                    ? 'No credit line set up with this vendor.'
+                    : blocked
+                        ? `This credit line is ${wallet.status === 'BLACKLISTED' ? 'blacklisted' : 'blocked'}.`
+                        : insufficient
+                            ? 'Available credit is less than this order amount.'
+                            : null,
+            };
+        });
+    }, [selectedGroups, creditWalletsByVendor]);
+
+    const creditAllSelectionsValid = creditEligibility.length > 0 && creditEligibility.every(c => c.ok);
 
     const handlePlaceOrder = async () => {
         if (selectedGroups.length === 0) {
@@ -693,44 +738,55 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
                             ))}
                         </div>
 
-                        {/* Credit info if selected */}
-{selectedPayment === 'credit' && (
-                            <div className="bg-purple-50 rounded-2xl p-4 border border-purple-100">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Shield size={16} className="text-purple-600" />
-                                    <span className="text-[13px] font-bold text-purple-800">DiSCCO Credit Line</span>
-                                </div>
-                                <div className="space-y-1.5">
-                                    <div className="flex justify-between text-[12px]">
-                                        <span className="text-purple-600">Available credit</span>
-                                        <span className="font-bold text-purple-800">
-                                            {availableCredit !== null ? `₹${availableCredit.toLocaleString('en-IN')}` : 'Loading...'}
-                                        </span>
+                        {/* Credit info if selected — one card per selected vendor group, each
+                            showing that vendor's DiSCCO credit line (or platform wallet) and
+                            whether it covers this order. */}
+                        {selectedPayment === 'credit' && (
+                            <div className="space-y-3">
+                                {!creditWalletsLoaded && (
+                                    <div className="bg-purple-50 rounded-2xl p-4 border border-purple-100 text-[12px] text-purple-600 font-medium">
+                                        Loading your credit lines…
                                     </div>
-                                    <div className="flex justify-between text-[12px]">
-                                        <span className="text-purple-600">This order</span>
-                                        <span className="font-bold text-purple-800">₹{selectedTotal.toLocaleString('en-IN')}</span>
-                                    </div>
-                                    <div className="flex justify-between text-[12px]">
-                                        <span className="text-purple-600">Next due date</span>
-                                        <span className="font-bold text-purple-800">
-                                            {creditDueDate ? new Date(creditDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
-                                        </span>
-                                    </div>
-                                    {creditUpcomingDates.length > 0 && (
-                                        <div className="mt-2 pt-2 border-t border-purple-200/50">
-                                            <span className="text-[10px] font-black text-purple-500 uppercase tracking-wider">Upcoming Due Dates</span>
-                                            <div className="space-y-1 mt-1">
-                                                {creditUpcomingDates.slice(0, 3).map((d, i) => (
-                                                    <div key={i} className="flex justify-between text-[11px]">
-                                                        <span className="text-purple-500 font-medium">{new Date(d).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-                                                        <span className="font-bold text-purple-700">Due</span>
-                                                    </div>
-                                                ))}
+                                )}
+                                {creditWalletsLoaded && creditEligibility.map(({ group, wallet, available, remaining, ok, reason }) => (
+                                    <div key={group.vendorId} className="bg-purple-50 rounded-2xl p-4 border border-purple-100">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Shield size={16} className="text-purple-600" />
+                                            <span className="text-[13px] font-bold text-purple-800">
+                                                {wallet?.vendor?.businessName ?? group.vendorName} — Credit Line
+                                            </span>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <div className="flex justify-between text-[12px]">
+                                                <span className="text-purple-600">Available credit</span>
+                                                <span className="font-bold text-purple-800">
+                                                    {wallet ? `₹${available.toLocaleString('en-IN')}` : '—'}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between text-[12px]">
+                                                <span className="text-purple-600">This order ({group.vendorName})</span>
+                                                <span className="font-bold text-purple-800">₹{group.subtotal.toLocaleString('en-IN')}</span>
+                                            </div>
+                                            <div className="flex justify-between text-[12px]">
+                                                <span className="text-purple-600">Remaining after order</span>
+                                                <span className={`font-bold ${remaining < 0 ? 'text-red-600' : 'text-purple-800'}`}>
+                                                    {wallet ? `₹${remaining.toLocaleString('en-IN')}` : '—'}
+                                                </span>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
+                                        {!ok && reason && (
+                                            <div className="mt-3 flex items-start gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+                                                <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
+                                                <p className="text-[11px] font-semibold text-red-600">{reason}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                {creditWalletsLoaded && !creditAllSelectionsValid && creditEligibility.length > 0 && (
+                                    <div className="text-[12px] font-semibold text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+                                        Pay via Credit isn&apos;t available for one or more selected vendors above. Resolve the issue or choose a different payment method.
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -790,9 +846,9 @@ const [availableCredit, setAvailableCredit] = useState<number | null>(null);
                         )}
                         <button
                             onClick={handlePlaceOrder}
-                            disabled={!selectedPayment || isPlacingOrder}
+                            disabled={!selectedPayment || isPlacingOrder || (selectedPayment === 'credit' && (!creditWalletsLoaded || !creditAllSelectionsValid))}
                             className={`w-full py-3.5 text-[14px] font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${
-                                selectedPayment && !isPlacingOrder
+                                selectedPayment && !isPlacingOrder && !(selectedPayment === 'credit' && (!creditWalletsLoaded || !creditAllSelectionsValid))
                                     ? 'bg-[#299e60] text-white shadow-green-200/50 hover:bg-[#22844f] active:scale-[0.99]'
                                     : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
                             }`}

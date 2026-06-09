@@ -9,6 +9,12 @@ import {
 } from '@/modules/commission/commission.service';
 import { resolveUnitPrice, type CustomerContext } from '@/modules/pricing/pricing.service';
 import { CartService, type CartContext } from '@/modules/cart/cart.service';
+import { creditWalletService } from '@/modules/credit/creditWallet.service';
+
+// Payment methods that draw on a CreditWallet. 'h1_wallet' uses the platform
+// (vendor-less) wallet; the rest use the order's vendor credit line.
+const CREDIT_PAYMENTS = ['credit', 'vendor_credit', 'h1_wallet'];
+const isCreditPayment = (m: string | null | undefined): boolean => !!m && CREDIT_PAYMENTS.includes(m);
 
 interface VendorOrderInput {
   vendorId: string;
@@ -140,9 +146,15 @@ export class OrderService {
         for (const item of vo.items) {
           const product = await tx.product.findUnique({
             where: { id: item.productId },
-            select: { id: true, name: true, taxPercent: true },
+            select: { id: true, name: true, taxPercent: true, creditEligible: true },
           });
           if (!product) throw Errors.notFound('Product');
+
+          // Item-level credit availability (Req): block credit payment for any
+          // item the vendor marked "credit not available".
+          if (!isDraft && isCreditPayment(input.paymentMethod) && !product.creditEligible) {
+            throw Errors.badRequest(`"${product.name}" is not available on credit — remove it or pay another way`);
+          }
 
           // Resolved taxable unit price — honours every assignment rule.
           const resolved = await resolveUnitPrice(
@@ -210,48 +222,9 @@ export class OrderService {
         }
         const totalAmount = Math.max(0, subtotal - promoDiscount);
 
-        // 4b. Credit check — only when paymentMethod is 'credit' (skipped for drafts)
-        if (!isDraft && input.paymentMethod === 'credit') {
-          const creditAcc = await tx.creditAccount.findUnique({
-            where: { userId_vendorId: { userId, vendorId: vo.vendorId } },
-          });
-          if (!creditAcc || creditAcc.status !== 'active') {
-            throw Errors.badRequest('No active credit account with this vendor');
-          }
-
-          // Auto-freeze: if overdue days exceed vendor's configured threshold, suspend the account
-          if (creditAcc.freezeOnOverdueDays > 0) {
-            const oldestOverdue = await tx.creditTransaction.findFirst({
-              where: {
-                creditAccountId: creditAcc.id,
-                type: 'debit',
-                dueDate: { lt: new Date() },
-              },
-              orderBy: { dueDate: 'asc' },
-            });
-            if (oldestOverdue?.dueDate) {
-              const daysOverdue = Math.floor(
-                (Date.now() - oldestOverdue.dueDate.getTime()) / 86_400_000
-              );
-              if (daysOverdue >= creditAcc.freezeOnOverdueDays) {
-                await tx.creditAccount.update({
-                  where: { id: creditAcc.id },
-                  data: { status: 'suspended' },
-                });
-                throw Errors.badRequest(
-                  `Credit account suspended — ${daysOverdue} days overdue (limit: ${creditAcc.freezeOnOverdueDays} days). Please clear outstanding dues to resume credit orders.`
-                );
-              }
-            }
-          }
-
-          const available = Number(creditAcc.creditLimit) - Number(creditAcc.creditUsed);
-          if (available < totalAmount) {
-            throw Errors.badRequest(
-              `Insufficient credit. Available: ₹${available.toFixed(2)}, required: ₹${totalAmount.toFixed(2)}`
-            );
-          }
-        }
+        // 4b. Credit is debited from the CreditWallet AFTER the order row exists
+        //     (debitWallet needs the orderId as the ledger reference). The debit
+        //     itself enforces wallet status, repayment-mode, and limit — see below.
 
         // 4. Generate order number
         const orderNumber = `PO-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
@@ -283,6 +256,15 @@ export class OrderService {
 
         // 6. Reserve inventory (drafts reserve nothing until submitted)
         if (!isDraft) await this.inventoryService.reserveStock(vo.items, tx);
+
+        // 6b. Debit the credit wallet for credit orders. debitWallet validates the
+        //     wallet (active, not blacklisted), repayment-mode reuse rules, and
+        //     available limit — all inside this tx, so any failure rolls back the
+        //     whole order. Outstanding is created now (per the wallet brief).
+        if (!isDraft && isCreditPayment(input.paymentMethod)) {
+          const creditVendorId = input.paymentMethod === 'h1_wallet' ? null : vo.vendorId;
+          await creditWalletService.debitWallet(userId, creditVendorId, totalAmount, order.id, tx);
+        }
 
         orders.push(order);
       }
@@ -488,17 +470,14 @@ export class OrderService {
         throw Errors.belowMOV(vendor.businessName, Number(vendor.minOrderValue), Number(order.subtotal));
       }
 
-      if (order.paymentMethod === 'credit') {
-        const creditAcc = await tx.creditAccount.findUnique({
-          where: { userId_vendorId: { userId: ctx.userId, vendorId: order.vendorId } },
-        });
-        if (!creditAcc || creditAcc.status !== 'active') throw Errors.badRequest('No active credit account with this vendor');
-        if (Number(creditAcc.creditLimit) - Number(creditAcc.creditUsed) < Number(order.totalAmount)) {
-          throw Errors.badRequest('Insufficient credit to submit this draft.');
-        }
+      await this.inventoryService.reserveStock(items, tx);
+
+      // Submitting a credit draft debits the wallet now (validates limit + mode).
+      if (isCreditPayment(order.paymentMethod)) {
+        const creditVendorId = order.paymentMethod === 'h1_wallet' ? null : order.vendorId;
+        await creditWalletService.debitWallet(ctx.userId, creditVendorId, Number(order.totalAmount), order.id, tx);
       }
 
-      await this.inventoryService.reserveStock(items, tx);
       const updated = await tx.order.update({ where: { id: orderId }, data: { status: 'pending' } });
 
       setImmediate(() => emitEvent('OrderCreated', {
@@ -944,61 +923,12 @@ export class OrderService {
         data: { status: status as never, ...extraData },
       });
 
-      // Credit side-effects — debit when confirmed, release when cancelled
-      if (order.paymentMethod === 'credit') {
-        const creditAcc = await tx.creditAccount.findUnique({
-          where: { userId_vendorId: { userId: order.userId, vendorId } },
-        });
-        if (creditAcc) {
-          const orderTotal = Number(order.totalAmount);
-          // Idempotent: debit at most once (on the first confirm OR deliver),
-          // reverse at most once (on cancel). This keeps the ledger correct even
-          // for a forced admin jump that skips the normal step sequence.
-          const existingDebit = await tx.creditTransaction.findFirst({
-            where: { orderId, type: 'debit', vendorId },
-          });
-          if ((status === 'confirmed' || status === 'delivered') && !existingDebit) {
-            const newUsed = Number(creditAcc.creditUsed) + orderTotal;
-            await tx.creditAccount.update({
-              where: { id: creditAcc.id },
-              data: { creditUsed: newUsed },
-            });
-            // Default payment due 30 days out
-            const dueDate = new Date(now);
-            dueDate.setDate(dueDate.getDate() + 30);
-            await tx.creditTransaction.create({
-              data: {
-                creditAccountId: creditAcc.id,
-                orderId,
-                vendorId,
-                type: 'debit',
-                amount: orderTotal,
-                balanceAfter: newUsed,
-                dueDate,
-              },
-            });
-          } else if (status === 'cancelled' && existingDebit) {
-            // Reverse the debit once (guard against double-reversal).
-            const existingReversal = await tx.creditTransaction.findFirst({
-              where: { orderId, type: 'credit', vendorId },
-            });
-            if (!existingReversal) {
-              const newUsed = Math.max(0, Number(creditAcc.creditUsed) - Number(existingDebit.amount));
-              await tx.creditAccount.update({ where: { id: creditAcc.id }, data: { creditUsed: newUsed } });
-              await tx.creditTransaction.create({
-                data: {
-                  creditAccountId: creditAcc.id,
-                  orderId,
-                  vendorId,
-                  type: 'credit',
-                  amount: Number(existingDebit.amount),
-                  balanceAfter: newUsed,
-                  notes: `Reversal — order ${orderId} cancelled`,
-                },
-              });
-            }
-          }
-        }
+      // Credit side-effect — the wallet was already debited at order create, so the
+      // only ledger move on a status change is RELEASING that debit when the order
+      // is cancelled (idempotent — reverseOrderDebit no-ops if already reversed).
+      if (isCreditPayment(order.paymentMethod) && status === 'cancelled') {
+        const creditVendorId = order.paymentMethod === 'h1_wallet' ? null : vendorId;
+        await creditWalletService.reverseOrderDebit(orderId, order.userId, creditVendorId, tx);
       }
 
       // V2.2 Phase 1 — Commission accrual hook.

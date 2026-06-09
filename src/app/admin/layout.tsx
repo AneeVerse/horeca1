@@ -26,6 +26,7 @@ import {
     Home,
     Sparkles,
     RotateCcw,
+    CreditCard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
@@ -51,6 +52,7 @@ const SIDEBAR_LINKS: AdminSidebarLink[] = [
     { name: 'Returns', icon: RotateCcw, href: '/admin/returns', requiredPerm: 'orders.edit' },
     { name: 'Brands', icon: Sparkles, href: '/admin/brands', requiredPerm: 'brands.view' },
     { name: 'Finance', icon: Wallet, href: '/admin/finance', requiredPerm: 'payments.view' },
+    { name: 'Credit & Wallet', icon: CreditCard, href: '/admin/credit', requiredPerm: 'payments.view' },
     { name: 'Reports', icon: BarChart3, href: '/admin/reports', requiredPerm: 'analytics.view' },
     { name: 'Team', icon: Users, href: '/admin/team', requiredPerm: ['users.view', 'users.create', 'users.edit', 'users.delete'] },
     { name: 'Settings', icon: Settings, href: '/admin/settings', requiredPerm: 'settings.view' },

@@ -1,24 +1,33 @@
-// POST /api/v1/credit/apply — Use credit to pay for an order
-// WHY: Instead of paying via Razorpay, the customer can use their vendor credit line
-//      This deducts the amount from their credit balance in a database transaction
-//      Common in B2B — vendors trust regular customers to pay on a monthly cycle
-// PROTECTED: Must be logged in
+// POST /api/v1/credit/apply — Request a Horeca1 credit line (eligibility check)
+// WHY: In the unified CreditWallet world, credit is NOT self-applied to a specific
+//      order — checkout debits the wallet automatically (order.service →
+//      creditWalletService.debitWallet). A credit LINE itself is assigned by an
+//      admin/vendor once the customer is eligible. This endpoint reports the
+//      caller's eligibility (≥ N successful orders) so the UI can either show
+//      "request submitted / pending review" or "X more orders to unlock".
+// PROTECTED: Must be logged in.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { CreditService } from '@/modules/credit/credit.service';
-import { applyCreditSchema } from '@/modules/credit/credit.validator';
+import { creditWalletService } from '@/modules/credit/creditWallet.service';
 import { withAuth } from '@/middleware/auth';
 import { errorResponse } from '@/middleware/errorHandler';
 
-const creditService = new CreditService();
-
-export const POST = withAuth(async (req: NextRequest, ctx) => {
+export const POST = withAuth(async (_req: NextRequest, ctx) => {
   try {
-    const body = await req.json();
-    const { orderId, amount } = applyCreditSchema.parse(body);
+    const { eligible, orderCount, threshold } = await creditWalletService.checkEligibility(ctx.userId);
 
-    const result = await creditService.apply(ctx.userId, orderId, amount);
-    return NextResponse.json({ success: true, data: result });
+    return NextResponse.json({
+      success: true,
+      data: {
+        eligible,
+        orderCount,
+        threshold,
+        ordersRemaining: Math.max(0, threshold - orderCount),
+        message: eligible
+          ? 'You meet the eligibility criteria. A credit line is assigned by Horeca1/your vendor — no further action needed.'
+          : `Complete ${Math.max(0, threshold - orderCount)} more successful order(s) to become eligible for credit.`,
+      },
+    });
   } catch (error) {
     return errorResponse(error);
   }

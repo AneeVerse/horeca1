@@ -20,6 +20,7 @@ import {
     Pencil,
     Save,
     X,
+    Wallet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
@@ -73,10 +74,36 @@ interface UserData {
             creditType: string | null;
         };
     }>;
+    creditWallets?: Array<{
+        id: string;
+        vendorId: string | null;
+        vendor: { businessName: string } | null;
+        status: 'ACTIVE' | 'BLOCKED' | 'BLACKLISTED';
+        creditLimit: number | string;
+        availableCredit: number | string;
+        outstandingAmount: number | string;
+        currentDueDate: string | null;
+    }>;
     _count: {
         orders: number;
         quickOrderLists: number;
     };
+}
+
+const INR = (v: number | string) =>
+    `₹${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+function getWalletStatusStyles(status: string) {
+    switch (status) {
+        case 'ACTIVE':
+            return 'bg-[#EEF8F1] text-[#299E60]';
+        case 'BLOCKED':
+            return 'bg-amber-50 text-amber-600';
+        case 'BLACKLISTED':
+            return 'bg-red-50 text-red-500';
+        default:
+            return 'bg-gray-50 text-gray-600';
+    }
 }
 
 function formatDateIndian(dateString: string): string {
@@ -567,6 +594,62 @@ export default function CustomerDetailsPage() {
                                         )}
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Credit Wallets Card (read-only) */}
+                    {user.creditWallets && user.creditWallets.length > 0 && (
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                            <div className="px-6 py-4 border-b border-[#EEEEEE]">
+                                <h3 className="font-[800] text-[16px] text-[#181725] flex items-center gap-2">
+                                    <Wallet size={18} className="text-[#299E60]" />
+                                    Credit Wallets
+                                </h3>
+                            </div>
+                            <div className="divide-y divide-[#EEEEEE]">
+                                {user.creditWallets.map((w) => (
+                                    <div key={w.id} className="p-6">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <p className="text-[14px] font-[800] text-[#181725]">
+                                                {w.vendorId ? (w.vendor?.businessName ?? 'Vendor credit line') : 'Horeca1 (platform)'}
+                                            </p>
+                                            <span
+                                                className={cn(
+                                                    'inline-block text-[11px] font-[800] px-2.5 py-1 rounded-md',
+                                                    getWalletStatusStyles(w.status)
+                                                )}
+                                            >
+                                                {w.status}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+                                            <div>
+                                                <p className="text-[12px] font-[800] text-[#7C7C7C] mb-1">Credit Limit</p>
+                                                <p className="text-[14px] font-[800] text-[#181725]">{INR(w.creditLimit)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[12px] font-[800] text-[#7C7C7C] mb-1">Available</p>
+                                                <p className="text-[14px] font-[800] text-[#299E60]">{INR(w.availableCredit)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[12px] font-[800] text-[#7C7C7C] mb-1">Outstanding</p>
+                                                <p className={cn(
+                                                    'text-[14px] font-[800]',
+                                                    Number(w.outstandingAmount) > 0 ? 'text-red-500' : 'text-[#181725]'
+                                                )}>
+                                                    {INR(w.outstandingAmount)}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[12px] font-[800] text-[#7C7C7C] mb-1">Due Date</p>
+                                                <p className="text-[14px] font-[800] text-[#181725]">
+                                                    {w.currentDueDate ? formatDateIndian(w.currentDueDate) : '--'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     )}

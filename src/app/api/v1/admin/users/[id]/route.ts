@@ -115,6 +115,21 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
             status: true,
           },
         },
+        // Unified credit wallets (CreditWallet) — the system that replaces the
+        // legacy CreditAccount. vendorId null = Horeca1 platform wallet.
+        creditWallets: {
+          select: {
+            id: true,
+            vendorId: true,
+            vendor: { select: { businessName: true } },
+            status: true,
+            creditLimit: true,
+            availableCredit: true,
+            outstandingAmount: true,
+            currentDueDate: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
         _count: {
           select: {
             orders: true,
