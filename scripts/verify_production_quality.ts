@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Horeca1 V2.2 — World-Class QA Production Integration Test Suite
  * 
@@ -695,18 +696,18 @@ async function runQaSuite() {
     assert(!!freshParent?.deliveryOtp, `OTP persisted successfully on DB order row: "${freshParent?.deliveryOtp}"`);
 
     // Shipped -> Delivered (with OTP check)
-    await orderService.updateStatus(freshParent?.id!, vendorProfile.id, 'processing');
-    await orderService.updateStatus(freshParent?.id!, vendorProfile.id, 'shipped');
+    await orderService.updateStatus(freshParent!.id, vendorProfile.id, 'processing');
+    await orderService.updateStatus(freshParent!.id, vendorProfile.id, 'shipped');
 
     // Incorrect OTP
     await assertThrows(
-      () => orderService.updateStatus(freshParent?.id!, vendorProfile.id, 'delivered', undefined, { proofType: 'otp', otp: '1111' }),
+      () => orderService.updateStatus(freshParent!.id, vendorProfile.id, 'delivered', undefined, { proofType: 'otp', otp: '1111' }),
       'Incorrect OTP is rejected by the transaction'
     );
 
     // Correct OTP
-    await orderService.updateStatus(freshParent?.id!, vendorProfile.id, 'delivered', undefined, { proofType: 'otp', otp: freshParent?.deliveryOtp! });
-    const deliveredParent = await prisma.order.findUnique({ where: { id: freshParent?.id } });
+    await orderService.updateStatus(freshParent!.id, vendorProfile.id, 'delivered', undefined, { proofType: 'otp', otp: freshParent!.deliveryOtp });
+    const deliveredParent = await prisma.order.findUnique({ where: { id: freshParent!.id } });
     assert(deliveredParent?.status === 'delivered', 'Order status moved successfully to "delivered" with valid OTP proof.');
 
     // Verify stock finalized

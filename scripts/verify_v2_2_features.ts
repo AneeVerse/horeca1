@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * V2.2 Complete Stack Verification Script
  * Covers Points 1 to 7. Runs integration actions directly and cleans up in finally block.
@@ -172,11 +173,11 @@ async function runTests() {
 
     testCustomer = await prisma.user.findFirst({ where: { role: 'customer' } });
     testProduct = await prisma.product.findFirst({ where: { basePrice: { gt: 0 } } });
-    testVendor = await prisma.vendor.findUnique({ where: { id: testProduct?.vendorId! } });
+    testVendor = await prisma.vendor.findUnique({ where: { id: testProduct!.vendorId } });
     
     const testMember = await prisma.businessAccountMember.findFirst({ where: { userId: testCustomer?.id } });
-    testBA = await prisma.businessAccount.findUnique({ where: { id: testMember?.businessAccountId! } });
-    testOutlet = await prisma.outlet.findFirst({ where: { businessAccountId: testBA?.id! } });
+    testBA = await prisma.businessAccount.findUnique({ where: { id: testMember!.businessAccountId } });
+    testOutlet = await prisma.outlet.findFirst({ where: { businessAccountId: testBA!.id } });
 
     if (!testCustomer || !testProduct || !testVendor || !testBA || !testOutlet) {
       throw new Error('Test environment missing seeded variables');
@@ -284,11 +285,11 @@ async function runTests() {
 
     orderCustomer = await prisma.user.findFirst({ where: { role: 'customer' } });
     orderVendor = await prisma.vendor.findFirst({ where: { creditEnabled: true } });
-    orderProduct = await prisma.product.findFirst({ where: { vendorId: orderVendor?.id!, basePrice: { gt: 0 } } });
+    orderProduct = await prisma.product.findFirst({ where: { vendorId: orderVendor!.id, basePrice: { gt: 0 } } });
     
     const orderMember = await prisma.businessAccountMember.findFirst({ where: { userId: orderCustomer?.id } });
-    orderBA = await prisma.businessAccount.findUnique({ where: { id: orderMember?.businessAccountId! } });
-    orderOutlet = await prisma.outlet.findFirst({ where: { businessAccountId: orderBA?.id! } });
+    orderBA = await prisma.businessAccount.findUnique({ where: { id: orderMember!.businessAccountId } });
+    orderOutlet = await prisma.outlet.findFirst({ where: { businessAccountId: orderBA!.id } });
 
     if (!orderCustomer || !orderVendor || !orderProduct || !orderBA || !orderOutlet) {
       throw new Error('Order testing environment missing variables');
@@ -451,22 +452,22 @@ async function runTests() {
     console.log('  Testing order transitions and side-effects...');
     
     // confirm
-    await orderService.updateStatus(parentOrder?.id!, orderVendor.id, 'confirmed');
+    await orderService.updateStatus(parentOrder!.id, orderVendor.id, 'confirmed');
     const creditAfterConfirm = await prisma.creditAccount.findUnique({
       where: { userId_vendorId: { userId: orderCustomer.id, vendorId: orderVendor.id } }
     });
     
-    const debitTx = await prisma.creditTransaction.findFirst({ where: { orderId: parentOrder?.id, type: 'debit' } });
+    const debitTx = await prisma.creditTransaction.findFirst({ where: { orderId: parentOrder!.id, type: 'debit' } });
     if (debitTx) creditTxIds.push(debitTx.id);
 
     const oldLimitUsed = originalCreditAcc ? Number(originalCreditAcc.creditUsed) : 0;
-    const expectedLimitUsed = oldLimitUsed + Number(parentOrder?.totalAmount);
+    const expectedLimitUsed = oldLimitUsed + Number(parentOrder!.totalAmount);
     assert(Number(creditAfterConfirm?.creditUsed) === expectedLimitUsed, `Credit account debited on confirmation. Balance used: ₹${creditAfterConfirm?.creditUsed}`);
     assert(!!debitTx, 'Credit ledger entry successfully recorded');
 
     // 7.6: OTP Delivery Proof flow
     console.log('  Testing Delivery OTP Generation (allowed on confirmed order)...');
-    const otpRes = await orderService.generateDeliveryOtp(parentOrder?.id!, orderVendor.id);
+    const otpRes = await orderService.generateDeliveryOtp(parentOrder!.id, orderVendor.id);
     assert(otpRes.sent === true, `OTP generated and sent (Expires: ${otpRes.expiresAt})`);
 
     // Retrieve the generated OTP from DB
@@ -488,21 +489,21 @@ async function runTests() {
     console.log(`  [DIAGNOSTIC] Inventory before delivery: Available: ${currentStockBeforeDelivery?.qtyAvailable}, Reserved: ${currentStockBeforeDelivery?.qtyReserved}`);
 
     // processing -> shipped
-    await orderService.updateStatus(freshParent?.id!, orderVendor.id, 'processing');
-    await orderService.updateStatus(freshParent?.id!, orderVendor.id, 'shipped');
+    await orderService.updateStatus(freshParent!.id, orderVendor.id, 'processing');
+    await orderService.updateStatus(freshParent!.id, orderVendor.id, 'shipped');
 
     // delivered (provide wrong OTP first)
     console.log('    Verifying incorrect OTP is rejected...');
     await assertThrows(
-      () => orderService.updateStatus(freshParent?.id!, orderVendor.id, 'delivered', undefined, { proofType: 'otp', otp: '0000' }),
+      () => orderService.updateStatus(freshParent!.id, orderVendor.id, 'delivered', undefined, { proofType: 'otp', otp: '0000' }),
       'Order transition throws error on invalid OTP'
     );
 
     // delivered (provide correct OTP)
     console.log('    Verifying correct OTP is accepted...');
-    await orderService.updateStatus(freshParent?.id!, orderVendor.id, 'delivered', undefined, { proofType: 'otp', otp: freshParent?.deliveryOtp! });
+    await orderService.updateStatus(freshParent!.id, orderVendor.id, 'delivered', undefined, { proofType: 'otp', otp: freshParent!.deliveryOtp });
     
-    const deliveredParent = await prisma.order.findUnique({ where: { id: freshParent?.id } });
+    const deliveredParent = await prisma.order.findUnique({ where: { id: freshParent!.id } });
     assert(deliveredParent?.status === 'delivered', `Order delivered successfully with OTP authentication`);
 
     // Verify physical stock finalized (reserved subtracted, available decremented)
