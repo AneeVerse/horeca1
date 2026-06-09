@@ -45,7 +45,7 @@ export const metadata: Metadata = {
   title: "horeca1 - B2B E-commerce for Restaurant Products",
   description: "High speed, optimized B2B platform for restaurant and eating products.",
   icons: {
-    icon: "/favicon.ico",
+    icon: "/Horeca1.png",
     shortcut: "/favicon.ico",
     apple: "/Horeca1.png",
   },
