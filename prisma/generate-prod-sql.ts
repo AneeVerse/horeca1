@@ -61,7 +61,7 @@ async function main() {
     include: { user: true, serviceAreas: true, deliverySlots: true },
   });
   lines.push('-- VENDORS (create missing ones via DO blocks)');
-  for (const { user, serviceAreas, deliverySlots, ...v } of vendors) {
+  for (const { user, serviceAreas, ...v } of vendors) {
     if (!user) continue;
     lines.push(`DO $$`);
     lines.push(`DECLARE v_user_id UUID; BEGIN`);

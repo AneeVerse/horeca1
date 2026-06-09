@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * V2.2 Complete Stack Verification Script
  * Covers Points 1 to 7. Runs integration actions directly and cleans up in finally block.
@@ -6,9 +5,9 @@
  * Run: npx tsx scripts/verify_v2_2_features.ts
  */
 import 'dotenv/config';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, User, Product, Vendor, BusinessAccount, Outlet, Inventory, CreditAccount, VendorCustomer } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { resolveUnitPrice, CustomerContext } from '../src/modules/pricing/pricing.service';
+import { resolveUnitPrice } from '../src/modules/pricing/pricing.service';
 import { OrderService, OrderContext } from '../src/modules/order/order.service';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -44,30 +43,30 @@ async function runTests() {
   const productsToCleanup: string[] = [];
   
   // State restoration variables
-  let testCustomer: any = null;
-  let testProduct: any = null;
-  let testVendor: any = null;
-  let testBA: any = null;
-  let testOutlet: any = null;
+  let testCustomer: User | null = null;
+  let testProduct: Product | null = null;
+  let testVendor: Vendor | null = null;
+  let testBA: BusinessAccount | null = null;
+  let testOutlet: Outlet | null = null;
 
-  let orderCustomer: any = null;
-  let orderVendor: any = null;
-  let orderProduct: any = null;
-  let orderBA: any = null;
-  let orderOutlet: any = null;
-  let secondaryVendor: any = null;
-  let targetProduct: any = null;
+  let orderCustomer: User | null = null;
+  let orderVendor: Vendor | null = null;
+  let orderProduct: Product | null = null;
+  let orderBA: BusinessAccount | null = null;
+  let orderOutlet: Outlet | null = null;
+  let secondaryVendor: Vendor | null = null;
+  let targetProduct: Product | null = null;
 
-  let originalInventory: any = null;
-  let originalTargetInventory: any = null;
+  let originalInventory: Inventory | null = null;
+  let originalTargetInventory: Inventory | null = null;
 
-  let originalCreditAcc: any = null;
+  let originalCreditAcc: CreditAccount | null = null;
   let didCreateCreditAcc = false;
 
-  let originalSecondaryCreditAcc: any = null;
+  let originalSecondaryCreditAcc: CreditAccount | null = null;
   let didCreateSecondaryCreditAcc = false;
 
-  let originalVendorCustomer: any = null;
+  let originalVendorCustomer: VendorCustomer | null = null;
   let didCreateVendorCustomer = false;
 
   try {
@@ -173,11 +172,11 @@ async function runTests() {
 
     testCustomer = await prisma.user.findFirst({ where: { role: 'customer' } });
     testProduct = await prisma.product.findFirst({ where: { basePrice: { gt: 0 } } });
-    testVendor = await prisma.vendor.findUnique({ where: { id: testProduct!.vendorId } });
+    testVendor = testProduct ? await prisma.vendor.findUnique({ where: { id: testProduct.vendorId } }) : null;
     
-    const testMember = await prisma.businessAccountMember.findFirst({ where: { userId: testCustomer?.id } });
-    testBA = await prisma.businessAccount.findUnique({ where: { id: testMember!.businessAccountId } });
-    testOutlet = await prisma.outlet.findFirst({ where: { businessAccountId: testBA!.id } });
+    const testMember = testCustomer ? await prisma.businessAccountMember.findFirst({ where: { userId: testCustomer.id } }) : null;
+    testBA = testMember ? await prisma.businessAccount.findUnique({ where: { id: testMember.businessAccountId } }) : null;
+    testOutlet = testBA ? await prisma.outlet.findFirst({ where: { businessAccountId: testBA.id } }) : null;
 
     if (!testCustomer || !testProduct || !testVendor || !testBA || !testOutlet) {
       throw new Error('Test environment missing seeded variables');
@@ -285,11 +284,11 @@ async function runTests() {
 
     orderCustomer = await prisma.user.findFirst({ where: { role: 'customer' } });
     orderVendor = await prisma.vendor.findFirst({ where: { creditEnabled: true } });
-    orderProduct = await prisma.product.findFirst({ where: { vendorId: orderVendor!.id, basePrice: { gt: 0 } } });
+    orderProduct = orderVendor ? await prisma.product.findFirst({ where: { vendorId: orderVendor.id, basePrice: { gt: 0 } } }) : null;
     
-    const orderMember = await prisma.businessAccountMember.findFirst({ where: { userId: orderCustomer?.id } });
-    orderBA = await prisma.businessAccount.findUnique({ where: { id: orderMember!.businessAccountId } });
-    orderOutlet = await prisma.outlet.findFirst({ where: { businessAccountId: orderBA!.id } });
+    const orderMember = orderCustomer ? await prisma.businessAccountMember.findFirst({ where: { userId: orderCustomer.id } }) : null;
+    orderBA = orderMember ? await prisma.businessAccount.findUnique({ where: { id: orderMember.businessAccountId } }) : null;
+    orderOutlet = orderBA ? await prisma.outlet.findFirst({ where: { businessAccountId: orderBA.id } }) : null;
 
     if (!orderCustomer || !orderVendor || !orderProduct || !orderBA || !orderOutlet) {
       throw new Error('Order testing environment missing variables');
@@ -451,31 +450,38 @@ async function runTests() {
     // 7.7: Order status transition check with OTP validation
     console.log('  Testing order transitions and side-effects...');
     
+    if (!parentOrder) {
+      throw new Error('parentOrder is null');
+    }
+
     // confirm
-    await orderService.updateStatus(parentOrder!.id, orderVendor.id, 'confirmed');
+    await orderService.updateStatus(parentOrder.id, orderVendor.id, 'confirmed');
     const creditAfterConfirm = await prisma.creditAccount.findUnique({
       where: { userId_vendorId: { userId: orderCustomer.id, vendorId: orderVendor.id } }
     });
     
-    const debitTx = await prisma.creditTransaction.findFirst({ where: { orderId: parentOrder!.id, type: 'debit' } });
+    const debitTx = await prisma.creditTransaction.findFirst({ where: { orderId: parentOrder.id, type: 'debit' } });
     if (debitTx) creditTxIds.push(debitTx.id);
 
     const oldLimitUsed = originalCreditAcc ? Number(originalCreditAcc.creditUsed) : 0;
-    const expectedLimitUsed = oldLimitUsed + Number(parentOrder!.totalAmount);
+    const expectedLimitUsed = oldLimitUsed + Number(parentOrder.totalAmount);
     assert(Number(creditAfterConfirm?.creditUsed) === expectedLimitUsed, `Credit account debited on confirmation. Balance used: ₹${creditAfterConfirm?.creditUsed}`);
     assert(!!debitTx, 'Credit ledger entry successfully recorded');
 
     // 7.6: OTP Delivery Proof flow
     console.log('  Testing Delivery OTP Generation (allowed on confirmed order)...');
-    const otpRes = await orderService.generateDeliveryOtp(parentOrder!.id, orderVendor.id);
+    const otpRes = await orderService.generateDeliveryOtp(parentOrder.id, orderVendor.id);
     assert(otpRes.sent === true, `OTP generated and sent (Expires: ${otpRes.expiresAt})`);
 
     // Retrieve the generated OTP from DB
-    const freshParent = await prisma.order.findUnique({ where: { id: parentOrder?.id } });
-    assert(!!freshParent?.deliveryOtp, `OTP persisted on order record: ${freshParent?.deliveryOtp}`);
+    const freshParent = await prisma.order.findUnique({ where: { id: parentOrder.id } });
+    if (!freshParent || !freshParent.deliveryOtp) {
+      throw new Error('freshParent or deliveryOtp is null');
+    }
+    assert(true, `OTP persisted on order record: ${freshParent.deliveryOtp}`);
 
     // Retrieve parent and child orders to diagnose item quantities
-    const parentItems = await prisma.orderItem.findMany({ where: { orderId: parentOrder?.id } });
+    const parentItems = await prisma.orderItem.findMany({ where: { orderId: parentOrder.id } });
     const childItems = await prisma.orderItem.findMany({ where: { orderId: splitResult.childId } });
     console.log(`  [DIAGNOSTIC] Parent Order Items count: ${parentItems.length}`);
     for (const item of parentItems) {
@@ -489,21 +495,21 @@ async function runTests() {
     console.log(`  [DIAGNOSTIC] Inventory before delivery: Available: ${currentStockBeforeDelivery?.qtyAvailable}, Reserved: ${currentStockBeforeDelivery?.qtyReserved}`);
 
     // processing -> shipped
-    await orderService.updateStatus(freshParent!.id, orderVendor.id, 'processing');
-    await orderService.updateStatus(freshParent!.id, orderVendor.id, 'shipped');
+    await orderService.updateStatus(freshParent.id, orderVendor.id, 'processing');
+    await orderService.updateStatus(freshParent.id, orderVendor.id, 'shipped');
 
     // delivered (provide wrong OTP first)
     console.log('    Verifying incorrect OTP is rejected...');
     await assertThrows(
-      () => orderService.updateStatus(freshParent!.id, orderVendor.id, 'delivered', undefined, { proofType: 'otp', otp: '0000' }),
+      () => orderService.updateStatus(freshParent.id, orderVendor.id, 'delivered', undefined, { proofType: 'otp', otp: '0000' }),
       'Order transition throws error on invalid OTP'
     );
 
     // delivered (provide correct OTP)
     console.log('    Verifying correct OTP is accepted...');
-    await orderService.updateStatus(freshParent!.id, orderVendor.id, 'delivered', undefined, { proofType: 'otp', otp: freshParent!.deliveryOtp });
+    await orderService.updateStatus(freshParent.id, orderVendor.id, 'delivered', undefined, { proofType: 'otp', otp: freshParent.deliveryOtp });
     
-    const deliveredParent = await prisma.order.findUnique({ where: { id: freshParent!.id } });
+    const deliveredParent = await prisma.order.findUnique({ where: { id: freshParent.id } });
     assert(deliveredParent?.status === 'delivered', `Order delivered successfully with OTP authentication`);
 
     // Verify physical stock finalized (reserved subtracted, available decremented)
@@ -630,14 +636,15 @@ async function runTests() {
   console.log(`====================================================${RESET}`);
 }
 
-async function assertThrows(fn: () => Promise<any>, successMsg: string) {
+async function assertThrows(fn: () => Promise<unknown>, successMsg: string) {
   try {
     await fn();
     console.log(`  ${RED}✗ Expected transition to throw but it succeeded.${RESET}`);
     throw new Error('ASSERT_THROW_FAIL');
-  } catch (e: any) {
-    if (e.message === 'ASSERT_THROW_FAIL') throw e;
-    console.log(`  ${GREEN}✓ ${successMsg} (${e.message})${RESET}`);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message === 'ASSERT_THROW_FAIL') throw e;
+    console.log(`  ${GREEN}✓ ${successMsg} (${message})${RESET}`);
   }
 }
 

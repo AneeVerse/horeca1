@@ -6,8 +6,6 @@ import {
     X,
     Search,
     Clock,
-    CheckCircle,
-    Users,
     Loader2,
     ClipboardList,
     Store,

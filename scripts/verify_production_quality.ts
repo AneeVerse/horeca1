@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Horeca1 V2.2 — World-Class QA Production Integration Test Suite
  * 
@@ -19,8 +18,9 @@ import 'dotenv/config';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { flatten, mergePermissions } from '../src/lib/permissions/engine';
+import { PermissionsJson } from '../src/lib/permissions/registry';
 import { resolveUnitPrice } from '../src/modules/pricing/pricing.service';
-import { OrderService, OrderContext } from '../src/modules/order/order.service';
+import { OrderService } from '../src/modules/order/order.service';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -69,9 +69,6 @@ async function runQaSuite() {
   const orderIds: string[] = [];
   const creditTxIds: string[] = [];
   const cleanupSalespersonIds: string[] = [];
-
-  // Capture original inventory values to restore later
-  const inventoryBackups: Map<string, { qtyAvailable: number; qtyReserved: number }> = new Map();
 
   try {
     // ═══════════════════════════════════════════════════════
@@ -412,7 +409,7 @@ async function runQaSuite() {
     cleanupUserIds.push(staffUser.id);
 
     // Map to vendor team
-    const teamMember = await prisma.vendorTeamMember.create({
+    await prisma.vendorTeamMember.create({
       data: {
         vendorId: vendorProfile.id,
         userId: staffUser.id,
@@ -432,7 +429,7 @@ async function runQaSuite() {
     cleanupUserRoleIds.push(userRoleMapping.id);
 
     // Verify Flat permissions resolution
-    const flatPerms = flatten(customRole.permissions as any);
+    const flatPerms = flatten(customRole.permissions as PermissionsJson);
     assert(flatPerms.has('orders.view') && flatPerms.has('orders.edit') && flatPerms.has('products.view'), 'Permissions successfully flattened to PermissionKey string set.');
     assert(!flatPerms.has('products.create') && !flatPerms.has('products.edit'), 'RBAC Engine Correctness: Flat permissions exclude products.create / products.edit');
 
@@ -693,21 +690,24 @@ async function runQaSuite() {
     assert(otpRes.sent === true, `Generated delivery OTP verification code (Expires: ${otpRes.expiresAt})`);
 
     const freshParent = await prisma.order.findUnique({ where: { id: modifiedOrder.id } });
-    assert(!!freshParent?.deliveryOtp, `OTP persisted successfully on DB order row: "${freshParent?.deliveryOtp}"`);
+    if (!freshParent || !freshParent.deliveryOtp) {
+      throw new Error('freshParent or deliveryOtp is null');
+    }
+    assert(true, `OTP persisted successfully on DB order row: "${freshParent.deliveryOtp}"`);
 
     // Shipped -> Delivered (with OTP check)
-    await orderService.updateStatus(freshParent!.id, vendorProfile.id, 'processing');
-    await orderService.updateStatus(freshParent!.id, vendorProfile.id, 'shipped');
+    await orderService.updateStatus(freshParent.id, vendorProfile.id, 'processing');
+    await orderService.updateStatus(freshParent.id, vendorProfile.id, 'shipped');
 
     // Incorrect OTP
     await assertThrows(
-      () => orderService.updateStatus(freshParent!.id, vendorProfile.id, 'delivered', undefined, { proofType: 'otp', otp: '1111' }),
+      () => orderService.updateStatus(freshParent.id, vendorProfile.id, 'delivered', undefined, { proofType: 'otp', otp: '1111' }),
       'Incorrect OTP is rejected by the transaction'
     );
 
     // Correct OTP
-    await orderService.updateStatus(freshParent!.id, vendorProfile.id, 'delivered', undefined, { proofType: 'otp', otp: freshParent!.deliveryOtp });
-    const deliveredParent = await prisma.order.findUnique({ where: { id: freshParent!.id } });
+    await orderService.updateStatus(freshParent.id, vendorProfile.id, 'delivered', undefined, { proofType: 'otp', otp: freshParent.deliveryOtp });
+    const deliveredParent = await prisma.order.findUnique({ where: { id: freshParent.id } });
     assert(deliveredParent?.status === 'delivered', 'Order status moved successfully to "delivered" with valid OTP proof.');
 
     // Verify stock finalized
@@ -715,7 +715,7 @@ async function runQaSuite() {
     assert(finalStock?.qtyAvailable === 92 && finalStock?.qtyReserved === 0, `Physical stock correctly deducted. Available: ${finalStock?.qtyAvailable}, Reserved: ${finalStock?.qtyReserved}`);
 
     // Verify salesperson commission accrual created
-    const accrual = await prisma.commissionAccrual.findFirst({ where: { orderId: freshParent?.id } });
+    const accrual = await prisma.commissionAccrual.findFirst({ where: { orderId: freshParent.id } });
     assert(!!accrual, `Salesperson commission accrual correctly generated (Accrued: ₹${accrual?.accruedAmount} on base ₹${accrual?.baseAmount})`);
 
   } catch (err) {
@@ -813,14 +813,15 @@ async function runQaSuite() {
   console.log(`================================================================${RESET}`);
 }
 
-async function assertThrows(fn: () => Promise<any>, successMsg: string) {
+async function assertThrows(fn: () => Promise<unknown>, successMsg: string) {
   try {
     await fn();
     console.log(`  ${RED}✗ Expected transition to throw but it succeeded.${RESET}`);
     throw new Error('ASSERT_THROW_FAIL');
-  } catch (e: any) {
-    if (e.message === 'ASSERT_THROW_FAIL') throw e;
-    console.log(`  ${GREEN}✓ ${successMsg} (${e.message})${RESET}`);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message === 'ASSERT_THROW_FAIL') throw e;
+    console.log(`  ${GREEN}✓ ${successMsg} (${message})${RESET}`);
   }
 }
 
