@@ -39,8 +39,9 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
 // POST — create purchase order (the checkout action)
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
-    // Vendor/admin team members need explicit storefront.order to place orders.
-    if (ctx.role !== 'customer') requirePermission(ctx, 'storefront.order');
+    // Vendor/brand team members need explicit storefront.order to place orders.
+    // Customers and admin users are unrestricted.
+    if (ctx.role !== 'customer' && ctx.role !== 'admin') requirePermission(ctx, 'storefront.order');
     // Rate limit: 10 orders per user per minute (prevents checkout spam)
     const { allowed } = await checkRateLimit(`order:${ctx.userId}`, 10, 60000);
     if (!allowed) {

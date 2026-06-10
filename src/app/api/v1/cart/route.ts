@@ -26,9 +26,9 @@ export const GET = withAuth(async (_req, ctx) => {
 
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
-    // Vendor/admin team members need explicit storefront.order permission to buy.
-    // Regular customers (role === 'customer') have unrestricted cart access.
-    if (ctx.role !== 'customer') requirePermission(ctx, 'storefront.order');
+    // Vendor/brand team members need explicit storefront.order permission to buy.
+    // Customers and admin users are unrestricted.
+    if (ctx.role !== 'customer' && ctx.role !== 'admin') requirePermission(ctx, 'storefront.order');
     const cartCtx = resolveCartContext(ctx);
     const body = await req.json();
     const { productId, vendorId, quantity } = addToCartSchema.parse(body);

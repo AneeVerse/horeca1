@@ -18,7 +18,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
     // Vendor/brand team members buying through the storefront need the same
     // explicit permission the cart POST requires; plain customers are free.
-    if (ctx.role !== 'customer') requirePermission(ctx, 'storefront.order');
+    if (ctx.role !== 'customer' && ctx.role !== 'admin') requirePermission(ctx, 'storefront.order');
 
     const cartCtx = resolveCartContext(ctx);
     const segments = new URL(req.url).pathname.split('/').filter(Boolean);

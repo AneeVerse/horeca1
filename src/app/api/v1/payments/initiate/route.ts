@@ -23,8 +23,9 @@ const paymentService = new PaymentService();
 
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
-    // Vendor/admin team members need explicit storefront.pay to initiate payments.
-    if (ctx.role !== 'customer') requirePermission(ctx, 'storefront.pay');
+    // Vendor/brand team members need explicit storefront.pay to initiate payments.
+    // Customers and admin users are unrestricted.
+    if (ctx.role !== 'customer' && ctx.role !== 'admin') requirePermission(ctx, 'storefront.pay');
     // Rate limit: 10 payment initiations per user per minute
     const { allowed } = await checkRateLimit(`payment:${ctx.userId}`, 10, 60000);
     if (!allowed) {
