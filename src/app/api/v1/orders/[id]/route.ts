@@ -26,3 +26,19 @@ export const GET = withAuth(async (
     return errorResponse(error);
   }
 });
+
+export const DELETE = withAuth(async (
+  req: NextRequest,
+  ctx,
+) => {
+  try {
+    const url = new URL(req.url);
+    const segments = url.pathname.split('/');
+    const orderId = segments[segments.length - 1];
+
+    const result = await orderService.delete(orderId, ctx.userId);
+    return NextResponse.json({ success: true, data: result });
+  } catch (error) {
+    return errorResponse(error);
+  }
+});

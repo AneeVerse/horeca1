@@ -599,6 +599,7 @@ model Order {
   deliveryProofType  String?      @map("delivery_proof_type") @db.VarChar(20)
   deliveryProofUrl   String?      @map("delivery_proof_url") @db.Text
   deliveryNotes      String?      @map("delivery_notes") @db.Text
+  customerDeleted    Boolean      @default(false) @map("customer_deleted")
   // V2.2 Phase 5 — delivery OTP proof. Generated when the order goes out for
   // delivery, sent to the customer, and verified on the delivered transition
   // when proofType='otp'. Fully optional — alternate proof types ignore these.

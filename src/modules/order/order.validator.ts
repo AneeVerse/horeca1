@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// Single source of truth for accepted payment methods. 'wallet' is the H1
+// platform credit wallet (alias 'h1_wallet'); 'credit'/'vendor_credit' draw
+// on the per-vendor DiSCCO line — see CREDIT_PAYMENTS in order.service.ts.
+export const paymentMethodSchema = z.enum([
+  'online', 'cod', 'prepaid', 'bank_transfer', 'po_number', 'cheque',
+  'credit', 'vendor_credit', 'wallet', 'h1_wallet', 'discco',
+]);
+
 export const createOrderSchema = z.object({
   vendorOrders: z.array(
     z.object({
@@ -14,10 +22,16 @@ export const createOrderSchema = z.object({
       notes: z.string().max(1000).optional(),
     })
   ).min(1),
-  paymentMethod: z.string().min(1),
+  paymentMethod: paymentMethodSchema,
   // Draft PO (Req 7): persist without reserving stock / charging credit /
   // clearing the cart. Submitted later via PATCH /orders/:id/submit.
   saveDraft: z.boolean().optional(),
+});
+
+// PATCH /orders/:id/submit — drafts are saved with a placeholder method; the
+// user picks the real one on submit.
+export const submitDraftSchema = z.object({
+  paymentMethod: paymentMethodSchema.optional(),
 });
 
 // Ops controls (Req 7) — admin order management.

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import type { Prisma } from '@prisma/client';
+import type { OrderStatus, Prisma } from '@prisma/client';
 import { emitEvent } from '@/events/emitter';
 import { InventoryService } from '@/modules/inventory/inventory.service';
 import { Errors } from '@/middleware/errorHandler';
@@ -11,9 +11,9 @@ import { resolveUnitPrice, type CustomerContext } from '@/modules/pricing/pricin
 import { CartService, type CartContext } from '@/modules/cart/cart.service';
 import { creditWalletService } from '@/modules/credit/creditWallet.service';
 
-// Payment methods that draw on a CreditWallet. 'h1_wallet' uses the platform
+// Payment methods that draw on a CreditWallet. 'h1_wallet'/'wallet' uses the platform
 // (vendor-less) wallet; the rest use the order's vendor credit line.
-const CREDIT_PAYMENTS = ['credit', 'vendor_credit', 'h1_wallet'];
+const CREDIT_PAYMENTS = ['credit', 'vendor_credit', 'h1_wallet', 'wallet'];
 const isCreditPayment = (m: string | null | undefined): boolean => !!m && CREDIT_PAYMENTS.includes(m);
 
 interface VendorOrderInput {
@@ -262,7 +262,7 @@ export class OrderService {
         //     available limit — all inside this tx, so any failure rolls back the
         //     whole order. Outstanding is created now (per the wallet brief).
         if (!isDraft && isCreditPayment(input.paymentMethod)) {
-          const creditVendorId = input.paymentMethod === 'h1_wallet' ? null : vo.vendorId;
+          const creditVendorId = (input.paymentMethod === 'h1_wallet' || input.paymentMethod === 'wallet') ? null : vo.vendorId;
           await creditWalletService.debitWallet(userId, creditVendorId, totalAmount, order.id, tx);
         }
 
@@ -302,8 +302,8 @@ export class OrderService {
 
   async list(userId: string, options: { status?: string; vendorId?: string; cursor?: string; limit?: number }) {
     const { status, vendorId, cursor, limit = 20 } = options;
-    const where: Record<string, unknown> = { userId };
-    if (status) where.status = status;
+    const where: Prisma.OrderWhereInput = { userId, customerDeleted: false };
+    if (status) where.status = status as OrderStatus;
     if (vendorId) where.vendorId = vendorId;
 
     const orders = await prisma.order.findMany({
@@ -332,7 +332,7 @@ export class OrderService {
 
   async getById(orderId: string, userId: string) {
     const order = await prisma.order.findFirst({
-      where: { id: orderId, userId },
+      where: { id: orderId, userId, customerDeleted: false },
       include: {
         items: {
           include: {
@@ -345,6 +345,26 @@ export class OrderService {
     });
     if (!order) throw Errors.notFound('Order');
     return order;
+  }
+
+  async delete(orderId: string, userId: string) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, userId },
+    });
+    if (!order) throw Errors.notFound('Order');
+
+    if (order.status === 'draft') {
+      await prisma.order.delete({
+        where: { id: orderId },
+      });
+      return { deleted: true, status: 'draft' };
+    } else {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { customerDeleted: true },
+      });
+      return { deleted: true, status: order.status };
+    }
   }
 
   /**
@@ -451,13 +471,17 @@ export class OrderService {
   }
 
   /** Submit a draft PO: draft → pending. Re-validates stock/MOV/credit, reserves, notifies. */
-  async submitDraft(orderId: string, ctx: OrderContext) {
+  async submitDraft(orderId: string, ctx: OrderContext, paymentMethod?: string) {
     return prisma.$transaction(async (tx) => {
       const order = await tx.order.findFirst({
         where: { id: orderId, userId: ctx.userId, status: 'draft' },
         include: { items: true },
       });
       if (!order) throw Errors.notFound('Draft order');
+
+      // Allow caller to override the payment method stored on the draft
+      // (drafts are saved with a placeholder; user picks real method on submit).
+      const effectivePaymentMethod = paymentMethod ?? order.paymentMethod;
 
       const items = order.items.map((i) => ({ productId: i.productId, quantity: i.quantity }));
       const stock = await this.inventoryService.bulkCheck(items, tx);
@@ -473,12 +497,12 @@ export class OrderService {
       await this.inventoryService.reserveStock(items, tx);
 
       // Submitting a credit draft debits the wallet now (validates limit + mode).
-      if (isCreditPayment(order.paymentMethod)) {
-        const creditVendorId = order.paymentMethod === 'h1_wallet' ? null : order.vendorId;
+      if (isCreditPayment(effectivePaymentMethod)) {
+        const creditVendorId = (effectivePaymentMethod === 'h1_wallet' || effectivePaymentMethod === 'wallet') ? null : order.vendorId;
         await creditWalletService.debitWallet(ctx.userId, creditVendorId, Number(order.totalAmount), order.id, tx);
       }
 
-      const updated = await tx.order.update({ where: { id: orderId }, data: { status: 'pending' } });
+      const updated = await tx.order.update({ where: { id: orderId }, data: { status: 'pending', paymentMethod: effectivePaymentMethod } });
 
       setImmediate(() => emitEvent('OrderCreated', {
         orderId: order.id, orderNumber: order.orderNumber, userId: ctx.userId,
@@ -927,7 +951,7 @@ export class OrderService {
       // only ledger move on a status change is RELEASING that debit when the order
       // is cancelled (idempotent — reverseOrderDebit no-ops if already reversed).
       if (isCreditPayment(order.paymentMethod) && status === 'cancelled') {
-        const creditVendorId = order.paymentMethod === 'h1_wallet' ? null : vendorId;
+        const creditVendorId = (order.paymentMethod === 'h1_wallet' || order.paymentMethod === 'wallet') ? null : vendorId;
         await creditWalletService.reverseOrderDebit(orderId, order.userId, creditVendorId, tx);
       }
 

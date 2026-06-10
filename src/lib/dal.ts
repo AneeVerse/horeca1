@@ -367,9 +367,12 @@ export const dal = {
       });
     },
 
-    /** Submit a saved draft PO (draft -> pending). */
-    async submitDraft(orderId: string) {
-      return apiFetch(`/api/v1/orders/${orderId}/submit`, { method: 'PATCH' });
+    /** Submit a saved draft PO (draft -> pending). Optionally override the payment method. */
+    async submitDraft(orderId: string, paymentMethod?: string) {
+      return apiFetch(`/api/v1/orders/${orderId}/submit`, {
+        method: 'PATCH',
+        ...(paymentMethod ? { body: JSON.stringify({ paymentMethod }) } : {}),
+      });
     },
 
     /** List user's orders */
@@ -386,6 +389,13 @@ export const dal = {
     /** Get single order */
     async getById(id: string) {
       return apiFetch(`/api/v1/orders/${id}`);
+    },
+
+    /** Delete or soft-delete order */
+    async delete(id: string) {
+      return apiFetch<{ success: boolean; data: { deleted: boolean; status: string } }>(`/api/v1/orders/${id}`, {
+        method: 'DELETE',
+      });
     },
   },
 
