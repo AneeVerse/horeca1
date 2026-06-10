@@ -13,7 +13,8 @@ import { requirePermission } from '@/lib/permissions/engine';
 import { withRateLimit } from '@/middleware/withRateLimit';
 import { provisionDefaultAccount } from '@/lib/provisionAccount';
 import { uniqueHcid } from '@/lib/hcid';
-import type { Role, CreditStatus } from '@prisma/client';
+import { normalizePhone, phoneLookupVariants } from '@/lib/phone';
+import type { Role, CreditStatus, Prisma } from '@prisma/client';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -250,8 +251,7 @@ export const POST = withRateLimit(adminOnly(async (req: NextRequest, ctx) => {
     const body = await req.json();
 
     const fullName = String(body.fullName ?? '').trim();
-    const phoneDigits = String(body.phone ?? '').replace(/\D/g, '');
-    const phone = phoneDigits.length === 12 ? phoneDigits.replace(/^91/, '') : phoneDigits;
+    const phone = normalizePhone(body.phone) ?? '';
     const rawEmail = String(body.email ?? '').trim().toLowerCase();
     const email = rawEmail && EMAIL_RE.test(rawEmail) ? rawEmail : null;
     const businessName = String(body.businessName ?? '').trim() || null;
@@ -265,8 +265,8 @@ export const POST = withRateLimit(adminOnly(async (req: NextRequest, ctx) => {
     if (rawEmail && !email) throw Errors.badRequest('Enter a valid email address');
     if (password && password.length < 6) throw Errors.badRequest('Password must be at least 6 characters');
 
-    // Uniqueness checks
-    const phoneTaken = await prisma.user.findUnique({ where: { phone }, select: { id: true } });
+    // Uniqueness checks — match all legacy phone representations.
+    const phoneTaken = await prisma.user.findFirst({ where: { phone: { in: phoneLookupVariants(phone) } }, select: { id: true } });
     if (phoneTaken) throw Errors.badRequest('A user with this phone already exists');
 
     if (email) {
@@ -321,6 +321,53 @@ export const POST = withRateLimit(adminOnly(async (req: NextRequest, ctx) => {
           isActive: false,
           isVerified: false,
         },
+      });
+    }
+
+    // Optional full Zoho-style profile sent by the new customer/vendor form.
+    // Persist the BusinessAccount fields + contact persons in one go so the
+    // create path collects exactly what the edit form shows.
+    const cp = body.companyProfile;
+    if (cp && typeof cp === 'object') {
+      const data: Prisma.BusinessAccountUpdateInput = {};
+      const setStr = (k: keyof Prisma.BusinessAccountUpdateInput, v: unknown) => {
+        if (typeof v === 'string') (data as Record<string, unknown>)[k] = v.trim() || null;
+      };
+      setStr('legalName', cp.legalName); setStr('displayName', cp.displayName); setStr('companyName', cp.companyName);
+      setStr('customerType', cp.customerType); setStr('salutation', cp.salutation);
+      setStr('firstName', cp.firstName); setStr('lastName', cp.lastName);
+      setStr('customerLanguage', cp.customerLanguage); setStr('taxPreference', cp.taxPreference);
+      setStr('gstTreatment', cp.gstTreatment); setStr('placeOfSupply', cp.placeOfSupply);
+      setStr('currency', cp.currency); setStr('paymentTerms', cp.paymentTerms);
+      setStr('pan', cp.pan); setStr('fssaiNumber', cp.fssaiNumber); setStr('gstin', cp.gstin);
+      setStr('billingAddressLine', cp.billingAddressLine); setStr('billingCity', cp.billingCity);
+      setStr('billingState', cp.billingState); setStr('billingPincode', cp.billingPincode);
+      setStr('businessType', cp.businessType); setStr('workPhone', cp.workPhone);
+      setStr('mobilePhone', cp.mobilePhone); setStr('remarks', cp.remarks);
+      if (typeof cp.enablePortal === 'boolean') data.enablePortal = cp.enablePortal;
+      if (cp.creditLimit !== undefined && cp.creditLimit !== '' && cp.creditLimit !== null) data.creditLimit = Number(cp.creditLimit);
+      if (cp.customFields && typeof cp.customFields === 'object') data.customFields = cp.customFields;
+
+      await prisma.$transaction(async (tx) => {
+        if (Object.keys(data).length > 0) {
+          await tx.businessAccount.update({ where: { id: provision.businessAccountId }, data });
+        }
+        if (Array.isArray(cp.contactPersons)) {
+          const rows = cp.contactPersons
+            .filter((c: Record<string, unknown>) => c && (c.firstName || c.lastName || c.email || c.workPhone || c.mobile))
+            .map((c: Record<string, unknown>) => ({
+              businessAccountId: provision.businessAccountId,
+              salutation: (c.salutation as string) || null,
+              firstName: (c.firstName as string) || null,
+              lastName: (c.lastName as string) || null,
+              email: (c.email as string) || null,
+              workPhone: (c.workPhone as string) || null,
+              mobile: (c.mobile as string) || null,
+              designation: (c.designation as string) || null,
+              isPrimary: !!c.isPrimary,
+            }));
+          if (rows.length > 0) await tx.contactPerson.createMany({ data: rows });
+        }
       });
     }
 

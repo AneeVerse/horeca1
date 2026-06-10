@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -15,16 +15,13 @@ import {
     Trash2,
     Plus,
     X,
-    Eye as EyeIcon,
-    EyeOff,
     SlidersHorizontal,
     Upload,
-    CheckSquare,
-    Square,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import CustomerFormModal from '@/components/features/admin/CustomerFormModal';
 
 interface AdminUser {
     id: string;
@@ -80,14 +77,14 @@ export default function CustomersPage() {
         // Don't silently treat API failures (401/403/500) as "no users yet".
         // Surface the real reason via toast and clear the list so the admin
         // can see something went wrong (most commonly a stale JWT after a
-        // role change — fix: sign out + sign back in).
+        // role change â€” fix: sign out + sign back in).
         fetch(url.toString())
             .then(async (res) => {
                 const json = await res.json().catch(() => null);
                 if (!res.ok || !json?.success) {
                     const msg = json?.error?.message
                         ?? json?.error
-                        ?? (res.status === 401 ? 'Session expired — please sign in again'
+                        ?? (res.status === 401 ? 'Session expired â€” please sign in again'
                             : res.status === 403 ? 'Your account does not have admin access. If you just changed roles, sign out and sign back in to refresh the session.'
                             : `Failed to load users (HTTP ${res.status})`);
                     setUsers([]);
@@ -481,7 +478,7 @@ export default function CustomersPage() {
                                                 </Link>
                                             </td>
                                             <td className="p-4 text-[13px] font-medium text-[#7C7C7C]">{user.email}</td>
-                                            <td className="p-4 text-[13px] font-medium text-[#7C7C7C]">{user.phone || '—'}</td>
+                                            <td className="p-4 text-[13px] font-medium text-[#7C7C7C]">{user.phone || 'â€”'}</td>
                                             <td className="p-4">
                                                 <span className={cn(
                                                     "inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold capitalize",
@@ -492,7 +489,7 @@ export default function CustomersPage() {
                                                     {user.role}
                                                 </span>
                                             </td>
-                                            <td className="p-4 text-[13px] font-medium text-[#7C7C7C]">{user.businessName || '—'}</td>
+                                            <td className="p-4 text-[13px] font-medium text-[#7C7C7C]">{user.businessName || 'â€”'}</td>
                                             <td className="p-4">
                                                 <span className={cn(
                                                     "inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold",
@@ -677,9 +674,10 @@ export default function CustomersPage() {
             )}
 
             {showAddModal && (
-                <AddUserModal
+                <CustomerFormModal
+                    mode="create"
                     onClose={() => setShowAddModal(false)}
-                    onCreated={() => { setShowAddModal(false); refetch(); }}
+                    onSaved={() => { setShowAddModal(false); refetch(); }}
                 />
             )}
 
@@ -693,136 +691,6 @@ export default function CustomersPage() {
     );
 }
 
-interface AddUserForm {
-    fullName: string;
-    phone: string;
-    email: string;
-    businessName: string;
-    password: string;
-}
-
-function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-    const [form, setForm] = useState<AddUserForm>({ fullName: '', phone: '', email: '', businessName: '', password: '' });
-    const [showPwd, setShowPwd] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const update = <K extends keyof AddUserForm>(k: K, v: AddUserForm[K]) => {
-        setForm(prev => ({ ...prev, [k]: v }));
-        setError(null);
-    };
-
-    const handleSubmit = async () => {
-        setError(null);
-        if (!form.fullName.trim()) { setError('Full name is required'); return; }
-        if (!/^\d{10}$/.test(form.phone)) { setError('Enter a valid 10-digit phone'); return; }
-        if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) { setError('Enter a valid email'); return; }
-        if (form.password && form.password.length < 6) { setError('Password must be at least 6 characters'); return; }
-        setSubmitting(true);
-        try {
-            const res = await fetch('/api/v1/admin/users', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    fullName: form.fullName.trim(),
-                    phone: form.phone,
-                    email: form.email.trim() || undefined,
-                    businessName: form.businessName.trim() || undefined,
-                    password: form.password || undefined,
-                    role: 'customer',
-                }),
-            });
-            const json = await res.json();
-            if (!json.success) {
-                setError(json.error?.message || json.error || 'Failed to create user');
-                return;
-            }
-            toast.success('Customer created');
-            onCreated();
-        } catch {
-            setError('Something went wrong');
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 z-[10000] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
-            <div className="bg-white rounded-[16px] shadow-2xl w-full max-w-[480px] max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-                <div className="px-6 py-4 border-b border-[#EEEEEE] flex items-center justify-between">
-                    <h2 className="text-[18px] font-[800] text-[#181725]">Add new customer</h2>
-                    <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
-                        <X size={18} />
-                    </button>
-                </div>
-
-                <div className="p-6 space-y-4">
-                    <p className="text-[12px] text-gray-500 -mt-1">
-                        Adding a vendor? Use <Link href="/admin/vendors" className="font-bold text-[#299E60] hover:underline">Vendors → Add Vendor</Link>.
-                    </p>
-
-                    {error && (
-                        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-[13px] text-red-600 font-medium">
-                            {error}
-                        </div>
-                    )}
-
-                    <Field label="Full name *">
-                        <input type="text" value={form.fullName} onChange={e => update('fullName', e.target.value)}
-                            placeholder="Enter full name"
-                            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#299E60] transition-colors" />
-                    </Field>
-
-                    <Field label="Business name" hint="(restaurant / hotel)">
-                        <input type="text" value={form.businessName} onChange={e => update('businessName', e.target.value)}
-                            placeholder="Restaurant / hotel"
-                            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#299E60] transition-colors" />
-                    </Field>
-
-                    <Field label="Phone *" hint="10 digits, no +91">
-                        <div className="relative flex items-center">
-                            <span className="absolute left-3 text-[13px] font-bold text-gray-500 select-none">+91</span>
-                            <input type="tel" inputMode="numeric" maxLength={10}
-                                value={form.phone} onChange={e => update('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
-                                placeholder="10 digit mobile number"
-                                className="w-full pl-11 pr-3 py-2.5 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#299E60] transition-colors" />
-                        </div>
-                    </Field>
-
-                    <Field label="Email" hint="(optional)">
-                        <input type="email" value={form.email} onChange={e => update('email', e.target.value)}
-                            placeholder="you@example.com"
-                            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#299E60] transition-colors" />
-                    </Field>
-
-                    <Field label="Password" hint="(optional — lets them skip OTP next time)">
-                        <div className="relative">
-                            <input type={showPwd ? 'text' : 'password'} value={form.password} onChange={e => update('password', e.target.value)}
-                                placeholder="At least 6 characters" autoComplete="new-password"
-                                className="w-full pl-3 pr-10 py-2.5 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#299E60] transition-colors" />
-                            <button type="button" onClick={() => setShowPwd(v => !v)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                                {showPwd ? <EyeOff size={15} /> : <EyeIcon size={15} />}
-                            </button>
-                        </div>
-                    </Field>
-                </div>
-
-                <div className="px-6 py-4 border-t border-[#EEEEEE] flex justify-end gap-2">
-                    <button onClick={onClose} disabled={submitting}
-                        className="px-4 py-2 text-[13px] font-bold text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">
-                        Cancel
-                    </button>
-                    <button onClick={handleSubmit} disabled={submitting}
-                        className="px-5 py-2 bg-[#299E60] hover:bg-[#238a53] text-white text-[13px] font-bold rounded-lg flex items-center gap-2 disabled:opacity-60 transition-colors">
-                        {submitting && <Loader2 size={14} className="animate-spin" />}
-                        Create user
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
 
 function ImportCustomersModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
     const [file, setFile] = useState<File | null>(null);
@@ -1068,13 +936,3 @@ function ImportCustomersModal({ onClose, onImported }: { onClose: () => void; on
     );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-    return (
-        <div className="space-y-1">
-            <label className="text-[12px] font-bold text-gray-700 ml-0.5">
-                {label} {hint && <span className="font-normal text-gray-400">{hint}</span>}
-            </label>
-            {children}
-        </div>
-    );
-}

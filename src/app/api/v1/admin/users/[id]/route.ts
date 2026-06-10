@@ -79,6 +79,24 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
                 manualTags: true,
                 aiTags: true,
                 behaviourTags: true,
+                // Zoho-style parity fields
+                customerType: true,
+                salutation: true,
+                firstName: true,
+                lastName: true,
+                companyName: true,
+                customerLanguage: true,
+                taxPreference: true,
+                gstTreatment: true,
+                placeOfSupply: true,
+                currency: true,
+                creditLimit: true,
+                paymentTerms: true,
+                enablePortal: true,
+                workPhone: true,
+                mobilePhone: true,
+                remarks: true,
+                customFields: true,
                 outlets: {
                   select: {
                     id: true,
@@ -90,6 +108,20 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
                     pincode: true,
                     isActive: true,
                   },
+                },
+                contactPersons: {
+                  select: {
+                    id: true,
+                    salutation: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    workPhone: true,
+                    mobile: true,
+                    designation: true,
+                    isPrimary: true,
+                  },
+                  orderBy: { createdAt: 'asc' },
                 },
               },
             },
@@ -287,8 +319,46 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
               manualTags: Array.isArray(cp.manualTags) ? cp.manualTags : undefined,
               aiTags: Array.isArray(cp.aiTags) ? cp.aiTags : undefined,
               behaviourTags: Array.isArray(cp.behaviourTags) ? cp.behaviourTags : undefined,
+              // Zoho-style parity fields
+              customerType: cp.customerType !== undefined ? cp.customerType : undefined,
+              salutation: cp.salutation !== undefined ? cp.salutation : undefined,
+              firstName: cp.firstName !== undefined ? cp.firstName : undefined,
+              lastName: cp.lastName !== undefined ? cp.lastName : undefined,
+              companyName: cp.companyName !== undefined ? cp.companyName : undefined,
+              customerLanguage: cp.customerLanguage !== undefined ? cp.customerLanguage : undefined,
+              taxPreference: cp.taxPreference !== undefined ? cp.taxPreference : undefined,
+              gstTreatment: cp.gstTreatment !== undefined ? cp.gstTreatment : undefined,
+              placeOfSupply: cp.placeOfSupply !== undefined ? cp.placeOfSupply : undefined,
+              currency: cp.currency !== undefined ? cp.currency : undefined,
+              creditLimit: cp.creditLimit !== undefined ? (cp.creditLimit === null || cp.creditLimit === '' ? null : Number(cp.creditLimit)) : undefined,
+              paymentTerms: cp.paymentTerms !== undefined ? cp.paymentTerms : undefined,
+              enablePortal: typeof cp.enablePortal === 'boolean' ? cp.enablePortal : undefined,
+              workPhone: cp.workPhone !== undefined ? cp.workPhone : undefined,
+              mobilePhone: cp.mobilePhone !== undefined ? cp.mobilePhone : undefined,
+              remarks: cp.remarks !== undefined ? cp.remarks : undefined,
+              customFields: cp.customFields !== undefined && typeof cp.customFields === 'object' ? cp.customFields : undefined,
             },
           });
+
+          // Contact Persons — full replace from the supplied array (Zoho-style
+          // editable list). Sent under companyProfile.contactPersons.
+          if (Array.isArray(cp.contactPersons)) {
+            await tx.contactPerson.deleteMany({ where: { businessAccountId: membership.businessAccountId } });
+            const rows = cp.contactPersons
+              .filter((c: Record<string, unknown>) => c && (c.firstName || c.lastName || c.email || c.workPhone || c.mobile))
+              .map((c: Record<string, unknown>) => ({
+                businessAccountId: membership.businessAccountId,
+                salutation: (c.salutation as string) || null,
+                firstName: (c.firstName as string) || null,
+                lastName: (c.lastName as string) || null,
+                email: (c.email as string) || null,
+                workPhone: (c.workPhone as string) || null,
+                mobile: (c.mobile as string) || null,
+                designation: (c.designation as string) || null,
+                isPrimary: !!c.isPrimary,
+              }));
+            if (rows.length > 0) await tx.contactPerson.createMany({ data: rows });
+          }
         }
       }
 

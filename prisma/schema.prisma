@@ -1475,6 +1475,25 @@ model BusinessAccount {
   manualTags          String[] @default([]) @map("manual_tags")
   aiTags              String[] @default([]) @map("ai_tags")
   behaviourTags       String[] @default([]) @map("behaviour_tags")
+  // Zoho-style customer/vendor parity fields (V2.2). Most are free-text/nullable
+  // so they can be set on create, admin edit, or bulk import.
+  customerType        String   @default("business") @map("customer_type") @db.VarChar(20) // business | individual
+  salutation          String?  @db.VarChar(20)
+  firstName           String?  @map("first_name") @db.VarChar(120)
+  lastName            String?  @map("last_name") @db.VarChar(120)
+  companyName         String?  @map("company_name") @db.VarChar(255)
+  customerLanguage    String   @default("en") @map("customer_language") @db.VarChar(20)
+  taxPreference       String   @default("taxable") @map("tax_preference") @db.VarChar(20) // taxable | exempt
+  gstTreatment        String?  @map("gst_treatment") @db.VarChar(40)
+  placeOfSupply       String?  @map("place_of_supply") @db.VarChar(100)
+  currency            String   @default("INR") @db.VarChar(10)
+  creditLimit         Decimal? @map("credit_limit") @db.Decimal(12, 2)
+  paymentTerms        String?  @map("payment_terms") @db.VarChar(40)
+  enablePortal        Boolean  @default(false) @map("enable_portal")
+  workPhone           String?  @map("work_phone") @db.VarChar(20)
+  mobilePhone         String?  @map("mobile_phone") @db.VarChar(20)
+  remarks             String?  @db.Text
+  customFields        Json     @default("{}") @map("custom_fields")
   isCustomer      Boolean  @default(true)  @map("is_customer")
   isVendor        Boolean  @default(false) @map("is_vendor")
   isBrand         Boolean  @default(false) @map("is_brand")
@@ -1485,6 +1504,7 @@ model BusinessAccount {
 
   members         BusinessAccountMember[]
   outlets         Outlet[]
+  contactPersons  ContactPerson[]
   roles           AccountRole[]
   userRoles       UserRole[]
   vendor          Vendor?
@@ -1554,6 +1574,27 @@ model Outlet {
   @@index([businessAccountId])
   @@index([pincode])
   @@map("outlets")
+}
+
+// Zoho-style "Contact Persons" — multiple named contacts per BusinessAccount
+// (beyond the single owner User). Used by the customer/vendor profile form.
+model ContactPerson {
+  id                String   @id @default(uuid()) @db.Uuid
+  businessAccountId String   @map("business_account_id") @db.Uuid
+  salutation        String?  @db.VarChar(20)
+  firstName         String?  @map("first_name") @db.VarChar(120)
+  lastName          String?  @map("last_name") @db.VarChar(120)
+  email             String?  @db.VarChar(255)
+  workPhone         String?  @map("work_phone") @db.VarChar(20)
+  mobile            String?  @db.VarChar(20)
+  designation       String?  @db.VarChar(120)
+  isPrimary         Boolean  @default(false) @map("is_primary")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  businessAccount   BusinessAccount @relation(fields: [businessAccountId], references: [id], onDelete: Cascade)
+
+  @@index([businessAccountId])
+  @@map("contact_persons")
 }
 
 // RBAC role: per-account JSON permissions matrix.
