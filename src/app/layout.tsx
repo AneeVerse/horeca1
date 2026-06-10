@@ -57,8 +57,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${quicksand.variable} ${inter.variable} ${poppins.variable} ${playfair.variable} font-sans antialiased bg-background`}>
+    <html lang="en" className={`${quicksand.variable} ${inter.variable} ${poppins.variable} ${playfair.variable}`}>
+      <body className={`${quicksand.className} font-sans antialiased bg-background`}>
         <AuthProvider>
           <GoogleMapsProvider>
             <AddressProvider>

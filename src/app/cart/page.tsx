@@ -986,7 +986,7 @@ export default function CartPage() {
 
                         {/* Checkout Button */}
                         <button
-                            onClick={() => setScreen('payment')}
+                            onClick={() => router.push('/checkout')}
                             disabled={selectedGroups.length === 0}
                             className="w-full bg-[#53B175] text-white py-5 rounded-2xl font-bold text-[18px] transition-all hover:bg-[#48a068] active:scale-[0.98] shadow-lg shadow-[#53B175]/20 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#53B175]"
                         >
@@ -1038,7 +1038,7 @@ export default function CartPage() {
             {/* Fixed Checkout Bar - Mobile + Tablet */}
             <div className="lg:hidden fixed bottom-0 left-0 right-0 px-5 pb-6 pt-3 bg-gradient-to-t from-white via-white to-transparent z-50">
                 <button
-                    onClick={() => setScreen('payment')}
+                    onClick={() => router.push('/checkout')}
                     disabled={selectedGroups.length === 0}
                     className="w-full bg-[#53B175] text-white py-[18px] rounded-[16px] font-bold text-[18px] transition-all active:scale-[0.98] shadow-lg shadow-[#53B175]/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >

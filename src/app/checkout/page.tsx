@@ -4,14 +4,14 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ChevronLeft, Clock, CheckCircle2, Shield, User, Loader2, Check, MapPin, AlertCircle, ChevronDown } from 'lucide-react';
-import { CreditCard, Smartphone, Building2, FileText, Wallet as WalletIcon } from 'lucide-react';
+import { Zap, BadgePercent, Banknote, FileText, Wallet as WalletIcon } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
-import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { useSession } from 'next-auth/react';
 import { dal } from '@/lib/dal';
 import { DeliverySlotPicker } from '@/components/features/checkout/DeliverySlotPicker';
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
-import type { VendorCartGroup } from '@/types';
+import type { VendorCartGroup, CartItem, VendorProduct } from '@/types';
+import { useSearchParams } from 'next/navigation';
 
 // window.Razorpay is typed in src/types/razorpay.d.ts
 
@@ -47,7 +47,7 @@ function openRazorpayPopup(opts: {
             order_id: opts.order_id,
             name: 'HoReCa Hub',
             description: opts.description,
-            theme: { color: '#299e60' },
+            theme: { color: '#53B175' },
             handler: (response: RazorpaySuccessPayload) => resolve(response),
             modal: { ondismiss: () => reject(new Error('Payment cancelled')) },
         });
@@ -56,6 +56,28 @@ function openRazorpayPopup(opts: {
 }
 
 type CheckoutStep = 'review' | 'payment' | 'confirmation';
+
+// Shape returned by GET /api/v1/orders/:id for the ?draft= flow. Decimal
+// fields arrive as strings over JSON.
+interface DraftOrderItem {
+    productId: string;
+    productName: string;
+    quantity: number;
+    unitPrice: string | number;
+    product?: { imageUrl: string | null; images: string[] } | null;
+}
+
+interface DraftOrderDetail {
+    id: string;
+    orderNumber: string;
+    status: string;
+    vendorId: string;
+    subtotal: string | number;
+    totalAmount: string | number;
+    paymentMethod: string | null;
+    vendor?: { businessName: string; logoUrl: string | null } | null;
+    items: DraftOrderItem[];
+}
 
 // Shape returned by GET /api/v1/wallet — one row per credit line the customer
 // holds (the H1 platform wallet has `vendor: null`, vendor-specific lines have
@@ -72,11 +94,48 @@ interface CustomerCreditWallet {
 }
 
 const PAYMENT_OPTIONS = [
-    { id: 'credit', name: 'DiSCCO Credit Line', desc: 'Pay later with credit', icon: CreditCard, color: 'purple' },
-  { id: 'wallet', name: 'H1 Wallet', desc: 'Pay from wallet balance', icon: WalletIcon, color: 'yellow' },
-    { id: 'online', name: 'Pay Online', desc: 'UPI, Cards, Netbanking', icon: Smartphone, color: 'blue' },
-    { id: 'bank_transfer', name: 'Bank Transfer', desc: 'NEFT / RTGS / IMPS', icon: Building2, color: 'green' },
-    { id: 'po_number', name: 'PO Number', desc: 'Enterprise purchase order', icon: FileText, color: 'orange' },
+  {
+    id: 'online',
+    name: 'Pay Online',
+    desc: 'UPI, Cards, Netbanking',
+    icon: Zap,
+    badgeBg: 'bg-[#3395FF]',
+    badgeText: 'text-white',
+    tag: 'RECOMMENDED',
+  },
+  {
+    id: 'credit',
+    name: 'DiSCCO Credit Line',
+    desc: 'Pay later with credit',
+    icon: BadgePercent,
+    badgeBg: 'bg-purple-50',
+    badgeText: 'text-purple-600',
+    tag: 'B2B CREDIT',
+  },
+  {
+    id: 'wallet',
+    name: 'H1 Wallet',
+    desc: 'Pay from wallet balance',
+    icon: WalletIcon,
+    badgeBg: 'bg-yellow-50',
+    badgeText: 'text-yellow-600',
+  },
+  {
+    id: 'bank_transfer',
+    name: 'Bank Transfer',
+    desc: 'NEFT / RTGS / IMPS',
+    icon: Banknote,
+    badgeBg: 'bg-green-50',
+    badgeText: 'text-green-600',
+  },
+  {
+    id: 'po_number',
+    name: 'PO Number',
+    desc: 'Enterprise purchase order',
+    icon: FileText,
+    badgeBg: 'bg-orange-50',
+    badgeText: 'text-orange-600',
+  },
 ];
 
 // ─── Inline "Delivering to" row + outlet switcher dropdown ──────────────────
@@ -150,7 +209,7 @@ function DeliveringToRow() {
         <div className="bg-white rounded-2xl border border-gray-100 p-4 relative" ref={dropdownRef}>
             <div className="flex items-start gap-3">
                 <div className="w-9 h-9 shrink-0 rounded-xl bg-green-50 flex items-center justify-center">
-                    <MapPin size={16} className="text-[#299e60]" />
+                    <MapPin size={16} className="text-[#53B175]" />
                 </div>
                 <div className="flex-1 min-w-0">
                     <p className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Delivering to</p>
@@ -169,7 +228,7 @@ function DeliveringToRow() {
                 <button
                     type="button"
                     onClick={() => setOpen((v) => !v)}
-                    className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:border-[#299e60] hover:bg-green-50/50 text-[12px] font-bold text-gray-700 hover:text-[#299e60] transition-colors cursor-pointer"
+                    className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:border-[#53B175] hover:bg-green-50/50 text-[12px] font-bold text-gray-700 hover:text-[#53B175] transition-colors cursor-pointer"
                 >
                     Change
                     <ChevronDown size={12} className={open ? 'rotate-180 transition-transform' : 'transition-transform'} />
@@ -231,7 +290,7 @@ function DeliveringToRow() {
                     <div className="px-3 py-2 border-t border-gray-100">
                         <Link
                             href={`/account/${activeBusinessAccountId}/outlets`}
-                            className="text-[11px] font-bold text-[#299e60] hover:underline"
+                            className="text-[11px] font-bold text-[#53B175] hover:underline"
                             onClick={() => setOpen(false)}
                         >
                             Manage outlets →
@@ -243,7 +302,7 @@ function DeliveringToRow() {
     );
 }
 
-export default function CheckoutPage() {
+function CheckoutPageContent() {
     const { groups, clearCart, removeFromCart } = useCart();
     const { status: sessionStatus } = useSession();
     const { currentOutlet, activeBusinessAccountId } = useBusinessAccountSwitcher();
@@ -256,6 +315,7 @@ export default function CheckoutPage() {
     const [creditWalletsByVendor, setCreditWalletsByVendor] = useState<Record<string, CustomerCreditWallet>>({});
     const [creditWalletsLoaded, setCreditWalletsLoaded] = useState(false);
     const [walletBalance, setWalletBalance] = useState<number | null>(null);
+    const [platformWallet, setPlatformWallet] = useState<CustomerCreditWallet | null>(null);
     const [bankTransferInput, setBankTransferInput] = useState('');
     const [poNumberInput, setPoNumberInput] = useState('');
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
@@ -265,17 +325,102 @@ export default function CheckoutPage() {
     const [slotByVendor, setSlotByVendor] = useState<Record<string, string | null>>({});
     // Per-vendor order notes / delivery instructions (Req 7).
     const [notesByVendor, setNotesByVendor] = useState<Record<string, string>>({});
+    // Collapsible vendor cards — collapsed by default for compact checkout.
+    const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set());
+    const toggleVendorExpand = (vendorId: string) => {
+        setExpandedVendors(prev => { const next = new Set(prev); if (next.has(vendorId)) next.delete(vendorId); else next.add(vendorId); return next; });
+    };
+
+    const searchParams = useSearchParams();
+    const draftId = searchParams.get('draft');
+    const [draftOrder, setDraftOrder] = useState<DraftOrderDetail | null>(null);
+    const [draftLoading, setDraftLoading] = useState(false);
+
+    useEffect(() => {
+        if (!draftId) return;
+        setDraftLoading(true);
+        dal.orders.getById(draftId)
+            .then((res) => {
+                const payload = res as { data?: DraftOrderDetail } | DraftOrderDetail;
+                const orderData = (payload && 'data' in payload ? payload.data : payload) as DraftOrderDetail | undefined;
+                if (orderData?.id && orderData.status === 'draft') {
+                    setDraftOrder(orderData);
+                    // Skip review step and go straight to payment step
+                    setStep('payment');
+                } else if (orderData?.id) {
+                    setOrderError('This order has already been submitted.');
+                } else {
+                    setOrderError('Could not load draft order details.');
+                }
+            })
+            .catch(err => {
+                setOrderError(err instanceof Error ? err.message : 'Could not load draft order details.');
+            })
+            .finally(() => setDraftLoading(false));
+    }, [draftId]);
+
+    const mappedDraftGroup = useMemo<VendorCartGroup | null>(() => {
+        if (!draftOrder) return null;
+
+        const cartItems: CartItem[] = draftOrder.items.map((item: DraftOrderItem) => {
+            const product: VendorProduct = {
+                id: item.productId,
+                name: item.productName,
+                displayName: item.productName,
+                description: '',
+                price: Number(item.unitPrice),
+                images: item.product?.imageUrl ? [item.product.imageUrl] : (item.product?.images && item.product.images.length > 0 ? item.product.images : ['/images/recom-product/product-img10.png']),
+                category: '',
+                packSize: '',
+                unit: '',
+                stock: 9999,
+                isActive: true,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                vendorId: draftOrder.vendorId,
+                vendorName: draftOrder.vendor?.businessName || 'Vendor',
+                bulkPrices: [],
+                creditBadge: true,
+                minOrderQuantity: 1
+            };
+            
+            return {
+                productId: item.productId,
+                product,
+                quantity: item.quantity
+            };
+        });
+
+        return {
+            vendorId: draftOrder.vendorId,
+            vendorName: draftOrder.vendor?.businessName || 'Vendor',
+            vendorLogo: draftOrder.vendor?.logoUrl || undefined,
+            subtotal: Number(draftOrder.totalAmount),
+            subtotalTaxable: Number(draftOrder.subtotal),
+            totalGST: Number(draftOrder.totalAmount) - Number(draftOrder.subtotal),
+            minOrderValue: 0,
+            meetsMinOrder: true,
+            items: cartItems
+        };
+    }, [draftOrder]);
+
+    const activeGroups = useMemo(() => {
+        if (draftOrder && mappedDraftGroup) {
+            return [mappedDraftGroup];
+        }
+        return groups;
+    }, [draftOrder, mappedDraftGroup, groups]);
 
     const selectedGroups = useMemo(
-        () => groups.filter(g => !excludedVendorIds.has(g.vendorId) && g.meetsMinOrder),
-        [groups, excludedVendorIds]
+        () => activeGroups.filter(g => !excludedVendorIds.has(g.vendorId) && g.meetsMinOrder),
+        [activeGroups, excludedVendorIds]
     );
     const selectedTotal = useMemo(
         () => selectedGroups.reduce((sum, g) => sum + g.subtotal, 0),
         [selectedGroups]
     );
     const selectedItemCount = useMemo(
-        () => selectedGroups.reduce((sum, g) => sum + g.items.reduce((a, i) => a + i.quantity, 0), 0),
+        () => selectedGroups.reduce((sum, g) => sum + g.items.reduce((a: number, i: CartItem) => a + i.quantity, 0), 0),
         [selectedGroups]
     );
     const selectedVendorCount = selectedGroups.length;
@@ -289,6 +434,11 @@ export default function CheckoutPage() {
         });
     };
 
+    // Scroll to top when step changes so payment options are not scrolled out of view
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+    }, [step]);
+
     // Load the customer's credit wallets (DiSCCO lines, one per vendor + the
     // H1 platform wallet) when the payment step is reached. Fetched once per
     // session and indexed by vendorId so each vendor group can show its own
@@ -300,16 +450,17 @@ export default function CheckoutPage() {
             .then((d: { data?: CustomerCreditWallet[] }) => {
                 const wallets = d.data ?? [];
                 const byVendor: Record<string, CustomerCreditWallet> = {};
-                let platformBalance: number | null = null;
+                let pWallet: CustomerCreditWallet | null = null;
                 for (const w of wallets) {
                     if (w.vendorId) {
                         byVendor[w.vendorId] = w;
-                    } else if (platformBalance === null) {
-                        platformBalance = Number(w.availableCredit) || 0;
+                    } else if (pWallet === null) {
+                        pWallet = w;
                     }
                 }
                 setCreditWalletsByVendor(byVendor);
-                setWalletBalance(platformBalance);
+                setPlatformWallet(pWallet);
+                setWalletBalance(pWallet ? Number(pWallet.availableCredit) || 0 : null);
             })
             .catch(() => {})
             .finally(() => setCreditWalletsLoaded(true));
@@ -344,6 +495,28 @@ export default function CheckoutPage() {
 
     const creditAllSelectionsValid = creditEligibility.length > 0 && creditEligibility.every(c => c.ok);
 
+    const walletEligibility = useMemo(() => {
+        if (!creditWalletsLoaded) return { ok: false, loading: true, reason: 'Loading H1 Wallet details...' };
+        if (!platformWallet) {
+            return { ok: false, reason: 'No H1 platform wallet found.' };
+        }
+        const available = Number(platformWallet.availableCredit) || 0;
+        const blocked = platformWallet.status === 'BLACKLISTED' || platformWallet.status === 'BLOCKED';
+        const insufficient = available < selectedTotal;
+        return {
+            wallet: platformWallet,
+            available,
+            remaining: available - selectedTotal,
+            blocked,
+            ok: !blocked && available >= selectedTotal,
+            reason: blocked
+                ? `H1 Wallet is ${platformWallet.status === 'BLACKLISTED' ? 'blacklisted' : 'blocked'}.`
+                : insufficient
+                    ? 'Available balance is less than the total order amount.'
+                    : null,
+        };
+    }, [platformWallet, selectedTotal, creditWalletsLoaded]);
+
     const handlePlaceOrder = async () => {
         if (selectedGroups.length === 0) {
             setOrderError('Select at least one vendor PO to place.');
@@ -361,7 +534,7 @@ export default function CheckoutPage() {
         try {
             const vendorOrders = selectedGroups.map(group => ({
                 vendorId: group.vendorId,
-                items: group.items.map(item => ({
+                items: group.items.map((item: CartItem) => ({
                     productId: item.productId,
                     quantity: item.quantity,
                 })),
@@ -369,11 +542,23 @@ export default function CheckoutPage() {
                 ...(notesByVendor[group.vendorId]?.trim() ? { notes: notesByVendor[group.vendorId].trim() } : {}),
             }));
 
-            // 1. Create orders in DB (same for all payment methods)
-            const result = await dal.orders.create(vendorOrders, selectedPayment) as {
-                orders: Array<{ id: string; orderNumber: string }>;
-            };
-            const createdOrders = result.orders || [];
+            // 1. Create or submit order (draft vs new order)
+            let createdOrders: Array<{ id: string; orderNumber: string }> = [];
+            if (draftId) {
+                const submitRes = await dal.orders.submitDraft(draftId, selectedPayment) as {
+                    success: boolean;
+                    data: { id: string; orderNumber: string };
+                };
+                if (!submitRes || !submitRes.success || !submitRes.data) {
+                    throw new Error('Failed to submit draft order.');
+                }
+                createdOrders = [submitRes.data];
+            } else {
+                const result = await dal.orders.create(vendorOrders, selectedPayment) as {
+                    orders: Array<{ id: string; orderNumber: string }>;
+                };
+                createdOrders = result.orders || [];
+            }
 
             // 2. For online payment: open Razorpay popup for each order
             if (selectedPayment === 'online') {
@@ -421,19 +606,21 @@ export default function CheckoutPage() {
             setPlacedOrderIds(createdOrders.map(o => o.orderNumber || o.id));
             setOrderSnapshot({ groups: [...selectedGroups], total: selectedTotal, count: selectedVendorCount });
             
+            // Remove only the placed vendor groups from cart; leave unselected ones intact.
+            if (!draftId) {
+                const placedAllGroups = selectedGroups.length === groups.length;
+                if (placedAllGroups) {
+                    clearCart();
+                } else {
+                    selectedGroups.forEach(g => g.items.forEach((i: CartItem) => removeFromCart(i.productId)));
+                }
+            }
+
             // Redirect to dedicated order-success page
             const ids = createdOrders.map((o: { id: string }) => o.id).join(',');
             const lastVendor = selectedGroups[selectedGroups.length - 1]?.vendorId || '';
             window.location.href = `/order-success?ids=${ids}&vendor=${lastVendor}`;
             return;
-
-            // Remove only the placed vendor groups from cart; leave unselected ones intact.
-            const placedAllGroups = selectedGroups.length === groups.length;
-            if (placedAllGroups) {
-                clearCart();
-            } else {
-                selectedGroups.forEach(g => g.items.forEach(i => removeFromCart(i.productId)));
-            }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Failed to place order. Please try again.';
             setOrderError(msg);
@@ -451,7 +638,7 @@ export default function CheckoutPage() {
         try {
             const vendorOrders = selectedGroups.map(group => ({
                 vendorId: group.vendorId,
-                items: group.items.map(item => ({ productId: item.productId, quantity: item.quantity })),
+                items: group.items.map((item: CartItem) => ({ productId: item.productId, quantity: item.quantity })),
                 ...(slotByVendor[group.vendorId] ? { deliverySlotId: slotByVendor[group.vendorId] as string } : {}),
                 ...(notesByVendor[group.vendorId]?.trim() ? { notes: notesByVendor[group.vendorId].trim() } : {}),
             }));
@@ -464,13 +651,22 @@ export default function CheckoutPage() {
         }
     };
 
-    if (groups.length === 0) {
+    if (draftLoading) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50/50">
+                <Loader2 size={36} className="text-[#53B175] animate-spin mb-4" />
+                <p className="text-[14px] text-gray-400 font-medium">Loading draft order details...</p>
+            </div>
+        );
+    }
+
+    if (!draftId && groups.length === 0) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50/50">
                 <div className="text-center">
                     <p className="text-[48px] mb-3">🛒</p>
                     <p className="text-[18px] font-bold text-gray-800 mb-2">Your cart is empty</p>
-                    <Link href="/" className="text-[14px] text-[#299e60] font-semibold hover:underline">
+                    <Link href="/" className="text-[14px] text-[#53B175] font-semibold hover:underline">
                         Browse vendors
                     </Link>
                 </div>
@@ -509,9 +705,9 @@ export default function CheckoutPage() {
             {/* Header */}
             <div className="bg-white border-b border-gray-100">
                 <div className="max-w-[var(--container-max)] mx-auto px-[var(--container-padding)] py-4">
-                    <Link href="/cart" className="flex items-center gap-1 text-[13px] text-gray-500 hover:text-gray-700 mb-2">
+                    <Link href={draftId ? "/orders" : "/cart"} className="flex items-center gap-1 text-[13px] text-gray-500 hover:text-gray-700 mb-2">
                         <ChevronLeft size={16} />
-                        Back to cart
+                        {draftId ? "Back to orders" : "Back to cart"}
                     </Link>
                     <h1 className="text-[20px] md:text-[24px] font-bold text-[#181725]">Checkout</h1>
 
@@ -525,7 +721,7 @@ export default function CheckoutPage() {
                             <React.Fragment key={s.key}>
                                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
                                     step === s.key
-                                        ? 'bg-[#299e60] text-white shadow-md shadow-green-200'
+                                        ? 'bg-[#53B175] text-white shadow-md shadow-green-200'
                                         : (idx < ['review', 'payment', 'confirmation'].indexOf(step))
                                             ? 'bg-green-100 text-green-700'
                                             : 'bg-gray-100 text-gray-400'
@@ -582,7 +778,7 @@ export default function CheckoutPage() {
                                             className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${
                                                 belowMov
                                                     ? 'bg-gray-100 border-gray-200 cursor-not-allowed'
-                                                    : isSelected ? 'bg-[#299e60] border-[#299e60]' : 'bg-white border-gray-300'
+                                                    : isSelected ? 'bg-[#53B175] border-[#53B175]' : 'bg-white border-gray-300'
                                             }`}
                                         >
                                             {isSelected && <Check size={13} className="text-white" strokeWidth={4} />}
@@ -593,14 +789,17 @@ export default function CheckoutPage() {
                                             <Image src={group.vendorLogo} alt={group.vendorName} fill className="object-contain" />
                                         </div>
                                     )}
-                                    <div className="flex-1">
+                                    <div className="flex-1 cursor-pointer" onClick={() => toggleVendorExpand(group.vendorId)}>
                                         <p className="text-[13px] font-bold text-[#181725]">{group.vendorName}</p>
                                         <p className="text-[10px] text-gray-400 font-medium flex items-center gap-1">
                                             <Clock size={10} />
-                                            Min order ₹{(group.minOrderValue || 0).toLocaleString('en-IN')}
+                                            {group.items.length} item{group.items.length > 1 ? 's' : ''} · Min ₹{(group.minOrderValue || 0).toLocaleString('en-IN')}
                                         </p>
                                     </div>
-                                    <span className="text-[14px] font-bold text-[#181725]">₹{group.subtotal.toLocaleString('en-IN')}</span>
+                                    <span className="text-[14px] font-bold text-[#181725] mr-1">₹{group.subtotal.toLocaleString('en-IN')}</span>
+                                    <button type="button" onClick={() => toggleVendorExpand(group.vendorId)} className="shrink-0 p-1 rounded-lg hover:bg-gray-100 transition-colors">
+                                        <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${expandedVendors.has(group.vendorId) ? 'rotate-180' : ''}`} />
+                                    </button>
                                 </div>
 
                                 {/* MOV banner */}
@@ -613,42 +812,57 @@ export default function CheckoutPage() {
                                     </div>
                                 )}
 
-                                {/* Items */}
-                                {group.items.map((item) => (
-                                    <div key={item.productId} className="flex items-center gap-3 px-4 py-3 border-b border-gray-50">
-                                        <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center p-1 shrink-0 relative overflow-hidden">
-                                            <Image src={item.product.images[0] || '/images/recom-product/product-img10.png'} alt={item.product.name} fill className="object-contain" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-[12px] font-bold text-[#181725] line-clamp-1">{item.product.name}</p>
-                                            <p className="text-[10px] text-gray-400">{item.product.packSize} × {item.quantity}</p>
-                                        </div>
-                                        <span className="text-[12px] font-bold text-[#181725]">₹{(item.product.price * item.quantity).toLocaleString('en-IN')}</span>
-                                    </div>
-                                ))}
-
-                                {/* Delivery slot picker + order notes */}
-                                {isSelected && (
+                                {/* Collapsible item list + slot/notes */}
+                                {expandedVendors.has(group.vendorId) ? (
                                     <>
-                                    <div className="px-4 py-3 bg-gray-50/50 border-t border-gray-100">
-                                        <DeliverySlotPicker
-                                            vendorId={group.vendorId}
-                                            selectedSlotId={slotByVendor[group.vendorId] ?? null}
-                                            onChange={(slotId) => setSlotByVendor(prev => ({ ...prev, [group.vendorId]: slotId }))}
-                                        />
-                                    </div>
-                                    <div className="px-4 py-3 bg-gray-50/50 border-t border-gray-100">
-                                        <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">Order notes / instructions (optional)</label>
-                                        <textarea
-                                            value={notesByVendor[group.vendorId] ?? ''}
-                                            onChange={(e) => setNotesByVendor(prev => ({ ...prev, [group.vendorId]: e.target.value }))}
-                                            rows={2}
-                                            maxLength={1000}
-                                            placeholder="e.g. deliver before noon, call on arrival…"
-                                            className="w-full text-[12px] rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#299e60] resize-none"
-                                        />
-                                    </div>
+                                    {/* Items */}
+                                    {group.items.map((item) => (
+                                        <div key={item.productId} className="flex items-center gap-3 px-4 py-2 border-b border-gray-50">
+                                            <div className="w-8 h-8 bg-gray-50 rounded-md flex items-center justify-center p-0.5 shrink-0 relative overflow-hidden">
+                                                <Image src={item.product.images[0] || '/images/recom-product/product-img10.png'} alt={item.product.name} fill className="object-contain" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-[12px] font-bold text-[#181725] line-clamp-1">{item.product.name}</p>
+                                                <p className="text-[10px] text-gray-400">{item.product.packSize} × {item.quantity}</p>
+                                            </div>
+                                            <span className="text-[12px] font-bold text-[#181725]">₹{(item.product.price * item.quantity).toLocaleString('en-IN')}</span>
+                                        </div>
+                                    ))}
+
+                                    {/* Delivery slot picker + order notes */}
+                                    {isSelected && (
+                                        <>
+                                        <div className="px-4 py-3 bg-gray-50/50 border-t border-gray-100">
+                                            <DeliverySlotPicker
+                                                vendorId={group.vendorId}
+                                                selectedSlotId={slotByVendor[group.vendorId] ?? null}
+                                                onChange={(slotId) => setSlotByVendor(prev => ({ ...prev, [group.vendorId]: slotId }))}
+                                            />
+                                        </div>
+                                        <div className="px-4 py-2.5 bg-gray-50/50 border-t border-gray-100">
+                                            <label className="block text-[11px] font-semibold text-gray-500 mb-1">Order notes (optional)</label>
+                                            <textarea
+                                                value={notesByVendor[group.vendorId] ?? ''}
+                                                onChange={(e) => setNotesByVendor(prev => ({ ...prev, [group.vendorId]: e.target.value }))}
+                                                rows={2}
+                                                maxLength={1000}
+                                                placeholder="e.g. deliver before noon, call on arrival…"
+                                                className="w-full text-[12px] rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#53B175] resize-none"
+                                            />
+                                        </div>
+                                        </>
+                                    )}
                                     </>
+                                ) : (
+                                    /* Collapsed compact summary */
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleVendorExpand(group.vendorId)}
+                                        className="w-full px-4 py-2 text-left text-[11px] text-gray-400 font-medium border-t border-gray-50 hover:bg-gray-50/50 transition-colors"
+                                    >
+                                        {group.items.slice(0, 3).map(i => i.product.name).join(', ')}{group.items.length > 3 ? ` +${group.items.length - 3} more` : ''}
+                                        <span className="text-[#53B175] ml-1 font-bold">↓ expand</span>
+                                    </button>
                                 )}
                             </div>
                             );
@@ -658,7 +872,7 @@ export default function CheckoutPage() {
                         <div className="bg-white rounded-2xl border border-gray-100 p-4">
                             <div className="flex items-center justify-between">
                                 <span className="text-[14px] font-bold text-[#181725]">Total Payable</span>
-                                <span className="text-[18px] font-bold text-[#299e60]">₹{selectedTotal.toLocaleString('en-IN')}</span>
+                                <span className="text-[18px] font-bold text-[#53B175]">₹{selectedTotal.toLocaleString('en-IN')}</span>
                             </div>
                             <p className="text-[11px] text-gray-400 mt-1">{selectedItemCount} items from {selectedVendorCount} vendor{selectedVendorCount !== 1 ? 's' : ''}</p>
                         </div>
@@ -684,190 +898,330 @@ export default function CheckoutPage() {
                             className={`w-full py-3.5 text-[14px] font-bold rounded-xl shadow-lg transition-all ${
                                 selectedVendorCount === 0 || currentOutlet?.requiresAddressUpdate
                                     ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
-                                    : 'bg-[#299e60] text-white shadow-green-200/50 hover:bg-[#22844f] active:scale-[0.99]'
+                                    : 'bg-[#53B175] text-white shadow-green-200/50 hover:bg-[#48a068] active:scale-[0.99]'
                             }`}
                         >
                             Continue to Payment →
                         </button>
-                        <button
-                            onClick={handleSaveDraft}
-                            disabled={selectedVendorCount === 0 || isPlacingOrder}
-                            className="w-full mt-2 py-3 text-[13px] font-bold rounded-xl border border-[#299e60] text-[#299e60] hover:bg-[#299e60]/5 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                        >
-                            Save as Draft
-                        </button>
+                        {!draftId && (
+                            <>
+                                <button
+                                    onClick={handleSaveDraft}
+                                    disabled={selectedVendorCount === 0 || isPlacingOrder}
+                                    className="w-full mt-2 py-2.5 text-[13px] font-bold rounded-xl border border-gray-200 text-gray-500 hover:border-[#53B175] hover:text-[#53B175] hover:bg-[#53B175]/5 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                                >
+                                    <FileText size={14} />
+                                    Save as Draft
+                                </button>
+                                <p className="text-[10px] text-gray-400 text-center mt-1.5">Save without paying — submit later from My Orders</p>
+                            </>
+                        )}
                     </div>
                 )}
 
                 {/* === STEP 2: PAYMENT === */}
                 {step === 'payment' && (
-                    <div className="space-y-4">
-                        <h2 className="text-[15px] font-bold text-[#181725]">Select Payment Method</h2>
-
-                        <div className="space-y-3">
-                            {PAYMENT_OPTIONS.map((opt) => (
-                                <button
-                                    key={opt.id}
-                                    onClick={() => setSelectedPayment(opt.id)}
-                                    className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all ${
-                                        selectedPayment === opt.id
-                                            ? 'border-[#299e60] bg-green-50/50 shadow-md shadow-green-100'
-                                            : 'border-gray-100 bg-white hover:border-gray-200'
-                                    }`}
-                                >
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                                        opt.color === 'purple' ? 'bg-purple-100 text-purple-600' :
-                                        opt.color === 'blue' ? 'bg-blue-100 text-blue-600' :
-                                        opt.color === 'green' ? 'bg-green-100 text-green-600' :
-                                        'bg-orange-100 text-orange-600'
-                                    }`}>
-                                        <opt.icon size={20} />
-                                    </div>
-                                    <div className="text-left flex-1">
-                                        <p className="text-[13px] font-bold text-[#181725]">{opt.name}</p>
-                                        <p className="text-[11px] text-gray-400 font-medium">{opt.desc}</p>
-                                    </div>
-                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                        selectedPayment === opt.id ? 'border-[#299e60]' : 'border-gray-200'
-                                    }`}>
-                                        {selectedPayment === opt.id && (
-                                            <div className="w-3 h-3 rounded-full bg-[#299e60]" />
-                                        )}
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Credit info if selected — one card per selected vendor group, each
-                            showing that vendor's DiSCCO credit line (or platform wallet) and
-                            whether it covers this order. */}
-                        {selectedPayment === 'credit' && (
-                            <div className="space-y-3">
-                                {!creditWalletsLoaded && (
-                                    <div className="bg-purple-50 rounded-2xl p-4 border border-purple-100 text-[12px] text-purple-600 font-medium">
-                                        Loading your credit lines…
-                                    </div>
-                                )}
-                                {creditWalletsLoaded && creditEligibility.map(({ group, wallet, available, remaining, ok, reason }) => (
-                                    <div key={group.vendorId} className="bg-purple-50 rounded-2xl p-4 border border-purple-100">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <Shield size={16} className="text-purple-600" />
-                                            <span className="text-[13px] font-bold text-purple-800">
-                                                {wallet?.vendor?.businessName ?? group.vendorName} — Credit Line
-                                            </span>
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <div className="flex justify-between text-[12px]">
-                                                <span className="text-purple-600">Available credit</span>
-                                                <span className="font-bold text-purple-800">
-                                                    {wallet ? `₹${available.toLocaleString('en-IN')}` : '—'}
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between text-[12px]">
-                                                <span className="text-purple-600">This order ({group.vendorName})</span>
-                                                <span className="font-bold text-purple-800">₹{group.subtotal.toLocaleString('en-IN')}</span>
-                                            </div>
-                                            <div className="flex justify-between text-[12px]">
-                                                <span className="text-purple-600">Remaining after order</span>
-                                                <span className={`font-bold ${remaining < 0 ? 'text-red-600' : 'text-purple-800'}`}>
-                                                    {wallet ? `₹${remaining.toLocaleString('en-IN')}` : '—'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        {!ok && reason && (
-                                            <div className="mt-3 flex items-start gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
-                                                <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
-                                                <p className="text-[11px] font-semibold text-red-600">{reason}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                                {creditWalletsLoaded && !creditAllSelectionsValid && creditEligibility.length > 0 && (
-                                    <div className="text-[12px] font-semibold text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
-                                        Pay via Credit isn&apos;t available for one or more selected vendors above. Resolve the issue or choose a different payment method.
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Wallet info if selected */}
-                        {selectedPayment === 'wallet' && (
-                            <div className="bg-yellow-50 rounded-2xl p-4 border border-yellow-100">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <WalletIcon size={16} className="text-yellow-600" />
-                                    <span className="text-[13px] font-bold text-yellow-800">H1 Wallet</span>
+                    <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 lg:gap-8 items-start">
+                        {/* Left Column — Payment Options */}
+                        <div className="space-y-4">
+                            <div className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm">
+                                <div className="px-5 md:px-7 py-5 border-b border-[#F0F0F0] bg-[#FAFAFA] text-left">
+                                    <h3 className="text-[17px] md:text-[19px] font-bold text-[#181725]">Select Payment Method</h3>
+                                    <p className="text-[13px] text-gray-400 font-medium mt-0.5">Choose how you&apos;d like to pay</p>
                                 </div>
-                                <div className="space-y-1.5">
-                                    <div className="flex justify-between text-[12px]">
-                                        <span className="text-yellow-600">Available balance</span>
-                                        <span className="font-bold text-yellow-800">
-                                            {walletBalance !== null ? `₹${walletBalance.toLocaleString('en-IN')}` : 'Loading...'}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between text-[12px]">
-                                        <span className="text-yellow-600">This order</span>
-                                        <span className="font-bold text-yellow-800">₹{selectedTotal.toLocaleString('en-IN')}</span>
-                                    </div>
+                                <div className="divide-y divide-[#F5F5F5]">
+                                    {PAYMENT_OPTIONS.map((opt) => {
+                                        const isSelected = selectedPayment === opt.id;
+                                        return (
+                                            <button
+                                                key={opt.id}
+                                                type="button"
+                                                onClick={() => setSelectedPayment(opt.id)}
+                                                className={`w-full px-5 md:px-7 py-4 md:py-5 flex items-center gap-4 text-left transition-all ${isSelected ? 'bg-[#53B175]/5' : 'hover:bg-gray-50/60'}`}
+                                            >
+                                                {/* Icon badge */}
+                                                <div className={`w-11 h-11 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 ${opt.badgeBg} ${opt.badgeText} border border-black/5`}>
+                                                    <opt.icon size={20} />
+                                                </div>
+                                                
+                                                {/* Label */}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="text-[15px] md:text-[16px] font-bold text-[#181725]">
+                                                            {opt.name}
+                                                        </span>
+                                                        {('tag' in opt && opt.tag) && (
+                                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${opt.id === 'online' ? 'bg-[#3395FF]/10 text-[#3395FF]' : 'bg-purple-100 text-purple-600'}`}>
+                                                                {opt.tag}
+                                                            </span>
+                                                        )}
+
+                                                        {/* Inline Balance badges */}
+                                                        {opt.id === 'wallet' && creditWalletsLoaded && platformWallet && (
+                                                            platformWallet.status === 'BLACKLISTED' || platformWallet.status === 'BLOCKED' ? (
+                                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 uppercase">
+                                                                    {platformWallet.status.toLowerCase()}
+                                                                </span>
+                                                            ) : walletBalance !== null && walletBalance < selectedTotal ? (
+                                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600">
+                                                                    Bal: ₹{walletBalance.toLocaleString('en-IN')} (Insufficient)
+                                                                </span>
+                                                            ) : walletBalance !== null ? (
+                                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-50 text-[#53B175]">
+                                                                    Bal: ₹{walletBalance.toLocaleString('en-IN')}
+                                                                </span>
+                                                            ) : null
+                                                        )}
+
+                                                        {opt.id === 'credit' && creditWalletsLoaded && (
+                                                            selectedGroups.length === 1 ? (
+                                                                (() => {
+                                                                    const wallet = creditWalletsByVendor[selectedGroups[0].vendorId];
+                                                                    if (!wallet) return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-50 text-gray-500">No Credit Setup</span>;
+                                                                    const avail = Number(wallet.availableCredit) || 0;
+                                                                    if (wallet.status === 'BLACKLISTED' || wallet.status === 'BLOCKED') {
+                                                                        return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 uppercase">{wallet.status.toLowerCase()}</span>;
+                                                                    }
+                                                                    if (avail < selectedGroups[0].subtotal) {
+                                                                        return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600">Limit: ₹{avail.toLocaleString('en-IN')} (Insufficient)</span>;
+                                                                    }
+                                                                    return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-50 text-[#53B175]">Limit: ₹{avail.toLocaleString('en-IN')}</span>;
+                                                                })()
+                                                            ) : selectedGroups.length > 1 ? (
+                                                                (() => {
+                                                                    const allOk = creditEligibility.every(c => c.ok);
+                                                                    const totalAvail = creditEligibility.reduce((sum, c) => sum + c.available, 0);
+                                                                    if (allOk) {
+                                                                        return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-50 text-[#53B175]">Limit: ₹{totalAvail.toLocaleString('en-IN')}</span>;
+                                                                    }
+                                                                    const blockedCount = creditEligibility.filter(c => c.blocked).length;
+                                                                    const insufficientCount = creditEligibility.filter(c => !c.blocked && c.available < c.group.subtotal).length;
+                                                                    if (blockedCount > 0) return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600">{blockedCount} Blocked</span>;
+                                                                    if (insufficientCount > 0) return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600">{insufficientCount} Insufficient</span>;
+                                                                    return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600">Unavailable</span>;
+                                                                })()
+                                                            ) : null
+                                                        )}
+                                                    </div>
+                                                    <span className="text-[12px] md:text-[13px] text-gray-400 font-medium block mt-0.5">{opt.desc}</span>
+                                                </div>
+
+                                                {/* Radio indicator */}
+                                                <div className={`w-5 h-5 md:w-6 md:h-6 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${isSelected ? 'border-[#53B175]' : 'border-gray-300'}`}>
+                                                    {isSelected && <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-[#53B175]" />}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
-                        )}
 
-                        {/* Bank Transfer input */}
-                        {selectedPayment === 'bank_transfer' && (
-                            <div className="bg-green-50 rounded-2xl p-4 border border-green-100">
-                                <p className="text-[12px] font-bold text-green-700 mb-2">Bank Account Details</p>
-                                <p className="text-[11px] text-green-600 mb-2">Transfer to: Horeca1 Pvt Ltd · A/C 1234567890 · IFSC HDFC0001234</p>
-                                <input type="text" placeholder="Enter UTR / Transaction Ref Number..." value={bankTransferInput} onChange={(e) => setBankTransferInput(e.target.value)}
-                                    className="w-full border border-green-200 rounded-xl px-3 py-2 text-[13px] font-bold outline-none focus:border-green-400 placeholder:text-gray-400" />
-                            </div>
-                        )}
+                            {/* Additional configuration panels (Bank Transfer input, PO number, etc.) on the left */}
+                            {selectedPayment === 'bank_transfer' && (
+                                <div className="bg-green-50 rounded-2xl p-5 border border-green-100 shadow-sm text-left">
+                                    <p className="text-[13px] font-bold text-green-700 mb-2">Bank Account Details</p>
+                                    <p className="text-[12px] text-green-600 mb-3 leading-relaxed">
+                                        Transfer to: <strong className="text-green-800">Horeca1 Pvt Ltd</strong><br />
+                                        A/C Number: <strong className="text-green-800">1234567890</strong><br />
+                                        IFSC Code: <strong className="text-green-800">HDFC0001234</strong>
+                                    </p>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Enter UTR / Transaction Ref Number..." 
+                                        value={bankTransferInput} 
+                                        onChange={(e) => setBankTransferInput(e.target.value)}
+                                        className="w-full border border-green-200 bg-white rounded-xl px-4 py-3 text-[13px] font-bold outline-none focus:ring-1 focus:ring-[#53B175] placeholder:text-gray-400" 
+                                    />
+                                </div>
+                            )}
 
-                        {/* PO Number input */}
-                        {selectedPayment === 'po_number' && (
-                            <div className="bg-orange-50 rounded-2xl p-4 border border-orange-100">
-                                <p className="text-[12px] font-bold text-orange-700 mb-2">Enter Purchase Order Number</p>
-                                <input type="text" placeholder="e.g. PO-2024-001" value={poNumberInput} onChange={(e) => setPoNumberInput(e.target.value)}
-                                    className="w-full border border-orange-200 rounded-xl px-3 py-2 text-[13px] font-bold outline-none focus:border-orange-400 placeholder:text-gray-400" />
-                            </div>
-                        )}
-
-                        {/* Total */}
-                        <div className="bg-white rounded-2xl border border-gray-100 p-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-[14px] font-bold text-[#181725]">Total Payable</span>
-                                <span className="text-[18px] font-bold text-[#299e60]">₹{selectedTotal.toLocaleString('en-IN')}</span>
-                            </div>
+                            {selectedPayment === 'po_number' && (
+                                <div className="bg-orange-50 rounded-2xl p-5 border border-orange-100 shadow-sm text-left">
+                                    <p className="text-[13px] font-bold text-orange-700 mb-2">Enter Purchase Order Number</p>
+                                    <input 
+                                        type="text" 
+                                        placeholder="e.g. PO-2024-001" 
+                                        value={poNumberInput} 
+                                        onChange={(e) => setPoNumberInput(e.target.value)}
+                                        className="w-full border border-orange-200 bg-white rounded-xl px-4 py-3 text-[13px] font-bold outline-none focus:ring-1 focus:ring-[#53B175] placeholder:text-gray-400" 
+                                    />
+                                </div>
+                            )}
                         </div>
 
-                        {orderError && (
-                            <div className="text-[13px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3 font-medium">
-                                {orderError}
+                        {/* Right Column — Summary card & Actions (desktop sticky, mobile/tablet bottom) */}
+                        <div className="space-y-4 lg:sticky lg:top-[80px]">
+                            {/* Paying via widget */}
+                            {selectedPayment && (
+                                <div className="bg-white rounded-2xl border border-[#E2E2E2] px-5 py-4 flex items-center gap-3 shadow-sm text-left animate-in fade-in slide-in-from-top-1 duration-200">
+                                    {(() => {
+                                        const opt = PAYMENT_OPTIONS.find(o => o.id === selectedPayment);
+                                        if (!opt) return null;
+                                        return (
+                                            <>
+                                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${opt.badgeBg} ${opt.badgeText} border border-black/5`}>
+                                                    <opt.icon size={18} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[12px] text-gray-400 font-medium">Paying via</p>
+                                                    <p className="text-[14px] font-bold text-[#181725]">{opt.name}</p>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+
+                            {/* Credit Eligibility Cards */}
+                            {selectedPayment === 'credit' && creditWalletsLoaded && (
+                                <div className="space-y-3">
+                                    {creditEligibility.map(({ group, wallet, available, remaining, ok, reason }) => (
+                                        <div key={group.vendorId} className="bg-purple-50 rounded-2xl p-4 border border-purple-100 text-left shadow-sm">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <Shield size={15} className="text-purple-600" />
+                                                <span className="text-[12px] font-bold text-purple-800 truncate">
+                                                    {wallet?.vendor?.businessName ?? group.vendorName}
+                                                </span>
+                                            </div>
+                                            <div className="space-y-1 text-[12px]">
+                                                <div className="flex justify-between">
+                                                    <span className="text-purple-600">Available Credit</span>
+                                                    <span className="font-bold text-purple-800">{wallet ? `₹${available.toLocaleString('en-IN')}` : '—'}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-purple-600">This PO Value</span>
+                                                    <span className="font-bold text-purple-800">₹{group.subtotal.toLocaleString('en-IN')}</span>
+                                                </div>
+                                                <div className="flex justify-between border-t border-purple-100/50 pt-1 mt-1">
+                                                    <span className="text-purple-600">Remaining Limit</span>
+                                                    <span className={`font-bold ${remaining < 0 ? 'text-red-600' : 'text-purple-800'}`}>
+                                                        {wallet ? `₹${remaining.toLocaleString('en-IN')}` : '—'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {!ok && reason && (
+                                                <div className="mt-2.5 flex items-start gap-1.5 bg-red-50 border border-red-100 rounded-lg p-2">
+                                                    <AlertCircle size={13} className="text-red-500 shrink-0 mt-0.5" />
+                                                    <p className="text-[10px] font-bold text-red-600">{reason}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {!creditAllSelectionsValid && (
+                                        <div className="text-[11px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl p-3 text-left">
+                                            Credit limit validation failed for one or more POs.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Wallet details card */}
+                            {selectedPayment === 'wallet' && creditWalletsLoaded && platformWallet && (
+                                <div className="bg-yellow-50 rounded-2xl p-4 border border-yellow-100 text-left shadow-sm">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <WalletIcon size={15} className="text-yellow-600" />
+                                        <span className="text-[12px] font-bold text-yellow-800">H1 Platform Wallet</span>
+                                    </div>
+                                    <div className="space-y-1 text-[12px]">
+                                        <div className="flex justify-between">
+                                            <span className="text-yellow-600">Wallet Balance</span>
+                                            <span className="font-bold text-yellow-800">₹{walletBalance?.toLocaleString('en-IN') ?? '—'}</span>
+                                        </div>
+                                        {Number(platformWallet.outstandingAmount) > 0 && (
+                                            <>
+                                                <div className="flex justify-between">
+                                                    <span className="text-yellow-600">Outstanding Due</span>
+                                                    <span className="font-bold text-rose-600">₹{Number(platformWallet.outstandingAmount).toLocaleString('en-IN')}</span>
+                                                </div>
+                                                {platformWallet.currentDueDate && (
+                                                    <div className="flex justify-between">
+                                                        <span className="text-yellow-600">Due Date</span>
+                                                        <span className="font-bold text-rose-600">
+                                                            {new Date(platformWallet.currentDueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                        <div className="flex justify-between border-t border-yellow-200/50 pt-1 mt-1">
+                                            <span className="text-yellow-600">This Order Total</span>
+                                            <span className="font-bold text-yellow-800">₹{selectedTotal.toLocaleString('en-IN')}</span>
+                                        </div>
+                                    </div>
+                                    {!walletEligibility.ok && walletEligibility.reason && (
+                                        <div className="mt-2.5 flex items-start gap-1.5 bg-red-50 border border-red-100 rounded-lg p-2">
+                                            <AlertCircle size={13} className="text-red-500 shrink-0 mt-0.5" />
+                                            <p className="text-[10px] font-bold text-red-600">{walletEligibility.reason}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Summary card */}
+                            <div className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm text-left">
+                                <div className="px-5 py-4 flex items-center gap-3 border-b border-[#F0F0F0] bg-gray-50/50">
+                                    <div className="w-[30px] h-[30px] rounded-lg border border-[#E2E2E2] flex items-center justify-center shrink-0 bg-white">
+                                        <FileText size={15} className="text-[#181725]" />
+                                    </div>
+                                    <span className="text-[14px] font-bold text-[#181725]">Final Summary</span>
+                                </div>
+                                <div className="p-5 space-y-4">
+                                    <div className="flex justify-between items-center text-[13px]">
+                                        <span className="text-gray-500 font-medium">Subtotal</span>
+                                        <span className="font-bold text-[#181725]">₹{selectedTotal.toLocaleString('en-IN')}</span>
+                                    </div>
+                                    <div className="border-t border-dashed border-[#D0D0D0] pt-4 flex justify-between items-baseline">
+                                        <span className="text-[15px] font-bold text-[#181725]">Total Payable</span>
+                                        <span className="text-[22px] font-black text-[#53B175]">₹{selectedTotal.toLocaleString('en-IN')}</span>
+                                    </div>
+                                    <p className="text-[10px] text-gray-400 leading-normal">
+                                        Checking out {selectedItemCount} items from {selectedVendorCount} vendor PO{selectedVendorCount > 1 ? 's' : ''}. Includes applicable GST and taxes.
+                                    </p>
+                                </div>
                             </div>
-                        )}
-                        <button
-                            onClick={handlePlaceOrder}
-                            disabled={!selectedPayment || isPlacingOrder || (selectedPayment === 'credit' && (!creditWalletsLoaded || !creditAllSelectionsValid))}
-                            className={`w-full py-3.5 text-[14px] font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${
-                                selectedPayment && !isPlacingOrder && !(selectedPayment === 'credit' && (!creditWalletsLoaded || !creditAllSelectionsValid))
-                                    ? 'bg-[#299e60] text-white shadow-green-200/50 hover:bg-[#22844f] active:scale-[0.99]'
-                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
-                            }`}
-                        >
-                            {isPlacingOrder ? (
-                                <>
-                                    <Loader2 size={16} className="animate-spin" />
-                                    {selectedPayment === 'online' ? 'Opening Payment...' : 'Placing Order...'}
-                                </>
-                            ) : selectedPayment === 'online' ? 'Pay Online →' : 'Place Order →'}
-                        </button>
+
+                            {/* Errors */}
+                            {orderError && (
+                                <div className="text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3 font-semibold text-left">
+                                    {orderError}
+                                </div>
+                            )}
+
+                            {/* Action Button */}
+                            <button
+                                onClick={handlePlaceOrder}
+                                disabled={
+                                    !selectedPayment || 
+                                    isPlacingOrder || 
+                                    (selectedPayment === 'credit' && (!creditWalletsLoaded || !creditAllSelectionsValid)) ||
+                                    (selectedPayment === 'wallet' && (!creditWalletsLoaded || !walletEligibility.ok))
+                                }
+                                className={`w-full py-4 text-[15px] font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${
+                                    selectedPayment && 
+                                    !isPlacingOrder && 
+                                    !(selectedPayment === 'credit' && (!creditWalletsLoaded || !creditAllSelectionsValid)) &&
+                                    !(selectedPayment === 'wallet' && (!creditWalletsLoaded || !walletEligibility.ok))
+                                        ? 'bg-[#53B175] hover:bg-[#48a068] text-white shadow-green-100/50 active:scale-[0.99]'
+                                        : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
+                                }`}
+                            >
+                                {isPlacingOrder ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        {selectedPayment === 'online' ? 'Opening Payment...' : 'Placing Order...'}
+                                    </>
+                                ) : selectedPayment === 'online' ? 'Pay Online →' : 'Place Order →'}
+                            </button>
+                        </div>
                     </div>
                 )}
 
                 {/* === STEP 3: CONFIRMATION === */}
+                {/* (kept for completeness — the success path hard-redirects to /order-success) */}
                 {step === 'confirmation' && (
                     <div className="text-center py-8">
                         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <CheckCircle2 size={40} className="text-[#299e60]" />
+                            <CheckCircle2 size={40} className="text-[#53B175]" />
                         </div>
                         <h2 className="text-[22px] font-bold text-[#181725] mb-1">Order Placed!</h2>
                         <p className="text-[14px] text-gray-500 mb-6">
@@ -895,7 +1249,7 @@ export default function CheckoutPage() {
                         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                             <Link
                                 href="/orders"
-                                className="px-6 py-2.5 bg-[#299e60] text-white text-[13px] font-bold rounded-xl shadow-md shadow-green-200/50 hover:bg-[#22844f] transition-all"
+                                className="px-6 py-2.5 bg-[#53B175] text-white text-[13px] font-bold rounded-xl shadow-md shadow-green-200/50 hover:bg-[#48a068] transition-all"
                             >
                                 View Orders
                             </Link>
@@ -910,5 +1264,20 @@ export default function CheckoutPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+// useSearchParams() requires a Suspense boundary in the App Router — without
+// it `next build` fails prerendering this page.
+export default function CheckoutPage() {
+    return (
+        <React.Suspense fallback={
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50/50">
+                <Loader2 size={36} className="text-[#53B175] animate-spin mb-4" />
+                <p className="text-[14px] text-gray-400 font-medium">Loading checkout...</p>
+            </div>
+        }>
+            <CheckoutPageContent />
+        </React.Suspense>
     );
 }
