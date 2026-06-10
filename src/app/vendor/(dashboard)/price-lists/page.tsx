@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Tag, Plus, Loader2, Pencil, Trash2, Users, Package, X } from 'lucide-react';
+import Link from 'next/link';
+import { Tag, Plus, Loader2, Pencil, Trash2, Users, Package, X, Grid3x3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface PriceList {
@@ -151,13 +152,22 @@ export default function VendorPriceListsPage() {
           <h1 className="text-[24px] font-bold text-[#181725]">Price Lists</h1>
           <p className="text-[12px] text-[#AEAEAE]">Custom pricing for B2B customer segments</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 h-[38px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-colors"
-        >
-          <Plus size={15} />
-          New Price List
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/vendor/price-lists/workspace"
+            className="flex items-center gap-2 px-4 h-[38px] rounded-[10px] bg-white border border-[#299E60] text-[#299E60] text-[13px] font-bold hover:bg-[#299E60]/5 transition-colors"
+          >
+            <Grid3x3 size={15} />
+            Open Workspace
+          </Link>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 px-4 h-[38px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-colors"
+          >
+            <Plus size={15} />
+            New Price List
+          </button>
+        </div>
       </div>
 
       {loading ? (
