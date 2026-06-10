@@ -3,7 +3,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 
 // WHY: Prisma 7 uses a JS-native engine (not a binary like Prisma 5/6).
 // It needs a "driver adapter" to talk to PostgreSQL.
-// PrismaPg accepts a PoolConfig object and creates the pg Pool internally.
+// PrismaPg accepts a pg.PoolConfig and creates the pg Pool internally.
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
