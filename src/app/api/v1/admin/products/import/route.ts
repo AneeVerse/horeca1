@@ -4,6 +4,7 @@ import { adminOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { parseProductImport, type ParsedProductRow } from '@/modules/import-export/excel.service';
 import { requirePermission } from '@/lib/permissions/engine';
+import { findOrCreateMaster } from '@/modules/catalog/catalog.service';
 
 // ── Preview mode: parse file, match SKUs, return diff without committing ──
 // ── Commit mode: actually create/update products with backup ──
@@ -13,10 +14,14 @@ interface PreviewItem {
   action: 'create' | 'update' | 'skip';
   name: string;
   sku?: string;
+  hsn?: string;
+  brand?: string;
+  unit?: string;
   category?: string;
   basePrice: number;
   grossRate: number;
   taxPercent: number;
+  promoPrice?: number | null;
   stock?: number;
   bulkSlabCount: number;
   // Full slab list so the UI can show admin the actual tier prices
@@ -162,10 +167,14 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             action: 'update',
             name: r.name,
             sku: r.sku,
+            hsn: r.hsn,
+            brand: r.brand,
+            unit: r.unit,
             category: r.category,
             basePrice: r.basePrice,
             grossRate: r.grossRate,
             taxPercent: r.taxPercent,
+            promoPrice: r.promoPrice ?? null,
             stock: r.stock,
             bulkSlabCount: r.bulkSlabs.length,
             bulkSlabs: slabPreview,
@@ -187,10 +196,14 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             action: 'create',
             name: r.name,
             sku: r.sku,
+            hsn: r.hsn,
+            brand: r.brand,
+            unit: r.unit,
             category: r.category,
             basePrice: r.basePrice,
             grossRate: r.grossRate,
             taxPercent: r.taxPercent,
+            promoPrice: r.promoPrice ?? null,
             stock: r.stock,
             bulkSlabCount: r.bulkSlabs.length,
             bulkSlabs: slabPreview,
@@ -373,9 +386,17 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           updated++;
         } else {
           // ── CREATE new product ──
+          // P0-1: link/create the Horeca1 master SKU by (name, brand) whenever a
+          // leaf category resolved — keeps bulk-imported items in the central
+          // item master, same invariant the single-create path enforces.
+          const masterProductId = categoryId
+            ? await findOrCreateMaster({ name: r.name, brand: r.brand ?? null, categoryId })
+            : null;
+
           const productData: Record<string, unknown> = {
             vendorId: vendorId || null,
             categoryId,
+            masterProductId,
             name: r.name,
             slug,
             sku: r.sku || null,

@@ -28,6 +28,7 @@ import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { parseProductImport, generateImportTemplate, type ParsedProductRow } from '@/modules/import-export/excel.service';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
+import { findOrCreateMaster } from '@/modules/catalog/catalog.service';
 
 // ── Response shapes — kept identical to the admin importer so the review
 //    wizard UI is portable between the two portals. ──
@@ -37,10 +38,14 @@ interface PreviewItem {
   action: 'create' | 'update' | 'skip';
   name: string;
   sku?: string;
+  hsn?: string;
+  brand?: string;
+  unit?: string;
   category?: string;
   basePrice: number;
   grossRate: number;
   taxPercent: number;
+  promoPrice?: number | null;
   stock?: number;
   bulkSlabCount: number;
   bulkSlabs: Array<{ minQty: number; price: number; grossRate: number; promoPrice?: number | null }>;
@@ -193,10 +198,14 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
             action: 'update',
             name: r.name,
             sku: r.sku,
+            hsn: r.hsn,
+            brand: r.brand,
+            unit: r.unit,
             category: r.category,
             basePrice: r.basePrice,
             grossRate: r.grossRate,
             taxPercent: r.taxPercent,
+            promoPrice: r.promoPrice ?? null,
             stock: r.stock,
             bulkSlabCount: r.bulkSlabs.length,
             bulkSlabs: slabPreview,
@@ -218,10 +227,14 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
             action: 'create',
             name: r.name,
             sku: r.sku,
+            hsn: r.hsn,
+            brand: r.brand,
+            unit: r.unit,
             category: r.category,
             basePrice: r.basePrice,
             grossRate: r.grossRate,
             taxPercent: r.taxPercent,
+            promoPrice: r.promoPrice ?? null,
             stock: r.stock,
             bulkSlabCount: r.bulkSlabs.length,
             bulkSlabs: slabPreview,
@@ -381,10 +394,20 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
           updated++;
         } else {
           // ── CREATE new product (pending vendor approval) ──
+          // P0-1: every product MUST map to a Horeca1 master SKU, exactly like
+          // the single-product create path (CatalogService.createProduct). The
+          // bulk path used to skip this, leaving imported rows orphaned from
+          // the central item master and un-reassignable. Link/create the master
+          // by (name, brand) when we have a resolved leaf category.
+          const masterProductId = categoryId
+            ? await findOrCreateMaster({ name: r.name, brand: r.brand ?? null, categoryId })
+            : null;
+
           const product = await prisma.product.create({
             data: {
               vendorId,
               categoryId,
+              masterProductId,
               name: r.name,
               slug: uniqueSlug(r.name),
               sku: r.sku || null,
