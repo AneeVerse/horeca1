@@ -228,12 +228,16 @@ export class PaymentService {
             method: entity.method ?? null,
           },
         }),
+        // paymentStatus reflects reality even when the order moved on; the
+        // workflow status only advances from 'pending' — a late capture must
+        // not resurrect a cancelled order or rewind one already in fulfilment.
         prisma.order.updateMany({
-          where: { id: { in: payments.map(p => p.orderId) } },
-          data: {
-            paymentStatus: 'paid',
-            status: 'confirmed',
-          },
+          where: { id: { in: payments.map(p => p.orderId) }, status: { not: 'cancelled' } },
+          data: { paymentStatus: 'paid' },
+        }),
+        prisma.order.updateMany({
+          where: { id: { in: payments.map(p => p.orderId) }, status: 'pending' },
+          data: { status: 'confirmed' },
         }),
       ]);
 
