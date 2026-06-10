@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { assertAccountMember, assertAccountPermission } from '@/lib/accountAccess';
 import { uniqueHcid } from '@/lib/hcid';
+import { phoneLookupVariants } from '@/lib/phone';
 import { sendEmail } from '@/lib/providers/email';
 import { buildInviteEmail } from '@/lib/email-templates/invite';
 import { sendSms } from '@/lib/providers/sms';
@@ -164,8 +165,8 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
         tempPassword = body.password;
       }
     } else if (phoneDigits.length === 10) {
-      const existing = await prisma.user.findUnique({
-        where: { phone: phoneDigits },
+      const existing = await prisma.user.findFirst({
+        where: { phone: { in: phoneLookupVariants(phoneDigits) } },
         select: { id: true, email: true, fullName: true, phone: true },
       });
       if (!existing) {

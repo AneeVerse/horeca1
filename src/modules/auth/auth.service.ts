@@ -5,6 +5,7 @@ import type { Role } from '@prisma/client';
 import { Errors } from '@/middleware/errorHandler';
 import { provisionDefaultAccount } from '@/lib/provisionAccount';
 import { uniqueHcid } from '@/lib/hcid';
+import { normalizePhone, phoneLookupVariants } from '@/lib/phone';
 
 interface SignupInput {
   email: string;
@@ -19,11 +20,16 @@ interface SignupInput {
 
 export class AuthService {
   async signup(input: SignupInput) {
+    // Canonical 10-digit phone — see src/lib/phone.ts. Stored prefixed
+    // ("+91…") in the past, which broke phone-based login lookups.
+    const phone = normalizePhone(input.phone);
+    if (input.phone && !phone) throw Errors.badRequest('Invalid phone number');
+
     const existing = await prisma.user.findFirst({
       where: {
         OR: [
           { email: input.email },
-          ...(input.phone ? [{ phone: input.phone }] : []),
+          ...(phone ? [{ phone: { in: phoneLookupVariants(phone) } }] : []),
         ],
       },
     });
@@ -43,7 +49,7 @@ export class AuthService {
         email: input.email,
         password: hashedPassword,
         fullName: input.fullName,
-        phone: input.phone,
+        phone,
         role: 'customer',
         pincode: input.pincode,
         businessName: input.businessName,
@@ -143,6 +149,11 @@ export class AuthService {
       image: string;
     }>
   ) {
+    if (data.phone !== undefined) {
+      const phone = normalizePhone(data.phone);
+      if (!phone) throw Errors.badRequest('Invalid phone number');
+      data = { ...data, phone };
+    }
     return prisma.user.update({
       where: { id: userId },
       data,

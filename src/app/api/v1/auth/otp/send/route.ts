@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/providers/email';
+import { phoneLookupVariants } from '@/lib/phone';
 import { withRateLimit } from '@/middleware/withRateLimit';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -86,7 +87,10 @@ async function postHandler(req: NextRequest) {
     // Verify the account exists for login
     if (mode === 'login') {
       const existing = usePhone
-        ? await prisma.user.findUnique({ where: { phone }, select: { id: true } })
+        ? await prisma.user.findFirst({
+            where: { phone: { in: phoneLookupVariants(phone) } },
+            select: { id: true },
+          })
         : await prisma.user.findUnique({ where: { email }, select: { id: true } });
       if (!existing) {
         return NextResponse.json(

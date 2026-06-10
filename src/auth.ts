@@ -8,6 +8,7 @@ import { redis } from '@/lib/redis';
 import { provisionDefaultAccount } from '@/lib/provisionAccount';
 import { uniqueHcid } from '@/lib/hcid';
 import { flatten } from '@/lib/permissions/engine';
+import { phoneLookupVariants } from '@/lib/phone';
 import type { PermissionKey, PermissionsJson } from '@/lib/permissions/registry';
 
 function vendorSlug(name: string): string {
@@ -63,8 +64,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         await prisma.otpCode.update({ where: { id: record.id }, data: { used: true } });
 
         let user = usePhone
-          ? await prisma.user.findUnique({
-              where: { phone },
+          ? await prisma.user.findFirst({
+              where: { phone: { in: phoneLookupVariants(phone) } },
               select: { id: true, email: true, fullName: true, role: true, image: true, isActive: true },
             })
           : await prisma.user.findUnique({
@@ -158,8 +159,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               select: { id: true, email: true, password: true, fullName: true, role: true, image: true, isActive: true },
             })
           : (phoneDigits.length === 10
-              ? await prisma.user.findUnique({
-                  where: { phone: phoneDigits },
+              ? await prisma.user.findFirst({
+                  where: { phone: { in: phoneLookupVariants(phoneDigits) } },
                   select: { id: true, email: true, password: true, fullName: true, role: true, image: true, isActive: true },
                 })
               : null);

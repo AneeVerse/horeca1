@@ -14,6 +14,7 @@ import { requirePermission, sanitizePermissions } from '@/lib/permissions/engine
 import { prisma } from '@/lib/prisma';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { uniqueHcid } from '@/lib/hcid';
+import { phoneLookupVariants } from '@/lib/phone';
 import { toTeamMemberDTO, teamMemberInclude, type TeamMemberDTO } from '@/lib/teamMemberShape';
 import { sendEmail } from '@/lib/providers/email';
 import { buildInviteEmail } from '@/lib/email-templates/invite';
@@ -169,7 +170,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
     const looksEmail = identifierTrim.includes('@');
     let user = looksEmail
       ? await prisma.user.findUnique({ where: { email: identifierTrim.toLowerCase() } })
-      : await prisma.user.findUnique({ where: { phone: identifierTrim.replace(/\D/g, '') } });
+      : await prisma.user.findFirst({ where: { phone: { in: phoneLookupVariants(identifierTrim) } } });
 
     // Capture plain-text password BEFORE bcrypt.hash so we can email it. Only
     // set on the new-user creation path; existing users keep their password.
