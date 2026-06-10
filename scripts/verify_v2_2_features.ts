@@ -1,11 +1,11 @@
-/**
+﻿/**
  * V2.2 Complete Stack Verification Script
  * Covers Points 1 to 7. Runs integration actions directly and cleans up in finally block.
  * 
  * Run: npx tsx scripts/verify_v2_2_features.ts
  */
 import 'dotenv/config';
-import { PrismaClient, User, Product, Vendor, BusinessAccount, Outlet, Inventory, CreditAccount, VendorCustomer } from '@prisma/client';
+import { PrismaClient, Prisma, User, Product, Vendor, BusinessAccount, Outlet, Inventory, CreditAccount, VendorCustomer } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { resolveUnitPrice } from '../src/modules/pricing/pricing.service';
 import { OrderService, OrderContext } from '../src/modules/order/order.service';
@@ -23,15 +23,15 @@ const BOLD = '\x1b[1m';
 
 async function runTests() {
   console.log(`${BOLD}====================================================`);
-  console.log(`🚀 STARTING AUTOMATED VERIFICATION OF FEATURES 1 - 7`);
+  console.log(`ðŸš€ STARTING AUTOMATED VERIFICATION OF FEATURES 1 - 7`);
   console.log(`====================================================${RESET}\n`);
 
   let failedTests = 0;
   const assert = (condition: boolean, message: string) => {
     if (condition) {
-      console.log(`  ${GREEN}✓ ${message}${RESET}`);
+      console.log(`  ${GREEN}âœ“ ${message}${RESET}`);
     } else {
-      console.log(`  ${RED}✗ ${message}${RESET}`);
+      console.log(`  ${RED}âœ— ${message}${RESET}`);
       failedTests++;
     }
   };
@@ -41,6 +41,7 @@ async function runTests() {
   const orderIds: string[] = [];
   const creditTxIds: string[] = [];
   const productsToCleanup: string[] = [];
+  let qaWalletId: string | null = null; // CreditWallet created for the debit-at-placement test
   
   // State restoration variables
   let testCustomer: User | null = null;
@@ -65,14 +66,15 @@ async function runTests() {
 
   let originalSecondaryCreditAcc: CreditAccount | null = null;
   let didCreateSecondaryCreditAcc = false;
+  let originalSecondaryMov: Prisma.Decimal | null = null;
 
   let originalVendorCustomer: VendorCustomer | null = null;
   let didCreateVendorCustomer = false;
 
   try {
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  POINT 1: USER & ACCESS CONTROL
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`${BOLD}1. USER & ACCESS CONTROL${RESET}`);
     const adminUser = await prisma.user.findFirst({ where: { role: 'admin' } });
     const vendorUser = await prisma.user.findFirst({ where: { role: 'vendor' } });
@@ -92,9 +94,9 @@ async function runTests() {
     assert(roleTemplates >= 14, `Seeded Role Templates exist (Found: ${roleTemplates} templates)`);
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  POINT 2: CUSTOMER MANAGEMENT
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}2. CUSTOMER MANAGEMENT${RESET}`);
     // Check 13 profile attributes on BusinessAccount
     const ba = await prisma.businessAccount.findFirst({ where: { isCustomer: true } });
@@ -118,9 +120,9 @@ async function runTests() {
     assert(customerOutlets.length > 0, `Customer has mapped outlets (Found: ${customerOutlets.length})`);
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  POINT 3: BRAND & VENDOR MANAGEMENT
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}3. BRAND & VENDOR MANAGEMENT${RESET}`);
     // Vendor KYC Display Columns check
     const vendor = await prisma.vendor.findFirst();
@@ -137,9 +139,9 @@ async function runTests() {
     assert(brandMappingsCount >= 0, `Brand product mappings count: ${brandMappingsCount}`);
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  POINT 4: CENTRAL ITEM MANAGEMENT
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}4. CENTRAL ITEM MANAGEMENT${RESET}`);
     // Check MasterProduct table & Product.masterProductId relation
     const masterCount = await prisma.masterProduct.count();
@@ -150,9 +152,9 @@ async function runTests() {
     assert(mappedProductsCount === totalProductsCount, `All products are linked to Horeca1 Master SKUs (${mappedProductsCount}/${totalProductsCount})`);
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  POINT 5: CATEGORY MANAGEMENT
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}5. CATEGORY MANAGEMENT${RESET}`);
     // Verify 2-level structure: Level-1 (Category) and Level-2 (Sub-Category)
     const level3Count = await prisma.category.count({
@@ -165,9 +167,9 @@ async function runTests() {
     assert(level3Count === 0, `Strict 2-Level category check: 0 level-3 categories exist in the database.`);
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  POINT 6: PRICELIST MANAGEMENT
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}6. PRICELIST MANAGEMENT & PRICING RESOLVER${RESET}`);
 
     testCustomer = await prisma.user.findFirst({ where: { role: 'customer' } });
@@ -198,7 +200,7 @@ async function runTests() {
       }
     }, prisma);
 
-    assert(Number(basePriceResult.unitPrice) === Number(testProduct.basePrice), `Default fallback resolves to basePrice: ₹${basePriceResult.unitPrice} (Expected: ₹${testProduct.basePrice})`);
+    assert(Number(basePriceResult.unitPrice) === Number(testProduct.basePrice), `Default fallback resolves to basePrice: â‚¹${basePriceResult.unitPrice} (Expected: â‚¹${testProduct.basePrice})`);
 
     // Test 6.2: Create a PriceList & Assignment by Pincode + Discount Pricing
     const pincodeList = await prisma.priceList.create({
@@ -231,8 +233,9 @@ async function runTests() {
       }
     }, prisma);
 
-    const expectedDiscount = Number(testProduct.basePrice) * 0.9;
-    assert(Number(pincodeDiscountResult.unitPrice) === expectedDiscount, `Pricing resolver resolves 10% global pincode discount: ₹${pincodeDiscountResult.unitPrice} (Expected: ₹${expectedDiscount})`);
+    // Resolver rounds to paise (2dp) — money is never stored with sub-paise precision.
+    const expectedDiscount = Math.round(Number(testProduct.basePrice) * 0.9 * 100) / 100;
+    assert(Number(pincodeDiscountResult.unitPrice) === expectedDiscount, `Pricing resolver resolves 10% global pincode discount: â‚¹${pincodeDiscountResult.unitPrice} (Expected: â‚¹${expectedDiscount})`);
 
     // Test 6.3: Scheme pricing free-goods calculation
     const schemeList = await prisma.priceList.create({
@@ -277,9 +280,9 @@ async function runTests() {
     assert(schemeResult.schemeMinQty === 10 && schemeResult.schemeFreeQty === 1, `Pricing resolver exposes scheme constraints: Min Qty ${schemeResult.schemeMinQty}, Free Qty ${schemeResult.schemeFreeQty}`);
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  POINT 7: ORDER MANAGEMENT SYSTEM
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}7. ORDER MANAGEMENT SYSTEM${RESET}`);
 
     orderCustomer = await prisma.user.findFirst({ where: { role: 'customer' } });
@@ -326,7 +329,7 @@ async function runTests() {
         vendorId: orderVendor.id,
         items: [{ productId: orderProduct.id, quantity: 5 }]
       }],
-      paymentMethod: 'credit',
+      paymentMethod: 'cod', // draft mechanics test — credit requires a provisioned wallet at submit
       saveDraft: true
     });
     
@@ -352,7 +355,7 @@ async function runTests() {
     const modifiedOrder = await orderService.modifyOrderQuantities(submittedOrder.id, orderVendor.id, [
       { itemId: draftOrder.items[0].id, quantity: 8 }
     ]);
-    assert(Number(modifiedOrder.totalAmount) > Number(submittedOrder.totalAmount), `Order total recalculated correctly: ₹${modifiedOrder.totalAmount}`);
+    assert(Number(modifiedOrder.totalAmount) > Number(submittedOrder.totalAmount), `Order total recalculated correctly: â‚¹${modifiedOrder.totalAmount}`);
 
     const modifiedStock = await prisma.inventory.findUnique({ where: { productId: orderProduct.id } });
     assert(modifiedStock?.qtyReserved === 8, `Stock reservation updated dynamically (Reserved: ${modifiedStock?.qtyReserved})`);
@@ -374,6 +377,12 @@ async function runTests() {
     });
     if (secondaryVendor) {
       console.log(`  Reassigning child PO from vendor "${orderVendor.businessName}" to "${secondaryVendor.businessName}"...`);
+
+      // Pin the target vendor's MOV to 0 for the test — reassignment correctly
+      // enforces the target MOV, and the split child (3 units) is intentionally
+      // small. Restored in the cleanup block below.
+      originalSecondaryMov = secondaryVendor.minOrderValue;
+      await prisma.vendor.update({ where: { id: secondaryVendor.id }, data: { minOrderValue: 0 } });
       
       // Create a temporary product for the secondary vendor mapped to the same master SKU
       targetProduct = await prisma.product.create({
@@ -456,17 +465,53 @@ async function runTests() {
 
     // confirm
     await orderService.updateStatus(parentOrder.id, orderVendor.id, 'confirmed');
-    const creditAfterConfirm = await prisma.creditAccount.findUnique({
-      where: { userId_vendorId: { userId: orderCustomer.id, vendorId: orderVendor.id } }
-    });
-    
-    const debitTx = await prisma.creditTransaction.findFirst({ where: { orderId: parentOrder.id, type: 'debit' } });
-    if (debitTx) creditTxIds.push(debitTx.id);
 
-    const oldLimitUsed = originalCreditAcc ? Number(originalCreditAcc.creditUsed) : 0;
-    const expectedLimitUsed = oldLimitUsed + Number(parentOrder.totalAmount);
-    assert(Number(creditAfterConfirm?.creditUsed) === expectedLimitUsed, `Credit account debited on confirmation. Balance used: ₹${creditAfterConfirm?.creditUsed}`);
-    assert(!!debitTx, 'Credit ledger entry successfully recorded');
+    // 7.5b: DiSCCO CreditWallet — debit happens at PLACEMENT (wallet brief),
+    // and cancellation releases it. The legacy CreditAccount is no longer
+    // written by order flows.
+    console.log('  Testing CreditWallet debit-at-placement + reversal on cancel...');
+    await prisma.product.update({ where: { id: orderProduct.id }, data: { creditEligible: true } });
+    let qaWallet = await prisma.creditWallet.findFirst({
+      where: { userId: orderCustomer.id, vendorId: orderVendor.id },
+    });
+    if (!qaWallet) {
+      qaWallet = await prisma.creditWallet.create({
+        data: {
+          userId: orderCustomer.id, vendorId: orderVendor.id,
+          creditLimit: 50000, availableCredit: 50000, usedCredit: 0, outstandingAmount: 0,
+        },
+      });
+      qaWalletId = qaWallet.id;
+    }
+    const outstandingBefore = Number(qaWallet.outstandingAmount);
+
+    const creditResult = await orderService.create(orderContext, {
+      vendorOrders: [{ vendorId: orderVendor.id, items: [{ productId: orderProduct.id, quantity: 2 }] }],
+      paymentMethod: 'credit',
+    });
+    const creditOrder = creditResult.orders[0];
+    orderIds.push(creditOrder.id);
+
+    const walletAfterDebit = await prisma.creditWallet.findUniqueOrThrow({ where: { id: qaWallet.id } });
+    const walletDebitTxn = await prisma.creditWalletTxn.findFirst({
+      where: { walletId: qaWallet.id, type: 'ORDER_DEBIT', referenceId: creditOrder.id },
+    });
+    assert(
+      Number(walletAfterDebit.outstandingAmount) === outstandingBefore + Number(creditOrder.totalAmount),
+      `Credit wallet debited at placement. Outstanding: ₹${walletAfterDebit.outstandingAmount}`,
+    );
+    assert(!!walletDebitTxn, 'Credit wallet ledger entry (ORDER_DEBIT) recorded');
+
+    await orderService.updateStatus(creditOrder.id, orderVendor.id, 'cancelled', 'QA reversal test');
+    const walletAfterCancel = await prisma.creditWallet.findUniqueOrThrow({ where: { id: qaWallet.id } });
+    const walletReversalTxn = await prisma.creditWalletTxn.findFirst({
+      where: { walletId: qaWallet.id, type: 'REVERSAL', referenceId: creditOrder.id },
+    });
+    assert(
+      Number(walletAfterCancel.outstandingAmount) === outstandingBefore,
+      `Credit wallet reversal restored outstanding on cancel (₹${walletAfterCancel.outstandingAmount})`,
+    );
+    assert(!!walletReversalTxn, 'Credit wallet ledger entry (REVERSAL) recorded');
 
     // 7.6: OTP Delivery Proof flow
     console.log('  Testing Delivery OTP Generation (allowed on confirmed order)...');
@@ -520,10 +565,10 @@ async function runTests() {
     console.error(`\n${RED}Verification crashed with error:${RESET}`, err);
     failedTests++;
   } finally {
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  CLEANUP & RESTORATION
-    // ═══════════════════════════════════════════════════════
-    console.log(`\n${YELLOW}🧹 Cleaning up test data and restoring original state...${RESET}`);
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    console.log(`\n${YELLOW}ðŸ§¹ Cleaning up test data and restoring original state...${RESET}`);
 
     try {
       // Delete order sub-items first
@@ -537,6 +582,15 @@ async function runTests() {
         await prisma.creditTransaction.deleteMany({ where: { id: { in: creditTxIds } } });
       }
       await prisma.creditTransaction.deleteMany({ where: { orderId: { in: orderIds } } });
+
+      // Delete the CreditWallet created for the debit-at-placement test
+      // (txns cascade via onDelete). If the wallet pre-existed, just remove
+      // the test's ledger rows.
+      if (qaWalletId) {
+        await prisma.creditWallet.delete({ where: { id: qaWalletId } }).catch(() => {});
+      } else {
+        await prisma.creditWalletTxn.deleteMany({ where: { referenceId: { in: orderIds } } });
+      }
 
       // Delete pricelists
       if (priceListIds.length > 0) {
@@ -559,6 +613,14 @@ async function runTests() {
             }
           });
         }
+      }
+
+      // Restore secondary vendor MOV (pinned to 0 for the reassignment test)
+      if (secondaryVendor && originalSecondaryMov !== null) {
+        await prisma.vendor.update({
+          where: { id: secondaryVendor.id },
+          data: { minOrderValue: originalSecondaryMov },
+        }).catch(() => {});
       }
 
       // Restore secondary vendor CreditAccount & mappings
@@ -620,18 +682,18 @@ async function runTests() {
         await prisma.product.deleteMany({ where: { id: { in: productsToCleanup } } });
       }
 
-      console.log(`  ${GREEN}✓ Cleanup successful. Database is back to its original state.${RESET}`);
+      console.log(`  ${GREEN}âœ“ Cleanup successful. Database is back to its original state.${RESET}`);
     } catch (cleanupErr) {
-      console.error(`  ${RED}✗ Cleanup failed! Database might contain trace records:${RESET}`, cleanupErr);
+      console.error(`  ${RED}âœ— Cleanup failed! Database might contain trace records:${RESET}`, cleanupErr);
     }
   }
 
   console.log(`\n${BOLD}====================================================`);
   if (failedTests > 0) {
-    console.log(`❌ VERIFICATION COMPLETE: ${failedTests} FAILURE(S) DETECTED`);
+    console.log(`âŒ VERIFICATION COMPLETE: ${failedTests} FAILURE(S) DETECTED`);
     process.exit(1);
   } else {
-    console.log(`✅ VERIFICATION COMPLETE: ALL stack checks passed successfully!`);
+    console.log(`âœ… VERIFICATION COMPLETE: ALL stack checks passed successfully!`);
   }
   console.log(`====================================================${RESET}`);
 }
@@ -639,12 +701,12 @@ async function runTests() {
 async function assertThrows(fn: () => Promise<unknown>, successMsg: string) {
   try {
     await fn();
-    console.log(`  ${RED}✗ Expected transition to throw but it succeeded.${RESET}`);
+    console.log(`  ${RED}âœ— Expected transition to throw but it succeeded.${RESET}`);
     throw new Error('ASSERT_THROW_FAIL');
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
     if (message === 'ASSERT_THROW_FAIL') throw e;
-    console.log(`  ${GREEN}✓ ${successMsg} (${message})${RESET}`);
+    console.log(`  ${GREEN}âœ“ ${successMsg} (${message})${RESET}`);
   }
 }
 
@@ -654,3 +716,4 @@ runTests()
     process.exit(2);
   })
   .finally(() => prisma.$disconnect());
+

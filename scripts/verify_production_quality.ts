@@ -1,5 +1,5 @@
-/**
- * Horeca1 V2.2 — World-Class QA Production Integration Test Suite
+﻿/**
+ * Horeca1 V2.2 â€” World-Class QA Production Integration Test Suite
  * 
  * Verifies the full stack by programmatically provisioning:
  *   1. A new Vendor (with full KYC and bank details).
@@ -41,15 +41,15 @@ function generateHCID(): string {
 
 async function runQaSuite() {
   console.log(`${BOLD}================================================================`);
-  console.log(`🛡️  RUNNING PRODUCTION-READY WORLD-CLASS QA INTEGRATION SUITE`);
+  console.log(`ðŸ›¡ï¸  RUNNING PRODUCTION-READY WORLD-CLASS QA INTEGRATION SUITE`);
   console.log(`================================================================${RESET}\n`);
 
   let failures = 0;
   const assert = (condition: boolean, message: string) => {
     if (condition) {
-      console.log(`  ${GREEN}✓ ${message}${RESET}`);
+      console.log(`  ${GREEN}âœ“ ${message}${RESET}`);
     } else {
-      console.log(`  ${RED}✗ ${message}${RESET}`);
+      console.log(`  ${RED}âœ— ${message}${RESET}`);
       failures++;
     }
   };
@@ -71,9 +71,9 @@ async function runQaSuite() {
   const cleanupSalespersonIds: string[] = [];
 
   try {
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  STEP 1: CATEGORY SEEDING (2-LEVEL ENFORCEMENT)
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`${BOLD}1. CATEGORY HIERARCHY VERIFICATION${RESET}`);
     
     // Create Root Category
@@ -98,15 +98,15 @@ async function runQaSuite() {
     cleanupCategoryIds.push(subCat.id);
     assert(subCat.parentId === rootCat.id, '2-Level Category tree successfully linked parent and sub-category');
 
-    // Attempt Grandchild Category (Level-3) — should throw or reject in application logic.
+    // Attempt Grandchild Category (Level-3) â€” should throw or reject in application logic.
     // Here we check that the app enforces rootCat.parentId is null for any subcategory parent.
     const parentIsRoot = await prisma.category.findUnique({ where: { id: subCat.parentId } });
     assert(parentIsRoot?.parentId === null, 'Nesting Guard: Sub-category parent is indeed a root category (no parentId)');
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  STEP 2: CENTRAL ITEM SKU PROVISIONING
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}2. CENTRAL ITEM SKU & MASTER PRODUCT PROVISIONING${RESET}`);
     
     // Create MasterProduct (canonical SKU)
@@ -125,16 +125,16 @@ async function runQaSuite() {
     assert(!!masterProduct.sku, `Canonical Horeca1 SKU generated: ${masterProduct.sku}`);
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  STEP 3: VENDOR PROVISIONING WITH KYC DETAILS
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}3. VENDOR PROVISIONING & KYC DATA INTEGRITY${RESET}`);
     
     const vendorUser = await prisma.user.create({
       data: {
         email: `qa-vendor-${Date.now()}@test.com`,
         fullName: 'QA Vendor Owner',
-        phone: `+9199000${String(Date.now()).slice(-5)}`,
+        phone: `99000${String(Date.now()).slice(-5)}`,
         role: 'vendor',
         hcidDisplay: generateHCID()
       }
@@ -193,16 +193,16 @@ async function runQaSuite() {
     assert(freshVendor?.panNumber === 'QAVND1234F' && freshVendor?.bankAccountNumber === '999888777666', 'Vendor KYC Card has PAN, FSSAI, and bank details correctly written and verified.');
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  STEP 4: CUSTOMER PROVISIONING WITH 13 CRM ATTRIBUTES
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}4. CUSTOMER PROVISIONING & CRM ATTRIBUTES${RESET}`);
     
     const customerUser = await prisma.user.create({
       data: {
         email: `qa-customer-${Date.now()}@test.com`,
         fullName: 'QA Restaurant Chef',
-        phone: `+9199888${String(Date.now()).slice(-5)}`,
+        phone: `99888${String(Date.now()).slice(-5)}`,
         role: 'customer',
         hcidDisplay: generateHCID()
       }
@@ -269,16 +269,16 @@ async function runQaSuite() {
     assert(freshCustomerBA?.cuisine === 'Pan Asian / Japanese' && freshCustomerBA?.monthlyPurchaseBand === 'High (Above 5L)', 'Customer profile successfully saved and queried all 13 CRM attributes.');
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  STEP 5: BRAND & PRODUCT MAPPING
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}5. BRAND STORE & DISTRIBUTOR PRODUCT MAPPING${RESET}`);
 
     const brandUserObj = await prisma.user.create({
       data: {
         email: `qa-brand-${Date.now()}@test.com`,
         fullName: 'QA Brand Manager',
-        phone: `+9199777${String(Date.now()).slice(-5)}`,
+        phone: `99777${String(Date.now()).slice(-5)}`,
         role: 'brand',
         hcidDisplay: generateHCID()
       }
@@ -377,9 +377,9 @@ async function runQaSuite() {
     assert(brandMapping.status === 'verified', 'Brand Product Mapping verified: Mapped vendor product successfully to brand catalog.');
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  STEP 6: RBAC PERMISSION TESTING
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}6. MULTI-ACCOUNT RBAC MAPPING & MUTATIVE ENFORCEMENT${RESET}`);
     
     // Create custom Vendor Manager Role Template
@@ -401,7 +401,7 @@ async function runQaSuite() {
       data: {
         email: `qa-staff-${Date.now()}@test.com`,
         fullName: 'QA Vendor Staff Member',
-        phone: `+9199666${String(Date.now()).slice(-5)}`,
+        phone: `99666${String(Date.now()).slice(-5)}`,
         role: 'vendor',
         hcidDisplay: generateHCID()
       }
@@ -439,9 +439,9 @@ async function runQaSuite() {
     assert(merged.has('products.edit') && merged.has('orders.edit'), 'Additive Merge (Union): Merged permission set correctly union-merged roles (additive, never restrictive).');
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  STEP 7: PRICELIST MANAGEMENT & RESOLVER
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}7. PRICELIST AND UNIT PRICE RESOLVER${RESET}`);
 
     // Create a special segment (tag) PriceList
@@ -454,7 +454,7 @@ async function runQaSuite() {
           create: {
             productId: vendorProduct.id,
             pricingType: 'fixed',
-            customPrice: new Prisma.Decimal(450) // Normally ₹500
+            customPrice: new Prisma.Decimal(450) // Normally â‚¹500
           }
         },
         assignments: {
@@ -484,12 +484,12 @@ async function runQaSuite() {
     }, prisma);
 
     assert(resolvedPrice.source === 'pricelist:segment', `Pricing resolver resolved segment assignment correctly: Source is "${resolvedPrice.source}"`);
-    assert(Number(resolvedPrice.unitPrice) === 450, `Pricing resolved correctly: resolved to ₹${resolvedPrice.unitPrice} (Expected: ₹450)`);
+    assert(Number(resolvedPrice.unitPrice) === 450, `Pricing resolved correctly: resolved to â‚¹${resolvedPrice.unitPrice} (Expected: â‚¹450)`);
 
 
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     //  STEP 8: ORDER MANAGEMENT LIFECYCLE (E2E)
-    // ═══════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     console.log(`\n${BOLD}8. ORDER LIFE CYCLE, SPLITTING, REASSIGNMENT, AND OTP HANDOVER${RESET}`);
 
     // Create a Salesperson for salesperson commission tracking
@@ -625,6 +625,15 @@ async function runQaSuite() {
       outletId: customerOutlet.id
     };
 
+    // Provision a vendor credit wallet for the QA customer — credit-paid
+    // orders debit the CreditWallet at placement/submit (wallet brief).
+    const qaCreditWallet = await prisma.creditWallet.create({
+      data: {
+        userId: customerUser.id, vendorId: vendorProfile.id,
+        creditLimit: 100000, availableCredit: 100000, usedCredit: 0, outstandingAmount: 0,
+      },
+    });
+
     // 8.1: Create Draft PO
     const draftRes = await orderService.create(orderContext, {
       vendorOrders: [{
@@ -677,13 +686,15 @@ async function runQaSuite() {
     assert(oldStock?.qtyReserved === 8, `Old Vendor stock decremented (Reserved: ${oldStock?.qtyReserved})`);
     assert(newStock?.qtyReserved === 4, `Target Vendor stock incremented (Reserved: ${newStock?.qtyReserved})`);
 
-    // 8.7: Confirm and Deliver (re-evaluate credit and stock deducts)
+    // 8.7: Confirm and Deliver. Credit was debited from the CreditWallet at
+    // SUBMIT time (wallet brief) — confirmation must not move money again.
     await orderService.updateStatus(modifiedOrder.id, vendorProfile.id, 'confirmed');
-    const creditAfterConfirm = await prisma.creditAccount.findUnique({ where: { id: mainCreditAcc.id } });
-    const debitTx = await prisma.creditTransaction.findFirst({ where: { orderId: modifiedOrder.id, type: 'debit' } });
-    if (debitTx) creditTxIds.push(debitTx.id);
-    assert(Number(creditAfterConfirm?.creditUsed) > 0, `Credit limit utilized on confirmation (Used: ₹${creditAfterConfirm?.creditUsed})`);
-    assert(!!debitTx, 'Credit transaction ledger entry verified.');
+    const walletAfterConfirm = await prisma.creditWallet.findUniqueOrThrow({ where: { id: qaCreditWallet.id } });
+    const walletDebitTx = await prisma.creditWalletTxn.findFirst({
+      where: { walletId: qaCreditWallet.id, type: 'ORDER_DEBIT', referenceId: modifiedOrder.id },
+    });
+    assert(Number(walletAfterConfirm.outstandingAmount) > 0, `Credit wallet utilized at submit (Outstanding: ₹${walletAfterConfirm.outstandingAmount})`);
+    assert(!!walletDebitTx, 'Credit wallet ledger entry (ORDER_DEBIT) verified.');
 
     // 8.6: Generate OTP Proof
     const otpRes = await orderService.generateDeliveryOtp(modifiedOrder.id, vendorProfile.id);
@@ -716,13 +727,13 @@ async function runQaSuite() {
 
     // Verify salesperson commission accrual created
     const accrual = await prisma.commissionAccrual.findFirst({ where: { orderId: freshParent.id } });
-    assert(!!accrual, `Salesperson commission accrual correctly generated (Accrued: ₹${accrual?.accruedAmount} on base ₹${accrual?.baseAmount})`);
+    assert(!!accrual, `Salesperson commission accrual correctly generated (Accrued: â‚¹${accrual?.accruedAmount} on base â‚¹${accrual?.baseAmount})`);
 
   } catch (err) {
     console.error(`\n${RED}QA Suite execution failed with error:${RESET}`, err);
     failures++;
   } finally {
-    console.log(`\n${YELLOW}🧹 CLEANING UP QA TEST ENTITIES...${RESET}`);
+    console.log(`\n${YELLOW}ðŸ§¹ CLEANING UP QA TEST ENTITIES...${RESET}`);
 
     try {
       // 1. Delete order dependencies first
@@ -735,6 +746,8 @@ async function runQaSuite() {
 
       // 2. Delete credit accounts
       await prisma.creditAccount.deleteMany({ where: { userId: { in: cleanupUserIds } } });
+      await prisma.creditWalletTxn.deleteMany({ where: { wallet: { userId: { in: cleanupUserIds } } } });
+      await prisma.creditWallet.deleteMany({ where: { userId: { in: cleanupUserIds } } });
 
       // 3. Delete pricelists
       if (cleanupPriceListIds.length > 0) {
@@ -797,18 +810,18 @@ async function runQaSuite() {
         await prisma.businessAccount.deleteMany({ where: { id: { in: cleanupBAIds } } });
       }
 
-      console.log(`  ${GREEN}✓ QA Cleanup completed successfully.${RESET}`);
+      console.log(`  ${GREEN}âœ“ QA Cleanup completed successfully.${RESET}`);
     } catch (cleanupErr) {
-      console.error(`  ${RED}✗ QA Cleanup encountered errors:${RESET}`, cleanupErr);
+      console.error(`  ${RED}âœ— QA Cleanup encountered errors:${RESET}`, cleanupErr);
     }
   }
 
   console.log(`\n${BOLD}================================================================`);
   if (failures > 0) {
-    console.log(`❌ QA SUITE FAILED: ${failures} DEFECT(S) DISCOVERED`);
+    console.log(`âŒ QA SUITE FAILED: ${failures} DEFECT(S) DISCOVERED`);
     process.exit(1);
   } else {
-    console.log(`✅ QA SUITE PASSED: ALL PRODUCTION CHECKLIST TASKS 1 - 7 ARE 100% RELIABLE!`);
+    console.log(`âœ… QA SUITE PASSED: ALL PRODUCTION CHECKLIST TASKS 1 - 7 ARE 100% RELIABLE!`);
   }
   console.log(`================================================================${RESET}`);
 }
@@ -816,12 +829,12 @@ async function runQaSuite() {
 async function assertThrows(fn: () => Promise<unknown>, successMsg: string) {
   try {
     await fn();
-    console.log(`  ${RED}✗ Expected transition to throw but it succeeded.${RESET}`);
+    console.log(`  ${RED}âœ— Expected transition to throw but it succeeded.${RESET}`);
     throw new Error('ASSERT_THROW_FAIL');
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
     if (message === 'ASSERT_THROW_FAIL') throw e;
-    console.log(`  ${GREEN}✓ ${successMsg} (${message})${RESET}`);
+    console.log(`  ${GREEN}âœ“ ${successMsg} (${message})${RESET}`);
   }
 }
 
@@ -831,3 +844,6 @@ runQaSuite()
     process.exit(2);
   })
   .finally(() => prisma.$disconnect());
+
+
+

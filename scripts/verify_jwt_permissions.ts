@@ -11,7 +11,8 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { flatten, mergePermissions } from '../src/lib/permissions/engine';
+import { flatten } from '../src/lib/permissions/engine';
+import { loadActiveContext } from '../src/lib/activeContext';
 import type { PermissionKey, PermissionsJson } from '../src/lib/permissions/registry';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -34,23 +35,24 @@ async function adminPermissions(userId: string): Promise<PermissionKey[]> {
 }
 
 async function loadActiveContextLite(userId: string): Promise<{ accountId: string | null; permissions: PermissionKey[]; roleNames: string[] }> {
-  // Mirrors loadActiveContext: primary account, account-wide UserRole rows merged.
-  const membership = await prisma.businessAccountMember.findFirst({
-    where: { userId },
-    orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
-    select: { businessAccountId: true },
-  });
-  if (!membership) return { accountId: null, permissions: [], roleNames: [] };
+  // Call the REAL loadActiveContext so this report can never drift from
+  // production behaviour (an earlier version only merged account-wide roles
+  // and falsely reported outlet-scoped members as having zero permissions).
+  const active = await loadActiveContext(userId, null, null);
+  if (!active) return { accountId: null, permissions: [], roleNames: [] };
+
+  // Role names for display — mirrors the OR clause the engine uses.
   const userRoles = await prisma.userRole.findMany({
-    where: { userId, businessAccountId: membership.businessAccountId, OR: [{ outletId: null }] },
-    select: { role: { select: { name: true, permissions: true } } },
+    where: {
+      userId,
+      businessAccountId: active.activeBusinessAccountId,
+      OR: [{ outletId: null }, ...(active.activeOutletId ? [{ outletId: active.activeOutletId }] : [])],
+    },
+    select: { role: { select: { name: true } } },
   });
-  const merged = mergePermissions(
-    ...userRoles.map((ur) => flatten(ur.role.permissions as PermissionsJson | null)),
-  );
   return {
-    accountId: membership.businessAccountId,
-    permissions: Array.from(merged),
+    accountId: active.activeBusinessAccountId,
+    permissions: active.permissions,
     roleNames: userRoles.map((ur) => ur.role.name),
   };
 }
