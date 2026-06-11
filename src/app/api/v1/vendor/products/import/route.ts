@@ -294,7 +294,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     // Per-row inline edits made in the review table. Whitelisted at apply
     // time so a forged extra key can't reach Prisma.
     const editsStr = formData.get('edits') as string | null;
-    type EditRow = Partial<{ name: string; sku: string; category: string; basePrice: number; taxPercent: number; stock: number }>;
+    type EditRow = Partial<{ name: string; sku: string; hsn: string; brand: string; unit: string; category: string; basePrice: number; taxPercent: number; promoPrice: number; stock: number }>;
     let editsMap: Record<number, EditRow> = {};
     if (editsStr) {
       try {
@@ -305,9 +305,13 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
           const safe: EditRow = {};
           if (typeof v.name === 'string')      safe.name = v.name.trim();
           if (typeof v.sku === 'string')       safe.sku = v.sku.trim();
+          if (typeof v.hsn === 'string')       safe.hsn = v.hsn.trim();
+          if (typeof v.brand === 'string')     safe.brand = v.brand.trim();
+          if (typeof v.unit === 'string')      safe.unit = v.unit.trim();
           if (typeof v.category === 'string')  safe.category = v.category.trim();
           if (typeof v.basePrice === 'number'  && v.basePrice > 0) safe.basePrice = v.basePrice;
           if (typeof v.taxPercent === 'number' && v.taxPercent >= 0 && v.taxPercent <= 100) safe.taxPercent = v.taxPercent;
+          if (typeof v.promoPrice === 'number' && v.promoPrice > 0) safe.promoPrice = v.promoPrice;
           if (typeof v.stock === 'number'      && v.stock >= 0 && Number.isInteger(v.stock)) safe.stock = v.stock;
           editsMap[n] = safe;
         }
@@ -343,9 +347,13 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
         ...parsedRow,
         ...(e.name      !== undefined ? { name: e.name } : {}),
         ...(e.sku       !== undefined ? { sku: e.sku } : {}),
+        ...(e.hsn       !== undefined ? { hsn: e.hsn } : {}),
+        ...(e.brand     !== undefined ? { brand: e.brand } : {}),
+        ...(e.unit      !== undefined ? { unit: e.unit } : {}),
         ...(e.category  !== undefined ? { category: e.category } : {}),
         ...(e.basePrice !== undefined ? { basePrice: e.basePrice } : {}),
         ...(e.taxPercent !== undefined ? { taxPercent: e.taxPercent } : {}),
+        ...(e.promoPrice !== undefined ? { promoPrice: e.promoPrice } : {}),
         ...(e.stock     !== undefined ? { stock: e.stock } : {}),
       };
 

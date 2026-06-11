@@ -34,9 +34,13 @@ export interface ImportModalConfig {
 type EditRow = Partial<{
   name: string;
   sku: string;
+  hsn: string;
+  brand: string;
+  unit: string;
   category: string;
   basePrice: number;
   taxPercent: number;
+  promoPrice: number;
   stock: number;
 }>;
 
@@ -306,9 +310,9 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-[60] animate-in fade-in duration-200" onClick={handleClose} />
-      <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
-        <div className="bg-white rounded-[20px] border border-[#EEEEEE] shadow-2xl w-full max-w-[1320px] max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+      {/* Full-tab panel — fills the whole viewport so the review grid has all
+          the space it needs (replaces the old cramped centered popup). */}
+      <div className="fixed inset-0 z-[61] bg-white flex flex-col animate-in fade-in duration-150">
 
           {/* Header */}
           <div className="flex items-center justify-between px-8 py-5 border-b border-[#EEEEEE] shrink-0">
@@ -464,9 +468,13 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                             const hasLocalEdits = Object.keys(rowEdit).length > 0;
                             const nameVal = rowEdit.name ?? item.name;
                             const skuVal = rowEdit.sku ?? (item.sku ?? '');
+                            const hsnVal = rowEdit.hsn ?? (item.hsn ?? '');
+                            const brandVal = rowEdit.brand ?? (item.brand ?? '');
+                            const unitVal = rowEdit.unit ?? (item.unit ?? '');
                             const catVal = rowEdit.category ?? (item.category ?? '');
                             const priceVal = rowEdit.basePrice ?? item.basePrice;
                             const taxVal = rowEdit.taxPercent ?? item.taxPercent;
+                            const promoVal = rowEdit.promoPrice ?? (item.promoPrice ?? null);
                             const stockVal = rowEdit.stock ?? (item.stock ?? 0);
                             const grossVal = Math.round(priceVal * (1 + taxVal / 100) * 100) / 100;
                             const rowBg = skipped
@@ -487,9 +495,9 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                                   <input type="text" value={nameVal} onChange={e => setEdit(item.row, 'name', e.target.value)} className={cellInput} />
                                 </td>
                                 <td className="px-3 py-2.5"><input type="text" value={skuVal} onChange={e => setEdit(item.row, 'sku', e.target.value)} className={cellInput} /></td>
-                                <td className="px-3 py-2.5 text-[#7C7C7C]">{item.hsn || '—'}</td>
-                                <td className="px-3 py-2.5 text-[#7C7C7C] truncate">{item.brand || '—'}</td>
-                                <td className="px-3 py-2.5 text-[#7C7C7C]">{item.unit || '—'}</td>
+                                <td className="px-3 py-2.5"><input type="text" value={hsnVal} onChange={e => setEdit(item.row, 'hsn', e.target.value)} placeholder="—" className={cellInput} /></td>
+                                <td className="px-3 py-2.5"><input type="text" value={brandVal} onChange={e => setEdit(item.row, 'brand', e.target.value)} placeholder="—" className={cellInput} /></td>
+                                <td className="px-3 py-2.5"><input type="text" value={unitVal} onChange={e => setEdit(item.row, 'unit', e.target.value)} placeholder="—" className={cn(cellInput, 'w-[64px]')} /></td>
                                 <td className="px-3 py-2.5">
                                   <select value={catVal} onChange={e => setEdit(item.row, 'category', e.target.value || undefined)} className={cn(cellInput, 'appearance-none')}>
                                     <option value="">— Select —</option>
@@ -503,7 +511,9 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                                   <input type="number" value={taxVal} onChange={e => setEdit(item.row, 'taxPercent', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right w-[44px]')} />
                                 </td>
                                 <td className="px-3 py-2.5 text-right font-semibold text-[#181725]">{inr(grossVal)}</td>
-                                <td className="px-3 py-2.5 text-right text-[#7C7C7C]">{item.promoPrice ? inr(item.promoPrice) : '—'}</td>
+                                <td className="px-3 py-2.5 text-right">
+                                  <input type="number" step="0.01" value={promoVal ?? ''} placeholder="—" onChange={e => setEdit(item.row, 'promoPrice', e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0))} className={cn(cellInput, 'text-right w-[70px]')} />
+                                </td>
                                 <td className="px-3 py-2.5 text-right">
                                   <input type="number" value={stockVal} onChange={e => setEdit(item.row, 'stock', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right w-[52px]')} />
                                 </td>
@@ -552,6 +562,15 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                         <FieldGroup label="SKU">
                           <input type="text" value={edits[currentItem.row]?.sku ?? (currentItem.sku ?? '')} onChange={e => setEdit(currentItem.row, 'sku', e.target.value)} className={inputCls} />
                         </FieldGroup>
+                        <FieldGroup label="HSN">
+                          <input type="text" value={edits[currentItem.row]?.hsn ?? (currentItem.hsn ?? '')} onChange={e => setEdit(currentItem.row, 'hsn', e.target.value)} className={inputCls} />
+                        </FieldGroup>
+                        <FieldGroup label="Brand">
+                          <input type="text" value={edits[currentItem.row]?.brand ?? (currentItem.brand ?? '')} onChange={e => setEdit(currentItem.row, 'brand', e.target.value)} className={inputCls} />
+                        </FieldGroup>
+                        <FieldGroup label="Unit">
+                          <input type="text" value={edits[currentItem.row]?.unit ?? (currentItem.unit ?? '')} onChange={e => setEdit(currentItem.row, 'unit', e.target.value)} className={inputCls} />
+                        </FieldGroup>
                         <FieldGroup label="Category">
                           <select value={edits[currentItem.row]?.category ?? (currentItem.category ?? '')} onChange={e => setEdit(currentItem.row, 'category', e.target.value || undefined)} className={selectCls}>
                             <option value="">— Select category —</option>
@@ -566,6 +585,11 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                         </FieldGroup>
                         <FieldGroup label="GST %">
                           <input type="number" value={edits[currentItem.row]?.taxPercent ?? currentItem.taxPercent} onChange={e => setEdit(currentItem.row, 'taxPercent', parseInt(e.target.value) || 0)} className={inputCls} />
+                        </FieldGroup>
+                        <FieldGroup label="Promo Rate (₹)">
+                          <input type="number" step="0.01" placeholder="—"
+                            value={edits[currentItem.row]?.promoPrice ?? (currentItem.promoPrice ?? '')}
+                            onChange={e => setEdit(currentItem.row, 'promoPrice', e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0))} className={inputCls} />
                         </FieldGroup>
                       </div>
 
@@ -680,7 +704,6 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
               </div>
             )}
           </div>
-        </div>
       </div>
     </>
   );
