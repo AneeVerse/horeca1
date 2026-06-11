@@ -13,7 +13,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   X, Upload, Download, Loader2, ChevronLeft, ChevronRight,
-  CheckCircle, AlertTriangle, ArrowRight, RotateCcw, Eye, Check, Store,
+  CheckCircle, AlertTriangle, ArrowRight, RotateCcw, Eye, Check, Store, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -31,6 +31,7 @@ export interface ImportModalConfig {
   vendors?: Array<{ id: string; businessName: string }>;
 }
 
+type EditSlab = { minQty: number; grossRate: number };
 type EditRow = Partial<{
   name: string;
   sku: string;
@@ -42,6 +43,9 @@ type EditRow = Partial<{
   taxPercent: number;
   promoPrice: number;
   stock: number;
+  // Bulk price tiers as GROSS rate/unit (matches the import sheet). The backend
+  // converts gross → taxable using the row's tax% on commit.
+  slabs: EditSlab[];
 }>;
 
 interface PreviewSlab { minQty: number; price: number; grossRate: number; promoPrice?: number | null }
@@ -175,6 +179,24 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
       else rowEdits[key] = value;
       if (Object.keys(rowEdits).length === 0) delete next[row];
       else next[row] = rowEdits;
+      return next;
+    });
+  }, []);
+
+  // Edit one bulk-slab tier (0 or 1) for a row. Seeds from the current edit
+  // or the parsed slabs, updates the tier, drops tiers that aren't fully
+  // filled, and stores the result as an `slabs` edit.
+  const setSlab = useCallback((row: number, item: PreviewItem, tier: 0 | 1, field: keyof EditSlab, value: number) => {
+    setEdits((prev) => {
+      const existingSlabs = prev[row]?.slabs ?? (item.bulkSlabs ?? []).map((s) => ({ minQty: s.minQty, grossRate: s.grossRate }));
+      const arr: EditSlab[] = [
+        { ...(existingSlabs[0] ?? { minQty: 0, grossRate: 0 }) },
+        { ...(existingSlabs[1] ?? { minQty: 0, grossRate: 0 }) },
+      ];
+      arr[tier][field] = value;
+      const cleaned = arr.filter((s) => Number(s.minQty) > 0 && Number(s.grossRate) > 0);
+      const next = { ...prev };
+      next[row] = { ...(next[row] ?? {}), slabs: cleaned };
       return next;
     });
   }, []);
@@ -437,31 +459,34 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                   </div>
                 )}
 
-                {/* Spreadsheet (list) view */}
+                {/* Spreadsheet (list) view — dense Excel-style grid */}
                 {viewMode === 'list' && (
-                  <div className="flex-1 bg-white rounded-[16px] border border-[#EEEEEE] overflow-hidden flex flex-col min-h-0 shadow-sm">
+                  <div className="flex-1 bg-white rounded-[12px] border border-[#E2E2E2] overflow-hidden flex flex-col min-h-0 shadow-sm">
                     <div className="overflow-auto">
-                      <table className="text-left border-collapse text-[12.5px] font-medium text-[#181725] min-w-[1180px]">
-                        <thead className="sticky top-0 z-10">
-                          <tr className="bg-[#FAFAFA] border-b border-[#EEEEEE] text-[10.5px] font-bold text-[#AEAEAE] uppercase tracking-wider">
-                            <th className="px-3 py-3 w-[52px] sticky left-0 bg-[#FAFAFA] z-20">Row</th>
-                            <th className="px-3 py-3 w-[86px]">Action</th>
-                            <th className="px-3 py-3 w-[230px] sticky left-[52px] bg-[#FAFAFA] z-20">Product Name</th>
-                            <th className="px-3 py-3 w-[120px]">SKU</th>
-                            <th className="px-3 py-3 w-[110px]">HSN</th>
-                            <th className="px-3 py-3 w-[120px]">Brand</th>
-                            <th className="px-3 py-3 w-[80px]">Unit</th>
-                            <th className="px-3 py-3 w-[150px]">Category</th>
-                            <th className="px-3 py-3 w-[110px] text-right">Taxable ₹</th>
-                            <th className="px-3 py-3 w-[70px] text-right">Tax %</th>
-                            <th className="px-3 py-3 w-[110px] text-right">Gross ₹</th>
-                            <th className="px-3 py-3 w-[90px] text-right">Promo ₹</th>
-                            <th className="px-3 py-3 w-[80px] text-right">Stock</th>
-                            <th className="px-3 py-3 w-[64px] text-center">Slabs</th>
-                            <th className="px-3 py-3 w-[60px] text-center sticky right-0 bg-[#FAFAFA] z-20">Skip</th>
+                      <table className="text-left border-collapse text-[11.5px] text-[#181725] min-w-[1640px] [&_td]:border-r [&_td]:border-[#EFEFEF] [&_th]:border-r [&_th]:border-[#E2E2E2]">
+                        <thead className="sticky top-0 z-30">
+                          <tr className="bg-[#F3F4F6] text-[10px] font-bold text-[#6B7280] uppercase tracking-wide">
+                            <th className="px-2 py-2 w-[44px] text-center sticky left-0 bg-[#F3F4F6] z-40">#</th>
+                            <th className="px-2 py-2 w-[74px] text-center">Action</th>
+                            <th className="px-2 py-2 w-[210px] sticky left-[44px] bg-[#F3F4F6] z-40">Product Name</th>
+                            <th className="px-2 py-2 w-[110px]">SKU</th>
+                            <th className="px-2 py-2 w-[100px]">HSN</th>
+                            <th className="px-2 py-2 w-[110px]">Brand</th>
+                            <th className="px-2 py-2 w-[70px]">Unit</th>
+                            <th className="px-2 py-2 w-[140px]">Category</th>
+                            <th className="px-2 py-2 w-[92px] text-right bg-[#EEF6F1]">Taxable ₹</th>
+                            <th className="px-2 py-2 w-[58px] text-right bg-[#EEF6F1]">Tax %</th>
+                            <th className="px-2 py-2 w-[92px] text-right bg-[#EEF6F1]">Gross ₹</th>
+                            <th className="px-2 py-2 w-[64px] text-right bg-[#FBF7EC]">Slab1 Qty</th>
+                            <th className="px-2 py-2 w-[84px] text-right bg-[#FBF7EC]">Slab1 ₹</th>
+                            <th className="px-2 py-2 w-[64px] text-right bg-[#FBF7EC]">Slab2 Qty</th>
+                            <th className="px-2 py-2 w-[84px] text-right bg-[#FBF7EC]">Slab2 ₹</th>
+                            <th className="px-2 py-2 w-[80px] text-right">Promo ₹</th>
+                            <th className="px-2 py-2 w-[68px] text-right">Stock</th>
+                            <th className="px-2 py-2 w-[48px] text-center sticky right-0 bg-[#F3F4F6] z-40 border-r-0">Skip</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[#F0F0F0]">
+                        <tbody>
                           {preview.items.map((item) => {
                             const skipped = skipRows.has(item.row);
                             const rowEdit = edits[item.row] ?? {};
@@ -477,55 +502,54 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                             const promoVal = rowEdit.promoPrice ?? (item.promoPrice ?? null);
                             const stockVal = rowEdit.stock ?? (item.stock ?? 0);
                             const grossVal = Math.round(priceVal * (1 + taxVal / 100) * 100) / 100;
+                            // Slab tiers (gross rate/unit) from edit or parsed file.
+                            const slabSrc = rowEdit.slabs ?? (item.bulkSlabs ?? []).map(s => ({ minQty: s.minQty, grossRate: s.grossRate }));
+                            const s1q = slabSrc[0]?.minQty ?? ''; const s1r = slabSrc[0]?.grossRate ?? '';
+                            const s2q = slabSrc[1]?.minQty ?? ''; const s2r = slabSrc[1]?.grossRate ?? '';
                             const rowBg = skipped
                               ? 'bg-[#FAFAFA]'
-                              : hasLocalEdits ? 'bg-amber-50/40'
-                              : item.action === 'create' ? 'bg-emerald-50/20'
-                              : 'bg-blue-50/20';
+                              : hasLocalEdits ? 'bg-amber-50/50'
+                              : item.action === 'create' ? 'bg-emerald-50/25'
+                              : 'bg-white';
                             return (
-                              <tr key={item.row} className={cn(rowBg, skipped && 'opacity-40', 'hover:brightness-[0.99]')}>
-                                <td className={cn('px-3 py-2.5 font-bold text-[#AEAEAE] sticky left-0 z-10', rowBg)}>{item.row}</td>
-                                <td className="px-3 py-2.5">
-                                  <span className={cn('inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider',
-                                    item.action === 'create' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800')}>
-                                    {item.action === 'create' ? 'New' : 'Update'}
+                              <tr key={item.row} className={cn(rowBg, skipped && 'opacity-40', 'border-b border-[#EFEFEF] hover:bg-[#299E60]/[0.04]')}>
+                                <td className={cn('px-2 py-1 text-center font-semibold text-[#9CA3AF] sticky left-0 z-20', rowBg)}>{item.row}</td>
+                                <td className="px-2 py-1 text-center">
+                                  <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide',
+                                    item.action === 'create' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-700')}>
+                                    {item.action === 'create' ? 'New' : 'Upd'}
                                   </span>
                                 </td>
-                                <td className={cn('px-3 py-2.5 sticky left-[52px] z-10', rowBg)}>
+                                <td className={cn('px-1 py-0.5 sticky left-[44px] z-20', rowBg)}>
                                   <input type="text" value={nameVal} onChange={e => setEdit(item.row, 'name', e.target.value)} className={cellInput} />
                                 </td>
-                                <td className="px-3 py-2.5"><input type="text" value={skuVal} onChange={e => setEdit(item.row, 'sku', e.target.value)} className={cellInput} /></td>
-                                <td className="px-3 py-2.5"><input type="text" value={hsnVal} onChange={e => setEdit(item.row, 'hsn', e.target.value)} placeholder="—" className={cellInput} /></td>
-                                <td className="px-3 py-2.5"><input type="text" value={brandVal} onChange={e => setEdit(item.row, 'brand', e.target.value)} placeholder="—" className={cellInput} /></td>
-                                <td className="px-3 py-2.5"><input type="text" value={unitVal} onChange={e => setEdit(item.row, 'unit', e.target.value)} placeholder="—" className={cn(cellInput, 'w-[64px]')} /></td>
-                                <td className="px-3 py-2.5">
-                                  <select value={catVal} onChange={e => setEdit(item.row, 'category', e.target.value || undefined)} className={cn(cellInput, 'appearance-none')}>
+                                <td className="px-1 py-0.5"><input type="text" value={skuVal} onChange={e => setEdit(item.row, 'sku', e.target.value)} className={cellInput} /></td>
+                                <td className="px-1 py-0.5"><input type="text" value={hsnVal} onChange={e => setEdit(item.row, 'hsn', e.target.value)} placeholder="—" className={cellInput} /></td>
+                                <td className="px-1 py-0.5"><input type="text" value={brandVal} onChange={e => setEdit(item.row, 'brand', e.target.value)} placeholder="—" className={cellInput} /></td>
+                                <td className="px-1 py-0.5"><input type="text" value={unitVal} onChange={e => setEdit(item.row, 'unit', e.target.value)} placeholder="—" className={cellInput} /></td>
+                                <td className="px-1 py-0.5">
+                                  <select value={catVal} onChange={e => setEdit(item.row, 'category', e.target.value || undefined)} className={cn(cellInput, 'appearance-none', !catVal && 'text-rose-400')}>
                                     <option value="">— Select —</option>
                                     {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                   </select>
                                 </td>
-                                <td className="px-3 py-2.5 text-right">
+                                <td className="px-1 py-0.5 bg-[#299E60]/[0.04]">
                                   <input type="number" step="0.01" value={priceVal} onChange={e => setEdit(item.row, 'basePrice', parseFloat(e.target.value) || 0)} className={cn(cellInput, 'text-right')} />
                                 </td>
-                                <td className="px-3 py-2.5 text-right">
-                                  <input type="number" value={taxVal} onChange={e => setEdit(item.row, 'taxPercent', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right w-[44px]')} />
+                                <td className="px-1 py-0.5 bg-[#299E60]/[0.04]">
+                                  <input type="number" value={taxVal} onChange={e => setEdit(item.row, 'taxPercent', parseFloat(e.target.value) || 0)} className={cn(cellInput, 'text-right')} />
                                 </td>
-                                <td className="px-3 py-2.5 text-right font-semibold text-[#181725]">{inr(grossVal)}</td>
-                                <td className="px-3 py-2.5 text-right">
-                                  <input type="number" step="0.01" value={promoVal ?? ''} placeholder="—" onChange={e => setEdit(item.row, 'promoPrice', e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0))} className={cn(cellInput, 'text-right w-[70px]')} />
-                                </td>
-                                <td className="px-3 py-2.5 text-right">
-                                  <input type="number" value={stockVal} onChange={e => setEdit(item.row, 'stock', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right w-[52px]')} />
-                                </td>
-                                <td className="px-3 py-2.5 text-center">
-                                  {item.bulkSlabCount > 0
-                                    ? <span className="text-[11px] bg-gray-100 px-2 py-0.5 rounded font-bold" title={(item.bulkSlabs ?? []).map(s => `≥${s.minQty}: ${inr(s.price)}`).join('  ')}>{item.bulkSlabCount}</span>
-                                    : <span className="text-gray-300">—</span>}
-                                </td>
-                                <td className={cn('px-3 py-2.5 text-center sticky right-0 z-10', rowBg)}>
-                                  <button onClick={() => toggleSkip(item.row)} className={cn('w-[26px] h-[26px] rounded-lg flex items-center justify-center transition-colors mx-auto',
-                                    skipped ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-gray-100 text-[#7C7C7C] hover:bg-amber-50 hover:text-amber-600')}>
-                                    <X size={13} />
+                                <td className="px-2 py-1 text-right font-bold text-[#181725] bg-[#299E60]/[0.04] tabular-nums">{inr(grossVal)}</td>
+                                <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" value={s1q} placeholder="—" onChange={e => setSlab(item.row, item, 0, 'minQty', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
+                                <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" step="0.01" value={s1r} placeholder="—" onChange={e => setSlab(item.row, item, 0, 'grossRate', parseFloat(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
+                                <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" value={s2q} placeholder="—" onChange={e => setSlab(item.row, item, 1, 'minQty', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
+                                <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" step="0.01" value={s2r} placeholder="—" onChange={e => setSlab(item.row, item, 1, 'grossRate', parseFloat(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
+                                <td className="px-1 py-0.5"><input type="number" step="0.01" value={promoVal ?? ''} placeholder="—" onChange={e => setEdit(item.row, 'promoPrice', e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0))} className={cn(cellInput, 'text-right')} /></td>
+                                <td className="px-1 py-0.5"><input type="number" value={stockVal} onChange={e => setEdit(item.row, 'stock', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
+                                <td className={cn('px-1 py-1 text-center sticky right-0 z-20 border-r-0', rowBg)}>
+                                  <button onClick={() => toggleSkip(item.row)} title={skipped ? 'Include row' : 'Skip row'} className={cn('w-[22px] h-[22px] rounded flex items-center justify-center transition-colors mx-auto',
+                                    skipped ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-gray-100 text-[#9CA3AF] hover:bg-rose-50 hover:text-rose-600')}>
+                                    <X size={12} />
                                   </button>
                                 </td>
                               </tr>
@@ -534,8 +558,8 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                         </tbody>
                       </table>
                     </div>
-                    <div className="px-4 py-2 border-t border-[#EEEEEE] bg-[#FAFAFA] text-[11px] text-[#AEAEAE] font-medium">
-                      Scroll horizontally to see all columns · Row / Name / Skip stay pinned · edited cells are highlighted amber
+                    <div className="px-4 py-2 border-t border-[#EEEEEE] bg-[#FAFAFA] text-[11px] text-[#9CA3AF] font-medium flex items-center gap-2">
+                      <Info size={12} /> Scroll horizontally for all columns · # / Name / Skip stay pinned · Gross is computed from Taxable × Tax% · edited rows highlight amber · enter both Qty and Rate for a slab tier
                     </div>
                   </div>
                 )}
@@ -711,7 +735,7 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
 
 const selectCls = 'w-full h-[40px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] font-medium outline-none focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10 bg-[#FAFAFA] focus:bg-white transition-all';
 const inputCls = selectCls;
-const cellInput = 'bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[#299E60] focus:bg-white px-1 py-0.5 rounded outline-none w-full';
+const cellInput = 'bg-transparent border border-transparent hover:border-[#D1D5DB] focus:border-[#299E60] focus:bg-white focus:ring-1 focus:ring-[#299E60]/20 px-1.5 py-1 rounded-[4px] outline-none w-full text-[11.5px] tabular-nums';
 
 function FieldGroup({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
   return (

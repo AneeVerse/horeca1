@@ -294,7 +294,8 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     // Per-row inline edits made in the review table. Whitelisted at apply
     // time so a forged extra key can't reach Prisma.
     const editsStr = formData.get('edits') as string | null;
-    type EditRow = Partial<{ name: string; sku: string; hsn: string; brand: string; unit: string; category: string; basePrice: number; taxPercent: number; promoPrice: number; stock: number }>;
+    type EditSlab = { minQty: number; grossRate: number };
+    type EditRow = Partial<{ name: string; sku: string; hsn: string; brand: string; unit: string; category: string; basePrice: number; taxPercent: number; promoPrice: number; stock: number; slabs: EditSlab[] }>;
     let editsMap: Record<number, EditRow> = {};
     if (editsStr) {
       try {
@@ -313,6 +314,12 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
           if (typeof v.taxPercent === 'number' && v.taxPercent >= 0 && v.taxPercent <= 100) safe.taxPercent = v.taxPercent;
           if (typeof v.promoPrice === 'number' && v.promoPrice > 0) safe.promoPrice = v.promoPrice;
           if (typeof v.stock === 'number'      && v.stock >= 0 && Number.isInteger(v.stock)) safe.stock = v.stock;
+          if (Array.isArray(v.slabs)) {
+            safe.slabs = v.slabs
+              .filter((s) => s && typeof s.minQty === 'number' && s.minQty > 0 && typeof s.grossRate === 'number' && s.grossRate > 0)
+              .slice(0, 3)
+              .map((s) => ({ minQty: Math.floor(s.minQty), grossRate: s.grossRate }));
+          }
           editsMap[n] = safe;
         }
       } catch { editsMap = {}; }
@@ -356,6 +363,16 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
         ...(e.promoPrice !== undefined ? { promoPrice: e.promoPrice } : {}),
         ...(e.stock     !== undefined ? { stock: e.stock } : {}),
       };
+
+      // Edited slab tiers override the file's. Sheet uses GROSS rate/unit;
+      // convert to the taxable rate updatePriceSlabs persists, using the row's tax%.
+      if (e.slabs !== undefined) {
+        r.bulkSlabs = e.slabs.map((s) => ({
+          minQty: s.minQty,
+          grossRate: s.grossRate,
+          taxableRate: r.taxPercent > 0 ? Math.round((s.grossRate / (1 + r.taxPercent / 100)) * 100) / 100 : s.grossRate,
+        }));
+      }
 
       try {
         const categoryId = r.category ? catMap.get(r.category.toLowerCase()) || null : null;
