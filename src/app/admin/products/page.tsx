@@ -1011,28 +1011,39 @@ export default function ProductsPage() {
                 ) : (
                     <>
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse min-w-[900px]">
+                            <table className="w-full text-left border-collapse min-w-[1280px]">
                                 <thead>
+                                    {/* Product (left) + Actions (right) stay pinned while the
+                                        middle columns scroll horizontally — power-admin view. */}
                                     <tr className="bg-[#F8F9FB]">
-                                        <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider w-[60px]">
-                                            Image
+                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider sticky left-0 bg-[#F8F9FB] z-20 min-w-[280px]">
+                                            Product
                                         </th>
-                                        <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
-                                            Name
+                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                            Brand
                                         </th>
-                                        <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
-                                            Vendors
-                                        </th>
-                                        <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
                                             Category
                                         </th>
-                                        <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                            Vendors
+                                        </th>
+                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider text-right">
+                                            Base ₹
+                                        </th>
+                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider text-right">
+                                            GST %
+                                        </th>
+                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                            Unit
+                                        </th>
+                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
                                             Status
                                         </th>
-                                        <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
                                             Inventory
                                         </th>
-                                        <th className="px-6 py-5 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider text-right">
+                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider text-right sticky right-0 bg-[#F8F9FB] z-20">
                                             Actions
                                         </th>
                                     </tr>
@@ -1042,37 +1053,47 @@ export default function ProductsPage() {
                                         const statusCfg = STATUS_CONFIG[product.approvalStatus];
                                         return (
                                             <tr key={product.id} className="hover:bg-[#F8F9FB]/60 transition-colors group">
-                                                {/* Image */}
-                                                <td className="px-6 py-4">
-                                                    {product.imageUrl ? (
-                                                        <img
-                                                            src={product.imageUrl}
-                                                            alt={product.name}
-                                                            className="w-[44px] h-[44px] rounded-[10px] object-cover border border-[#EEEEEE]"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-[44px] h-[44px] rounded-[10px] bg-[#F8F9FB] border border-[#EEEEEE] flex items-center justify-center text-[#AEAEAE]">
-                                                            <ImageIcon size={18} />
-                                                        </div>
-                                                    )}
-                                                </td>
-
-                                                {/* Name */}
-                                                <td className="px-6 py-4">
-                                                    <div>
-                                                        <p className="text-[14px] font-bold text-[#181725] line-clamp-1">
-                                                            {product.name}
-                                                        </p>
-                                                        {product.sku && (
-                                                            <p className="text-[11px] text-[#AEAEAE] font-medium mt-0.5">
-                                                                SKU: {product.sku}
-                                                            </p>
+                                                {/* Product — thumbnail + name + SKU, pinned left */}
+                                                <td className="px-5 py-4 sticky left-0 bg-white group-hover:bg-[#F8F9FB] z-10">
+                                                    <div className="flex items-center gap-3">
+                                                        {product.imageUrl ? (
+                                                            <img
+                                                                src={product.imageUrl}
+                                                                alt={product.name}
+                                                                className="w-[42px] h-[42px] rounded-[10px] object-cover border border-[#EEEEEE] shrink-0"
+                                                            />
+                                                        ) : (
+                                                            <div className="w-[42px] h-[42px] rounded-[10px] bg-[#F8F9FB] border border-[#EEEEEE] flex items-center justify-center text-[#AEAEAE] shrink-0">
+                                                                <ImageIcon size={18} />
+                                                            </div>
                                                         )}
+                                                        <div className="min-w-0">
+                                                            <p className="text-[14px] font-bold text-[#181725] line-clamp-1">
+                                                                {product.name}
+                                                            </p>
+                                                            <p className="text-[11px] text-[#AEAEAE] font-medium mt-0.5">
+                                                                {product.sku ? `SKU: ${product.sku}` : 'No SKU'}
+                                                            </p>
+                                                        </div>
                                                     </div>
                                                 </td>
 
+                                                {/* Brand */}
+                                                <td className="px-5 py-4">
+                                                    <span className="text-[13px] font-medium text-[#7C7C7C]">
+                                                        {product.brand || '--'}
+                                                    </span>
+                                                </td>
+
+                                                {/* Category */}
+                                                <td className="px-5 py-4">
+                                                    <span className="text-[13px] font-medium text-[#7C7C7C]">
+                                                        {product.category?.name ?? '--'}
+                                                    </span>
+                                                </td>
+
                                                 {/* Vendors */}
-                                                <td className="px-6 py-4">
+                                                <td className="px-5 py-4">
                                                     {(product.vendorCount ?? 0) > 0 ? (
                                                         <span className="text-[13px] font-semibold text-[#181725]" title={product.vendors?.join(', ')}>
                                                             {product.vendorCount} vendor{product.vendorCount !== 1 ? 's' : ''}
@@ -1084,18 +1105,32 @@ export default function ProductsPage() {
                                                     )}
                                                 </td>
 
-                                                {/* Category */}
-                                                <td className="px-6 py-4">
+                                                {/* Base price (taxable rate) */}
+                                                <td className="px-5 py-4 text-right">
+                                                    <span className="text-[13px] font-bold text-[#181725] tabular-nums">
+                                                        ₹{Number(product.basePrice ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                                                    </span>
+                                                </td>
+
+                                                {/* GST % */}
+                                                <td className="px-5 py-4 text-right">
+                                                    <span className="text-[13px] font-medium text-[#7C7C7C] tabular-nums">
+                                                        {Number(product.taxPercent ?? 0)}%
+                                                    </span>
+                                                </td>
+
+                                                {/* Unit / pack */}
+                                                <td className="px-5 py-4">
                                                     <span className="text-[13px] font-medium text-[#7C7C7C]">
-                                                        {product.category?.name ?? '--'}
+                                                        {product.unit || product.packSize || '--'}
                                                     </span>
                                                 </td>
 
                                                 {/* Status */}
-                                                <td className="px-6 py-4">
+                                                <td className="px-5 py-4">
                                                     <span
                                                         className={cn(
-                                                            'inline-flex items-center gap-1.5 text-[11px] font-[900] px-3 py-1.5 rounded-[8px] uppercase tracking-wider border',
+                                                            'inline-flex items-center gap-1.5 text-[11px] font-[900] px-3 py-1.5 rounded-[8px] uppercase tracking-wider border whitespace-nowrap',
                                                             statusCfg.bg,
                                                             statusCfg.text,
                                                         )}
@@ -1107,7 +1142,7 @@ export default function ProductsPage() {
                                                 </td>
 
                                                 {/* Inventory — aggregated across vendors */}
-                                                <td className="px-6 py-4">
+                                                <td className="px-5 py-4 whitespace-nowrap">
                                                     {(product.vendorCount ?? 0) > 0 ? (
                                                         <div
                                                             className="cursor-default"
@@ -1130,8 +1165,8 @@ export default function ProductsPage() {
                                                     )}
                                                 </td>
 
-                                                {/* Actions */}
-                                                <td className="px-6 py-4">
+                                                {/* Actions — pinned right */}
+                                                <td className="px-5 py-4 sticky right-0 bg-white group-hover:bg-[#F8F9FB] z-10">
                                                     <div className="flex items-center justify-end gap-2">
                                                         {/* Edit */}
                                                         {perms.canWriteProducts && (
