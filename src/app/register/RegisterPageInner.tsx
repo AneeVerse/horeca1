@@ -17,17 +17,15 @@ type Step = 'form' | 'otp' | 'success';
 export default function RegisterPageInner() {
   const params = useSearchParams();
   const redirectTo = params?.get('redirect') || null;
-  const { status: sessionStatus, data: session } = useSession();
+  const { status: sessionStatus } = useSession();
 
-  // Already-logged-in users shouldn't see the register form.
+  // Already-logged-in users shouldn't see the register form. Everyone
+  // lands on the storefront — account/outlet selection happens there,
+  // and the navbar Dashboard shortcut covers portal users.
   useEffect(() => {
     if (sessionStatus !== 'authenticated') return;
-    if (redirectTo) { window.location.href = redirectTo; return; }
-    const role = (session?.user as { role?: string } | undefined)?.role;
-    if (role === 'vendor') window.location.href = '/vendor/dashboard';
-    else if (role === 'admin') window.location.href = '/admin/dashboard';
-    else window.location.href = '/';
-  }, [sessionStatus, session, redirectTo]);
+    window.location.href = redirectTo || '/';
+  }, [sessionStatus, redirectTo]);
 
   const [step, setStep] = useState<Step>('form');
   const [isLoading, setIsLoading] = useState(false);

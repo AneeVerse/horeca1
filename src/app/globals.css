@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-quicksand), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --color-primary: #299e60;
   --color-primary-dark: #22844f;
   --color-primary-light: #dcfce7;
@@ -58,11 +58,26 @@
   }
 
   body {
-    font-family: var(--font-quicksand), ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    /* Client spec: body 200, regular 400 (Tailwind font-normal) */
+    font-weight: 200;
     @apply bg-background text-text antialiased;
     overflow-x: clip;
     max-width: 100vw;
     width: 100%;
+  }
+
+  /* Inter reads best with slightly tighter tracking at display sizes */
+  h1, h2, h3 {
+    letter-spacing: -0.02em;
+  }
+  h4, h5, h6 {
+    letter-spacing: -0.01em;
+  }
+
+  /* Keep prices and quantities aligned in tables and slab tiers */
+  table, [data-tabular-nums] {
+    font-variant-numeric: tabular-nums;
   }
 
   a,

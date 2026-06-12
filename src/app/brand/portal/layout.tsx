@@ -114,7 +114,7 @@ export default function BrandPortalLayout({ children }: { children: React.ReactN
     }
 
     return (
-        <div className="flex flex-col min-h-screen bg-[#F8F9FB] font-[family-name:var(--font-poppins)]">
+        <div className="flex flex-col min-h-screen bg-[#F8F9FB]">
             {/* Top Header */}
             <header className="h-[70px] bg-white border-b border-[#EEEEEE] flex items-center px-6 sticky top-0 z-50 shrink-0">
                 <div className={cn(

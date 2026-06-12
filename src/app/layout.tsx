@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   description: "High speed, optimized B2B platform for restaurant and eating products.",
   icons: {
     icon: "/horeca1_logo.jpg",
-    shortcut: "/favicon.ico",
+    shortcut: "/horeca1_logo.jpg",
     apple: "/horeca1_logo.jpg",
   },
 };
@@ -57,8 +57,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${quicksand.variable} ${inter.variable} ${poppins.variable} ${playfair.variable}`}>
-      <body className={`${quicksand.className} font-sans antialiased bg-background`}>
+    <html lang="en">
+      <body className={`${quicksand.variable} ${inter.variable} ${poppins.variable} ${playfair.variable} font-sans antialiased bg-background`}>
         <AuthProvider>
           <GoogleMapsProvider>
             <AddressProvider>

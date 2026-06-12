@@ -14,7 +14,7 @@ export async function sendSms(input: SendSmsInput): Promise<void> {
   // MSG91_WHATSAPP_TEMPLATE_ID: approved Meta template ID from MSG91 dashboard
   const templateId = input.channel === 'whatsapp'
     ? process.env.MSG91_WHATSAPP_TEMPLATE_ID
-    : process.env.MSG91_SMS_TEMPLATE_ID;
+    : (process.env.MSG91_SMS_TEMPLATE_ID || process.env.MSG91_TEMPLATE_ID);
   const whatsappNumber = process.env.MSG91_WHATSAPP_NUMBER;
 
   const normalized = normalizePhone(input.to);

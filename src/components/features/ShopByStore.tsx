@@ -28,36 +28,7 @@ export function ShopByStore() {
         desktopScrollRef.current?.scrollBy({ left: 400, behavior: 'smooth' });
     };
 
-    const StoreCard = ({ vendor }: { vendor: Vendor }) => {
-        const isCircular = vendor.id === 'v2';
-        const categoriesLabel = vendor.categories.slice(0, 2).join(', ') +
-            (vendor.categories.length > 2 ? `, ${vendor.categories.length - 2}+` : '');
-        return (
-            <div className="flex flex-col items-center w-full">
-                <Link
-                    href={`/vendor/${vendor.id}`}
-                    className="w-full flex flex-col items-center group"
-                >
-                    <img
-                        src={vendor.logo}
-                        alt={vendor.name}
-                        className={cn(
-                            "w-[85px] h-[85px] md:w-[100px] md:h-[100px] mb-3 object-cover transition-all duration-300 active:scale-95 group-hover:scale-105",
-                            isCircular ? "rounded-full" : "rounded-2xl"
-                        )}
-                    />
-                    <div className="text-center w-full px-0.5">
-                        <h3 className="text-[14px] md:text-[16px] font-bold text-[#181725] mb-0.5 leading-tight line-clamp-1 group-hover:text-[#53B175] transition-colors">
-                            {vendor.name}
-                        </h3>
-                        <p className="text-[10px] md:text-[11px] text-[#7C7C7C] font-medium leading-tight line-clamp-2">
-                            {categoriesLabel}
-                        </p>
-                    </div>
-                </Link>
-            </div>
-        );
-    };
+
 
     return (
         <section className="w-full pt-4 pb-2 bg-white overflow-hidden">
@@ -137,3 +108,34 @@ export function ShopByStore() {
         </section>
     );
 }
+
+const StoreCard = ({ vendor }: { vendor: Vendor }) => {
+    const isCircular = vendor.id === 'v2';
+    const categoriesLabel = vendor.categories.slice(0, 2).join(', ') +
+        (vendor.categories.length > 2 ? `, ${vendor.categories.length - 2}+` : '');
+    return (
+        <div className="flex flex-col items-center w-full">
+            <Link
+                href={`/vendor/${vendor.id}`}
+                className="w-full flex flex-col items-center group"
+            >
+                <img
+                    src={vendor.logo}
+                    alt={vendor.name}
+                    className={cn(
+                        "w-[85px] h-[85px] md:w-[100px] md:h-[100px] mb-3 object-cover transition-all duration-300 active:scale-95 group-hover:scale-105",
+                        isCircular ? "rounded-full" : "rounded-2xl"
+                    )}
+                />
+                <div className="text-center w-full px-0.5">
+                    <h3 className="text-[14px] md:text-[16px] font-bold text-[#181725] mb-0.5 leading-tight line-clamp-1 group-hover:text-[#53B175] transition-colors">
+                        {vendor.name}
+                    </h3>
+                    <p className="text-[10px] md:text-[11px] text-[#7C7C7C] font-medium leading-tight line-clamp-2">
+                        {categoriesLabel}
+                    </p>
+                </div>
+            </Link>
+        </div>
+    );
+};

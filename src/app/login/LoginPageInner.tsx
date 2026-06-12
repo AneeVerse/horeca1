@@ -26,7 +26,7 @@ export default function LoginPageInner() {
   // number they just verified.
   const prefilledPhone = params?.get('phone')?.replace(/\D/g, '').slice(0, 10) ?? '';
   const prefilledEmail = params?.get('email') ?? '';
-  const { status: sessionStatus, data: session } = useSession();
+  const { status: sessionStatus } = useSession();
 
   const [step, setStep] = useState<Step>('form');
   const [isLoading, setIsLoading] = useState(false);
@@ -35,15 +35,13 @@ export default function LoginPageInner() {
   // If the user is already logged in, bounce them off the login page.
   // Without this, navigating to /login while authenticated leaves you
   // staring at a login form even though the navbar shows you're signed in.
+  // Everyone lands on the STOREFRONT: the post-login selector handles
+  // account → outlet there, and vendor/admin/brand users have a Dashboard
+  // shortcut in the navbar when they want their portal.
   useEffect(() => {
     if (sessionStatus !== 'authenticated') return;
-    if (redirectTo) { window.location.href = redirectTo; return; }
-    const role = (session?.user as { role?: string } | undefined)?.role;
-    if (role === 'vendor') window.location.href = '/vendor/dashboard';
-    else if (role === 'admin') window.location.href = '/admin/dashboard';
-    else if (role === 'brand') window.location.href = '/brand/portal';
-    else window.location.href = '/';
-  }, [sessionStatus, session, redirectTo]);
+    window.location.href = redirectTo || '/';
+  }, [sessionStatus, redirectTo]);
 
   const [identifier, setIdentifier] = useState(prefilledPhone || prefilledEmail);
   const [usePassword, setUsePassword] = useState(false);
@@ -74,19 +72,13 @@ export default function LoginPageInner() {
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
-  // Hard-navigate so the new session cookie + role-based destination
-  // are picked up by SSR. router.replace + setTimeout(reload) was racing —
-  // half the time we'd land back on /login.
+  // Hard-navigate so the new session cookie is picked up by SSR.
+  // router.replace + setTimeout(reload) was racing — half the time we'd
+  // land back on /login. ALWAYS land on the storefront: multi-account
+  // users get the account → outlet selector there, and the navbar
+  // Dashboard shortcut covers vendor/admin/brand users.
   const goPostLogin = useCallback(async () => {
-    if (redirectTo) { window.location.href = redirectTo; return; }
-    try {
-      const res = await fetch('/api/v1/auth/me');
-      const json = await res.json();
-      const role = json?.data?.role;
-      if (role === 'vendor') window.location.href = '/vendor/dashboard';
-      else if (role === 'admin') window.location.href = '/admin/dashboard';
-      else window.location.href = '/';
-    } catch { window.location.href = '/'; }
+    window.location.href = redirectTo || '/';
   }, [redirectTo]);
 
   const handleSendOtp = async () => {

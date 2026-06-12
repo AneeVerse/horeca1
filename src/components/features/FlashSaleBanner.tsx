@@ -92,11 +92,11 @@ export function FlashSaleBanner() {
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4 md:mb-8">
                     <div className="flex items-center gap-2">
-                        <h2 className="text-[0.9rem] md:text-[1.5rem] font-[family-name:var(--font-inter)] md:font-[family-name:var(--font-quicksand)] font-[800] md:font-bold text-[#1e293b]">
+                        <h2 className="text-[0.9rem] md:text-[1.5rem] font-[800] md:font-bold text-[#1e293b]">
                             Flash sale 🔥
                         </h2>
                     </div>
-                    <Link href="/flash-sale" className="flex items-center gap-1 text-[#5cb85c] font-black md:font-bold text-sm md:text-base md:font-[family-name:var(--font-quicksand)]">
+                    <Link href="/flash-sale" className="flex items-center gap-1 text-[#5cb85c] font-black md:font-bold text-sm md:text-base">
                         See all <ChevronRight size={18} />
                     </Link>
                 </div>
@@ -123,19 +123,19 @@ export function FlashSaleBanner() {
 
                             {/* Info */}
                             <div className="flex flex-col flex-1">
-                                <h3 className="text-[12px] md:text-[16px] font-[family-name:var(--font-inter)] md:font-[family-name:var(--font-quicksand)] font-[900] md:font-bold text-[#1e293b] leading-tight mb-0.5 line-clamp-2 h-8 md:h-9">
+                                <h3 className="text-[12px] md:text-[16px] font-[900] md:font-bold text-[#1e293b] leading-tight mb-0.5 line-clamp-2 h-8 md:h-9">
                                     {product.name}
                                 </h3>
-                                <p className="text-[9px] md:text-[12px] text-gray-400 mb-2 font-medium md:font-[family-name:var(--font-quicksand)]">
+                                <p className="text-[9px] md:text-[12px] text-gray-400 mb-2 font-medium">
                                     {product.weight}
                                 </p>
 
                                 <div className="mt-auto flex items-center justify-between">
                                     <div className="flex flex-col xl:flex-row xl:items-center xl:gap-2">
-                                        <span className="text-[13px] md:text-[18px] font-[family-name:var(--font-inter)] md:font-[family-name:var(--font-quicksand)] font-[900] md:font-bold text-[#1e293b]">
+                                        <span className="text-[13px] md:text-[18px] font-[900] md:font-bold text-[#1e293b]">
                                             ${product.price.toFixed(2)}
                                         </span>
-                                        <span className="text-[9px] md:text-[12px] text-red-500/80 line-through md:font-[family-name:var(--font-quicksand)]">
+                                        <span className="text-[9px] md:text-[12px] text-red-500/80 line-through">
                                             ${product.originalPrice.toFixed(2)}
                                         </span>
                                     </div>

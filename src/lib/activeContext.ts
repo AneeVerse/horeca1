@@ -8,7 +8,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { flatten, mergePermissions } from '@/lib/permissions/engine';
-import type { PermissionKey, PermissionsJson } from '@/lib/permissions/registry';
+import { ALL_PERMISSION_KEYS, type PermissionKey, type PermissionsJson } from '@/lib/permissions/registry';
 
 const MAX_AVAILABLE_ACCOUNTS = 20;
 
@@ -156,10 +156,16 @@ export async function loadActiveContext(
       },
     });
 
-    const permSet = mergePermissions(
-      ...userRoles.map((ur) => flatten(ur.role.permissions as PermissionsJson | null)),
-    );
-    const permissions = Array.from(permSet);
+    // Account OWNER (the isPrimary membership — same semantics the account
+    // routes use for owner checks) always gets the FULL current permission
+    // set. Stored role JSON snapshots go stale when new modules are added to
+    // the registry (storefront.* locked owners out of their own checkout this
+    // way); deriving from ALL_PERMISSION_KEYS at session time can't go stale.
+    const permissions = chosen.isPrimary
+      ? [...ALL_PERMISSION_KEYS]
+      : Array.from(mergePermissions(
+          ...userRoles.map((ur) => flatten(ur.role.permissions as PermissionsJson | null)),
+        ));
 
     // Cap the availableAccounts list (cookie size). Compute truncation flag + total count.
     const totalAccountCount = memberships.length;
