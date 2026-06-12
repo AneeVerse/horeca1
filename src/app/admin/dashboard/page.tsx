@@ -8,7 +8,6 @@ import {
     Store,
     Wallet,
     TrendingUp,
-    Star,
     ChevronRight,
     Loader2,
 } from 'lucide-react';

@@ -226,12 +226,12 @@ export default function VendorsPage() {
                     {searchQuery ? (
                         <>
                             <h4 className="text-[15px] font-bold text-[#374151]">No matched results</h4>
-                            <p className="text-[13px] text-[#9CA3AF] mt-1">We couldn't find any vendor matching "{searchQuery}"</p>
+                            <p className="text-[13px] text-[#9CA3AF] mt-1">We couldn&apos;t find any vendor matching &quot;{searchQuery}&quot;</p>
                         </>
                     ) : (
                         <>
                             <h4 className="text-[15px] font-bold text-[#374151]">No vendors registered yet</h4>
-                            <p className="text-[13px] text-[#9CA3AF] mt-1">Click the "Add Vendor" button to register your first seller partner.</p>
+                            <p className="text-[13px] text-[#9CA3AF] mt-1">Click the &quot;Add Vendor&quot; button to register your first seller partner.</p>
                         </>
                     )}
                 </div>

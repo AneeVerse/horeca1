@@ -8,8 +8,6 @@ import {
     ArrowUpRight,
     ArrowDownRight,
     Search,
-    Filter,
-    CheckCircle2,
     Clock,
     CreditCard,
     Building2,
@@ -60,7 +58,6 @@ export default function FinancePage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [isMounted, setIsMounted] = useState(false);
     const [activePayoutTab, setActivePayoutTab] = useState<'pending' | 'completed'>('pending');
-    const [toast, setToast] = useState<string | null>(null);
 
     useEffect(() => {
         Promise.resolve().then(() => setIsMounted(true));
@@ -71,10 +68,7 @@ export default function FinancePage() {
             .finally(() => setLoading(false));
     }, []);
 
-    const showToast = (msg: string) => {
-        setToast(msg);
-        setTimeout(() => setToast(null), 3000);
-    };
+
 
     const payments = data?.recentPayments || [];
     const filteredPayments = payments.filter(p => {
@@ -375,17 +369,7 @@ export default function FinancePage() {
             </>
             )}
 
-            {/* Toast */}
-            {toast && (
-                <div className="fixed bottom-10 right-10 z-[100] animate-in slide-in-from-bottom-5 duration-300">
-                    <div className="bg-[#181725] text-white px-6 py-4 rounded-[16px] shadow-2xl flex items-center gap-3 border border-white/10">
-                        <div className="w-8 h-8 rounded-full bg-[#299E60] flex items-center justify-center">
-                            <CheckCircle2 size={18} className="text-white" />
-                        </div>
-                        <p className="text-[14px] font-bold">{toast}</p>
-                    </div>
-                </div>
-            )}
+
         </div>
     );
 }
