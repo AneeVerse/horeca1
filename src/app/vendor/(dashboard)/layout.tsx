@@ -47,6 +47,7 @@ import {
     BookOpen,
     Tag,
     Gift,
+    CreditCard,
     Upload,
     BadgeIndianRupee,
     Wand2,
@@ -71,6 +72,7 @@ const SIDEBAR_LINKS: VendorSidebarLink[] = [
     { name: 'Products',      icon: Package,         href: '/vendor/products',       requiredPerm: 'products.view' },
     { name: 'Brand Mappings',icon: GitMerge,        href: '/vendor/brand-mappings', requiredPerm: 'products.edit' },
     { name: 'Inventory',     icon: Warehouse,       href: '/vendor/inventory',      requiredPerm: 'inventory.view' },
+    { name: 'Credit',        icon: CreditCard,      href: '/vendor/credit',         requiredPerm: ['creditLine.view', 'creditLine.approve'] },
     { name: 'Collections',   icon: Landmark,        href: '/vendor/collections',    requiredPerm: 'products.edit' },
     { name: 'Returns',       icon: RotateCcw,       href: '/vendor/returns',        requiredPerm: 'orders.edit' },
     { name: 'Customers',     icon: UserCircle,      href: '/vendor/customers',      requiredPerm: 'customers.view' },
@@ -179,7 +181,7 @@ export default function VendorLayout({
     const bannerHeight = 0; // Banner is now fixed/floating — no layout space needed
 
     return (
-        <div className="flex flex-col min-h-screen bg-[#F8F9FB] font-[family-name:var(--font-poppins)]">
+        <div className="flex flex-col min-h-screen bg-[#F8F9FB]">
 
             {/* Full-width Top Header */}
             <header className="h-[80px] bg-white border-b border-[#EEEEEE] flex items-center px-8 shrink-0 sticky top-0 z-50">

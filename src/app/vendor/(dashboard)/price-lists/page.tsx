@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Tag, Plus, Loader2, Pencil, Trash2, Users, Package, X, Grid3x3 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 interface PriceList {
   id: string;
@@ -150,7 +149,7 @@ export default function VendorPriceListsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[24px] font-bold text-[#181725]">Price Lists</h1>
-          <p className="text-[12px] text-[#AEAEAE]">Custom pricing for B2B customer segments</p>
+          <p className="text-[12px] text-[#AEAEAE]">Give special prices to specific customers, areas, or groups</p>
         </div>
         <div className="flex items-center gap-2">
           <Link

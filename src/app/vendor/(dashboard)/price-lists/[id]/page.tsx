@@ -94,7 +94,7 @@ interface AssignmentDraft {
 }
 
 interface VendorCustomerOption { userId: string; label: string }
-interface OutletOption { id: string; name: string; city: string | null; pincode: string | null }
+interface OutletOption { id: string; name: string; city: string | null; pincode: string | null; businessName?: string | null }
 interface BrandOption { id: string; name: string }
 
 // ── Component ─────────────────────────────────────────────────────────
@@ -178,20 +178,26 @@ export default function PriceListDetailPage() {
   // opens the "Add assignment" picker so we don't pay for them on first
   // paint.
   const ensureOptionsLoaded = useCallback(async (type: AssignmentType) => {
-    if (type === 'outlet' && outletOpts.length === 0) {
-      const j = await fetch('/api/v1/vendor/outlets').then((r) => r.json());
-      if (j.success) setOutletOpts(j.data.outlets ?? j.data ?? []);
-    }
-    if (type === 'brand' && brandOpts.length === 0) {
-      const j = await fetch('/api/v1/brands').then((r) => r.json());
-      if (j.success) setBrandOpts(j.data ?? []);
-    }
-    if (type === 'customer' && customerOpts.length === 0) {
-      const j = await fetch('/api/v1/vendor/customers').then((r) => r.json());
-      if (j.success) {
-        const list = (j.data ?? []) as Array<{ userId: string; user?: { fullName?: string; businessName?: string; email?: string } }>;
-        setCustomerOpts(list.map((c) => ({ userId: c.userId, label: c.user?.businessName ?? c.user?.fullName ?? c.user?.email ?? c.userId })));
+    try {
+      // Customers + customer outlets come from one endpoint. Outlets are the
+      // CUSTOMERS' outlets, not the vendor's own — the pricing resolver
+      // matches the buyer's active outlet, so vendor outlets would never apply.
+      if ((type === 'outlet' && outletOpts.length === 0) || (type === 'customer' && customerOpts.length === 0)) {
+        const j = await fetch('/api/v1/vendor/pricing-targets').then((r) => r.json());
+        if (j.success) {
+          setOutletOpts(j.data.outlets ?? []);
+          setCustomerOpts(j.data.customers ?? []);
+        }
       }
+      if (type === 'brand' && brandOpts.length === 0) {
+        const j = await fetch('/api/v1/brands?limit=100').then((r) => r.json());
+        if (j.success) {
+          const list = (j.data.brands ?? []) as Array<{ id: string; name: string }>;
+          setBrandOpts(list.map((b) => ({ id: b.id, name: b.name })));
+        }
+      }
+    } catch {
+      toast.error('Could not load options — check your connection and retry');
     }
   }, [outletOpts.length, brandOpts.length, customerOpts.length]);
 
@@ -407,7 +413,7 @@ export default function PriceListDetailPage() {
           </button>
           <div>
             <h1 className="text-[22px] font-bold text-[#181725]">{priceList.name}</h1>
-            <p className="text-[12px] text-[#AEAEAE]">Edit pricing rules, assignments, and product overrides</p>
+            <p className="text-[12px] text-[#AEAEAE]">Set special prices, then choose which customers get them</p>
           </div>
         </div>
         <button
@@ -436,7 +442,7 @@ export default function PriceListDetailPage() {
           <div>
             <label className="block text-[12px] font-semibold text-[#7C7C7C] mb-1">
               Global Discount (%)
-              <span className="ml-1 text-[#AEAEAE] font-normal">— fallback when a product has no item-level override</span>
+              <span className="ml-1 text-[#AEAEAE] font-normal">— applies to every product, unless you set a specific price for it below</span>
             </label>
             <input
               type="number" min="0" max="100" step="0.5"
@@ -458,7 +464,7 @@ export default function PriceListDetailPage() {
           </div>
           <div className="flex items-center gap-1.5">
             <Users size={13} />
-            <span>{priceList.customers.length} legacy customer mapping{priceList.customers.length !== 1 ? 's' : ''}</span>
+            <span>{priceList.customers.length} directly linked customer{priceList.customers.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
       </div>
@@ -467,8 +473,8 @@ export default function PriceListDetailPage() {
       <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-[#F5F5F5] flex items-center justify-between">
           <div>
-            <h2 className="text-[14px] font-bold text-[#181725]">Assignments</h2>
-            <p className="text-[12px] text-[#AEAEAE]">Targets that make this list apply automatically — by pincode, area, customer, outlet, segment-tag, or brand.</p>
+            <h2 className="text-[14px] font-bold text-[#181725]">Who gets these prices</h2>
+            <p className="text-[12px] text-[#AEAEAE]">Add a rule and the prices apply automatically — to a customer, an outlet, a pincode, an area, a customer group, or a brand&apos;s products.</p>
           </div>
           {!addingAssign && (
             <button
@@ -535,8 +541,8 @@ export default function PriceListDetailPage() {
         {assignments.length === 0 ? (
           <div className="py-12 text-center">
             <MapPin size={28} className="text-[#E5E7EB] mx-auto mb-3" />
-            <p className="text-[13px] font-bold text-[#AEAEAE]">No assignments yet</p>
-            <p className="text-[12px] text-[#AEAEAE] mt-1">Add a rule above to make this list auto-apply for matching customers.</p>
+            <p className="text-[13px] font-bold text-[#AEAEAE]">Nobody gets this list yet</p>
+            <p className="text-[12px] text-[#AEAEAE] mt-1">Click &ldquo;Add assignment&rdquo; to choose which customers see these prices.</p>
           </div>
         ) : (
           <div className="px-5 py-4 flex flex-wrap gap-2">
@@ -612,8 +618,8 @@ export default function PriceListDetailPage() {
       {/* ── Items ──────────────────────────────────────────────────── */}
       <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-[#F5F5F5] flex items-center justify-between">
-          <h2 className="text-[14px] font-bold text-[#181725]">Items</h2>
-          <p className="text-[12px] text-[#AEAEAE]">Per-product pricing with type discriminator. Falls back to global discount when a product isn&apos;t listed here.</p>
+          <h2 className="text-[14px] font-bold text-[#181725]">Product prices</h2>
+          <p className="text-[12px] text-[#AEAEAE]">Set a special price for specific products. Anything not listed here just gets the global discount.</p>
         </div>
 
         {/* Add product */}
@@ -680,9 +686,9 @@ export default function PriceListDetailPage() {
       {/* Legacy customer mappings (kept visible for migration awareness) */}
       {priceList.customers.length > 0 && (
         <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
-          <h2 className="text-[14px] font-bold text-[#181725] mb-1">Legacy customer mappings</h2>
+          <h2 className="text-[14px] font-bold text-[#181725] mb-1">Directly linked customers</h2>
           <p className="text-[12px] text-[#AEAEAE] mb-3">
-            Direct VendorCustomer → PriceList links (pre-V2.2). These still resolve via the priority chain after the new assignment rules above.
+            These customers were linked to this list the old way. They still get these prices, but the rules above are checked first.
           </p>
           <div className="flex flex-wrap gap-2">
             {priceList.customers.map((c) => (
@@ -833,7 +839,11 @@ function AssignmentValuePicker({
     return (
       <select value={value} onChange={(e) => onChange(e.target.value)} className={base}>
         <option value="">— select outlet —</option>
-        {outletOpts.map((o) => <option key={o.id} value={o.id}>{o.name}{o.pincode ? ` · ${o.pincode}` : ''}</option>)}
+        {outletOpts.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.businessName ? `${o.businessName} — ` : ''}{o.name}{o.pincode ? ` · ${o.pincode}` : ''}
+          </option>
+        ))}
       </select>
     );
   }
@@ -895,7 +905,9 @@ function buildAssignmentDraft(
     }
     case 'brand': {
       const b = opts.brandOpts.find((x) => x.id === v);
-      return { type, brandId: v, label: b?.name ?? v };
+      // Send brandName too: products without a verified brand mapping
+      // still match by free-text brand name in the pricing resolver.
+      return { type, brandId: v, brandName: b?.name, label: b?.name ?? v };
     }
     case 'customer': {
       const c = opts.customerOpts.find((x) => x.userId === v);

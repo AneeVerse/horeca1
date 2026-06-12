@@ -190,7 +190,7 @@ export default function PricelistWorkspacePage() {
           <Link href="/vendor/price-lists" className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-100 text-gray-500"><ChevronLeft size={18} /></Link>
           <div>
             <h1 className="text-[22px] font-black text-[#181725]">Pricelist Workspace</h1>
-            <p className="text-[12px] text-gray-400 font-medium">Spreadsheet pricing across all your price lists. Empty cells use the list/base price.</p>
+            <p className="text-[12px] text-gray-400 font-medium">Edit every price list side by side, like a spreadsheet. Faint numbers are automatic — type over one to set your own price.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -218,7 +218,7 @@ export default function PricelistWorkspacePage() {
       ) : (
         <>
           <div className="flex items-center gap-2 text-[11px] text-gray-400 font-medium">
-            <Info size={13} /> Click a cell to edit · Enter to edit/commit · arrows/Tab to move · empty = uses fallback (shown faint) · use ƒ on a column header for a formula
+            <Info size={13} /> Click a cell to type a price · Enter saves it · arrows/Tab move around · leave a cell empty to use the automatic price · ƒ on a column applies a formula to all rows
           </div>
           <div className="bg-white border border-[#EEEEEE] rounded-[14px] overflow-auto shadow-sm" tabIndex={0} onKeyDown={onGridKeyDown}>
             <table className="border-collapse text-[13px]">

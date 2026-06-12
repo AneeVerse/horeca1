@@ -95,14 +95,7 @@ const AGING_BAR_COLOR: Record<string, string> = {
 
 type FilterTab = 'all' | 'overdue' | 'active' | 'blocked';
 
-// ─── Reminder stub ─────────────────────────────────────────────────────────────
 
-async function sendReminderStub(customerId: string): Promise<void> {
-  // Real reminders run server-side via the daily credit cron job.
-  // This stub optimistically shows a toast — no critical POST needed.
-  await new Promise<void>((resolve) => setTimeout(resolve, 400));
-  void customerId; // consumed for type correctness
-}
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -135,10 +128,21 @@ export default function VendorCollectionsPage() {
   const handleSendReminder = async (row: CustomerRow) => {
     setRemindingId(row.id);
     try {
-      await sendReminderStub(row.customer.id);
-      toast.success(`Reminder queued for ${row.customer.fullName}`);
-    } catch {
-      toast.error('Failed to queue reminder');
+      const res = await fetch('/api/v1/vendor/credit/remind', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ customerId: row.customer.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error?.message || 'Failed to send reminder');
+      }
+      toast.success(`Reminder sent successfully to ${row.customer.fullName}`);
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : 'Failed to send reminder');
     } finally {
       setRemindingId(null);
     }
