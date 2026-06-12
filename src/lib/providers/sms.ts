@@ -3,7 +3,8 @@
 
 interface SendSmsInput {
   to: string;
-  body: string;
+  body?: string;
+  variables?: Record<string, string>;
   channel: 'sms' | 'whatsapp';
 }
 
@@ -20,7 +21,7 @@ export async function sendSms(input: SendSmsInput): Promise<void> {
   const normalized = normalizePhone(input.to);
 
   if (!authKey || !templateId || (input.channel === 'whatsapp' && !whatsappNumber)) {
-    console.warn(`[${input.channel}:dev] ${normalized} | ${input.body.slice(0, 120)}…`);
+    console.warn(`[${input.channel}:dev] ${normalized} | ${input.body?.slice(0, 120) || JSON.stringify(input.variables)}…`);
     return;
   }
 
@@ -37,7 +38,7 @@ export async function sendSms(input: SendSmsInput): Promise<void> {
     : {
         template_id: templateId,
         sender: senderId,
-        recipients: [{ mobiles: normalized, body: input.body }],
+        recipients: [{ mobiles: normalized, body: input.body, ...input.variables }],
       };
 
   const res = await fetch(endpoint, {

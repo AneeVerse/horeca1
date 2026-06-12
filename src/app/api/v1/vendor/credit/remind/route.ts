@@ -77,6 +77,12 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
         to: wallet.user.phone,
         body: messageBody,
         channel: 'sms',
+        variables: {
+          name: wallet.user.fullName,
+          amount: formattedOutstanding,
+          vendor: vendorName,
+          link: paymentLink,
+        },
       });
       smsSuccess = true;
     } catch (smsError) {
