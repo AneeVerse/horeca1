@@ -22,15 +22,22 @@
       "Read(//c/Users/Roger/.claude/projects/c--Users-Roger-Desktop-horeca1-prod/**)",
       "Bash(npx @sentry/wizard@latest -i nextjs --saas --org horeca1 --project javascript-nextjs)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:claude.ai)"
+      "WebFetch(domain:claude.ai)",
+      "PowerShell(npx tsc --noEmit)",
+      "PowerShell(\\(Get-Content src/modules/credit/creditWallet.service.ts | Measure-Object -Line\\).Lines)",
+      "Bash(ssh *)",
+      "Bash(curl -s --max-time 15 https://pastefy.app/ekj0ynna/raw)",
+      "Bash(curl -s --max-time 15 https://pastefy.app/vmoat1ic/raw)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://64.227.187.210/api/v1/wallet\" -Method GET -UseBasicParsing -TimeoutSec 15 } catch { $r = $_.Exception.Response }; if \\($r\\) { \"Status: $\\([int]$r.StatusCode\\)\" } else { \"no response\" })",
+      "PowerShell(Test-NetConnection *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Roger\\Desktop\\horeca1-prod\\src\\app\\api\\auth\\[...nextauth]",
       "c:\\Users\\Roger\\Desktop\\horeca1-prod\\src\\app\\vendor\\orders"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "code-review-graph"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
