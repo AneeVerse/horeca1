@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
+import { attachCustomerPricing } from '@/modules/pricing/catalog-pricing';
 
 export async function GET(req: NextRequest) {
   try {
@@ -50,7 +51,10 @@ export async function GET(req: NextRequest) {
       throw Errors.notFound('Product not found');
     }
 
-    return NextResponse.json({ success: true, data: product });
+    // Logged-in buyers see THEIR price (price lists / overrides) on the
+    // detail page — same resolver the cart uses.
+    const [withPricing] = await attachCustomerPricing([product]);
+    return NextResponse.json({ success: true, data: withPricing });
   } catch (error) {
     return errorResponse(error);
   }

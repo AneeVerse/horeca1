@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { errorResponse } from '@/middleware/errorHandler';
+import { attachCustomerPricing } from '@/modules/pricing/catalog-pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,7 +64,8 @@ export async function GET(req: NextRequest) {
       })
       .slice(0, limit);
 
-    return NextResponse.json({ success: true, data: { products } });
+    const withPricing = await attachCustomerPricing(products);
+    return NextResponse.json({ success: true, data: { products: withPricing } });
   } catch (error) {
     return errorResponse(error);
   }

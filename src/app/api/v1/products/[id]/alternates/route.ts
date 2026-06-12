@@ -12,8 +12,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { errorResponse } from '@/middleware/errorHandler';
+import { attachCustomerPricing } from '@/modules/pricing/catalog-pricing';
 
 const STOPWORDS = new Set(['the', 'and', 'for', 'with', 'pcs', 'kgs', 'ltr', 'pack']);
+
+// All tiers exit through here so logged-in buyers see THEIR price on
+// alternate-vendor suggestions too.
+async function respond(
+  alternates: Array<{ id: string; vendorId?: string | null; basePrice: unknown; brand?: string | null }>,
+  matchType: string,
+) {
+  return NextResponse.json({
+    success: true,
+    data: { alternates: await attachCustomerPricing(alternates), matchType },
+  });
+}
 
 const productInclude = {
   vendor: { select: { id: true, businessName: true, logoUrl: true, minOrderValue: true } },
@@ -72,10 +85,7 @@ export async function GET(
         take: 3,
       });
       if (linked.length > 0) {
-        return NextResponse.json({
-          success: true,
-          data: { alternates: linked.map(l => l.distributorProduct), matchType: 'brand_mapping' },
-        });
+        return respond(linked.map(l => l.distributorProduct), 'brand_mapping');
       }
     }
 
@@ -91,10 +101,7 @@ export async function GET(
         take: 3,
       });
       if (byBarcode.length > 0) {
-        return NextResponse.json({
-          success: true,
-          data: { alternates: byBarcode, matchType: 'barcode' },
-        });
+        return respond(byBarcode, 'barcode');
       }
     }
 
@@ -112,10 +119,7 @@ export async function GET(
         take: 3,
       });
       if (byBrand.length > 0) {
-        return NextResponse.json({
-          success: true,
-          data: { alternates: byBrand, matchType: 'brand_category' },
-        });
+        return respond(byBrand, 'brand_category');
       }
     }
 
@@ -138,10 +142,7 @@ export async function GET(
         orderBy: { createdAt: 'desc' },
         take: 3,
       });
-      return NextResponse.json({
-        success: true,
-        data: { alternates: sameCategory, matchType: 'category' },
-      });
+      return respond(sameCategory, 'category');
     }
 
     const candidates = await prisma.product.findMany({
@@ -170,10 +171,7 @@ export async function GET(
       .slice(0, 3)
       .map(r => r.product);
 
-    return NextResponse.json({
-      success: true,
-      data: { alternates: ranked, matchType: ranked.length > 0 ? 'token_overlap' : 'none' },
-    });
+    return respond(ranked, ranked.length > 0 ? 'token_overlap' : 'none');
   } catch (error) {
     return errorResponse(error);
   }

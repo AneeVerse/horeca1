@@ -1,14 +1,20 @@
-// GET /api/v1/vendor/credit — Vendor's credit-wallet customer list + aging summary
+// GET  /api/v1/vendor/credit — Vendor's credit-wallet customer list + aging summary
+// POST /api/v1/vendor/credit — Vendor assigns / updates a customer's credit line
 // WHY: Vendors need a view of all customers who have an outstanding CreditWallet
 //      balance owed to them, with aging buckets and summary totals, so they can
-//      monitor exposure, send reminders, and prioritise collections.
-// PROTECTED: Vendor only (vendors + admins)
+//      monitor exposure, send reminders, and prioritise collections. Assignment
+//      is the client-doc "Vendor-backed credit" MUST-HAVE: Vendor >> Choose
+//      Customer >> Assign Credit Limit >> Assign Credit Terms.
+// PROTECTED: Vendor only (vendors + admins); POST additionally needs creditLine.approve
 
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
-import { errorResponse } from '@/middleware/errorHandler';
+import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { resolveVendorId } from '@/lib/resolveVendorId';
+import { requirePermission } from '@/lib/permissions/engine';
+import { creditWalletService } from '@/modules/credit/creditWallet.service';
 
 // ── Aging bucket helper ──────────────────────────────────────────────────────
 
@@ -111,6 +117,62 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         },
       },
     });
+  } catch (error) {
+    return errorResponse(error);
+  }
+});
+
+// ── Assign / update a credit line ─────────────────────────────────────────────
+
+const overridesSchema = z.object({
+  repaymentMode: z.enum(['REPAY_BEFORE_NEXT_USE', 'ALLOW_USAGE_TILL_DUE']).optional(),
+  billingModel: z.enum(['BILL_TO_BILL', 'WEEKLY', 'FORTNIGHTLY', 'MONTHLY']).optional(),
+  creditTenureDays: z.number().int().min(0).max(365).optional(),
+  gracePeriodDays: z.number().int().min(0).max(365).optional(),
+  blacklistDays: z.number().int().min(0).max(3650).optional(),
+  interestRatePct: z.number().min(0).max(100).optional(),
+  interestFrequencyDays: z.number().int().min(1).max(365).optional(),
+  penaltyAmount: z.number().min(0).max(100000).optional(),
+  penaltyFrequencyDays: z.number().int().min(1).max(365).optional(),
+}).partial();
+
+const assignSchema = z.object({
+  userId: z.string().uuid(),
+  creditLimit: z.number().min(0).max(50000000),
+  overrides: overridesSchema.optional(),
+  remark: z.string().max(500).optional(),
+});
+
+export const POST = vendorOnly(async (req: NextRequest, ctx) => {
+  try {
+    requirePermission(ctx, 'creditLine.approve');
+    const vendorId = await resolveVendorId(ctx, req);
+    const body = assignSchema.parse(await req.json());
+
+    // Multi-tenancy guard: the target must actually be a customer of THIS
+    // vendor (has ordered, is CRM-mapped, or already has a wallet here) —
+    // a vendor must not be able to attach credit to arbitrary user ids.
+    const [hasOrdered, isCrm, hasWallet] = await Promise.all([
+      prisma.order.findFirst({ where: { vendorId, userId: body.userId }, select: { id: true } }),
+      prisma.vendorCustomer.findFirst({ where: { vendorId, userId: body.userId }, select: { id: true } }),
+      prisma.creditWallet.findFirst({ where: { vendorId, userId: body.userId }, select: { id: true } }),
+    ]);
+    if (!hasOrdered && !isCrm && !hasWallet) {
+      throw Errors.badRequest('This user is not a customer of your store yet — they must place an order or be added in Customers first.');
+    }
+
+    // Same engine the admin panel and checkout use — writes CreditWallet,
+    // logs CREDIT_ASSIGN / LIMIT_UPDATE with an audit trail.
+    const wallet = await creditWalletService.assignCredit(
+      body.userId,
+      vendorId,
+      body.creditLimit,
+      body.overrides ?? {},
+      ctx.userId,
+      body.remark ?? 'Credit assigned by vendor',
+    );
+
+    return NextResponse.json({ success: true, data: wallet }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }

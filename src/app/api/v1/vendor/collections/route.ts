@@ -11,6 +11,7 @@ import { vendorOnly } from '@/middleware/rbac';
 import { errorResponse } from '@/middleware/errorHandler';
 import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
+import { creditWalletService } from '@/modules/credit/creditWallet.service';
 
 function agingBucket(daysOverdue: number) {
   if (daysOverdue <= 0) return 'current';
@@ -112,20 +113,22 @@ const createAccountSchema = z.object({
   creditLimit: z.number().positive(),
 });
 
+// Legacy endpoint kept for backward compatibility, but repointed to the
+// CreditWallet engine: the old prisma.creditAccount.upsert wrote to the
+// retired table that checkout never reads, so credit assigned here was
+// invisible to the customer. New UI should call POST /api/v1/vendor/credit.
 export const POST = vendorOnly(async (req: NextRequest, ctx) => {
   try {
     const { vendorId } = await resolveVendorContext(ctx, req);
-    requirePermission(ctx, 'orders.edit');
+    requirePermission(ctx, 'creditLine.approve');
 
     const { userId, creditLimit } = createAccountSchema.parse(await req.json());
 
-    const account = await prisma.creditAccount.upsert({
-      where: { userId_vendorId: { userId, vendorId } },
-      update: { creditLimit, status: 'active' },
-      create: { userId, vendorId, creditLimit, status: 'active' },
-    });
+    const wallet = await creditWalletService.assignCredit(
+      userId, vendorId, creditLimit, {}, ctx.userId, 'Credit assigned by vendor (collections)',
+    );
 
-    return NextResponse.json({ success: true, data: account });
+    return NextResponse.json({ success: true, data: wallet });
   } catch (error) {
     return errorResponse(error);
   }
