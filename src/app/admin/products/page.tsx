@@ -7,7 +7,6 @@ import {
     Loader2,
     Plus,
     Upload,
-    Download,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
@@ -316,12 +315,6 @@ function SubstituteProductPicker({
     );
 }
 
-const STATUS_CONFIG = {
-    approved: { label: 'Approved', bg: 'bg-[#EEF8F1]', text: 'text-[#299E60]', dot: 'bg-[#299E60]' },
-    pending: { label: 'Pending', bg: 'bg-[#FFF7E6]', text: 'text-[#F59E0B]', dot: 'bg-[#F59E0B]' },
-    rejected: { label: 'Rejected', bg: 'bg-[#FFF0F0]', text: 'text-[#E74C3C]', dot: 'bg-[#E74C3C]' },
-} as const;
-
 const PAGE_LIMIT = 20;
 
 // ---------------------------------------------------------------------------
@@ -341,7 +334,6 @@ export default function ProductsPage() {
 
     // Loading state
     const [loading, setLoading] = useState(true);
-    const [loadingMore, setLoadingMore] = useState(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [loadingProduct, setLoadingProduct] = useState(false);
@@ -359,7 +351,8 @@ export default function ProductsPage() {
     const [searchInput, setSearchInput] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
-    const [filterVendor, setFilterVendor] = useState('');
+    // Vendor filter UI was dropped in the spreadsheet redesign; state kept for the query builder.
+    const [filterVendor] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
 
     // Panel / Modal state
@@ -496,25 +489,25 @@ export default function ProductsPage() {
     // Inline Cell Editing Handlers
     // -----------------------------------------------------------------------
 
-    const handleCellChange = (productId: string, field: string, value: any) => {
+    const handleCellChange = (productId: string, field: string, value: unknown) => {
         setProducts(prev => prev.map(p => {
             if (p.id !== productId) return p;
             if (field === 'category') {
-                return { ...p, category: value };
+                return { ...p, category: value } as Product;
             }
-            return { ...p, [field]: value };
+            return { ...p, [field]: value } as Product;
         }));
     };
 
-    const handleInlineEdit = async (productId: string, field: string, value: any, originalValue: any) => {
+    const handleInlineEdit = async (productId: string, field: string, value: unknown, originalValue: unknown) => {
         if (value === originalValue) return;
 
-        if (field === 'name' && (!value || !value.trim())) {
+        if (field === 'name' && (!value || !String(value).trim())) {
             toast.error('Product name cannot be empty');
             handleCellChange(productId, 'name', originalValue);
             return;
         }
-        if (field === 'basePrice' && (isNaN(value) || value <= 0)) {
+        if (field === 'basePrice' && (isNaN(Number(value)) || Number(value) <= 0)) {
             toast.error('Please enter a valid base price');
             handleCellChange(productId, 'basePrice', originalValue);
             return;
@@ -527,8 +520,8 @@ export default function ProductsPage() {
 
         try {
             let url = `/api/v1/admin/products/${productId}`;
-            let method = 'PATCH';
-            let bodyPayload: Record<string, any> = {};
+            const method = 'PATCH';
+            let bodyPayload: Record<string, unknown> = {};
 
             if (field === 'approvalStatus') {
                 url = `/api/v1/admin/products/${productId}/approval`;
@@ -569,6 +562,7 @@ export default function ProductsPage() {
                 }
             }
         } catch (err) {
+            console.error('Failed to update inline product:', err);
             toast.error('Network error. Failed to save product.');
             if (field === 'primaryCategoryId') {
                 const origCat = originalProductsRef.current.find(p => p.id === productId)?.category;

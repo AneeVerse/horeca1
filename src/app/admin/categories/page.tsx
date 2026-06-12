@@ -18,7 +18,6 @@ import {
     FileText,
     ChevronRight,
     ChevronDown,
-    ImageIcon,
     X,
     AlertTriangle,
     FolderTree,
@@ -372,21 +371,21 @@ export default function CategoriesPage() {
     // Cell Editing and Toggle Active
     // -----------------------------------------------------------------------
 
-    const handleCellChange = (catId: string, field: keyof Category, value: any) => {
+    const handleCellChange = (catId: string, field: keyof Category, value: Category[keyof Category]) => {
         setCategories((prev) =>
-            prev.map((c) => (c.id === catId ? { ...c, [field]: value } : c))
+            prev.map((c) => (c.id === catId ? { ...c, [field]: value } as Category : c))
         );
     };
 
-    const handleInlineEdit = async (catId: string, field: keyof Category, value: any, originalValue: any) => {
+    const handleInlineEdit = async (catId: string, field: keyof Category, value: Category[keyof Category], originalValue: Category[keyof Category]) => {
         if (value === originalValue) return;
 
-        if (field === 'name' && (!value || !value.trim())) {
+        if (field === 'name' && (!value || !String(value).trim())) {
             toast.error('Category name cannot be empty');
             handleCellChange(catId, 'name', originalValue);
             return;
         }
-        if (field === 'slug' && (!value || !value.trim())) {
+        if (field === 'slug' && (!value || !String(value).trim())) {
             toast.error('Category slug cannot be empty');
             handleCellChange(catId, 'slug', originalValue);
             return;
@@ -400,7 +399,7 @@ export default function CategoriesPage() {
 
         try {
             let url = `/api/v1/admin/categories/${catId}`;
-            let bodyPayload: Record<string, any> = {};
+            let bodyPayload: Record<string, unknown> = {};
 
             if (field === 'approvalStatus') {
                 url = `/api/v1/admin/categories/${catId}/approval`;
@@ -463,9 +462,9 @@ export default function CategoriesPage() {
                 originalCategoriesRef.current[cat.id].isActive = !cat.isActive;
             }
             toast.success('Category active status updated');
-        } catch (err: any) {
+        } catch (err) {
             console.error('Toggle active failed:', err);
-            toast.error(err.message || 'Failed to toggle active status');
+            toast.error(err instanceof Error ? err.message : 'Failed to toggle active status');
         } finally {
             setToggleLoadingId(null);
         }
@@ -999,7 +998,7 @@ export default function CategoriesPage() {
                         type="button"
                         onClick={(e) => {
                             e.preventDefault();
-                            handleSubmit(e as any);
+                            handleSubmit(e);
                         }}
                         disabled={formLoading}
                         className="flex-1 h-[48px] bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] shadow-sm shadow-[#299E60]/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
@@ -1228,8 +1227,8 @@ const CategoryRow = ({
     hasChildren?: boolean;
     isExpanded?: boolean;
     toggleExpand: (id: string) => void;
-    handleCellChange: (catId: string, field: keyof Category, value: any) => void;
-    handleInlineEdit: (catId: string, field: keyof Category, value: any, originalValue: any) => Promise<void>;
+    handleCellChange: (catId: string, field: keyof Category, value: Category[keyof Category]) => void;
+    handleInlineEdit: (catId: string, field: keyof Category, value: Category[keyof Category], originalValue: Category[keyof Category]) => Promise<void>;
     originalCat?: Category;
     toggleLoadingId: string | null;
     savingRows: Set<string>;
@@ -1437,44 +1436,5 @@ const CategoryRow = ({
     );
 }
 
-const StatusBadge = ({ status }: { status: Category['approvalStatus'] }) => {
-    const config = {
-        approved: {
-            label: 'Approved',
-            bg: 'bg-[#EEF8F1]',
-            text: 'text-[#299E60]',
-            border: 'border-[#299E60]/10',
-            dot: 'bg-[#299E60]',
-        },
-        pending: {
-            label: 'Pending',
-            bg: 'bg-[#FFF7E6]',
-            text: 'text-[#F59E0B]',
-            border: 'border-[#F59E0B]/10',
-            dot: 'bg-[#F59E0B]',
-        },
-        rejected: {
-            label: 'Rejected',
-            bg: 'bg-[#FFF0F0]',
-            text: 'text-[#E74C3C]',
-            border: 'border-[#E74C3C]/10',
-            dot: 'bg-[#E74C3C]',
-        },
-    }[status];
-
-    return (
-        <span
-            className={cn(
-                'inline-flex items-center gap-1.5 text-[11px] font-[900] px-3 py-1.5 rounded-[8px] uppercase tracking-wider border',
-                config.bg,
-                config.text,
-                config.border
-            )}
-        >
-            <span className={cn('w-1.5 h-1.5 rounded-full', config.dot)} />
-            {config.label}
-        </span>
-    );
-};
 
 

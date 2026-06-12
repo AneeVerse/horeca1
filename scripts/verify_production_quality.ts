@@ -67,7 +67,6 @@ async function runQaSuite() {
   const cleanupUserRoleIds: string[] = [];
   const cleanupPriceListIds: string[] = [];
   const orderIds: string[] = [];
-  const creditTxIds: string[] = [];
   const cleanupSalespersonIds: string[] = [];
 
   try {
@@ -574,7 +573,7 @@ async function runQaSuite() {
     });
 
     // Setup credit limit for the main vendor
-    const mainCreditAcc = await prisma.creditAccount.create({
+    await prisma.creditAccount.create({
       data: {
         userId: customerUser.id,
         vendorId: vendorProfile.id,

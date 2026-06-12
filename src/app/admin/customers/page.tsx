@@ -124,7 +124,6 @@ export default function CustomersPage() {
 
     const totalCustomers = users.filter(u => u.role === 'customer').length;
     const totalVendors = users.filter(u => u.role === 'vendor').length;
-    const activeUsers = users.filter(u => u.isActive).length;
     const inactiveUsers = users.filter(u => !u.isActive).length;
 
     const stats = [
