@@ -103,13 +103,26 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
   const basePrice = Number(p.basePrice) || 0;
   const promoPrice = p.promoPrice != null ? Number(p.promoPrice) : null;
   const mrp = p.originalPrice != null ? Number(p.originalPrice) : null;
-  const effectivePrice = priceSlabs.length > 0
+  let effectivePrice = priceSlabs.length > 0
     ? Number(priceSlabs[0].price)
     : (promoPrice != null && promoPrice < basePrice ? promoPrice : basePrice);
   // Strike-through shows the higher reference price (MRP wins if present, else base when promo is active).
-  const strikePrice = mrp && mrp > effectivePrice
+  let strikePrice = mrp && mrp > effectivePrice
     ? mrp
     : (promoPrice != null && promoPrice < basePrice ? basePrice : undefined);
+
+  // V2.2 Phase 4 — server-resolved customer-specific price (price list /
+  // per-customer override) attached by the catalog APIs for logged-in
+  // buyers. It outranks slabs and promos, so it becomes THE price and the
+  // slab tiers are hidden (the resolver ignores them when a list matches).
+  const customerPricing = p.customerPricing as { unitPrice: number } | undefined;
+  const customerPriceApplied = customerPricing != null && Number.isFinite(Number(customerPricing.unitPrice));
+  if (customerPriceApplied) {
+    effectivePrice = Number(customerPricing.unitPrice);
+    strikePrice = mrp && mrp > effectivePrice
+      ? mrp
+      : (basePrice > effectivePrice ? basePrice : undefined);
+  }
 
   // Brand mapping → discovery-surface name override.
   // When a verified/auto-mapped BrandProductMapping is attached, the brand's canonical name
@@ -164,14 +177,17 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
     categoryId: (p.categoryId as string) || ((p.category as Record<string, unknown>)?.id as string) || undefined,
     categoryParentId: ((p.category as Record<string, unknown>)?.parentId as string) || undefined,
     categoryParentName: (((p.category as Record<string, unknown>)?.parent as Record<string, unknown>)?.name as string) || undefined,
-    bulkPrices: priceSlabs.map((s): BulkPriceTier => ({
+    bulkPrices: customerPriceApplied ? [] : priceSlabs.map((s): BulkPriceTier => ({
       minQty: Number(s.minQty),
       price: Number(s.price),
     })),
     creditBadge: (p.creditEligible as boolean) || false,
-    minOrderQuantity: priceSlabs.length > 0 ? Number(priceSlabs[0].minQty) : 1,
+    minOrderQuantity: customerPriceApplied
+      ? Number(p.minOrderQty) || 1
+      : priceSlabs.length > 0 ? Number(priceSlabs[0].minQty) : 1,
     frequentlyOrdered: false,
     isDeal: strikePrice !== undefined && strikePrice > effectivePrice,
+    customerPriceApplied: customerPriceApplied || undefined,
   };
 }
 

@@ -73,6 +73,8 @@ export interface VendorProduct extends Product {
     vendorMinOrderValue?: number; // vendor's min ₹ order value for this vendor group
     frequentlyOrdered?: boolean;
     isDeal?: boolean;
+    /** True when `price` is a server-resolved customer-specific price (price list / override). */
+    customerPriceApplied?: boolean;
 }
 
 export interface BulkPriceTier {

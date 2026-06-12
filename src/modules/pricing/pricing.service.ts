@@ -4,7 +4,9 @@
  * Single source of truth for "what unit price should this customer see/pay
  * for this product?". Called from cart.addItem / cart.updateQuantity /
  * cart.getCart / order.create / order.subtotal — anywhere the legacy
- * code used `product.basePrice` or `priceSlab.price` directly.
+ * code used `product.basePrice` or `priceSlab.price` directly — and, via
+ * resolveCatalogPrices, from the public catalog APIs so listing/detail
+ * pages show the customer THEIR price, not the base price.
  *
  * Priority chain (first match wins, falls through on no match):
  *
@@ -37,9 +39,8 @@
 import { Prisma } from '@prisma/client';
 import type {
   PrismaClient,
-  PriceList,
-  PriceListItem,
   PriceListAssignment,
+  PriceListItem,
 } from '@prisma/client';
 import { prisma as defaultPrisma } from '@/lib/prisma';
 
@@ -84,6 +85,145 @@ export interface ResolutionResult {
   schemeMinQty?: number | null;
   schemeFreeQty?: number | null;
 }
+
+// ── Shared chain internals ───────────────────────────────────────────
+// Structural shapes (not full Prisma models) so both the single-product
+// resolver and the batch catalog resolver can feed pre-fetched rows in.
+
+type ItemShape = Pick<
+  PriceListItem,
+  'id' | 'productId' | 'customPrice' | 'pricingType' | 'discountPercent' | 'schemeMinQty' | 'schemeFreeQty'
+>;
+
+interface ListShape {
+  id: string;
+  discountPercent: Prisma.Decimal | number;
+  items: ItemShape[];
+}
+
+type AssignmentShape = Pick<
+  PriceListAssignment,
+  'type' | 'userId' | 'businessAccountId' | 'outletId' | 'brandId' | 'pincode' | 'area' | 'segment' | 'brandName'
+> & { priceList: ListShape };
+
+interface ProductPricingInput {
+  id: string;
+  basePrice: Prisma.Decimal;
+  /** product.brand lowercased, for free-text brand matching */
+  brandLower: string | null;
+  /** canonical brand ids from verified/auto brand mappings */
+  mappedBrandIds: ReadonlySet<string>;
+}
+
+function assignmentEligible(
+  a: AssignmentShape,
+  customer: CustomerContext,
+  product: ProductPricingInput,
+  customerTags: ReadonlySet<string>,
+): boolean {
+  switch (a.type) {
+    case 'outlet':
+      return !!customer.outletId && a.outletId === customer.outletId;
+    case 'customer':
+      return (
+        (!!a.userId && a.userId === customer.userId) ||
+        (!!a.businessAccountId && a.businessAccountId === customer.businessAccountId)
+      );
+    case 'segment':
+      return !!a.segment && customerTags.has(a.segment.toLowerCase());
+    case 'pincode':
+      return !!a.pincode && a.pincode === customer.outletPincode;
+    case 'area': {
+      if (!a.area) return false;
+      const needle = a.area.toLowerCase();
+      return (
+        customer.outletCity?.toLowerCase() === needle ||
+        customer.outletState?.toLowerCase() === needle
+      );
+    }
+    case 'brand':
+      // P0-5: canonical brandId match (via the product's brand mapping),
+      // with a free-text brand-name fallback for products not yet mapped.
+      if (a.brandId && product.mappedBrandIds.has(a.brandId)) return true;
+      if (a.brandName && product.brandLower) return a.brandName.toLowerCase() === product.brandLower;
+      return false;
+    default:
+      return false;
+  }
+}
+
+// Try to resolve via a single PriceList — picks this product's item,
+// applies pricingType math, and returns a result. Null means this list
+// doesn't yield a usable price (e.g. scheme miss) and the chain falls
+// through to the next priority level.
+function applyListForProduct(
+  list: ListShape,
+  productId: string,
+  basePrice: Prisma.Decimal,
+  quantity: number,
+  sourceKey: ResolutionSource,
+): ResolutionResult | null {
+  const item = list.items.find((i) => i.productId === productId);
+  if (item) {
+    const result = applyPricingType(item, basePrice, quantity);
+    if (result !== null) {
+      return {
+        unitPrice: result,
+        source: sourceKey,
+        priceListId: list.id,
+        priceListItemId: item.id,
+        // Surface scheme parameters so the order layer can grant free goods.
+        ...(item.pricingType === 'scheme'
+          ? { schemeMinQty: item.schemeMinQty, schemeFreeQty: item.schemeFreeQty }
+          : {}),
+      };
+    }
+    // scheme miss falls through to the next priority level
+  }
+  // No item for this product, but a global discountPercent might apply.
+  if (Number(list.discountPercent) > 0) {
+    const dp = new Prisma.Decimal(list.discountPercent);
+    const discounted = basePrice.mul(new Prisma.Decimal(1).minus(dp.div(100)));
+    return {
+      unitPrice: round2(discounted),
+      source: sourceKey,
+      priceListId: list.id,
+    };
+  }
+  return null;
+}
+
+const ORDERED_TYPES: Array<{ type: PriceListAssignment['type']; key: ResolutionSource }> = [
+  { type: 'outlet',   key: 'pricelist:outlet' },
+  { type: 'customer', key: 'pricelist:customer' },
+  { type: 'segment',  key: 'pricelist:segment' },
+  { type: 'pincode',  key: 'pricelist:pincode' },
+  { type: 'area',     key: 'pricelist:area' },
+  { type: 'brand',    key: 'pricelist:brand' },
+];
+
+// Levels 1–6 of the chain: assignment-driven price lists.
+function evaluateAssignmentChain(
+  assignments: AssignmentShape[],
+  customer: CustomerContext,
+  product: ProductPricingInput,
+  quantity: number,
+  customerTags: ReadonlySet<string>,
+): ResolutionResult | null {
+  for (const { type, key } of ORDERED_TYPES) {
+    for (const a of assignments) {
+      if (a.type !== type || !assignmentEligible(a, customer, product, customerTags)) continue;
+      const r = applyListForProduct(a.priceList, product.id, product.basePrice, quantity, key);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+const ITEM_SELECT = {
+  id: true, productId: true, customPrice: true, pricingType: true,
+  discountPercent: true, schemeMinQty: true, schemeFreeQty: true,
+} as const;
 
 /**
  * Resolve the unit price the customer should see/pay right now.
@@ -157,17 +297,7 @@ export async function resolveUnitPrice(
             select: {
               id: true,
               discountPercent: true,
-              items: {
-                where: { productId: input.productId },
-                select: {
-                  id: true,
-                  customPrice: true,
-                  pricingType: true,
-                  discountPercent: true,
-                  schemeMinQty: true,
-                  schemeFreeQty: true,
-                },
-              },
+              items: { where: { productId: input.productId }, select: ITEM_SELECT },
             },
           },
         },
@@ -179,123 +309,32 @@ export async function resolveUnitPrice(
   }
 
   const basePrice = product.basePrice;
-  const productBrand = product.brand?.toLowerCase() ?? null;
-  const mappedBrandIds = new Set((product.brandMappings ?? []).map((m) => m.brandId));
+  const productInput: ProductPricingInput = {
+    id: product.id,
+    basePrice,
+    brandLower: product.brand?.toLowerCase() ?? null,
+    mappedBrandIds: new Set((product.brandMappings ?? []).map((m) => m.brandId)),
+  };
   const customerTags = new Set(
     [...(input.customer.tags ?? []), ...(vendorCustomer?.tags ?? [])].map((t) => t.toLowerCase()),
   );
 
-  // Each priority level either returns a fully-resolved unit price or
-  // returns null to fall through. Encapsulated in a helper so we can
-  // unit-test the chain piece by piece.
-  type Match = { assignment: PriceListAssignment & { priceList: PriceList & { items: PriceListItem[] } } };
-
-  function matchesByType(type: PriceListAssignment['type']): Match[] {
-    return assignments
-      .filter((a) => a.type === type && eligible(a, type))
-      .map((a) => ({ assignment: a as Match['assignment'] }));
-  }
-
-  function eligible(a: PriceListAssignment, type: PriceListAssignment['type']): boolean {
-    switch (type) {
-      case 'outlet':
-        return !!input.customer.outletId && a.outletId === input.customer.outletId;
-      case 'customer':
-        return (
-          (!!a.userId && a.userId === input.customer.userId) ||
-          (!!a.businessAccountId && a.businessAccountId === input.customer.businessAccountId)
-        );
-      case 'segment':
-        return !!a.segment && customerTags.has(a.segment.toLowerCase());
-      case 'pincode':
-        return !!a.pincode && a.pincode === input.customer.outletPincode;
-      case 'area': {
-        if (!a.area) return false;
-        const needle = a.area.toLowerCase();
-        return (
-          input.customer.outletCity?.toLowerCase() === needle ||
-          input.customer.outletState?.toLowerCase() === needle
-        );
-      }
-      case 'brand':
-        // P0-5: canonical brandId match (via the product's brand mapping),
-        // with a free-text brand-name fallback for products not yet mapped.
-        if (a.brandId && mappedBrandIds.has(a.brandId)) return true;
-        if (a.brandName && productBrand) return a.brandName.toLowerCase() === productBrand;
-        return false;
-      default:
-        return false;
-    }
-  }
-
-  // Try to resolve via a single PriceList — picks the highest-priority
-  // matching item, applies pricingType math, and returns a result. Null
-  // means this list doesn't yield a usable price (e.g. scheme miss).
-  function applyList(
-    list: PriceList & { items: PriceListItem[] },
-    sourceKey: ResolutionSource,
-  ): ResolutionResult | null {
-    const item = list.items[0]; // items already filtered to this productId
-    if (item) {
-      const result = applyPricingType(item, basePrice, input.quantity);
-      if (result !== null) {
-        return {
-          unitPrice: result,
-          source: sourceKey,
-          priceListId: list.id,
-          priceListItemId: item.id,
-          // Surface scheme parameters so the order layer can grant free goods.
-          ...(item.pricingType === 'scheme'
-            ? { schemeMinQty: item.schemeMinQty, schemeFreeQty: item.schemeFreeQty }
-            : {}),
-        };
-      }
-      // scheme miss falls through to the next priority level
-    }
-    // No item for this product, but a global discountPercent might apply.
-    if (Number(list.discountPercent) > 0) {
-      const dp = new Prisma.Decimal(list.discountPercent);
-      const discounted = basePrice.mul(new Prisma.Decimal(1).minus(dp.div(100)));
-      return {
-        unitPrice: round2(discounted),
-        source: sourceKey,
-        priceListId: list.id,
-      };
-    }
-    return null;
-  }
-
-  // ── Priority chain ─────────────────────────────────────────────────
-  const orderedTypes: Array<{ type: PriceListAssignment['type']; key: ResolutionSource }> = [
-    { type: 'outlet',   key: 'pricelist:outlet' },
-    { type: 'customer', key: 'pricelist:customer' },
-    { type: 'segment',  key: 'pricelist:segment' },
-    { type: 'pincode',  key: 'pricelist:pincode' },
-    { type: 'area',     key: 'pricelist:area' },
-    { type: 'brand',    key: 'pricelist:brand' },
-  ];
-
-  for (const { type, key } of orderedTypes) {
-    const matches = matchesByType(type);
-    for (const { assignment } of matches) {
-      const r = applyList(assignment.priceList, key);
-      if (r) return r;
-    }
-  }
+  // ── 1–6. Assignment-driven price lists ─────────────────────────────
+  const chained = evaluateAssignmentChain(assignments, input.customer, productInput, input.quantity, customerTags);
+  if (chained) return chained;
 
   // 7. Legacy VendorCustomer.priceListId
   if (vendorCustomer?.priceListId) {
     const list = await db.priceList.findFirst({
       where: { id: vendorCustomer.priceListId, vendorId: input.vendorId, isActive: true },
-      include: {
-        items: {
-          where: { productId: input.productId },
-          select: { id: true, customPrice: true, pricingType: true, discountPercent: true, schemeMinQty: true, schemeFreeQty: true },
-        },
+      select: {
+        id: true,
+        discountPercent: true,
+        items: { where: { productId: input.productId }, select: ITEM_SELECT },
       },
     });
     if (list) {
-      const r = applyList(list as PriceList & { items: PriceListItem[] }, 'pricelist:legacy-customer-mapping');
+      const r = applyListForProduct(list, input.productId, basePrice, input.quantity, 'pricelist:legacy-customer-mapping');
       if (r) return r;
     }
   }
@@ -320,6 +359,165 @@ export async function resolveUnitPrice(
 
   // 10. Default fallback
   return { unitPrice: round2(basePrice), source: 'base-price' };
+}
+
+// ── Batch resolver for catalog surfaces ──────────────────────────────
+
+export interface CatalogPrice {
+  unitPrice: number;
+  source: ResolutionSource;
+  priceListId?: string;
+}
+
+/**
+ * Resolve customer-specific prices for MANY products in one pass —
+ * built for listing/detail/search APIs where calling resolveUnitPrice
+ * per product would N+1 the database.
+ *
+ * Evaluates chain levels 1–8 only (price lists + legacy mapping +
+ * per-product override) at quantity 1. Products that fall through to
+ * slabs/base price are simply absent from the returned map — the
+ * catalog already renders those correctly.
+ */
+export async function resolveCatalogPrices(
+  products: Array<{ id: string; vendorId: string; basePrice: Prisma.Decimal | number | string; brand?: string | null }>,
+  customer: CustomerContext,
+  db: Db = defaultPrisma,
+): Promise<Map<string, CatalogPrice>> {
+  const out = new Map<string, CatalogPrice>();
+  if (products.length === 0) return out;
+
+  const productIds = [...new Set(products.map((p) => p.id))];
+  const vendorIds = [...new Set(products.map((p) => p.vendorId))];
+
+  const [assignments, vendorCustomers, overrides, brandMappings] = await Promise.all([
+    db.priceListAssignment.findMany({
+      where: {
+        priceList: { vendorId: { in: vendorIds }, isActive: true },
+        OR: [
+          { type: 'outlet', outletId: customer.outletId ?? undefined },
+          { type: 'customer', userId: customer.userId },
+          ...(customer.businessAccountId
+            ? [{ type: 'customer' as const, businessAccountId: customer.businessAccountId }]
+            : []),
+          { type: 'segment' },
+          ...(customer.outletPincode
+            ? [{ type: 'pincode' as const, pincode: customer.outletPincode }]
+            : []),
+          { type: 'area' },
+          { type: 'brand' },
+        ],
+      },
+      include: {
+        priceList: {
+          select: {
+            id: true,
+            vendorId: true,
+            discountPercent: true,
+            items: { where: { productId: { in: productIds } }, select: ITEM_SELECT },
+          },
+        },
+      },
+    }),
+    db.vendorCustomer.findMany({
+      where: { vendorId: { in: vendorIds }, userId: customer.userId },
+      select: { vendorId: true, priceListId: true, tags: true },
+    }),
+    db.vendorCustomerPrice.findMany({
+      where: { vendorId: { in: vendorIds }, customerId: customer.userId, productId: { in: productIds } },
+      select: { vendorId: true, productId: true, price: true },
+    }),
+    db.brandProductMapping.findMany({
+      where: { distributorProductId: { in: productIds }, status: { in: ['verified', 'auto_mapped'] } },
+      select: { distributorProductId: true, brandId: true },
+    }),
+  ]);
+
+  const vcByVendor = new Map(vendorCustomers.map((vc) => [vc.vendorId, vc]));
+
+  // 7. Legacy lists — fetch all referenced ones in one query.
+  const legacyListIds = vendorCustomers.flatMap((vc) => (vc.priceListId ? [vc.priceListId] : []));
+  const legacyLists = legacyListIds.length
+    ? await db.priceList.findMany({
+        where: { id: { in: legacyListIds }, vendorId: { in: vendorIds }, isActive: true },
+        select: {
+          id: true,
+          vendorId: true,
+          discountPercent: true,
+          items: { where: { productId: { in: productIds } }, select: ITEM_SELECT },
+        },
+      })
+    : [];
+  const legacyById = new Map(legacyLists.map((l) => [l.id, l]));
+
+  const assignmentsByVendor = new Map<string, AssignmentShape[]>();
+  for (const a of assignments) {
+    const vId = a.priceList.vendorId;
+    const arr = assignmentsByVendor.get(vId) ?? [];
+    arr.push(a);
+    assignmentsByVendor.set(vId, arr);
+  }
+
+  const overrideByKey = new Map(overrides.map((o) => [`${o.vendorId}:${o.productId}`, o.price]));
+  const brandIdsByProduct = new Map<string, Set<string>>();
+  for (const m of brandMappings) {
+    const set = brandIdsByProduct.get(m.distributorProductId) ?? new Set<string>();
+    set.add(m.brandId);
+    brandIdsByProduct.set(m.distributorProductId, set);
+  }
+
+  const quantity = 1; // catalog shows the entry price; cart re-resolves per real qty
+
+  for (const p of products) {
+    const vc = vcByVendor.get(p.vendorId);
+    const customerTags = new Set(
+      [...(customer.tags ?? []), ...(vc?.tags ?? [])].map((t) => t.toLowerCase()),
+    );
+    const productInput: ProductPricingInput = {
+      id: p.id,
+      basePrice: new Prisma.Decimal(p.basePrice),
+      brandLower: p.brand?.toLowerCase() ?? null,
+      mappedBrandIds: brandIdsByProduct.get(p.id) ?? new Set(),
+    };
+
+    // 1–6. Assignment chain (scoped to this product's vendor)
+    let result = evaluateAssignmentChain(
+      assignmentsByVendor.get(p.vendorId) ?? [],
+      customer,
+      productInput,
+      quantity,
+      customerTags,
+    );
+
+    // 7. Legacy mapping
+    if (!result && vc?.priceListId) {
+      const list = legacyById.get(vc.priceListId);
+      if (list && list.vendorId === p.vendorId) {
+        result = applyListForProduct(list, p.id, productInput.basePrice, quantity, 'pricelist:legacy-customer-mapping');
+      }
+    }
+
+    if (result) {
+      out.set(p.id, {
+        unitPrice: Number(result.unitPrice),
+        source: result.source,
+        priceListId: result.priceListId,
+      });
+      continue;
+    }
+
+    // 8. Per-product customer override
+    const override = overrideByKey.get(`${p.vendorId}:${p.id}`);
+    if (override != null) {
+      out.set(p.id, {
+        unitPrice: Number(round2(new Prisma.Decimal(override))),
+        source: 'customer-product-override',
+      });
+    }
+    // 9–10 (slabs/base) intentionally omitted — catalog renders those already.
+  }
+
+  return out;
 }
 
 // ── Pricing-type math ────────────────────────────────────────────────
