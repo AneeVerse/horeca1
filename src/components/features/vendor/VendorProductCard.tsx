@@ -337,7 +337,11 @@ export const VendorProductCard = React.memo(function VendorProductCard({
                     </span>
                 ) : (
                     <>
-                        {product.isDeal && (
+                        {product.customerPriceApplied ? (
+                            <span className="bg-gradient-to-r from-[#299E60] to-[#53B175] text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md shadow-green-500/20 tracking-wide">
+                                Your price
+                            </span>
+                        ) : product.isDeal && (
                             <span className="bg-gradient-to-r from-[#FF4D4D] to-[#FF6B6B] text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md shadow-red-500/20 tracking-wide">
                                 Deal
                             </span>
@@ -471,6 +475,9 @@ export const VendorProductCard = React.memo(function VendorProductCard({
                             )}>
                                 ₹{product.price}
                             </span>
+                            {product.customerPriceApplied && product.originalPrice != null && product.originalPrice > product.price && (
+                                <span className="text-[12px] font-semibold text-gray-400 line-through">₹{product.originalPrice}</span>
+                            )}
                             <span className="text-[11px] font-medium text-gray-500">/ unit</span>
                         </div>
                     </div>
@@ -724,6 +731,9 @@ export const VendorProductCard = React.memo(function VendorProductCard({
                                 )}>
                                     ₹{product.price}
                                 </span>
+                                {product.customerPriceApplied && product.originalPrice != null && product.originalPrice > product.price && (
+                                    <span className="text-[11px] font-semibold text-gray-400 line-through">₹{product.originalPrice}</span>
+                                )}
                                 <span className="text-[10px] font-medium text-gray-500">/ unit</span>
                             </div>
 
@@ -821,6 +831,9 @@ export const VendorProductCard = React.memo(function VendorProductCard({
                             )}>
                                 ₹{product.price}
                             </span>
+                            {product.customerPriceApplied && product.originalPrice != null && product.originalPrice > product.price && (
+                                <span className="text-[13px] font-semibold text-gray-400 line-through">₹{product.originalPrice}</span>
+                            )}
                             <span className="text-[12px] font-medium text-gray-500">/ unit</span>
                         </div>
                         {renderPrimaryCTA(false)}

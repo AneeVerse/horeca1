@@ -53,51 +53,7 @@ export function CategoryShowcase({ filterByProducts, title = "Shop By Category",
 
     if (categories.length === 0) return null;
 
-    const CategoryCard = ({ cat }: { cat: (typeof categories)[0] }) => {
-        const isActive = activeCategory === `cat:${cat.name}`;
-        const sharedClass = "flex flex-col items-center group transition-transform active:scale-95 w-full";
-        const content = (
-            <>
-                <div
-                    className={cn(
-                        "w-full aspect-square rounded-[18px] flex items-center justify-center mb-2 overflow-hidden relative border transition-all duration-300",
-                        isActive
-                            ? "border-[#53B175] shadow-[0_12px_32px_rgba(83,177,117,0.18)] ring-2 ring-[#53B175]/10 bg-white"
-                            : "border-gray-100 shadow-sm group-hover:shadow-[0_12px_24px_rgba(83,177,117,0.08)] group-hover:border-[#53B175]/30"
-                    )}
-                    style={{ backgroundColor: isActive ? 'white' : cat.bgColor }}
-                >
-                    <div className="relative w-[72%] h-[72%]">
-                        <Image
-                            src={cat.image || '/images/category/vegitable.png'}
-                            alt={cat.name}
-                            fill
-                            className="object-contain"
-                        />
-                    </div>
-                </div>
-                <h3 className={cn(
-                    "text-[11px] md:text-[12px] text-center font-extrabold leading-tight px-0.5 line-clamp-2 min-h-[2.4em] transition-colors",
-                    isActive ? "text-[#53B175]" : "text-[#181725] group-hover:text-[#53B175]"
-                )}>
-                    {cat.name}
-                </h3>
-            </>
-        );
 
-        if (onCategoryClick) {
-            return (
-                <button onClick={() => onCategoryClick(cat.name)} className={sharedClass}>
-                    {content}
-                </button>
-            );
-        }
-        return (
-            <Link href={`/category/${cat.slug}`} className={sharedClass}>
-                {content}
-            </Link>
-        );
-    };
 
     return (
         <section
@@ -147,14 +103,14 @@ export function CategoryShowcase({ filterByProducts, title = "Shop By Category",
                             {isMobileExpanded ? (
                                 <div className="grid grid-cols-3 auto-cols-[100px] gap-x-4 gap-y-6 pb-6 px-6 w-auto">
                                     {categories.map((cat) => (
-                                        <CategoryCard key={cat.id} cat={cat} />
+                                        <CategoryCard key={cat.id} cat={cat} activeCategory={activeCategory} onCategoryClick={onCategoryClick} />
                                     ))}
                                 </div>
                             ) : (
                                 <div className="flex items-start gap-4 pb-6 px-6 w-max">
                                     {categories.map((cat) => (
                                         <div key={cat.id} className="w-[100px] shrink-0">
-                                            <CategoryCard cat={cat} />
+                                            <CategoryCard cat={cat} activeCategory={activeCategory} onCategoryClick={onCategoryClick} />
                                         </div>
                                     ))}
                                 </div>
@@ -167,7 +123,7 @@ export function CategoryShowcase({ filterByProducts, title = "Shop By Category",
                         <div className="grid grid-cols-9 gap-x-3 gap-y-5 pb-4 px-6 md:px-[var(--container-padding)]">
                             {(isDesktopExpanded ? categories : categories.slice(0, 18)).map((cat) => (
                                 <div key={cat.id} className="w-full">
-                                    <CategoryCard cat={cat} />
+                                    <CategoryCard cat={cat} activeCategory={activeCategory} onCategoryClick={onCategoryClick} />
                                 </div>
                             ))}
                         </div>
@@ -177,3 +133,55 @@ export function CategoryShowcase({ filterByProducts, title = "Shop By Category",
         </section>
     );
 }
+
+interface CategoryCardProps {
+    cat: Category & { bgColor: string };
+    activeCategory?: string;
+    onCategoryClick?: (categoryName: string) => void;
+}
+
+const CategoryCard = ({ cat, activeCategory, onCategoryClick }: CategoryCardProps) => {
+    const isActive = activeCategory === `cat:${cat.name}`;
+    const sharedClass = "flex flex-col items-center group transition-transform active:scale-95 w-full";
+    const content = (
+        <>
+            <div
+                className={cn(
+                    "w-full aspect-square rounded-[18px] flex items-center justify-center mb-2 overflow-hidden relative border transition-all duration-300",
+                    isActive
+                        ? "border-[#53B175] shadow-[0_12px_32px_rgba(83,177,117,0.18)] ring-2 ring-[#53B175]/10 bg-white"
+                        : "border-gray-100 shadow-sm group-hover:shadow-[0_12px_24px_rgba(83,177,117,0.08)] group-hover:border-[#53B175]/30"
+                )}
+                style={{ backgroundColor: isActive ? 'white' : cat.bgColor }}
+            >
+                <div className="relative w-[72%] h-[72%]">
+                    <Image
+                        src={cat.image || '/images/category/vegitable.png'}
+                        alt={cat.name}
+                        fill
+                        className="object-contain"
+                    />
+                </div>
+            </div>
+            <h3 className={cn(
+                "text-[11px] md:text-[12px] text-center font-extrabold leading-tight px-0.5 line-clamp-2 min-h-[2.4em] transition-colors",
+                isActive ? "text-[#53B175]" : "text-[#181725] group-hover:text-[#53B175]"
+            )}>
+                {cat.name}
+            </h3>
+        </>
+    );
+
+    if (onCategoryClick) {
+        return (
+            <button onClick={() => onCategoryClick(cat.name)} className={sharedClass}>
+                {content}
+            </button>
+        );
+    }
+    return (
+        <Link href={`/category/${cat.slug}`} className={sharedClass}>
+            {content}
+        </Link>
+    );
+};

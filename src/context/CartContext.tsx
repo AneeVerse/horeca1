@@ -111,6 +111,17 @@ function fromApiCart(apiData: { vendorGroups: unknown[]; total: number }): CartI
             const taxPercent = Number(product.taxPercent) || 0;
             const grossPrice = Math.round(taxableRate * (1 + taxPercent / 100) * 100) / 100;
 
+            // Customer-specific price (price list / per-customer override): the
+            // server resolved a unitPrice that is neither the base price nor any
+            // slab tier. The resolver OUTRANKS slabs for these, so local tier
+            // recomputation must be disabled — otherwise changing quantity would
+            // flip the display back to base/slab prices the customer won't pay.
+            const baseTaxable = Number(product.basePrice) || 0;
+            const matchesSlab = priceSlabs.some(s => Math.abs(Number(s.price) - unitPrice) < 0.005);
+            const isCustomerPrice = unitPrice > 0
+                && Math.abs(unitPrice - baseTaxable) > 0.005
+                && !matchesSlab;
+
             // MRP: originalPrice from DB is also a taxable rate — compute gross MRP
             const originalTaxableRate = Number(product.originalPrice) || 0;
             const grossMRP = originalTaxableRate > 0
@@ -134,8 +145,9 @@ function fromApiCart(apiData: { vendorGroups: unknown[]; total: number }): CartI
                 vendorId: (raw.vendorId as string) || (itemVendor.id as string) || '',
                 vendorName: (itemVendor.businessName as string) || '',
                 vendorLogo: (itemVendor.logoUrl as string) || '',
-                // Bulk price slabs: store gross prices for display
-                bulkPrices: priceSlabs.map(s => ({
+                // Bulk price slabs: store gross prices for display. Hidden when a
+                // customer price applies — the resolver ignores slabs for those.
+                bulkPrices: isCustomerPrice ? [] : priceSlabs.map(s => ({
                     minQty: Number(s.minQty),
                     price: Math.round(Number(s.price) * (1 + taxPercent / 100) * 100) / 100,
                 })),
@@ -146,10 +158,14 @@ function fromApiCart(apiData: { vendorGroups: unknown[]; total: number }): CartI
                 vendorMinOrderValue: Number((itemVendor.minOrderValue as number) || 0),
                 frequentlyOrdered: false,
                 isDeal: false,
+                customerPriceApplied: isCustomerPrice || undefined,
             };
-            // basePriceGross = gross price at qty < first tier (single unit base price)
-            // DB basePrice is taxable rate → compute gross
-            const basePriceGross = Math.round(Number(product.basePrice) * (1 + taxPercent / 100) * 100) / 100 || grossPrice;
+            // basePriceGross = gross price at qty < first tier (single unit base price).
+            // For customer-priced items the resolved gross IS the anchor — local
+            // tier math must never recompute from the catalog base price.
+            const basePriceGross = isCustomerPrice
+                ? grossPrice
+                : Math.round(Number(product.basePrice) * (1 + taxPercent / 100) * 100) / 100 || grossPrice;
 
             items.push({
                 productId: vp.id,
@@ -303,9 +319,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const minQty = item.product?.minOrderQuantity || 1;
         if (quantity < minQty) return;
 
-        // Sync with server cart (server also recalculates slab price)
+        // Sync with server cart (server also recalculates slab price).
+        // For customer-priced items the server is the only price authority
+        // (scheme prices change with quantity) — refresh after the PATCH so
+        // the UI always shows exactly what checkout will charge.
         if (isLoggedIn && item.cartItemId) {
-            dal.cart.updateItem(item.cartItemId, quantity).catch(() => {});
+            const patch = dal.cart.updateItem(item.cartItemId, quantity);
+            if (item.product?.customerPriceApplied) {
+                patch
+                    .then(() => dal.cart.get())
+                    .then(apiData => setCart(fromApiCart(apiData as { vendorGroups: unknown[]; total: number })))
+                    .catch(() => {});
+            } else {
+                patch.catch(() => {});
+            }
         }
 
         setCart(prev => prev.map(i => {

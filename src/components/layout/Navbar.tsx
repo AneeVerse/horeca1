@@ -91,28 +91,7 @@ export function Navbar() {
         setIsSearchOverlayOpen(true);
     };
 
-    function SearchURLSync() {
-        const searchParams = useSearchParams();
-        const router = useRouter();
 
-        React.useEffect(() => {
-            if (!searchParams) return;
-            const searchOpen = searchParams.get('searchOpen');
-            const q = searchParams.get('q');
-            const tab = searchParams.get('tab');
-
-            if (searchOpen === 'true') {
-                openSearch(tab as 'items' | 'stores' | 'vendors' || 'items', q || '');
-                const url = new URL(window.location.href);
-                url.searchParams.delete('searchOpen');
-                url.searchParams.delete('q');
-                url.searchParams.delete('tab');
-                router.replace(url.pathname + url.search, { scroll: false });
-            }
-        }, [searchParams, router]);
-
-        return null;
-    }
 
     const pathname = usePathname();
     const isShipmentPage = pathname?.includes('/cart/shipment/');
@@ -135,7 +114,7 @@ export function Navbar() {
     return (
         <>
             <React.Suspense fallback={null}>
-                <SearchURLSync />
+                <SearchURLSync openSearch={openSearch} />
             </React.Suspense>
             {pathname === '/' && (
                 <InitialPincodeOverlay
@@ -280,8 +259,8 @@ export function Navbar() {
                                                 isActive ? "text-primary bg-primary/5" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
                                             )}
                                         >
-                                            <Icon size={21} strokeWidth={isActive ? 2.5 : 1.8} />
-                                            <span className="text-[10px] font-bold leading-none">{name}</span>
+                                            <Icon size={21} strokeWidth={isActive ? 2 : 1.5} />
+                                            <span className="text-[10px] font-medium leading-none">{name}</span>
                                         </Link>
                                     );
                                 })}
@@ -293,7 +272,7 @@ export function Navbar() {
                             {/* Cart + User */}
                             <div className="flex items-center gap-1 shrink-0">
                                 <Link href="/cart" className="p-2.5 hover:bg-gray-50 rounded-full transition-all relative group cursor-pointer">
-                                    <ShoppingCart size={22} className="text-text group-hover:text-primary transition-colors" />
+                                    <ShoppingCart size={22} strokeWidth={1.5} className="text-text group-hover:text-primary transition-colors" />
                                     <span className="absolute top-0.5 right-0.5 bg-primary text-white text-[10px] w-[18px] h-[18px] flex items-center justify-center rounded-full font-bold border-2 border-white">
                                         {totalItems}
                                     </span>
@@ -305,7 +284,7 @@ export function Navbar() {
                                     }}
                                     className="p-2.5 hover:bg-gray-50 rounded-full transition-all group cursor-pointer"
                                 >
-                                    <User size={22} className="text-text group-hover:text-primary transition-colors" />
+                                    <User size={22} strokeWidth={1.5} className="text-text group-hover:text-primary transition-colors" />
                                 </button>
                             </div>
                         </div>
@@ -405,3 +384,31 @@ export function Navbar() {
         </>
     );
 }
+
+const SearchURLSync = ({
+    openSearch,
+}: {
+    openSearch: (tab?: 'items' | 'stores' | 'vendors', initialQuery?: string) => void;
+}) => {
+    const searchParams = useSearchParams();
+    const router = useRouter();
+
+    React.useEffect(() => {
+        if (!searchParams) return;
+        const searchOpen = searchParams.get('searchOpen');
+        const q = searchParams.get('q');
+        const tab = searchParams.get('tab');
+
+        if (searchOpen === 'true') {
+            openSearch(tab as 'items' | 'stores' | 'vendors' || 'items', q || '');
+            const url = new URL(window.location.href);
+            url.searchParams.delete('searchOpen');
+            url.searchParams.delete('q');
+            url.searchParams.delete('tab');
+            router.replace(url.pathname + url.search, { scroll: false });
+        }
+    }, [searchParams, router, openSearch]);
+
+    return null;
+};
+

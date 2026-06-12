@@ -48,6 +48,8 @@ interface ApiProduct {
     priceSlabs: { minQty: number; maxQty: number | null; price: number }[];
     inventory: { qtyAvailable: number } | null;
     brandMappings?: { brandMasterProduct: { name: string; brand: { name: string; slug: string } } }[];
+    /** Server-resolved customer-specific price (price list / override) for the logged-in buyer. */
+    customerPricing?: { unitPrice: number; source: string };
 }
 
 export default function ProductDetailPage() {
@@ -77,12 +79,26 @@ export default function ProductDetailPage() {
     const brandName = brandMapping?.brand?.name as string | undefined;
     const brandSlug = brandMapping?.brand?.slug as string | undefined;
     const vendorName = apiProduct?.vendor?.businessName || '';
-    const productPrice = apiProduct?.priceSlabs?.[0]?.price ?? apiProduct?.basePrice ?? 0;
+    // Customer-specific price (price list / override) outranks slabs — it's
+    // what the cart will charge, so it's what the page must show.
+    const customerPrice = apiProduct?.customerPricing?.unitPrice;
+    const hasCustomerPrice = customerPrice != null && Number.isFinite(Number(customerPrice));
+    const productPrice = hasCustomerPrice
+        ? Number(customerPrice)
+        : apiProduct?.priceSlabs?.[0]?.price ?? apiProduct?.basePrice ?? 0;
+    const customerStrikePrice = hasCustomerPrice && Number(apiProduct?.basePrice ?? 0) > productPrice
+        ? Number(apiProduct?.basePrice)
+        : null;
     const productImage = apiProduct?.imageUrl || apiProduct?.images?.[0] || '/images/product/product-img3.png';
     const productCategory = apiProduct?.category?.name || '';
     const productUnit = apiProduct?.packSize || '1 unit';
     const productDescription = apiProduct?.description || 'Premium quality product sourced for professional kitchens.';
-    const bulkPrices = apiProduct?.priceSlabs || [];
+    // Slab tiers are outranked (and ignored by the cart) when a customer price applies — hide them.
+    const apiPriceSlabs = apiProduct?.priceSlabs;
+    const bulkPrices = useMemo(
+        () => (hasCustomerPrice ? [] : (apiPriceSlabs || [])),
+        [hasCustomerPrice, apiPriceSlabs],
+    );
     const stockQty = apiProduct?.inventory?.qtyAvailable ?? 0;
 
     // Derive product object matching old UI shape
@@ -117,7 +133,8 @@ export default function ProductDetailPage() {
         bulkPrices: bulkPrices.map(s => ({ minQty: s.minQty, price: s.price })),
         creditBadge: false,
         minOrderQuantity: bulkPrices[0]?.minQty || 1,
-    }), [apiProduct, id, productName, productDescription, productCategory, productPrice, productImage, productUnit, stockQty, bulkPrices]);
+        customerPriceApplied: hasCustomerPrice || undefined,
+    }), [apiProduct, id, productName, productDescription, productCategory, productPrice, productImage, productUnit, stockQty, bulkPrices, hasCustomerPrice]);
 
     const isLiked = isInWishlist(vendorProductForContext.id);
 
@@ -297,9 +314,15 @@ export default function ProductDetailPage() {
                         </div>
                         )}
 
-                        <div className="flex items-baseline gap-1.5 mb-6">
+                        <div className="flex items-baseline gap-2 mb-6 flex-wrap">
                             <span className="text-[22px] font-black text-[#181725]">₹ {productPrice}</span>
+                            {customerStrikePrice != null && (
+                                <span className="text-[15px] font-semibold text-gray-400 line-through">₹ {customerStrikePrice}</span>
+                            )}
                             <span className="text-[15px] text-[#7C7C7C] font-semibold"> /kg</span>
+                            {hasCustomerPrice && (
+                                <span className="text-[10px] font-bold bg-[#EEF8F1] text-[#299E60] px-2 py-0.5 rounded-full uppercase tracking-wide">Your price</span>
+                            )}
                         </div>
 
                         <button onClick={() => handleAdd(1)} className="w-full py-4 bg-[#EAF7EF] rounded-[20px] border border-[#53B175]/30 flex items-center justify-center gap-3 text-[#53B175] text-[16px] font-bold transition-all active:scale-95 hover:bg-[#E2F2E8]">
@@ -422,9 +445,17 @@ export default function ProductDetailPage() {
 
                             {/* Desktop Action Summary */}
                             <div className="flex items-center gap-8 pt-2">
-                                <div className="flex items-baseline gap-2 min-w-[160px]">
-                                    <span className="text-[48px] font-black text-[#181725]">₹ {productPrice}</span>
-                                    <span className="text-[20px] text-[#7C7C7C] font-bold">/kg</span>
+                                <div className="flex flex-col min-w-[160px]">
+                                    {hasCustomerPrice && (
+                                        <span className="text-[11px] font-bold bg-[#EEF8F1] text-[#299E60] px-2 py-0.5 rounded-full uppercase tracking-wide w-fit mb-1">Your price</span>
+                                    )}
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-[48px] font-black text-[#181725]">₹ {productPrice}</span>
+                                        {customerStrikePrice != null && (
+                                            <span className="text-[22px] font-semibold text-gray-400 line-through">₹ {customerStrikePrice}</span>
+                                        )}
+                                        <span className="text-[20px] text-[#7C7C7C] font-bold">/kg</span>
+                                    </div>
                                 </div>
                                 <button onClick={() => handleAdd(1)} className="flex-1 h-[72px] bg-[#53B175] text-white rounded-[28px] flex items-center justify-center gap-4 text-[20px] font-black transition-all active:scale-[0.98] hover:bg-[#489e67] shadow-2xl shadow-green-100">
                                     <span>Add To Cart</span>
