@@ -132,7 +132,7 @@ export default function AdminLayout({
     }
 
     return (
-        <div className="flex flex-col min-h-screen bg-[#F8F9FB] font-[family-name:var(--font-poppins)]">
+        <div className="flex flex-col min-h-screen bg-[#F8F9FB]">
             {/* Full-width Top Header */}
             <header className="h-[80px] bg-white border-b border-[#EEEEEE] flex items-center px-8 sticky top-0 z-50 shrink-0">
                 {/* Logo Section - same width as sidebar */}

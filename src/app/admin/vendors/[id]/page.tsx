@@ -21,6 +21,13 @@ import {
     CalendarClock,
     FileText,
     AlertCircle,
+    Building2,
+    ExternalLink,
+    Landmark,
+    FileCheck2,
+    Truck,
+    Edit2,
+    Globe,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -90,7 +97,7 @@ interface VendorData {
     minOrderValue: number;
     deliveryFee: number;
     freeDeliveryAbove: number | null;
-    // KYC / onboarding fields (returned by the admin vendor GET via `include`).
+    // KYC / onboarding fields
     tradeName: string | null;
     vendorType: string | null;
     gstNumber: string | null;
@@ -158,7 +165,6 @@ function formatDayOfWeek(day: string | number): string {
 }
 
 function formatTime(time: string): string {
-    // Handles "HH:MM" or "HH:MM:SS" formats
     const [hours, minutes] = time.split(':');
     const h = parseInt(hours, 10);
     const ampm = h >= 12 ? 'PM' : 'AM';
@@ -179,6 +185,9 @@ export default function VendorDetailsPage() {
     const [togglingVerification, setTogglingVerification] = useState(false);
     const [documents, setDocuments] = useState<VendorDocument[]>([]);
     const [updatingDoc, setUpdatingDoc] = useState<string | null>(null);
+
+    // Active tab
+    const [activeTab, setActiveTab] = useState<'overview' | 'kyc_bank' | 'documents' | 'products' | 'delivery'>('overview');
 
     // Edit states
     const [isEditing, setIsEditing] = useState(false);
@@ -389,8 +398,8 @@ export default function VendorDetailsPage() {
             const json = await res.json();
             if (json.success && json.data) {
                 setVendor((prev) => (prev ? { ...prev, isVerified: json.data.isVerified } : prev));
+                toast.success(json.data.isVerified ? 'Vendor verified successfully' : 'Vendor verification revoked');
             } else {
-                // Refetch to get the latest state
                 await fetchVendor();
             }
         } catch (err: unknown) {
@@ -400,7 +409,16 @@ export default function VendorDetailsPage() {
         }
     };
 
-    // Loading state
+    const viewDashboard = async () => {
+        if (!vendor) return;
+        await fetch('/api/v1/admin/impersonate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vendorId: vendor.id }),
+        });
+        router.push('/vendor/dashboard');
+    };
+
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center h-[60vh] gap-3">
@@ -410,7 +428,6 @@ export default function VendorDetailsPage() {
         );
     }
 
-    // Error state
     if (error || !vendor) {
         return (
             <div className="flex flex-col items-center justify-center h-[60vh] gap-3">
@@ -437,70 +454,82 @@ export default function VendorDetailsPage() {
     });
 
     const stats = [
-        { label: 'Products', value: vendor._count.products, icon: Package, color: '#299E60' },
-        { label: 'Orders', value: vendor._count.orders, icon: ShoppingCart, color: '#F59E0B' },
-        { label: 'Service Areas', value: vendor.serviceAreas.length, icon: MapPinned, color: '#3B82F6' },
+        { label: 'Products Listed', value: vendor._count.products, icon: Package, color: '#299E60' },
+        { label: 'Total Orders', value: vendor._count.orders, icon: ShoppingCart, color: '#F59E0B' },
+        { label: 'Coverage Areas', value: vendor.serviceAreas.length, icon: MapPinned, color: '#3B82F6' },
         {
-            label: 'Status',
-            value: vendor.isVerified ? 'Verified' : 'Pending',
+            label: 'KYC Status',
+            value: vendor.isVerified ? 'VERIFIED' : 'PENDING',
             icon: vendor.isVerified ? ShieldCheck : ShieldX,
             color: vendor.isVerified ? '#299E60' : '#F59E0B',
         },
     ];
 
     return (
-        <div className="space-y-6 pb-10">
-            {/* Header / Breadcrumbs */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-[14px] text-[#4B4B4B]">
+        <div className="space-y-6 pb-12 px-4 md:px-0">
+            {/* Header Breadcrumbs Row */}
+            <div className="flex items-center justify-between border-b border-[#EEEEEE] pb-4">
+                <div className="flex items-center gap-2 text-[13px] text-[#6B7280]">
                     <button
                         onClick={() => router.back()}
-                        className="hover:text-[#299E60] flex items-center gap-1 transition-colors"
+                        className="hover:text-[#299E60] flex items-center gap-1 transition-colors font-bold text-[12px] uppercase tracking-wider"
                     >
-                        <ChevronLeft size={16} />
+                        <ChevronLeft size={14} />
                         Back
                     </button>
                     <span className="text-gray-300">|</span>
-                    <Link href="/admin/vendors" className="hover:text-[#299E60] transition-colors">
-                        Sellers
+                    <Link href="/admin/vendors" className="hover:text-[#299E60] transition-colors font-semibold">
+                        Sellers Registry
                     </Link>
                     <span className="text-gray-300">{'>'}</span>
-                    <span className="font-bold text-[#181725]">Seller Details</span>
+                    <span className="font-extrabold text-[#111827]">{vendor.businessName}</span>
                 </div>
-                <button
-                    onClick={() => setIsEditing(!isEditing)}
-                    className={cn(
-                        "px-4 py-2 rounded-[10px] text-[13px] font-bold border transition-colors",
-                        isEditing
-                            ? "bg-[#E74C3C] border-[#E74C3C] text-white hover:bg-[#c0392b]"
-                            : "bg-white border-[#EEEEEE] text-[#181725] hover:bg-[#FAFAFA]"
-                    )}
-                >
-                    {isEditing ? "Cancel Edit" : "Edit Vendor Info"}
-                </button>
+
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={viewDashboard}
+                        className="h-[38px] px-4 bg-[#EEF8F1] border border-[#299E60]/20 text-[#299E60] rounded-[10px] text-[12px] font-bold hover:bg-[#D1FAE5] active:scale-97 transition-all flex items-center gap-1.5 shadow-sm"
+                    >
+                        <Globe size={14} />
+                        Impersonate Dashboard
+                    </button>
+                    <button
+                        onClick={() => setIsEditing(!isEditing)}
+                        className={cn(
+                            "h-[38px] px-4 rounded-[10px] text-[12px] font-bold border active:scale-97 transition-all flex items-center gap-1.5 shadow-sm",
+                            isEditing
+                                ? "bg-[#EF4444] border-[#EF4444] text-white hover:bg-[#DC2626]"
+                                : "bg-white border-[#D1D5DB] text-[#374151] hover:bg-[#F9FAFB]"
+                        )}
+                    >
+                        <Edit2 size={13} />
+                        {isEditing ? "Cancel Editing" : "Edit Details"}
+                    </button>
+                </div>
             </div>
 
+            {/* Editing Warning Banner */}
             {isEditing && (
-                <div className="bg-amber-50 border border-amber-200 rounded-[14px] p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-[14px] font-semibold text-amber-800">
-                        <AlertCircle size={18} />
-                        You are in Edit Mode. Make your changes and click Save.
+                <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-[12px] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                    <div className="flex items-center gap-2.5 text-[14px] font-bold text-[#B45309]">
+                        <AlertCircle size={18} className="shrink-0" />
+                        You have enabled Editing Mode. Make your updates in the tabs below and press Save.
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
                         <button
                             onClick={() => setIsEditing(false)}
-                            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-[10px] text-[13px] font-bold hover:bg-gray-50 transition-colors"
+                            className="px-4 py-1.5 bg-white border border-[#D1D5DB] text-[#374151] rounded-[8px] text-[12px] font-bold hover:bg-[#F9FAFB] transition-colors"
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleSaveVendor}
                             disabled={savingEdits}
-                            className="px-5 py-2 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                            className="px-4 py-1.5 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold hover:bg-[#238a54] transition-colors flex items-center gap-1.5 disabled:opacity-50"
                         >
                             {savingEdits ? (
                                 <>
-                                    <Loader2 size={14} className="animate-spin" />
+                                    <Loader2 size={12} className="animate-spin" />
                                     Saving...
                                 </>
                             ) : (
@@ -511,372 +540,188 @@ export default function VendorDetailsPage() {
                 </div>
             )}
 
-            {/* Top Section: Vendor Info */}
-            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
-                    {/* Left: Logo + Basic Info */}
-                    <div className="p-8 flex gap-6">
-                        <div className="shrink-0">
-                            <div className="w-[140px] h-[140px] rounded-[16px] bg-[#F1F4F9] flex items-center justify-center p-4">
-                                {vendor.logoUrl ? (
-                                    <img
-                                        src={vendor.logoUrl}
-                                        alt={vendor.businessName}
-                                        className="w-[100px] h-[100px] object-contain"
-                                    />
-                                ) : (
-                                    <span className="text-[36px] font-[900] text-[#299E60]">
-                                        {getInitials(vendor.businessName)}
-                                    </span>
-                                )}
-                            </div>
-                            <button
-                                onClick={handleToggleVerification}
-                                disabled={togglingVerification}
-                                className={cn(
-                                    'mt-4 w-full py-2.5 rounded-[10px] text-[13px] font-bold transition-all shadow-sm flex items-center justify-center gap-2',
-                                    vendor.isVerified
-                                        ? 'bg-amber-500 text-white hover:bg-amber-600'
-                                        : 'bg-[#299E60] text-white hover:bg-[#238a54]'
-                                )}
-                            >
-                                {togglingVerification ? (
-                                    <Loader2 size={14} className="animate-spin" />
-                                ) : vendor.isVerified ? (
-                                    <ShieldX size={14} />
-                                ) : (
-                                    <ShieldCheck size={14} />
-                                )}
-                                {togglingVerification
-                                    ? 'Updating...'
-                                    : vendor.isVerified
-                                      ? 'Revoke Verification'
-                                      : 'Verify Vendor'}
-                            </button>
-                            {!vendor.isVerified && (
-                                <button
-                                    onClick={() => {
-                                        const reason = window.prompt('Reason for rejection (will be sent to vendor):');
-                                        if (!reason || !reason.trim()) return;
-                                        fetch(`/api/v1/vendors/${vendor.id}`, {
-                                            method: 'PATCH',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ isActive: false, rejectionReason: reason.trim() }),
-                                        }).then(r => { if (r.ok) window.location.reload(); });
-                                    }}
-                                    className="mt-2 w-full py-2.5 rounded-[10px] text-[13px] font-bold transition-all shadow-sm flex items-center justify-center gap-2 bg-red-500 text-white hover:bg-red-600"
-                                >
-                                    <XCircle size={14} />
-                                    Reject Vendor
-                                </button>
+            {/* Profile Overview Header Card */}
+            <div className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden p-6 md:p-8 flex flex-col lg:flex-row items-center lg:items-stretch gap-6 md:gap-8">
+                {/* Logo Section */}
+                <div className="flex flex-col items-center justify-center shrink-0 w-[180px]">
+                    <div className="w-[140px] h-[140px] rounded-[16px] bg-[#F9FAFB] border border-[#E5E7EB] flex items-center justify-center p-4 shadow-inner">
+                        {vendor.logoUrl ? (
+                            <img
+                                src={vendor.logoUrl}
+                                alt={vendor.businessName}
+                                className="w-full h-full object-contain"
+                            />
+                        ) : (
+                            <span className="text-[42px] font-black text-[#299E60]">
+                                {getInitials(vendor.businessName)}
+                            </span>
+                        )}
+                    </div>
+                    
+                    {/* Active Status Tag */}
+                    <div className="mt-3">
+                        <span className={cn(
+                            "text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider border",
+                            vendor.isActive 
+                                ? "bg-[#EEF8F1] border-[#299E60]/10 text-[#299E60]"
+                                : "bg-[#FDF2F2] border-[#EF4444]/10 text-[#EF4444]"
+                        )}>
+                            Account: {vendor.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Info summary */}
+                <div className="flex-1 min-w-0 flex flex-col justify-between text-center lg:text-left">
+                    <div>
+                        <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-3 justify-center lg:justify-start">
+                            <h2 className="text-[24px] font-black text-[#111827] leading-tight">
+                                {vendor.businessName}
+                            </h2>
+                            {vendor.isVerified && (
+                                <div className="self-center flex items-center gap-1 bg-[#EEF8F1] border border-[#D1FAE5] px-2.5 py-0.5 rounded-full text-[10px] font-bold text-[#299E60] uppercase tracking-wide">
+                                    <ShieldCheck size={11} fill="#299E60" className="text-white" />
+                                    Verified Vendor
+                                </div>
                             )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-3">
-                                {isEditing ? (
-                                    <input
-                                        type="text"
-                                        value={businessName}
-                                        onChange={(e) => setBusinessName(e.target.value)}
-                                        className="text-[18px] font-extrabold text-[#181725] border border-[#EEEEEE] rounded-[10px] px-3 py-1.5 w-full outline-none focus:border-[#299E60]/40"
+
+                        {vendor.description && (
+                            <p className="text-[13px] text-[#6B7280] font-medium mt-2 leading-relaxed max-w-[600px] mx-auto lg:mx-0">
+                                {vendor.description}
+                            </p>
+                        )}
+
+                        <div className="flex items-center justify-center lg:justify-start gap-1.5 mt-3">
+                            <div className="flex items-center">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                    <Star
+                                        key={star}
+                                        size={14}
+                                        fill={star <= Math.round(vendor.rating) ? '#F59E0B' : 'none'}
+                                        className={star <= Math.round(vendor.rating) ? 'text-[#F59E0B]' : 'text-[#D1D5DB]'}
                                     />
-                                ) : (
-                                    <h2 className="text-[22px] font-extrabold text-[#181725] leading-tight">
-                                        {vendor.businessName}
-                                    </h2>
-                                )}
-                                {vendor.isVerified && (
-                                    <CheckCircle2
-                                        size={20}
-                                        className="text-[#299E60] shrink-0"
-                                        fill="#299E60"
-                                        stroke="white"
-                                    />
-                                )}
+                                ))}
                             </div>
-                            {isEditing ? (
-                                <textarea
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    rows={2}
-                                    className="text-[13px] text-[#7C7C7C] font-medium border border-[#EEEEEE] rounded-[10px] px-3 py-1.5 w-full outline-none focus:border-[#299E60]/40 mt-1 resize-none"
-                                />
-                            ) : vendor.description && (
-                                <p className="text-[13px] text-[#7C7C7C] font-medium mt-0.5 line-clamp-2">
-                                    {vendor.description}
-                                </p>
-                            )}
-                            <div className="flex items-center gap-2 mt-3">
-                                <div className="flex items-center gap-0.5">
-                                    {[1, 2, 3, 4, 5].map((star) => (
-                                        <Star
-                                            key={star}
-                                            size={16}
-                                            fill={star <= Math.round(vendor.rating) ? '#F59E0B' : 'none'}
-                                            className={
-                                                star <= Math.round(vendor.rating)
-                                                    ? 'text-[#F59E0B]'
-                                                    : 'text-[#E5E7EB]'
-                                            }
-                                        />
-                                    ))}
-                                </div>
-                                <span className="text-[14px] font-bold text-[#181725]">
-                                    {vendor.rating}/5
-                                </span>
-                            </div>
-                            <div className="space-y-3 mt-5">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-[30px] h-[30px] rounded-full bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
-                                        <User size={14} />
-                                    </div>
-                                    {isEditing ? (
-                                        <input
-                                            type="text"
-                                            value={fullName}
-                                            onChange={(e) => setFullName(e.target.value)}
-                                            className="text-[13px] font-bold text-[#4B4B4B] border border-[#EEEEEE] rounded-[8px] px-3 py-1 w-full outline-none focus:border-[#299E60]/40"
-                                        />
-                                    ) : (
-                                        <span className="text-[13px] font-bold text-[#4B4B4B]">
-                                            {vendor.user.fullName}
-                                        </span>
-                                    )}
-                                </div>
-                                {isEditing ? (
-                                    <div className="space-y-2 border border-[#EEEEEE] p-3 rounded-[10px] bg-[#FAFAFA] ml-[42px]">
-                                        <span className="text-[11px] uppercase font-bold text-gray-400">Registered Address</span>
-                                        <input
-                                            type="text"
-                                            placeholder="Address Line"
-                                            value={address}
-                                            onChange={(e) => setAddress(e.target.value)}
-                                            className="text-[13px] font-semibold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-3 py-1 w-full outline-none focus:border-[#299E60]/40 bg-white"
-                                        />
-                                        <div className="grid grid-cols-3 gap-2">
-                                            <input
-                                                type="text"
-                                                placeholder="City"
-                                                value={city}
-                                                onChange={(e) => setCity(e.target.value)}
-                                                className="text-[13px] font-semibold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-2 py-1 w-full outline-none focus:border-[#299E60]/40 bg-white"
-                                            />
-                                            <input
-                                                type="text"
-                                                placeholder="State"
-                                                value={stateVal}
-                                                onChange={(e) => setStateVal(e.target.value)}
-                                                className="text-[13px] font-semibold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-2 py-1 w-full outline-none focus:border-[#299E60]/40 bg-white"
-                                            />
-                                            <input
-                                                type="text"
-                                                placeholder="Pincode"
-                                                value={pincode}
-                                                onChange={(e) => setPincode(e.target.value)}
-                                                className="text-[13px] font-semibold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-2 py-1 w-full outline-none focus:border-[#299E60]/40 bg-white"
-                                            />
-                                        </div>
-                                    </div>
-                                ) : fullAddress ? (
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-[30px] h-[30px] rounded-full bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
-                                            <MapPin size={14} />
-                                        </div>
-                                        <span className="text-[13px] font-bold text-[#4B4B4B]">
-                                            {fullAddress}
-                                        </span>
-                                    </div>
-                                ) : null}
-                                <div className="flex items-center gap-3">
-                                    <div className="w-[30px] h-[30px] rounded-full bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
-                                        <Mail size={14} />
-                                    </div>
-                                    {isEditing ? (
-                                        <input
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            className="text-[13px] font-bold text-[#4B4B4B] border border-[#EEEEEE] rounded-[8px] px-3 py-1 w-full outline-none focus:border-[#299E60]/40"
-                                        />
-                                    ) : (
-                                        <span className="text-[13px] font-bold text-[#4B4B4B]">
-                                            {vendor.user.email}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="w-[30px] h-[30px] rounded-full bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
-                                        <Phone size={14} />
-                                    </div>
-                                    {isEditing ? (
-                                        <input
-                                            type="text"
-                                            value={phone}
-                                            onChange={(e) => setPhone(e.target.value)}
-                                            className="text-[13px] font-bold text-[#4B4B4B] border border-[#EEEEEE] rounded-[8px] px-3 py-1 w-full outline-none focus:border-[#299E60]/40"
-                                        />
-                                    ) : (
-                                        <span className="text-[13px] font-bold text-[#4B4B4B]">
-                                            {vendor.user.phone}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
+                            <span className="text-[12px] font-extrabold text-[#111827]">
+                                {Number(vendor.rating).toFixed(1)} / 5.0 Rating
+                            </span>
                         </div>
                     </div>
 
-                    {/* Right: Delivery & Business Info */}
-                    <div className="p-8 border-l border-[#EEEEEE]">
-                        <h3 className="text-[18px] font-extrabold text-[#181725] mb-6">
-                            Business Details
-                        </h3>
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-[14px] font-medium text-[#7C7C7C]">
-                                    GST Number (User)
-                                </span>
-                                {isEditing ? (
-                                    <input
-                                        type="text"
-                                        value={userGstNumber}
-                                        onChange={(e) => setUserGstNumber(e.target.value.toUpperCase())}
-                                        className="text-[14px] font-bold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-3 py-1 max-w-[200px] outline-none focus:border-[#299E60]/40 text-right font-mono"
-                                    />
-                                ) : (
-                                    <span className="text-[14px] font-bold text-[#181725]">
-                                        {vendor.user.gstNumber || 'Not provided'}
-                                    </span>
-                                )}
+                    {/* Contacts checklist banner */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6 border-t border-[#F3F4F6] pt-4 text-left">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-[30px] h-[30px] rounded-[8px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]">
+                                <User size={13} />
                             </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-[14px] font-medium text-[#7C7C7C]">
-                                    Min Order Value
-                                </span>
-                                {isEditing ? (
-                                    <input
-                                        type="number"
-                                        value={minOrderValue}
-                                        onChange={(e) => setMinOrderValue(e.target.value)}
-                                        className="text-[14px] font-bold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-3 py-1 max-w-[150px] outline-none focus:border-[#299E60]/40 text-right"
-                                    />
-                                ) : (
-                                    <span className="text-[14px] font-bold text-[#181725]">
-                                        {formatPrice(vendor.minOrderValue)}
-                                    </span>
-                                )}
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-[14px] font-medium text-[#7C7C7C]">
-                                    Delivery Fee
-                                </span>
-                                {isEditing ? (
-                                    <input
-                                        type="number"
-                                        value={deliveryFee}
-                                        onChange={(e) => setDeliveryFee(e.target.value)}
-                                        className="text-[14px] font-bold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-3 py-1 max-w-[150px] outline-none focus:border-[#299E60]/40 text-right"
-                                    />
-                                ) : (
-                                    <span className="text-[14px] font-bold text-[#181725]">
-                                        {vendor.deliveryFee === 0
-                                            ? 'Free'
-                                            : formatPrice(vendor.deliveryFee)}
-                                    </span>
-                                )}
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-[14px] font-medium text-[#7C7C7C]">
-                                    Free Delivery Above
-                                </span>
-                                {isEditing ? (
-                                    <input
-                                        type="number"
-                                        placeholder="optional"
-                                        value={freeDeliveryAbove}
-                                        onChange={(e) => setFreeDeliveryAbove(e.target.value)}
-                                        className="text-[14px] font-bold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-3 py-1 max-w-[150px] outline-none focus:border-[#299E60]/40 text-right"
-                                    />
-                                ) : (
-                                    <span className="text-[14px] font-bold text-[#181725]">
-                                        {vendor.freeDeliveryAbove !== null && vendor.freeDeliveryAbove > 0
-                                            ? formatPrice(vendor.freeDeliveryAbove)
-                                            : 'N/A'}
-                                    </span>
-                                )}
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-[14px] font-medium text-[#7C7C7C]">
-                                    Account Status
-                                </span>
-                                {isEditing ? (
-                                    <select
-                                        value={isActive ? 'true' : 'false'}
-                                        onChange={(e) => setIsActive(e.target.value === 'true')}
-                                        className="text-[14px] font-bold text-[#181725] border border-[#EEEEEE] rounded-[8px] px-3 py-1 outline-none focus:border-[#299E60]/40 bg-white"
-                                    >
-                                        <option value="true">Active</option>
-                                        <option value="false">Inactive</option>
-                                    </select>
-                                ) : (
-                                    <span
-                                        className={cn(
-                                            'text-[12px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase',
-                                            vendor.isActive
-                                                ? 'bg-[#E6F9ED] text-[#299E60]'
-                                                : 'bg-[#FDE2E2] text-[#EF4444]'
-                                        )}
-                                    >
-                                        {vendor.isActive ? 'Active' : 'Inactive'}
-                                    </span>
-                                )}
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-[14px] font-medium text-[#7C7C7C]">
-                                    Credit Accounts
-                                </span>
-                                <span className="text-[14px] font-bold text-[#181725]">
-                                    {vendor._count.creditAccounts}
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-[14px] font-medium text-[#7C7C7C]">
-                                    Joined
-                                </span>
-                                <span className="text-[14px] font-bold text-[#181725]">
-                                    {new Date(vendor.user.createdAt).toLocaleDateString('en-IN', {
-                                        day: '2-digit',
-                                        month: 'short',
-                                        year: 'numeric',
-                                    })}
-                                </span>
+                            <div className="min-w-0">
+                                <span className="text-[10px] text-[#9CA3AF] uppercase block leading-none font-bold">Authorized Owner</span>
+                                <span className="text-[12px] font-bold text-[#374151] truncate block">{vendor.user.fullName}</span>
                             </div>
                         </div>
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-[30px] h-[30px] rounded-[8px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]">
+                                <Mail size={13} />
+                            </div>
+                            <div className="min-w-0">
+                                <span className="text-[10px] text-[#9CA3AF] uppercase block leading-none font-bold">Billing Email</span>
+                                <span className="text-[12px] font-bold text-[#374151] truncate block">{vendor.user.email}</span>
+                            </div>
+                        </div>
+                        {vendor.user.phone && (
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-[30px] h-[30px] rounded-[8px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]">
+                                    <Phone size={13} />
+                                </div>
+                                <div className="min-w-0">
+                                    <span className="text-[10px] text-[#9CA3AF] uppercase block leading-none font-bold">Mobile Phone</span>
+                                    <span className="text-[12px] font-bold text-[#374151] block">{vendor.user.phone}</span>
+                                </div>
+                            </div>
+                        )}
+                        {fullAddress && (
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-[30px] h-[30px] rounded-[8px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]">
+                                    <MapPin size={13} />
+                                </div>
+                                <div className="min-w-0">
+                                    <span className="text-[10px] text-[#9CA3AF] uppercase block leading-none font-bold">Registered Office</span>
+                                    <span className="text-[12px] font-bold text-[#374151] truncate block">{fullAddress}</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
+                </div>
+
+                {/* Right side status togglers */}
+                <div className="w-full lg:w-[220px] border-t lg:border-t-0 lg:border-l border-[#F3F4F6] pt-6 lg:pt-0 lg:pl-6 flex flex-col justify-center gap-2.5">
+                    <span className="text-[11px] font-bold text-[#9CA3AF] uppercase text-center lg:text-left">Verification Actions</span>
+                    <button
+                        onClick={handleToggleVerification}
+                        disabled={togglingVerification}
+                        className={cn(
+                            'w-full py-2.5 rounded-[10px] text-[12px] font-bold transition-all shadow-sm flex items-center justify-center gap-2 border',
+                            vendor.isVerified
+                                ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600'
+                                : 'bg-[#299E60] border-[#299E60] text-white hover:bg-[#238a54]'
+                        )}
+                    >
+                        {togglingVerification ? (
+                            <Loader2 size={13} className="animate-spin" />
+                        ) : vendor.isVerified ? (
+                            <ShieldX size={13} />
+                        ) : (
+                            <ShieldCheck size={13} />
+                        )}
+                        {togglingVerification
+                            ? 'Updating State...'
+                            : vendor.isVerified
+                              ? 'Revoke Verification'
+                              : 'Approve & Verify'}
+                    </button>
+                    {!vendor.isVerified && (
+                        <button
+                            onClick={() => {
+                                const reason = window.prompt('Reason for rejection (will be sent to vendor):');
+                                if (!reason || !reason.trim()) return;
+                                fetch(`/api/v1/vendors/${vendor.id}`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ isActive: false, rejectionReason: reason.trim() }),
+                                }).then(r => { if (r.ok) window.location.reload(); });
+                            }}
+                            className="w-full py-2.5 rounded-[10px] text-[12px] font-bold transition-all shadow-sm flex items-center justify-center gap-2 bg-[#EF4444] border border-[#EF4444] text-white hover:bg-[#DC2626]"
+                        >
+                            <XCircle size={13} />
+                            Reject Partner
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Stats Row */}
+            {/* Quick Metrics Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {stats.map((stat, idx) => (
                     <div
                         key={idx}
-                        className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden hover:shadow-md transition-all group"
+                        className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden hover:shadow-md transition-all group flex flex-col justify-between"
                     >
                         <div className="h-[3px] w-full" style={{ backgroundColor: stat.color }} />
-                        <div className="p-6 text-center">
+                        <div className="p-5 text-center">
                             <div
-                                className="w-[44px] h-[44px] rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform"
+                                className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition-transform"
                                 style={{
-                                    backgroundColor: `${stat.color}15`,
+                                    backgroundColor: `${stat.color}12`,
                                     color: stat.color,
                                 }}
                             >
-                                <stat.icon size={20} />
+                                <stat.icon size={18} />
                             </div>
-                            <h4 className="text-[20px] font-[900] text-[#181725] leading-none">
+                            <h4 className="text-[20px] font-black text-[#111827] leading-none">
                                 {stat.value}
                             </h4>
-                            <p className="text-[12px] font-bold text-[#AEAEAE] mt-2 uppercase tracking-wider">
+                            <p className="text-[10px] font-bold text-[#9CA3AF] mt-2 uppercase tracking-widest">
                                 {stat.label}
                             </p>
                         </div>
@@ -884,472 +729,866 @@ export default function VendorDetailsPage() {
                 ))}
             </div>
 
-            {/* Products Table */}
-            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                <div className="p-6 flex items-center justify-between border-b border-[#EEEEEE]">
-                    <h3 className="text-[18px] font-extrabold text-[#181725] flex items-center gap-2">
-                        <Package size={20} className="text-[#299E60]" />
-                        Products
-                        <span className="text-[14px] font-bold text-[#AEAEAE]">
-                            ({vendor.products.length})
-                        </span>
-                    </h3>
+            {/* Elegant Tab System */}
+            <div className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                {/* Tabs Selector Bar */}
+                <div className="flex border-b border-[#EEEEEE] overflow-x-auto bg-[#F9FAFB]">
+                    {([
+                        { id: 'overview', label: 'Company Overview', icon: Building2 },
+                        { id: 'kyc_bank', label: 'KYC & Settlement Bank', icon: Landmark },
+                        { id: 'documents', label: 'Verification Records', icon: FileCheck2 },
+                        { id: 'products', label: 'Catalog Products', icon: Package },
+                        { id: 'delivery', label: 'Slots & Coverage', icon: Truck },
+                    ] as const).map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={cn(
+                                "flex items-center gap-2 px-6 py-4 border-b-2 font-bold text-[12px] transition-all whitespace-nowrap outline-none",
+                                activeTab === tab.id
+                                    ? "border-[#299E60] text-[#299E60] bg-white shadow-sm"
+                                    : "border-transparent text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6]/50"
+                            )}
+                        >
+                            <tab.icon size={14} />
+                            {tab.label}
+                            {tab.id === 'documents' && documents.length > 0 && (
+                                <span className="ml-1 bg-gray-200 text-gray-700 text-[10px] px-1.5 py-0.5 rounded-full font-black">
+                                    {documents.length}
+                                </span>
+                            )}
+                            {tab.id === 'products' && vendor.products.length > 0 && (
+                                <span className="ml-1 bg-[#EEF8F1] text-[#299E60] text-[10px] px-1.5 py-0.5 rounded-full font-black border border-[#299E60]/10">
+                                    {vendor.products.length}
+                                </span>
+                            )}
+                        </button>
+                    ))}
                 </div>
 
-                {vendor.products.length === 0 ? (
-                    <div className="p-12 text-center">
-                        <Package size={40} className="text-[#E5E7EB] mx-auto mb-3" />
-                        <p className="text-[14px] font-bold text-[#AEAEAE]">
-                            No products added yet
-                        </p>
-                    </div>
-                ) : (
-                    <>
-                        {/* Table Header */}
-                        <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE] text-[12px] font-bold text-[#AEAEAE] uppercase">
-                            <div className="col-span-1">#</div>
-                            <div className="col-span-5">Product Name</div>
-                            <div className="col-span-3">Price</div>
-                            <div className="col-span-3">Status</div>
-                        </div>
+                {/* Tab Content Panels */}
+                <div className="p-6 md:p-8">
+                    {/* TAB 1: COMPANY OVERVIEW */}
+                    {activeTab === 'overview' && (
+                        <div className="space-y-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {/* Left Side: Profile Information */}
+                                <div className="space-y-6">
+                                    <div className="border-b border-[#F3F4F6] pb-2">
+                                        <h3 className="text-[15px] font-black text-[#111827]">Business Profile</h3>
+                                    </div>
 
-                        {/* Table Rows */}
-                        {vendor.products.map((product, i) => (
-                            <div
-                                key={product.id}
-                                className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#F5F5F5] items-center hover:bg-[#FAFAFA] transition-colors"
-                            >
-                                <div className="col-span-1 text-[13px] font-bold text-[#AEAEAE]">
-                                    {i + 1}
+                                    <div className="space-y-4">
+                                        {/* Business Name */}
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1.5">Commercial Business Name</label>
+                                            {isEditing ? (
+                                                <input
+                                                    type="text"
+                                                    value={businessName}
+                                                    onChange={(e) => setBusinessName(e.target.value)}
+                                                    className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] focus:ring-1 focus:ring-[#299E60]/20 font-medium"
+                                                />
+                                            ) : (
+                                                <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">{vendor.businessName}</span>
+                                            )}
+                                        </div>
+
+                                        {/* Description */}
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1.5">Business Description</label>
+                                            {isEditing ? (
+                                                <textarea
+                                                    value={description}
+                                                    onChange={(e) => setDescription(e.target.value)}
+                                                    rows={3}
+                                                    className="w-full border border-[#D1D5DB] rounded-[8px] p-3 text-[13px] outline-none focus:border-[#299E60] focus:ring-1 focus:ring-[#299E60]/20 font-medium resize-none"
+                                                />
+                                            ) : (
+                                                <span className="text-[13px] font-medium text-[#4B5563] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] whitespace-pre-line leading-relaxed min-h-[70px]">
+                                                    {vendor.description || 'No description provided.'}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Office Address */}
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1.5">Registered Office Address</label>
+                                            {isEditing ? (
+                                                <div className="space-y-2 bg-[#FAFAFA] border border-[#EEEEEE] p-3 rounded-[8px]">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Street Address Line"
+                                                        value={address}
+                                                        onChange={(e) => setAddress(e.target.value)}
+                                                        className="w-full h-[36px] border border-[#D1D5DB] rounded-[6px] px-3 text-[13px] outline-none focus:border-[#299E60] bg-white"
+                                                    />
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="City"
+                                                            value={city}
+                                                            onChange={(e) => setCity(e.target.value)}
+                                                            className="w-full h-[36px] border border-[#D1D5DB] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#299E60] bg-white"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="State"
+                                                            value={stateVal}
+                                                            onChange={(e) => setStateVal(e.target.value)}
+                                                            className="w-full h-[36px] border border-[#D1D5DB] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#299E60] bg-white"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Pincode"
+                                                            value={pincode}
+                                                            onChange={(e) => setPincode(e.target.value)}
+                                                            className="w-full h-[36px] border border-[#D1D5DB] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#299E60] bg-white"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">{fullAddress || 'Not provided'}</span>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="col-span-5 flex items-center gap-3">
-                                    <div className="w-[44px] h-[44px] rounded-[10px] bg-[#F1F4F9] overflow-hidden shrink-0">
-                                        {product.imageUrl ? (
-                                            <img
-                                                src={product.imageUrl}
-                                                alt={product.name}
-                                                className="w-full h-full object-cover"
+
+                                {/* Right Side: Commercial settings */}
+                                <div className="space-y-6">
+                                    <div className="border-b border-[#F3F4F6] pb-2">
+                                        <h3 className="text-[15px] font-black text-[#111827]">Order & Commercial Settings</h3>
+                                    </div>
+
+                                    <div className="space-y-4 bg-[#F9FAFB] p-5 rounded-[12px] border border-[#E5E7EB]/50">
+                                        {/* Min Order Value */}
+                                        <div className="flex items-center justify-between border-b border-[#EEEEEE] pb-3.5">
+                                            <span className="text-[12px] font-bold text-[#4B5563] uppercase">Minimum Order Value</span>
+                                            {isEditing ? (
+                                                <div className="relative">
+                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] text-[12px] font-bold">₹</span>
+                                                    <input
+                                                        type="number"
+                                                        value={minOrderValue}
+                                                        onChange={(e) => setMinOrderValue(e.target.value)}
+                                                        className="w-[120px] h-[34px] border border-[#D1D5DB] rounded-[8px] pl-6 pr-2.5 text-[13px] outline-none focus:border-[#299E60] font-bold text-right"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <span className="text-[13px] font-extrabold text-[#111827]">{formatPrice(vendor.minOrderValue)}</span>
+                                            )}
+                                        </div>
+
+                                        {/* Delivery Fee */}
+                                        <div className="flex items-center justify-between border-b border-[#EEEEEE] pb-3.5">
+                                            <span className="text-[12px] font-bold text-[#4B5563] uppercase">Delivery Surcharge Fee</span>
+                                            {isEditing ? (
+                                                <div className="relative">
+                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] text-[12px] font-bold">₹</span>
+                                                    <input
+                                                        type="number"
+                                                        value={deliveryFee}
+                                                        onChange={(e) => setDeliveryFee(e.target.value)}
+                                                        className="w-[120px] h-[34px] border border-[#D1D5DB] rounded-[8px] pl-6 pr-2.5 text-[13px] outline-none focus:border-[#299E60] font-bold text-right"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <span className="text-[13px] font-extrabold text-[#111827]">
+                                                    {vendor.deliveryFee === 0 ? 'Free' : formatPrice(vendor.deliveryFee)}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Free Delivery Threshold */}
+                                        <div className="flex items-center justify-between border-b border-[#EEEEEE] pb-3.5">
+                                            <span className="text-[12px] font-bold text-[#4B5563] uppercase">Free Delivery Above</span>
+                                            {isEditing ? (
+                                                <div className="relative">
+                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] text-[12px] font-bold">₹</span>
+                                                    <input
+                                                        type="number"
+                                                        placeholder="optional"
+                                                        value={freeDeliveryAbove}
+                                                        onChange={(e) => setFreeDeliveryAbove(e.target.value)}
+                                                        className="w-[120px] h-[34px] border border-[#D1D5DB] rounded-[8px] pl-6 pr-2.5 text-[13px] outline-none focus:border-[#299E60] font-bold text-right"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <span className="text-[13px] font-extrabold text-[#111827]">
+                                                    {vendor.freeDeliveryAbove ? formatPrice(vendor.freeDeliveryAbove) : 'N/A'}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Onboarding Time */}
+                                        <div className="flex items-center justify-between pt-1">
+                                            <span className="text-[12px] font-bold text-[#4B5563] uppercase">Partner Registration</span>
+                                            <span className="text-[13px] font-extrabold text-[#374151]">
+                                                {new Date(vendor.user.createdAt).toLocaleDateString('en-IN', {
+                                                    day: '2-digit',
+                                                    month: 'long',
+                                                    year: 'numeric',
+                                                })}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Owner Profile Panel */}
+                            <div className="border-t border-[#F3F4F6] pt-6">
+                                <h3 className="text-[15px] font-black text-[#111827] mb-4">Onboarding Account User</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Full Legal Name</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={fullName}
+                                                onChange={(e) => setFullName(e.target.value)}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
                                             />
                                         ) : (
-                                            <div className="w-full h-full flex items-center justify-center">
-                                                <Package
-                                                    size={18}
-                                                    className="text-[#AEAEAE]"
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">{vendor.user.fullName}</span>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Account Email Address</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="email"
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] truncate">{vendor.user.email}</span>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">User GSTIN (Registered)</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={userGstNumber}
+                                                onChange={(e) => setUserGstNumber(e.target.value.toUpperCase())}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] font-mono uppercase"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] font-mono uppercase">{vendor.user.gstNumber || 'Not provided'}</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB 2: KYC & BANK DETAILS */}
+                    {activeTab === 'kyc_bank' && (
+                        <div className="space-y-8">
+                            {/* Corporate Registry */}
+                            <div>
+                                <div className="border-b border-[#F3F4F6] pb-2 mb-4">
+                                    <h3 className="text-[15px] font-black text-[#111827]">Compliance Identifiers</h3>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Trade/Entity Name</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={tradeName}
+                                                onChange={(e) => setTradeName(e.target.value)}
+                                                className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">{vendor.tradeName || 'Not provided'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Vendor Entity Type</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={vendorType}
+                                                onChange={(e) => setVendorType(e.target.value)}
+                                                className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">{vendor.vendorType || 'Not provided'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Corporate GSTIN</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={gstNumber}
+                                                onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
+                                                className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] font-mono"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] font-mono uppercase">{vendor.gstNumber || 'Not provided'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Corporate PAN</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={panNumber}
+                                                onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                                                className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] font-mono"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] font-mono uppercase">{vendor.panNumber || 'Not provided'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">FSSAI License No.</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={fssaiNumber}
+                                                onChange={(e) => setFssaiNumber(e.target.value)}
+                                                className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">{vendor.fssaiNumber || 'Not provided'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">MSME Udyam Registration No.</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={udyamNumber}
+                                                onChange={(e) => setUdyamNumber(e.target.value)}
+                                                className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">{vendor.udyamNumber || 'Not provided'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">CIN (Corporate Identity Number)</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={cinNumber}
+                                                onChange={(e) => setCinNumber(e.target.value.toUpperCase())}
+                                                className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] font-mono"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] font-mono uppercase">{vendor.cinNumber || 'Not provided'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Delivery Capacity (Vehicles)</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={deliveryCapability}
+                                                onChange={(e) => setDeliveryCapability(e.target.value)}
+                                                className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">{vendor.deliveryCapability || 'Not provided'}</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Authorized Signatory Contacts */}
+                            <div className="border-t border-[#F3F4F6] pt-6">
+                                <div className="pb-2 mb-4">
+                                    <h3 className="text-[15px] font-black text-[#111827]">Authorized Signatory / Contacts</h3>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Authorized Person Name</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={authorizedPersonName}
+                                                onChange={(e) => setAuthorizedPersonName(e.target.value)}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">{vendor.authorizedPersonName || 'Not provided'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Authorized Person Phone</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={authorizedPersonPhone}
+                                                onChange={(e) => setAuthorizedPersonPhone(e.target.value)}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] font-mono">{vendor.authorizedPersonPhone || 'Not provided'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Authorized Person Email</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="email"
+                                                value={authorizedPersonEmail}
+                                                onChange={(e) => setAuthorizedPersonEmail(e.target.value)}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] truncate">{vendor.authorizedPersonEmail || 'Not provided'}</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Logistics / Pickup Address */}
+                            <div className="border-t border-[#F3F4F6] pt-6">
+                                <div className="pb-2 mb-4">
+                                    <h3 className="text-[15px] font-black text-[#111827]">Logistics / Pickup Address</h3>
+                                </div>
+
+                                <div className="max-w-[600px]">
+                                    {isEditing ? (
+                                        <div className="space-y-2 bg-[#FAFAFA] border border-[#EEEEEE] p-3 rounded-[8px]">
+                                            <input
+                                                type="text"
+                                                placeholder="Street Address Line"
+                                                value={pickupAddressLine}
+                                                onChange={(e) => setPickupAddressLine(e.target.value)}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[6px] px-3 text-[13px] outline-none focus:border-[#299E60] bg-white"
+                                            />
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <input
+                                                    type="text"
+                                                    placeholder="City"
+                                                    value={pickupCity}
+                                                    onChange={(e) => setPickupCity(e.target.value)}
+                                                    className="w-full h-[36px] border border-[#D1D5DB] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#299E60] bg-white"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    placeholder="State"
+                                                    value={pickupState}
+                                                    onChange={(e) => setPickupState(e.target.value)}
+                                                    className="w-full h-[36px] border border-[#D1D5DB] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#299E60] bg-white"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Pincode"
+                                                    value={pickupPincode}
+                                                    onChange={(e) => setPickupPincode(e.target.value)}
+                                                    className="w-full h-[36px] border border-[#D1D5DB] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#299E60] bg-white"
                                                 />
                                             </div>
-                                        )}
-                                    </div>
-                                    <p className="text-[14px] font-bold text-[#1B2559] truncate">
-                                        {product.name}
-                                    </p>
-                                </div>
-                                <div className="col-span-3 text-[14px] font-bold text-[#181725]">
-                                    {formatPrice(product.basePrice)}
-                                </div>
-                                <div className="col-span-3">
-                                    {product.isActive ? (
-                                        <span className="inline-flex items-center gap-1.5 bg-[#E6F9ED] text-[#299E60] text-[11px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase">
-                                            <CheckCircle2 size={12} />
-                                            Active
-                                        </span>
+                                        </div>
                                     ) : (
-                                        <span className="inline-flex items-center gap-1.5 bg-[#FDE2E2] text-[#EF4444] text-[11px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase">
-                                            <XCircle size={12} />
-                                            Inactive
+                                        <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-3 rounded-lg border border-[#F3F4F6] leading-relaxed">
+                                            {[vendor.pickupAddressLine, vendor.pickupCity, vendor.pickupState, vendor.pickupPincode].filter(Boolean).join(', ') || 'Not configured'}
                                         </span>
                                     )}
                                 </div>
                             </div>
-                        ))}
-                    </>
-                )}
-            </div>
 
-            {/* Delivery Slots + Service Areas */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                {/* Delivery Slots */}
-                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                    <div className="p-6 flex items-center gap-2 border-b border-[#EEEEEE]">
-                        <CalendarClock size={20} className="text-[#299E60]" />
-                        <h3 className="text-[18px] font-extrabold text-[#181725]">
-                            Delivery Slots
-                        </h3>
-                        <span className="text-[14px] font-bold text-[#AEAEAE]">
-                            ({vendor.deliverySlots.length})
-                        </span>
-                    </div>
+                            {/* Settlement Bank details */}
+                            <div className="border-t border-[#F3F4F6] pt-6 bg-[#FAFAFA] -mx-6 md:-mx-8 px-6 md:px-8 py-6 rounded-b-[16px]">
+                                <div className="pb-2 mb-4">
+                                    <h3 className="text-[15px] font-black text-[#111827]">Settlement Bank Details</h3>
+                                </div>
 
-                    {vendor.deliverySlots.length === 0 ? (
-                        <div className="p-12 text-center">
-                            <CalendarClock size={40} className="text-[#E5E7EB] mx-auto mb-3" />
-                            <p className="text-[14px] font-bold text-[#AEAEAE]">
-                                No delivery slots configured
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="divide-y divide-[#F5F5F5]">
-                            {sortedSlots.map((slot) => (
-                                <div
-                                    key={slot.id}
-                                    className="px-6 py-4 flex items-center justify-between hover:bg-[#FAFAFA] transition-colors"
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-[36px] h-[36px] rounded-[10px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]">
-                                            <Clock size={16} />
-                                        </div>
-                                        <div>
-                                            <p className="text-[14px] font-bold text-[#181725]">
-                                                {formatDayOfWeek(slot.dayOfWeek)}
-                                            </p>
-                                            <p className="text-[12px] text-[#7C7C7C] font-medium mt-0.5">
-                                                {formatTime(slot.slotStart)} - {formatTime(slot.slotEnd)}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-[11px] font-bold text-[#7C7C7C]">
-                                            Cutoff: {formatTime(slot.cutoffTime)}
-                                        </span>
-                                        {slot.isActive ? (
-                                            <span className="inline-flex items-center gap-1 bg-[#E6F9ED] text-[#299E60] text-[10px] font-[900] px-2 py-1 rounded-[5px] uppercase">
-                                                Active
-                                            </span>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Beneficiary Account Name</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={bankAccountName}
+                                                onChange={(e) => setBankAccountName(e.target.value)}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] bg-white"
+                                            />
                                         ) : (
-                                            <span className="inline-flex items-center gap-1 bg-[#FDE2E2] text-[#EF4444] text-[10px] font-[900] px-2 py-1 rounded-[5px] uppercase">
-                                                Inactive
-                                            </span>
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-white p-2.5 rounded-lg border border-[#E5E7EB]">{vendor.bankAccountName || 'Not configured'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Account Number</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={bankAccountNumber}
+                                                onChange={(e) => setBankAccountNumber(e.target.value)}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] bg-white"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-white p-2.5 rounded-lg border border-[#E5E7EB] font-mono">{vendor.bankAccountNumber || 'Not configured'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">IFSC Code (Indian Financial System)</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={bankIfsc}
+                                                onChange={(e) => setBankIfsc(e.target.value.toUpperCase())}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] bg-white font-mono uppercase"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-white p-2.5 rounded-lg border border-[#E5E7EB] font-mono uppercase">{vendor.bankIfsc || 'Not configured'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Bank Name</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={bankName}
+                                                onChange={(e) => setBankName(e.target.value)}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] bg-white"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-white p-2.5 rounded-lg border border-[#E5E7EB]">{vendor.bankName || 'Not configured'}</span>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Account Category/Type</label>
+                                        {isEditing ? (
+                                            <select
+                                                value={bankAccountType}
+                                                onChange={(e) => setBankAccountType(e.target.value)}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] bg-white font-medium"
+                                            >
+                                                <option value="">Select account type...</option>
+                                                <option value="current">Current Account</option>
+                                                <option value="savings">Savings Account</option>
+                                            </select>
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-white p-2.5 rounded-lg border border-[#E5E7EB] uppercase">{vendor.bankAccountType || 'Not configured'}</span>
                                         )}
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Service Areas */}
-                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                    <div className="p-6 flex items-center gap-2 border-b border-[#EEEEEE]">
-                        <MapPinned size={20} className="text-[#3B82F6]" />
-                        <h3 className="text-[18px] font-extrabold text-[#181725]">
-                            Service Areas
-                        </h3>
-                        <span className="text-[14px] font-bold text-[#AEAEAE]">
-                            ({vendor.serviceAreas.length})
-                        </span>
-                    </div>
-
-                    {vendor.serviceAreas.length === 0 ? (
-                        <div className="p-12 text-center">
-                            <MapPinned size={40} className="text-[#E5E7EB] mx-auto mb-3" />
-                            <p className="text-[14px] font-bold text-[#AEAEAE]">
-                                No service areas configured
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="p-6">
-                            <div className="flex flex-wrap gap-3">
-                                {vendor.serviceAreas.map((area) => (
-                                    <div
-                                        key={area.id}
-                                        className={cn(
-                                            'flex items-center gap-2 px-4 py-2.5 rounded-[10px] border text-[13px] font-bold',
-                                            area.isActive
-                                                ? 'bg-[#F0F7FF] border-[#3B82F6]/20 text-[#3B82F6]'
-                                                : 'bg-[#F5F5F5] border-[#EEEEEE] text-[#AEAEAE]'
-                                        )}
-                                    >
-                                        <MapPin size={14} />
-                                        {area.pincode}
-                                        {!area.isActive && (
-                                            <span className="text-[10px] font-[900] uppercase text-[#AEAEAE]">
-                                                (inactive)
-                                            </span>
-                                        )}
-                                    </div>
-                                ))}
                             </div>
                         </div>
                     )}
-                </div>
-            </div>
 
-            {/* KYC & Bank Details (P0-7) */}
-            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                <div className="p-6 flex items-center gap-2 border-b border-[#EEEEEE]">
-                    <ShieldCheck size={20} className="text-[#299E60]" />
-                    <h3 className="text-[18px] font-extrabold text-[#181725]">KYC &amp; Bank Details</h3>
-                </div>
-                <div className="p-6">
-                    {isEditing ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Trade Name</label>
-                                <input
-                                    type="text"
-                                    value={tradeName}
-                                    onChange={(e) => setTradeName(e.target.value)}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
-                                />
+                    {/* TAB 3: VERIFICATION COMPLIANCE DOCUMENTS */}
+                    {activeTab === 'documents' && (
+                        <div className="space-y-6">
+                            <div className="border-b border-[#F3F4F6] pb-2 mb-4 flex items-center justify-between">
+                                <h3 className="text-[15px] font-black text-[#111827]">Compliance Documentation Checklist</h3>
                             </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Vendor Type</label>
-                                <input
-                                    type="text"
-                                    value={vendorType}
-                                    onChange={(e) => setVendorType(e.target.value)}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">GSTIN (Vendor)</label>
-                                <input
-                                    type="text"
-                                    value={gstNumber}
-                                    onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 font-mono"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">PAN Number</label>
-                                <input
-                                    type="text"
-                                    value={panNumber}
-                                    onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 font-mono"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">FSSAI Number</label>
-                                <input
-                                    type="text"
-                                    value={fssaiNumber}
-                                    onChange={(e) => setFssaiNumber(e.target.value)}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Udyam Number</label>
-                                <input
-                                    type="text"
-                                    value={udyamNumber}
-                                    onChange={(e) => setUdyamNumber(e.target.value)}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">CIN Number</label>
-                                <input
-                                    type="text"
-                                    value={cinNumber}
-                                    onChange={(e) => setCinNumber(e.target.value.toUpperCase())}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 font-mono"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Delivery Capability</label>
-                                <input
-                                    type="text"
-                                    value={deliveryCapability}
-                                    onChange={(e) => setDeliveryCapability(e.target.value)}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Authorized Person Name</label>
-                                <input
-                                    type="text"
-                                    value={authorizedPersonName}
-                                    onChange={(e) => setAuthorizedPersonName(e.target.value)}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Authorized Phone</label>
-                                <input
-                                    type="text"
-                                    value={authorizedPersonPhone}
-                                    onChange={(e) => setAuthorizedPersonPhone(e.target.value)}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Authorized Email</label>
-                                <input
-                                    type="email"
-                                    value={authorizedPersonEmail}
-                                    onChange={(e) => setAuthorizedPersonEmail(e.target.value)}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
-                                />
-                            </div>
-                            <div className="sm:col-span-2">
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Pickup Address</label>
-                                <div className="space-y-2 bg-[#FAFAFA] border border-[#EEEEEE] p-3 rounded-[8px]">
-                                    <input
-                                        type="text"
-                                        placeholder="Street Address"
-                                        value={pickupAddressLine}
-                                        onChange={(e) => setPickupAddressLine(e.target.value)}
-                                        className="w-full h-[36px] border border-[#EEEEEE] rounded-[6px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 bg-white"
-                                    />
-                                    <div className="grid grid-cols-3 gap-2">
-                                        <input
-                                            type="text"
-                                            placeholder="City"
-                                            value={pickupCity}
-                                            onChange={(e) => setPickupCity(e.target.value)}
-                                            className="w-full h-[36px] border border-[#EEEEEE] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#299E60]/40 bg-white"
-                                        />
-                                        <input
-                                            type="text"
-                                            placeholder="State"
-                                            value={pickupState}
-                                            onChange={(e) => setPickupState(e.target.value)}
-                                            className="w-full h-[36px] border border-[#EEEEEE] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#299E60]/40 bg-white"
-                                        />
-                                        <input
-                                            type="text"
-                                            placeholder="Pincode"
-                                            value={pickupPincode}
-                                            onChange={(e) => setPickupPincode(e.target.value)}
-                                            className="w-full h-[36px] border border-[#EEEEEE] rounded-[6px] px-2 text-[13px] outline-none focus:border-[#299E60]/40 bg-white"
-                                        />
-                                    </div>
+
+                            {documents.length === 0 ? (
+                                <div className="p-12 text-center bg-[#F9FAFB] rounded-[16px] border border-dashed border-[#D1D5DB]">
+                                    <FileText size={40} className="text-[#AEAEAE] mx-auto mb-3" />
+                                    <h4 className="text-[14px] font-bold text-[#374151]">No Documents Uploaded</h4>
+                                    <p className="text-[12px] text-[#9CA3AF] mt-1">The vendor has not uploaded any verification records for onboarding.</p>
                                 </div>
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Bank Account Name</label>
-                                <input
-                                    type="text"
-                                    value={bankAccountName}
-                                    onChange={(e) => setBankAccountName(e.target.value)}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Bank Account Number</label>
-                                <input
-                                    type="text"
-                                    value={bankAccountNumber}
-                                    onChange={(e) => setBankAccountNumber(e.target.value)}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">IFSC Code</label>
-                                <input
-                                    type="text"
-                                    value={bankIfsc}
-                                    onChange={(e) => setBankIfsc(e.target.value.toUpperCase())}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 font-mono"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Bank Name</label>
-                                <input
-                                    type="text"
-                                    value={bankName}
-                                    onChange={(e) => setBankName(e.target.value)}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-1">Account Type</label>
-                                <select
-                                    value={bankAccountType}
-                                    onChange={(e) => setBankAccountType(e.target.value)}
-                                    className="w-full h-[40px] border border-[#EEEEEE] rounded-[8px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 bg-white"
-                                >
-                                    <option value="">Select account type...</option>
-                                    <option value="current">Current</option>
-                                    <option value="savings">Savings</option>
-                                </select>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
-                            {([
-                                { label: 'Trade Name', value: vendor.tradeName },
-                                { label: 'Vendor Type', value: vendor.vendorType },
-                                { label: 'GSTIN', value: vendor.gstNumber },
-                                { label: 'PAN', value: vendor.panNumber },
-                                { label: 'FSSAI', value: vendor.fssaiNumber },
-                                { label: 'Udyam', value: vendor.udyamNumber },
-                                { label: 'CIN', value: vendor.cinNumber },
-                                { label: 'Delivery Capability', value: vendor.deliveryCapability },
-                                { label: 'Authorized Person', value: vendor.authorizedPersonName },
-                                { label: 'Authorized Phone', value: vendor.authorizedPersonPhone },
-                                { label: 'Authorized Email', value: vendor.authorizedPersonEmail },
-                                { label: 'Pickup Address', value: [vendor.pickupAddressLine, vendor.pickupCity, vendor.pickupState, vendor.pickupPincode].filter(Boolean).join(', ') || null },
-                                { label: 'Bank Account Name', value: vendor.bankAccountName },
-                                { label: 'Bank Account No.', value: vendor.bankAccountNumber },
-                                { label: 'IFSC', value: vendor.bankIfsc },
-                                { label: 'Bank Name', value: vendor.bankName },
-                                { label: 'Account Type', value: vendor.bankAccountType },
-                            ] as { label: string; value: string | null }[]).map((f) => (
-                                <div key={f.label}>
-                                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#AEAEAE] mb-0.5">{f.label}</p>
-                                    <p className="text-[14px] font-semibold text-[#181725] break-words">{f.value || 'Not provided'}</p>
+                            ) : (
+                                <div className="border border-[#EEEEEE] rounded-[12px] overflow-hidden bg-white divide-y divide-[#F3F4F6]">
+                                    {documents.map((doc, idx) => (
+                                        <div key={doc.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-[#F9FAFB]/50 transition-colors">
+                                            <div className="flex items-start gap-4">
+                                                {/* Visual icon box */}
+                                                <div className="w-[44px] h-[44px] rounded-[10px] bg-[#EEF2F6] flex items-center justify-center text-[#4B5563] shrink-0 border border-[#E5E7EB]">
+                                                    <FileText size={18} />
+                                                </div>
+
+                                                <div className="min-w-0">
+                                                    <span className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-wider block">Record #{idx + 1}</span>
+                                                    <h4 className="text-[14px] font-bold text-[#111827] mt-0.5">{DOC_TYPE_LABELS[doc.type] ?? doc.type}</h4>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <a 
+                                                            href={doc.fileUrl} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="text-[12px] text-[#299E60] font-bold hover:underline inline-flex items-center gap-1 shrink-0"
+                                                        >
+                                                            <span>View Document</span>
+                                                            <ExternalLink size={12} />
+                                                        </a>
+                                                        <span className="text-gray-300">|</span>
+                                                        <span className="text-[11px] text-[#9CA3AF] font-medium">Uploaded: {new Date(doc.uploadedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                                    </div>
+                                                    {doc.adminNote && (
+                                                        <div className="mt-2.5 bg-[#FFF8EB] border border-[#FDE68A]/60 px-3 py-1.5 rounded-lg text-[11px] text-[#B45309] font-medium leading-relaxed max-w-[500px]">
+                                                            <strong className="font-extrabold uppercase text-[9px] mr-1 block sm:inline">Admin Auditor Note:</strong>
+                                                            {doc.adminNote}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Doc statuses and actions */}
+                                            <div className="flex items-center gap-3 self-end md:self-auto border-t md:border-t-0 pt-3 md:pt-0 border-[#F3F4F6] w-full md:w-auto justify-end">
+                                                <span className={cn(
+                                                    'text-[10px] font-black px-2.5 py-1 rounded-full uppercase border tracking-wider',
+                                                    doc.status === 'verified' ? 'bg-[#EEF8F1] border-[#299E60]/15 text-[#299E60]' :
+                                                    doc.status === 'rejected' ? 'bg-[#FDF2F2] border-[#EF4444]/15 text-[#EF4444]' :
+                                                    'bg-[#FFF8EB] border-[#D97706]/15 text-[#D97706]'
+                                                )}>
+                                                    Status: {doc.status}
+                                                </span>
+
+                                                <div className="flex items-center gap-2">
+                                                    {doc.status !== 'verified' && (
+                                                        <button 
+                                                            onClick={() => handleDocStatus(doc.id, 'verified')}
+                                                            disabled={updatingDoc === doc.id}
+                                                            className="h-[32px] px-3 bg-[#299E60] hover:bg-[#238a54] text-white text-[11px] font-bold rounded-[8px] disabled:opacity-50 flex items-center gap-1 shadow-sm transition-colors"
+                                                        >
+                                                            {updatingDoc === doc.id ? (
+                                                                <Loader2 size={11} className="animate-spin" />
+                                                            ) : (
+                                                                <CheckCircle2 size={12} />
+                                                            )}
+                                                            Verify
+                                                        </button>
+                                                    )}
+                                                    {doc.status !== 'rejected' && (
+                                                        <button 
+                                                            onClick={() => {
+                                                                const note = window.prompt('Provide rejection reason (will be visible to vendor):');
+                                                                if (note === null) return;
+                                                                handleDocStatus(doc.id, 'rejected', note.trim() || undefined);
+                                                            }}
+                                                            disabled={updatingDoc === doc.id}
+                                                            className="h-[32px] px-3 bg-white border border-[#E5E7EB] hover:bg-[#FDF2F2] hover:text-[#EF4444] text-[#4B5563] text-[11px] font-bold rounded-[8px] disabled:opacity-50 flex items-center gap-1 transition-colors"
+                                                        >
+                                                            {updatingDoc === doc.id ? (
+                                                                <Loader2 size={11} className="animate-spin" />
+                                                            ) : (
+                                                                <XCircle size={12} />
+                                                            )}
+                                                            Reject
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
+                            )}
                         </div>
                     )}
-                </div>
-            </div>
 
-            {/* Verification Documents */}
-            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                <div className="p-6 flex items-center gap-2 border-b border-[#EEEEEE]">
-                    <FileText size={20} className="text-[#7C3AED]" />
-                    <h3 className="text-[18px] font-extrabold text-[#181725]">Verification Documents</h3>
-                    <span className="text-[14px] font-bold text-[#AEAEAE]">({documents.length})</span>
-                </div>
-                {documents.length === 0 ? (
-                    <div className="p-12 text-center">
-                        <FileText size={40} className="text-[#E5E7EB] mx-auto mb-3" />
-                        <p className="text-[14px] font-bold text-[#AEAEAE]">No documents uploaded</p>
-                    </div>
-                ) : (
-                    <div className="divide-y divide-[#F5F5F5]">
-                        {documents.map(doc => (
-                            <div key={doc.id} className="px-6 py-4 flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                    <div className="w-[36px] h-[36px] rounded-[10px] bg-[#F3EFFE] flex items-center justify-center text-[#7C3AED] shrink-0">
-                                        <FileText size={16} />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-[13px] font-bold text-[#181725]">{DOC_TYPE_LABELS[doc.type] ?? doc.type}</p>
-                                        <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer"
-                                            className="text-[12px] text-[#299E60] hover:underline truncate block max-w-[260px]">
-                                            {doc.fileName}
-                                        </a>
-                                        {doc.adminNote && <p className="text-[11px] text-[#AEAEAE] mt-0.5">{doc.adminNote}</p>}
-                                    </div>
+                    {/* TAB 4: VENDOR PRODUCTS CATALOG */}
+                    {activeTab === 'products' && (
+                        <div className="space-y-6">
+                            <div className="border-b border-[#F3F4F6] pb-2 mb-4 flex items-center justify-between">
+                                <h3 className="text-[15px] font-black text-[#111827]">Products Inventory List</h3>
+                            </div>
+
+                            {vendor.products.length === 0 ? (
+                                <div className="p-12 text-center bg-[#F9FAFB] rounded-[16px] border border-dashed border-[#D1D5DB]">
+                                    <Package size={40} className="text-[#AEAEAE] mx-auto mb-3" />
+                                    <h4 className="text-[14px] font-bold text-[#374151]">No Registered Products</h4>
+                                    <p className="text-[12px] text-[#9CA3AF] mt-1">This seller partner has not added any products to the marketplace catalogue yet.</p>
                                 </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <span className={cn('text-[11px] font-bold px-2.5 py-1 rounded-[6px] uppercase',
-                                        doc.status === 'verified' ? 'bg-green-50 text-green-700' :
-                                        doc.status === 'rejected' ? 'bg-red-50 text-red-700' :
-                                        'bg-amber-50 text-amber-700'
-                                    )}>{doc.status}</span>
-                                    {doc.status !== 'verified' && (
-                                        <button onClick={() => handleDocStatus(doc.id, 'verified')}
-                                            disabled={updatingDoc === doc.id}
-                                            className="px-3 py-1.5 bg-[#299E60] text-white text-[11px] font-bold rounded-[7px] disabled:opacity-50 flex items-center gap-1">
-                                            {updatingDoc === doc.id ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle2 size={11} />}
-                                            Verify
-                                        </button>
-                                    )}
-                                    {doc.status !== 'rejected' && (
-                                        <button onClick={() => handleDocStatus(doc.id, 'rejected')}
-                                            disabled={updatingDoc === doc.id}
-                                            className="px-3 py-1.5 bg-red-50 text-red-600 text-[11px] font-bold rounded-[7px] disabled:opacity-50 flex items-center gap-1 border border-red-100">
-                                            {updatingDoc === doc.id ? <Loader2 size={11} className="animate-spin" /> : <AlertCircle size={11} />}
-                                            Reject
-                                        </button>
+                            ) : (
+                                <div className="w-full overflow-x-auto rounded-[12px] border border-[#EEEEEE] bg-white">
+                                    <table className="w-full border-collapse text-left text-[13px] min-w-[700px]">
+                                        <thead>
+                                            <tr className="bg-[#FAFAFA] border-b border-[#EEEEEE] text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">
+                                                <th className="px-5 py-3.5 font-bold w-[60px] text-center">#</th>
+                                                <th className="px-5 py-3.5 font-bold min-w-[280px]">Product Information</th>
+                                                <th className="px-5 py-3.5 font-bold">Base Price (INR)</th>
+                                                <th className="px-5 py-3.5 font-bold w-[120px]">Marketplace Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-[#F3F4F6]">
+                                            {vendor.products.map((product, i) => (
+                                                <tr key={product.id} className="hover:bg-[#F9FAFB]/50 transition-colors">
+                                                    <td className="px-5 py-3 text-center text-[12px] font-bold text-[#9CA3AF]">
+                                                        {i + 1}
+                                                    </td>
+                                                    <td className="px-5 py-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-[42px] h-[42px] rounded-[8px] bg-[#F3F4F6] overflow-hidden shrink-0 border border-[#E5E7EB] flex items-center justify-center">
+                                                                {product.imageUrl ? (
+                                                                    <img
+                                                                        src={product.imageUrl}
+                                                                        alt={product.name}
+                                                                        className="w-full h-full object-cover"
+                                                                    />
+                                                                ) : (
+                                                                    <Package size={16} className="text-[#9CA3AF]" />
+                                                                )}
+                                                            </div>
+                                                            <span className="text-[13px] font-bold text-[#111827] truncate block max-w-[350px]">
+                                                                {product.name}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-5 py-3 font-bold text-[#111827]">
+                                                        {formatPrice(product.basePrice)}
+                                                    </td>
+                                                    <td className="px-5 py-3">
+                                                        {product.isActive ? (
+                                                            <span className="inline-flex items-center gap-1 bg-[#EEF8F1] text-[#299E60] text-[10px] font-black px-2 py-0.5 rounded-full border border-[#D1FAE5] uppercase tracking-wide">
+                                                                Active
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 bg-[#FDF2F2] text-[#EF4444] text-[10px] font-black px-2 py-0.5 rounded-full border border-[#FEE2E2] uppercase tracking-wide">
+                                                                Inactive
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* TAB 5: DELIVERY SLOTS & COVERAGE AREAS */}
+                    {activeTab === 'delivery' && (
+                        <div className="space-y-8">
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                {/* Left column: Slots */}
+                                <div className="space-y-4">
+                                    <div className="border-b border-[#F3F4F6] pb-2 mb-2">
+                                        <h3 className="text-[15px] font-black text-[#111827] flex items-center gap-1.5">
+                                            <CalendarClock size={16} className="text-[#299E60]" />
+                                            Active Schedule Delivery Slots
+                                        </h3>
+                                    </div>
+
+                                    {vendor.deliverySlots.length === 0 ? (
+                                        <div className="p-8 text-center bg-[#F9FAFB] rounded-[12px] border border-dashed border-[#D1D5DB]">
+                                            <CalendarClock size={32} className="text-[#AEAEAE] mx-auto mb-2" />
+                                            <h4 className="text-[13px] font-bold text-[#374151]">No slots configured</h4>
+                                        </div>
+                                    ) : (
+                                        <div className="border border-[#EEEEEE] rounded-[12px] overflow-hidden bg-white divide-y divide-[#F3F4F6]">
+                                            {sortedSlots.map((slot) => (
+                                                <div
+                                                    key={slot.id}
+                                                    className="px-5 py-3.5 flex items-center justify-between hover:bg-[#F9FAFB]/50 transition-colors"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-[32px] h-[32px] rounded-[8px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0 border border-[#D1FAE5]">
+                                                            <Clock size={14} />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[13px] font-bold text-[#111827]">
+                                                                {formatDayOfWeek(slot.dayOfWeek)}
+                                                            </p>
+                                                            <p className="text-[11px] text-[#6B7280] font-medium mt-0.5">
+                                                                Hours: {formatTime(slot.slotStart)} - {formatTime(slot.slotEnd)}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2.5">
+                                                        <span className="text-[11px] font-bold text-[#6B7280]">
+                                                            Cutoff: {formatTime(slot.cutoffTime)}
+                                                        </span>
+                                                        <span className={cn(
+                                                            "text-[9px] font-black px-2 py-0.5 rounded-full border uppercase tracking-wider",
+                                                            slot.isActive 
+                                                                ? "bg-[#EEF8F1] border-[#299E60]/10 text-[#299E60]" 
+                                                                : "bg-[#FDF2F2] border-[#EF4444]/10 text-[#EF4444]"
+                                                        )}>
+                                                            {slot.isActive ? 'Active' : 'Inactive'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
+
+                                {/* Right column: Coverage */}
+                                <div className="space-y-4">
+                                    <div className="border-b border-[#F3F4F6] pb-2 mb-2">
+                                        <h3 className="text-[15px] font-black text-[#111827] flex items-center gap-1.5">
+                                            <MapPinned size={16} className="text-[#3B82F6]" />
+                                            Commercial Dispatch Service Areas
+                                        </h3>
+                                    </div>
+
+                                    {vendor.serviceAreas.length === 0 ? (
+                                        <div className="p-8 text-center bg-[#F9FAFB] rounded-[12px] border border-dashed border-[#D1D5DB]">
+                                            <MapPinned size={32} className="text-[#AEAEAE] mx-auto mb-2" />
+                                            <h4 className="text-[13px] font-bold text-[#374151]">No coverage pincodes</h4>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-[#FAFAFA] p-5 rounded-[12px] border border-[#E5E7EB]/50">
+                                            <p className="text-[11px] font-bold text-[#9CA3AF] uppercase mb-3.5">Eligible Delivery Pincodes</p>
+                                            <div className="flex flex-wrap gap-2.5">
+                                                {vendor.serviceAreas.map((area) => (
+                                                    <div
+                                                        key={area.id}
+                                                        className={cn(
+                                                            'flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] border text-[12px] font-bold shadow-sm transition-all',
+                                                            area.isActive
+                                                                ? 'bg-[#EFF6FF] border-[#3B82F6]/20 text-[#2563EB]'
+                                                                : 'bg-[#F3F4F6] border-[#E5E7EB] text-[#6B7280]'
+                                                        )}
+                                                    >
+                                                        <MapPin size={12} className="opacity-75" />
+                                                        <span>{area.pincode}</span>
+                                                        {!area.isActive && (
+                                                            <span className="text-[9px] uppercase font-black text-[#9CA3AF]">
+                                                                (disabled)
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Save edits bottom actions toolbar */}
+                {isEditing && (
+                    <div className="p-6 bg-[#FAFAFA] border-t border-[#EEEEEE] flex justify-end gap-3 rounded-b-[16px]">
+                        <button
+                            onClick={() => setIsEditing(false)}
+                            className="px-5 py-2 bg-white border border-[#D1D5DB] text-[#374151] rounded-[10px] text-[13px] font-bold hover:bg-[#F9FAFB] active:scale-97 transition-colors shadow-sm"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSaveVendor}
+                            disabled={savingEdits}
+                            className="px-6 py-2 bg-[#299E60] hover:bg-[#238a54] text-white rounded-[10px] text-[13px] font-bold active:scale-97 transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-md shadow-[#299E60]/10"
+                        >
+                            {savingEdits ? (
+                                <>
+                                    <Loader2 size={13} className="animate-spin" />
+                                    Saving...
+                                </>
+                            ) : (
+                                "Save Changes"
+                            )}
+                        </button>
                     </div>
                 )}
             </div>

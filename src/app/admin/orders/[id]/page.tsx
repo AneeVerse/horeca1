@@ -3,7 +3,23 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ChevronLeft, User, Package, MapPin, Loader2, AlertCircle } from 'lucide-react';
+import { 
+    ChevronLeft, 
+    User, 
+    Package, 
+    MapPin, 
+    Loader2, 
+    AlertCircle,
+    ShoppingBag,
+    Landmark,
+    Scissors,
+    CornerDownRight,
+    CheckCircle2,
+    Calendar,
+    Coins,
+    RefreshCw,
+    FileText
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -90,29 +106,29 @@ function getStatusBadgeClasses(status: string): string {
     switch (status) {
         case 'delivered':
         case 'confirmed':
-            return 'bg-[#EEF8F1] text-[#299E60]';
+            return 'bg-[#EEF8F1] text-[#299E60] border-[#D1FAE5]';
         case 'processing':
         case 'pending':
-            return 'bg-[#FFF4E5] text-[#976538]';
+            return 'bg-[#FFF8EB] text-[#D97706] border-[#FEF3C7]';
         case 'shipped':
-            return 'bg-[#E8F0FE] text-[#1A56DB]';
+            return 'bg-[#E8F0FE] text-[#1A56DB] border-[#DBEAFE]';
         case 'cancelled':
-            return 'bg-[#FEE8E8] text-[#C53030]';
+            return 'bg-[#FDF2F2] text-[#EF4444] border-[#FEE2E2]';
         default:
-            return 'bg-[#F3F4F6] text-[#6B7280]';
+            return 'bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]';
     }
 }
 
 function getPaymentStatusBadgeClasses(status: string): string {
     switch (status) {
         case 'paid':
-            return 'bg-[#EEF8F1] text-[#299E60]';
+            return 'bg-[#EEF8F1] text-[#299E60] border-[#D1FAE5]';
         case 'pending':
-            return 'bg-[#FFF4E5] text-[#976538]';
+            return 'bg-[#FFF8EB] text-[#D97706] border-[#FEF3C7]';
         case 'failed':
-            return 'bg-[#FEE8E8] text-[#C53030]';
+            return 'bg-[#FDF2F2] text-[#EF4444] border-[#FEE2E2]';
         default:
-            return 'bg-[#F3F4F6] text-[#6B7280]';
+            return 'bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]';
     }
 }
 
@@ -124,6 +140,16 @@ function formatDate(dateStr: string): string {
         hour: '2-digit',
         minute: '2-digit',
     });
+}
+
+function formatTime(time: string): string {
+    if (!time) return 'N/A';
+    const [hours, minutes] = time.split(':');
+    const h = parseInt(hours, 10);
+    if (isNaN(h)) return time;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${minutes || '00'} ${ampm}`;
 }
 
 function formatCurrency(amount: number): string {
@@ -145,10 +171,10 @@ export default function OrderDetailsPage() {
     const [error, setError] = useState<string | null>(null);
     const [updatingStatus, setUpdatingStatus] = useState(false);
     const [selectedStatus, setSelectedStatus] = useState('');
-    // Ops: edit line quantities on a pending order (Req 7 / P0-2).
+    // Ops: edit quantities
     const [editedQty, setEditedQty] = useState<Record<string, number>>({});
     const [savingQty, setSavingQty] = useState(false);
-    // Ops: split + reassign (pending only).
+    // Ops: split & reassign
     const [splitQty, setSplitQty] = useState<Record<string, number>>({});
     const [reassignTo, setReassignTo] = useState('');
     const [vendorOptions, setVendorOptions] = useState<{ id: string; businessName: string }[]>([]);
@@ -212,6 +238,7 @@ export default function OrderDetailsPage() {
             }
 
             setOrder((prev) => (prev ? { ...prev, status: selectedStatus } : prev));
+            toast.success(`Order status updated successfully`);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to update status');
             setSelectedStatus(order.status);
@@ -278,16 +305,15 @@ export default function OrderDetailsPage() {
         } finally { setOpsBusy(false); }
     }
 
-    // Loading state
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-[400px]">
+            <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
                 <Loader2 className="w-8 h-8 animate-spin text-[#299E60]" />
+                <span className="text-[13px] font-bold text-[#6B7280]">Loading order details...</span>
             </div>
         );
     }
 
-    // Error state
     if (error || !order) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -306,314 +332,410 @@ export default function OrderDetailsPage() {
     const paymentMethod = order.payments.length > 0 ? order.payments[0].method : null;
 
     return (
-        <div className="space-y-8 pb-10">
+        <div className="space-y-6 pb-12 px-4 md:px-0">
             {/* Page Header */}
-            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                <div>
-                    <div className="flex items-center gap-3 mb-1">
-                        <Link
-                            href="/admin/orders"
-                            className="w-[36px] h-[36px] rounded-full bg-white border border-[#DCDCDC] flex items-center justify-center hover:bg-[#F5F5F5] transition-colors"
-                        >
-                            <ChevronLeft size={18} className="text-[#4B4B4B]" />
-                        </Link>
-                        <h1 className="text-[28px] font-bold text-[#000000] leading-none">Order Details</h1>
+            <div className="flex items-center justify-between border-b border-[#EEEEEE] pb-4">
+                <div className="flex items-center gap-3 text-[13px] text-[#6B7280]">
+                    <button
+                        onClick={() => router.back()}
+                        className="w-[34px] h-[34px] rounded-[10px] bg-white border border-[#E5E7EB] flex items-center justify-center hover:bg-[#F9FAFB] transition-all shadow-sm shrink-0 active:scale-95"
+                    >
+                        <ChevronLeft size={16} className="text-[#374151]" />
+                    </button>
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-[20px] font-black text-[#111827] leading-none">Order Details</h1>
+                            <span className={cn(
+                                'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border',
+                                getStatusBadgeClasses(order.status)
+                            )}>
+                                {order.status}
+                            </span>
+                        </div>
+                        <p className="text-[#6B7280] text-[12px] font-medium mt-1">ID: {order.orderNumber} &bull; Created at {formatDate(order.createdAt)}</p>
                     </div>
-                    <p className="text-[#000000] text-[13px] font-medium opacity-70 ml-[48px]">
-                        {order.orderNumber}
-                    </p>
                 </div>
             </div>
 
-            {/* Main Content Card */}
-            <div className="bg-white p-10 md:p-14 rounded-[12px] border border-[#DCDCDC] shadow-sm max-w-[1100px]">
-                {/* Order Top Header */}
-                <div className="mb-12 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                        <p className="text-[14px] font-medium text-[#7C7C7C] mb-1">{formatDate(order.createdAt)}</p>
-                        <p className="text-[14px] font-bold text-[#181725]">Order: {order.orderNumber}</p>
-                    </div>
-                    <span
-                        className={cn(
-                            'inline-flex items-center px-3 py-1 rounded-full text-[12px] font-bold uppercase tracking-wide w-fit',
-                            getStatusBadgeClasses(order.status)
-                        )}
-                    >
-                        {order.status}
-                    </span>
-                </div>
-
-                {/* Info Triple Columns */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-16">
-                    {/* Customer */}
-                    <div className="flex gap-4">
-                        <div className="w-[52px] h-[52px] bg-[#EEF8F1] rounded-full shrink-0 flex items-center justify-center">
-                            <User size={22} className="text-[#299E60]" />
-                        </div>
-                        <div className="space-y-1">
-                            <h4 className="text-[18px] font-bold text-[#181725]">Customer</h4>
-                            <div className="text-[14px] text-[#4B4B4B] font-medium space-y-1 pt-1">
-                                <p>{order.user.fullName}</p>
-                                <p>{order.user.email}</p>
-                                {order.user.phone && <p>{order.user.phone}</p>}
-                                {order.user.businessName && (
-                                    <p className="text-[#7C7C7C]">{order.user.businessName}</p>
-                                )}
+            {/* Main Layout Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Left side 2 columns: Cards and tables */}
+                <div className="lg:col-span-2 space-y-6">
+                    {/* Information Cards (Customer, Deliver To, Order Info) */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                        {/* Customer */}
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] p-5 shadow-sm flex flex-col justify-between">
+                            <div className="flex items-start gap-3">
+                                <div className="w-9 h-9 rounded-[10px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0 border border-[#D1FAE5]">
+                                    <User size={16} />
+                                </div>
+                                <div className="min-w-0">
+                                    <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-wider mb-1">Customer Profile</h4>
+                                    <p className="text-[13px] font-bold text-[#374151] truncate">{order.user.fullName}</p>
+                                    <p className="text-[12px] text-[#6B7280] truncate font-medium mt-0.5">{order.user.email}</p>
+                                    {order.user.phone && <p className="text-[11px] text-[#9CA3AF] font-semibold font-mono mt-0.5">{order.user.phone}</p>}
+                                </div>
                             </div>
+                            {order.user.businessName && (
+                                <div className="mt-3 pt-2 border-t border-[#F3F4F6]">
+                                    <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Business:</span>
+                                    <span className="text-[12px] font-semibold text-[#4B5563] block truncate">{order.user.businessName}</span>
+                                </div>
+                            )}
                         </div>
-                    </div>
 
-                    {/* Order Info */}
-                    <div className="flex gap-4">
-                        <div className="w-[52px] h-[52px] bg-[#EEF8F1] rounded-full shrink-0 flex items-center justify-center">
-                            <Package size={22} className="text-[#299E60]" />
-                        </div>
-                        <div className="space-y-1">
-                            <h4 className="text-[18px] font-bold text-[#181725]">Order Info</h4>
-                            <div className="text-[14px] text-[#4B4B4B] font-medium space-y-2 pt-1">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[#7C7C7C]">Status:</span>
-                                    <span
-                                        className={cn(
-                                            'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold uppercase',
-                                            getStatusBadgeClasses(order.status)
-                                        )}
-                                    >
-                                        {order.status}
+                        {/* Deliver To */}
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] p-5 shadow-sm flex flex-col justify-between">
+                            <div className="flex items-start gap-3">
+                                <div className="w-9 h-9 rounded-[10px] bg-[#EFF6FF] flex items-center justify-center text-[#3B82F6] shrink-0 border border-[#DBEAFE]">
+                                    <MapPin size={16} />
+                                </div>
+                                <div className="min-w-0">
+                                    <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-wider mb-1">Delivery Destination</h4>
+                                    <p className="text-[12px] font-semibold text-[#4B5563] line-clamp-2 leading-relaxed">{order.deliveryAddress || 'Not specified'}</p>
+                                    {order.deliveryPincode && (
+                                        <p className="text-[11px] font-bold text-[#374151] mt-1 inline-block bg-[#F3F4F6] px-1.5 py-0.5 rounded">Pin: {order.deliveryPincode}</p>
+                                    )}
+                                </div>
+                            </div>
+                            {order.deliverySlot && (
+                                <div className="mt-3 pt-2 border-t border-[#F3F4F6]">
+                                    <span className="text-[10px] uppercase font-bold text-[#9CA3AF] flex items-center gap-1">
+                                        <Calendar size={10} /> Delivery Slot:
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-[#4B5563] block mt-0.5">
+                                        {order.deliverySlot.dayOfWeek} ({formatTime(order.deliverySlot.slotStart)} - {formatTime(order.deliverySlot.slotEnd)})
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[#7C7C7C]">Payment:</span>
-                                    <span
-                                        className={cn(
-                                            'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold uppercase',
+                            )}
+                        </div>
+
+                        {/* Order Info */}
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] p-5 shadow-sm flex flex-col justify-between">
+                            <div className="flex items-start gap-3">
+                                <div className="w-9 h-9 rounded-[10px] bg-[#FFF8EB] flex items-center justify-center text-[#D97706] shrink-0 border border-[#FEF3C7]">
+                                    <ShoppingBag size={16} />
+                                </div>
+                                <div className="min-w-0 space-y-1">
+                                    <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-wider mb-1">Finance &amp; Vendor</h4>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[11px] text-[#6B7280] font-medium">Payment:</span>
+                                        <span className={cn(
+                                            'inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase border',
                                             getPaymentStatusBadgeClasses(order.paymentStatus)
-                                        )}
-                                    >
-                                        {order.paymentStatus}
+                                        )}>
+                                            {order.paymentStatus}
+                                        </span>
+                                    </div>
+                                    {paymentMethod && (
+                                        <p className="text-[12px] text-[#4B5563] font-semibold">
+                                            <span className="text-[#9CA3AF] font-medium">Method:</span> {paymentMethod}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            {order.vendor && (
+                                <div className="mt-3 pt-2 border-t border-[#F3F4F6]">
+                                    <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Assigned Vendor:</span>
+                                    <span className="text-[12px] font-bold text-[#299E60] block truncate">{order.vendor.businessName}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Products Table Card */}
+                    <div className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                        <div className="px-5 py-4 border-b border-[#EEEEEE] bg-[#FAFAFA]">
+                            <h3 className="text-[14px] font-black text-[#111827] flex items-center gap-1.5">
+                                <Package size={16} className="text-[#299E60]" />
+                                Products Sub-items List ({order.items.length})
+                            </h3>
+                        </div>
+
+                        <div className="overflow-x-auto w-full">
+                            <table className="w-full border-collapse text-left text-[13px]">
+                                <thead>
+                                    <tr className="bg-[#FAFAFA] border-b border-[#EEEEEE] text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">
+                                        <th className="px-5 py-3 font-bold w-[60px] text-center">#</th>
+                                        <th className="px-5 py-3 font-bold">Product Item</th>
+                                        <th className="px-5 py-3 font-bold text-right w-[140px]">Unit Price</th>
+                                        <th className="px-5 py-3 font-bold text-center w-[120px]">Quantity</th>
+                                        <th className="px-5 py-3 font-bold text-right w-[140px]">Total Price</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#F3F4F6]">
+                                    {order.items.map((item, idx) => (
+                                        <tr key={item.id} className="hover:bg-[#F9FAFB]/30 transition-colors">
+                                            <td className="px-5 py-4 text-center text-[12px] font-bold text-[#9CA3AF]">
+                                                {idx + 1}
+                                            </td>
+                                            <td className="px-5 py-4">
+                                                <span className="text-[13px] font-bold text-[#111827] block leading-tight">
+                                                    {item.productName}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-4 text-right font-semibold text-[#4B5563]">
+                                                {formatCurrency(item.unitPrice)}
+                                            </td>
+                                            <td className="px-5 py-4 text-center">
+                                                {order.status === 'pending' ? (
+                                                    <div className="inline-flex items-center">
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            value={editedQty[item.id] ?? item.quantity}
+                                                            onChange={(e) => setEditedQty((prev) => ({ 
+                                                                ...prev, 
+                                                                [item.id]: Math.max(0, parseInt(e.target.value, 10) || 0) 
+                                                            }))}
+                                                            className="w-16 h-[30px] text-center border border-[#D1D5DB] rounded-[6px] text-[13px] font-bold outline-none focus:border-[#299E60]"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <span className="font-extrabold text-[#111827] text-[13px]">{item.quantity}</span>
+                                                )}
+                                            </td>
+                                            <td className="px-5 py-4 text-right font-bold text-[#111827]">
+                                                {formatCurrency(item.totalPrice)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Quantity modification warning / edit actions (pending only) */}
+                        {order.status === 'pending' && (
+                            <div className="p-4 bg-[#FFFBEB] border-t border-[#FDE68A] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="flex items-start gap-2 text-[12px] font-medium text-[#B45309]">
+                                    <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                                    <span>
+                                        <strong>Auditor Action Required:</strong> Edit line quantities in table inputs above (setting 0 removes the product line).
                                     </span>
                                 </div>
-                                {paymentMethod && (
-                                    <p>
-                                        <span className="text-[#7C7C7C]">Method:</span> {paymentMethod}
-                                    </p>
-                                )}
-                                {order.vendor && (
-                                    <p>
-                                        <span className="text-[#7C7C7C]">Vendor:</span> {order.vendor.businessName}
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Deliver To */}
-                    <div className="flex gap-4">
-                        <div className="w-[52px] h-[52px] bg-[#EEF8F1] rounded-full shrink-0 flex items-center justify-center">
-                            <MapPin size={22} className="text-[#299E60]" />
-                        </div>
-                        <div className="space-y-1">
-                            <h4 className="text-[18px] font-bold text-[#181725]">Deliver To</h4>
-                            <div className="text-[14px] text-[#4B4B4B] font-medium space-y-1 pt-1">
-                                {order.deliveryAddress && <p>{order.deliveryAddress}</p>}
-                                {order.deliveryPincode && (
-                                    <p>
-                                        <span className="text-[#7C7C7C]">Pincode:</span> {order.deliveryPincode}
-                                    </p>
-                                )}
-                                {order.deliverySlot && (
-                                    <p className="text-[#7C7C7C] text-[13px]">
-                                        Slot: {order.deliverySlot.dayOfWeek} {order.deliverySlot.slotStart} - {order.deliverySlot.slotEnd}
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Products Table */}
-                <div className="overflow-x-auto mb-10">
-                    <table className="w-full border-separate border-spacing-0">
-                        <thead>
-                            <tr className="h-[52px] border-b border-[#EEEEEE]">
-                                <th className="text-left text-[14px] font-bold text-[#181725] pb-4">Product</th>
-                                <th className="text-left text-[14px] font-bold text-[#181725] pb-4">Unit Price</th>
-                                <th className="text-center text-[14px] font-bold text-[#181725] pb-4">Quantity</th>
-                                <th className="text-right text-[14px] font-bold text-[#181725] pb-4">Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {order.items.map((item) => (
-                                <tr key={item.id} className="group">
-                                    <td className="py-6 border-t border-[#EEEEEE]">
-                                        <span className="text-[15px] font-bold text-[#181725]">
-                                            {item.productName}
-                                        </span>
-                                    </td>
-                                    <td className="py-6 border-t border-[#EEEEEE] text-[15px] font-bold text-[#181725]">
-                                        {formatCurrency(item.unitPrice)}
-                                    </td>
-                                    <td className="py-6 border-t border-[#EEEEEE] text-[15px] font-bold text-[#181725] text-center">
-                                        {order.status === 'pending' ? (
-                                            <input
-                                                type="number"
-                                                min={0}
-                                                value={editedQty[item.id] ?? item.quantity}
-                                                onChange={(e) => setEditedQty((prev) => ({ ...prev, [item.id]: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
-                                                className="w-16 text-center border border-gray-200 rounded-md py-1"
-                                            />
-                                        ) : item.quantity}
-                                    </td>
-                                    <td className="py-6 border-t border-[#EEEEEE] text-[15px] font-bold text-[#181725] text-right">
-                                        {formatCurrency(item.totalPrice)}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Ops: modify quantities (pending only) — P0-2 */}
-                {order.status === 'pending' && (
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-                        <p className="text-[12px] text-amber-800 font-medium">Ops: edit quantities above (0 removes a line), then save. Available only while pending. Split &amp; vendor-reassign are available via the API.</p>
-                        <button onClick={handleSaveQuantities} disabled={savingQty} className="bg-[#299e60] text-white text-[13px] font-bold px-4 py-2 rounded-lg disabled:opacity-50 whitespace-nowrap">
-                            {savingQty ? 'Saving…' : 'Save quantity changes'}
-                        </button>
-                    </div>
-                )}
-
-                {/* Ops: split + reassign (pending only) — P0-2 */}
-                {order.status === 'pending' && (
-                    <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <div className="border border-gray-200 rounded-lg p-4">
-                            <p className="text-[13px] font-bold text-[#181725] mb-1">Split order</p>
-                            <p className="text-[11px] text-gray-500 mb-3">Move quantities into a new PO (same vendor).</p>
-                            <div className="space-y-2 max-h-44 overflow-auto">
-                                {order.items.map((i) => (
-                                    <div key={i.id} className="flex items-center justify-between gap-2">
-                                        <span className="text-[12px] text-[#4B4B4B] truncate">{i.productName} <span className="text-gray-400">(have {i.quantity})</span></span>
-                                        <input type="number" min={0} max={i.quantity} value={splitQty[i.id] || 0}
-                                            onChange={(e) => setSplitQty((p) => ({ ...p, [i.id]: Math.max(0, Math.min(i.quantity, parseInt(e.target.value, 10) || 0)) }))}
-                                            className="w-16 text-center border border-gray-200 rounded-md py-1 text-[12px]" />
-                                    </div>
-                                ))}
-                            </div>
-                            <button onClick={handleSplit} disabled={opsBusy} className="mt-3 bg-[#181725] text-white text-[12px] font-bold px-3 py-2 rounded-lg disabled:opacity-50">Create split order</button>
-                        </div>
-                        <div className="border border-gray-200 rounded-lg p-4">
-                            <p className="text-[13px] font-bold text-[#181725] mb-1">Reassign vendor</p>
-                            <p className="text-[11px] text-gray-500 mb-3">Move to another vendor that carries these items (matched by master SKU).</p>
-                            <select value={reassignTo} onChange={(e) => setReassignTo(e.target.value)} className="w-full border border-gray-200 rounded-md py-2 px-2 text-[12px]">
-                                <option value="">Select vendor…</option>
-                                {vendorOptions.filter((v) => v.id !== order.vendor?.id).map((v) => (
-                                    <option key={v.id} value={v.id}>{v.businessName}</option>
-                                ))}
-                            </select>
-                            <button onClick={handleReassign} disabled={opsBusy || !reassignTo} className="mt-3 bg-[#181725] text-white text-[12px] font-bold px-3 py-2 rounded-lg disabled:opacity-50">Reassign</button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Summary Section */}
-                <div className="border-t border-[#EEEEEE] pt-8 flex justify-end">
-                    <div className="w-full max-w-[320px] space-y-3">
-                        <div className="flex justify-between text-[14px] font-medium">
-                            <span className="text-[#7C7C7C]">Subtotal</span>
-                            <span className="text-[#181725] font-bold">{formatCurrency(order.subtotal)}</span>
-                        </div>
-                        <div className="flex justify-between text-[14px] font-medium pb-4 border-b border-dotted border-[#DCDCDC]">
-                            <span className="text-[#7C7C7C]">Delivery Fee</span>
-                            <span className="text-[#181725] font-bold">{formatCurrency(order.deliveryFee || 0)}</span>
-                        </div>
-                        <div className="flex justify-between items-center pt-2">
-                            <span className="text-[16px] font-bold text-[#181725]">Grand Total</span>
-                            <span className="text-[24px] font-bold text-[#181725]">{formatCurrency(order.totalAmount)}</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Notes */}
-                {order.notes && (
-                    <div className="mt-10 pt-8 border-t border-[#EEEEEE]">
-                        <h4 className="text-[16px] font-bold text-[#181725] mb-2">Notes</h4>
-                        <p className="text-[14px] text-[#4B4B4B] font-medium">{order.notes}</p>
-                    </div>
-                )}
-
-                {/* Credit Transactions */}
-                {order.creditTxns.length > 0 && (
-                    <div className="mt-10 pt-8 border-t border-[#EEEEEE]">
-                        <h4 className="text-[16px] font-bold text-[#181725] mb-4">Credit Transactions</h4>
-                        <div className="space-y-2">
-                            {order.creditTxns.map((txn) => (
-                                <div
-                                    key={txn.id}
-                                    className="flex items-center justify-between text-[14px] font-medium py-2 border-b border-[#F5F5F5] last:border-0"
+                                <button 
+                                    onClick={handleSaveQuantities} 
+                                    disabled={savingQty} 
+                                    className="h-[34px] px-4 bg-[#299E60] hover:bg-[#238a54] text-white text-[12px] font-bold rounded-[8px] disabled:opacity-50 shrink-0 shadow-sm active:scale-97 transition-all flex items-center gap-1.5"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <span
-                                            className={cn(
-                                                'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold uppercase',
-                                                txn.type === 'credit'
-                                                    ? 'bg-[#EEF8F1] text-[#299E60]'
-                                                    : 'bg-[#FEE8E8] text-[#C53030]'
-                                            )}
-                                        >
-                                            {txn.type}
-                                        </span>
-                                        <span className="text-[#7C7C7C]">{formatDate(txn.createdAt)}</span>
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                        <span className="text-[#181725] font-bold">{formatCurrency(txn.amount)}</span>
-                                        <span className="text-[#7C7C7C] text-[12px]">
-                                            Bal: {formatCurrency(txn.balanceAfter)}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Status Update Section */}
-                <div className="mt-10 pt-8 border-t border-[#EEEEEE]">
-                    <h4 className="text-[16px] font-bold text-[#181725] mb-4">Update Status</h4>
-                    <div className="flex items-center gap-3">
-                        <select
-                            value={selectedStatus}
-                            onChange={(e) => setSelectedStatus(e.target.value)}
-                            disabled={updatingStatus}
-                            className="h-[42px] px-4 bg-white border border-[#DCDCDC] rounded-[10px] text-[14px] font-medium text-[#181725] outline-none focus:border-[#299E60]/40 transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                            {ORDER_STATUSES.map((s) => (
-                                <option key={s} value={s}>
-                                    {s.charAt(0).toUpperCase() + s.slice(1)}
-                                </option>
-                            ))}
-                        </select>
-                        <button
-                            onClick={handleStatusUpdate}
-                            disabled={updatingStatus || selectedStatus === order.status}
-                            className={cn(
-                                'h-[42px] px-6 rounded-[10px] text-[14px] font-bold transition-all',
-                                selectedStatus === order.status
-                                    ? 'bg-[#E0E0E0] text-[#AEAEAE] cursor-not-allowed'
-                                    : 'bg-[#299E60] text-white hover:bg-[#238A52] cursor-pointer'
-                            )}
-                        >
-                            {updatingStatus ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                                'Update'
-                            )}
-                        </button>
-                        {selectedStatus !== order.status && (
-                            <span className="text-[12px] text-[#7C7C7C] font-medium">
-                                {order.status} &rarr; {selectedStatus}
-                            </span>
+                                    {savingQty && <Loader2 size={12} className="animate-spin" />}
+                                    Save Quantities
+                                </button>
+                            </div>
                         )}
                     </div>
+
+                    {/* Operational controls panel (Split Order & Reassign Vendor) */}
+                    {order.status === 'pending' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                            {/* Split Order */}
+                            <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm space-y-4 flex flex-col justify-between">
+                                <div>
+                                    <div className="flex items-center gap-2 border-b border-[#F3F4F6] pb-2 mb-3">
+                                        <Scissors size={15} className="text-[#374151]" />
+                                        <h4 className="text-[14px] font-black text-[#111827]">Split Off Order</h4>
+                                    </div>
+                                    <p className="text-[11px] text-[#6B7280] leading-relaxed mb-4">
+                                        Move quantities of products below into a separate purchase order (remains with {order.vendor.businessName}).
+                                    </p>
+                                    <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
+                                        {order.items.map((i) => (
+                                            <div key={i.id} className="flex items-center justify-between gap-2 bg-[#F9FAFB] p-2 rounded-lg border border-[#F3F4F6]">
+                                                <span className="text-[12px] text-[#374151] font-semibold truncate max-w-[200px]" title={i.productName}>
+                                                    {i.productName}
+                                                </span>
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    <span className="text-[10px] text-[#9CA3AF] font-bold">Qty (Max {i.quantity}):</span>
+                                                    <input 
+                                                        type="number" 
+                                                        min={0} 
+                                                        max={i.quantity} 
+                                                        value={splitQty[i.id] || 0}
+                                                        onChange={(e) => setSplitQty((p) => ({ 
+                                                            ...p, 
+                                                            [i.id]: Math.max(0, Math.min(i.quantity, parseInt(e.target.value, 10) || 0)) 
+                                                        }))}
+                                                        className="w-14 h-[26px] text-center border border-[#D1D5DB] rounded-[4px] text-[11px] font-bold outline-none focus:border-[#299E60]" 
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={handleSplit} 
+                                    disabled={opsBusy} 
+                                    className="h-[36px] w-full bg-[#181725] hover:bg-[#2A2B35] text-white text-[12px] font-bold rounded-[8px] disabled:opacity-50 transition-all flex items-center justify-center gap-1.5"
+                                >
+                                    {opsBusy && <Loader2 size={12} className="animate-spin" />}
+                                    Create Split PO
+                                </button>
+                            </div>
+
+                            {/* Reassign Vendor */}
+                            <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm space-y-4 flex flex-col justify-between">
+                                <div>
+                                    <div className="flex items-center gap-2 border-b border-[#F3F4F6] pb-2 mb-3">
+                                        <RefreshCw size={15} className="text-[#374151]" />
+                                        <h4 className="text-[14px] font-black text-[#111827]">Reassign Vendor Partner</h4>
+                                    </div>
+                                    <p className="text-[11px] text-[#6B7280] leading-relaxed mb-4">
+                                        Transfer this entire order to another commercial vendor partner. Fits matching inventory automatically.
+                                    </p>
+                                    
+                                    <div className="space-y-1.5 pt-2">
+                                        <label className="text-[10px] font-bold text-[#9CA3AF] uppercase">Select Eligible Vendor</label>
+                                        <select 
+                                            value={reassignTo} 
+                                            onChange={(e) => setReassignTo(e.target.value)} 
+                                            className="w-full h-[38px] border border-[#D1D5DB] bg-white rounded-[8px] px-3 text-[12px] font-semibold outline-none focus:border-[#299E60]"
+                                        >
+                                            <option value="">Choose partner...</option>
+                                            {vendorOptions.filter((v) => v.id !== order.vendor?.id).map((v) => (
+                                                <option key={v.id} value={v.id}>{v.businessName}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={handleReassign} 
+                                    disabled={opsBusy || !reassignTo} 
+                                    className="h-[36px] w-full bg-[#181725] hover:bg-[#2A2B35] text-white text-[12px] font-bold rounded-[8px] disabled:opacity-50 transition-all flex items-center justify-center gap-1.5"
+                                >
+                                    {opsBusy && <Loader2 size={12} className="animate-spin" />}
+                                    Reassign &amp; Re-route
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Right side 1 column: Billing ledger, status overrides, and notes */}
+                <div className="space-y-6">
+                    {/* Status update selector card */}
+                    <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm space-y-4">
+                        <div className="border-b border-[#F3F4F6] pb-2">
+                            <h4 className="text-[14px] font-black text-[#111827] flex items-center gap-1.5">
+                                <CheckCircle2 size={15} className="text-[#299E60]" />
+                                Administrative Status Control
+                            </h4>
+                        </div>
+                        
+                        <div className="space-y-3">
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-[#9CA3AF] uppercase">Set Order Status</label>
+                                <select
+                                    value={selectedStatus}
+                                    onChange={(e) => setSelectedStatus(e.target.value)}
+                                    disabled={updatingStatus}
+                                    className="w-full h-[38px] px-3 bg-white border border-[#D1D5DB] rounded-[8px] text-[13px] font-bold text-[#374151] outline-none focus:border-[#299E60] cursor-pointer"
+                                >
+                                    {ORDER_STATUSES.map((s) => (
+                                        <option key={s} value={s}>
+                                            {s.charAt(0).toUpperCase() + s.slice(1)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <button
+                                onClick={handleStatusUpdate}
+                                disabled={updatingStatus || selectedStatus === order.status}
+                                className={cn(
+                                    'w-full h-[38px] rounded-[8px] text-[12px] font-bold transition-all shadow-sm flex items-center justify-center gap-1.5',
+                                    selectedStatus === order.status
+                                        ? 'bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed border border-[#E5E7EB]'
+                                        : 'bg-[#299E60] text-white hover:bg-[#238A52] border border-[#299E60] cursor-pointer'
+                                )}
+                            >
+                                {updatingStatus ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    'Commit Status Update'
+                                )}
+                            </button>
+                            
+                            {selectedStatus !== order.status && (
+                                <div className="text-[11px] text-[#B45309] bg-[#FFF8EB] border border-[#FEF3C7] p-2.5 rounded-lg flex items-center gap-1 font-bold">
+                                    <CornerDownRight size={13} className="shrink-0" />
+                                    <span>Transitions: {order.status} &rarr; {selectedStatus}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Invoice ledger box */}
+                    <div className="bg-[#FAFAFA] rounded-[16px] border border-[#E5E7EB] p-5 space-y-4 shadow-inner">
+                        <div className="border-b border-[#E5E7EB] pb-2">
+                            <h4 className="text-[14px] font-black text-[#111827] flex items-center gap-1.5">
+                                <Landmark size={15} className="text-[#4B5563]" />
+                                Billing Invoice Summary
+                            </h4>
+                        </div>
+                        
+                        <div className="space-y-3.5 text-[13px] font-medium text-[#4B5563]">
+                            <div className="flex justify-between">
+                                <span>Cart Subtotal</span>
+                                <span className="text-[#111827] font-bold">{formatCurrency(order.subtotal)}</span>
+                            </div>
+                            <div className="flex justify-between pb-3.5 border-b border-dashed border-[#D1D5DB]">
+                                <span>Logistics Surcharge</span>
+                                <span className="text-[#111827] font-bold">{formatCurrency(order.deliveryFee || 0)}</span>
+                            </div>
+                            <div className="flex justify-between items-center pt-1.5">
+                                <span className="text-[14px] font-black text-[#111827]">Grand Total</span>
+                                <span className="text-[20px] font-black text-[#111827]">{formatCurrency(order.totalAmount)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Customer Notes */}
+                    {order.notes && (
+                        <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm space-y-2">
+                            <h4 className="text-[13px] font-black text-[#111827] flex items-center gap-1">
+                                <FileText size={14} className="text-[#9CA3AF]" />
+                                Customer Dispatch Notes
+                            </h4>
+                            <p className="text-[12px] text-[#4B5563] font-semibold bg-[#FAFAFA] border border-[#F3F4F6] p-3 rounded-lg leading-relaxed">
+                                {order.notes}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Credit Ledger transactions */}
+                    {order.creditTxns.length > 0 && (
+                        <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm space-y-3">
+                            <div className="border-b border-[#F3F4F6] pb-2 flex items-center gap-1.5">
+                                <Coins size={15} className="text-[#F59E0B]" />
+                                <h4 className="text-[13px] font-black text-[#111827]">Credit Transactions</h4>
+                            </div>
+                            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                {order.creditTxns.map((txn) => (
+                                    <div
+                                        key={txn.id}
+                                        className="text-[12px] font-semibold py-2.5 border-b border-[#F3F4F6] last:border-0 flex flex-col gap-1.5"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <span className={cn(
+                                                'inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase border tracking-wide',
+                                                txn.type === 'credit'
+                                                    ? 'bg-[#EEF8F1] border-[#299E60]/10 text-[#299E60]'
+                                                    : 'bg-[#FDF2F2] border-[#EF4444]/10 text-[#EF4444]'
+                                            )}>
+                                                {txn.type}
+                                            </span>
+                                            <span className="text-[12px] font-bold text-[#111827]">{formatCurrency(txn.amount)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-[10px] text-[#9CA3AF]">
+                                            <span>{formatDate(txn.createdAt)}</span>
+                                            <span>Balance After: {formatCurrency(txn.balanceAfter)}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

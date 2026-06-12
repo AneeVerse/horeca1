@@ -27,6 +27,9 @@ import {
 import { cn } from '@/lib/utils';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
+import { toast } from 'sonner';
+
+const cellInput = 'bg-transparent border border-transparent hover:border-[#D1D5DB] focus:border-[#299E60] focus:bg-white focus:ring-1 focus:ring-[#299E60]/20 px-1.5 py-1 rounded-[4px] outline-none w-full text-[12.5px] tabular-nums transition-colors';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -122,6 +125,10 @@ export default function CategoriesPage() {
     // Toggle loading tracker
     const [toggleLoadingId, setToggleLoadingId] = useState<string | null>(null);
 
+    // Saving rows state (for inline editing loaders)
+    const [savingRows, setSavingRows] = useState<Set<string>>(new Set());
+    const originalCategoriesRef = useRef<Record<string, Category>>({});
+
     // Expanded parents
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
@@ -138,7 +145,15 @@ export default function CategoriesPage() {
             const res = await fetch('/api/v1/admin/categories');
             const json = await res.json();
             if (!res.ok) throw new Error(json.error || 'Failed to fetch categories');
-            setCategories(json.data ?? json.categories ?? []);
+            const cats = json.data ?? json.categories ?? [];
+            setCategories(cats);
+
+            // Cache original values
+            const cache: Record<string, Category> = {};
+            cats.forEach((c: Category) => {
+                cache[c.id] = JSON.parse(JSON.stringify(c));
+            });
+            originalCategoriesRef.current = cache;
         } catch (err) {
             console.error('Failed to fetch categories:', err);
             setError(err instanceof Error ? err.message : 'Failed to load categories');
@@ -354,8 +369,82 @@ export default function CategoriesPage() {
     };
 
     // -----------------------------------------------------------------------
-    // Toggle active
+    // Cell Editing and Toggle Active
     // -----------------------------------------------------------------------
+
+    const handleCellChange = (catId: string, field: keyof Category, value: any) => {
+        setCategories((prev) =>
+            prev.map((c) => (c.id === catId ? { ...c, [field]: value } : c))
+        );
+    };
+
+    const handleInlineEdit = async (catId: string, field: keyof Category, value: any, originalValue: any) => {
+        if (value === originalValue) return;
+
+        if (field === 'name' && (!value || !value.trim())) {
+            toast.error('Category name cannot be empty');
+            handleCellChange(catId, 'name', originalValue);
+            return;
+        }
+        if (field === 'slug' && (!value || !value.trim())) {
+            toast.error('Category slug cannot be empty');
+            handleCellChange(catId, 'slug', originalValue);
+            return;
+        }
+
+        setSavingRows((prev) => {
+            const next = new Set(prev);
+            next.add(catId);
+            return next;
+        });
+
+        try {
+            let url = `/api/v1/admin/categories/${catId}`;
+            let bodyPayload: Record<string, any> = {};
+
+            if (field === 'approvalStatus') {
+                url = `/api/v1/admin/categories/${catId}/approval`;
+                bodyPayload = {
+                    action: value === 'approved' ? 'approve' : 'reject',
+                    note: 'Status updated inline'
+                };
+            } else {
+                bodyPayload = { [field]: value };
+            }
+
+            const res = await fetch(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bodyPayload),
+            });
+            const json = await res.json();
+
+            if (json.success) {
+                toast.success('Category updated');
+                const updatedCategory = json.data;
+                setCategories(prev => prev.map(c => c.id === catId ? { ...c, ...updatedCategory } : c));
+                if (originalCategoriesRef.current[catId]) {
+                    originalCategoriesRef.current[catId] = {
+                        ...originalCategoriesRef.current[catId],
+                        ...updatedCategory,
+                    };
+                }
+            } else {
+                toast.error(json.error || json.message || 'Failed to update category');
+                handleCellChange(catId, field, originalValue);
+            }
+        } catch (err) {
+            console.error('Failed to update inline category:', err);
+            toast.error('Network error. Failed to save changes.');
+            handleCellChange(catId, field, originalValue);
+        } finally {
+            setSavingRows((prev) => {
+                const next = new Set(prev);
+                next.delete(catId);
+                return next;
+            });
+        }
+    };
 
     const handleToggleActive = async (cat: Category) => {
         setToggleLoadingId(cat.id);
@@ -370,8 +459,13 @@ export default function CategoriesPage() {
             setCategories((prev) =>
                 prev.map((c) => (c.id === cat.id ? { ...c, isActive: !c.isActive } : c))
             );
-        } catch (err) {
+            if (originalCategoriesRef.current[cat.id]) {
+                originalCategoriesRef.current[cat.id].isActive = !cat.isActive;
+            }
+            toast.success('Category active status updated');
+        } catch (err: any) {
             console.error('Toggle active failed:', err);
+            toast.error(err.message || 'Failed to toggle active status');
         } finally {
             setToggleLoadingId(null);
         }
@@ -446,192 +540,13 @@ export default function CategoriesPage() {
         return topLevel.filter((c) => !excludeIds.has(c.id));
     }, [categories, editingCategory]);
 
-    // -----------------------------------------------------------------------
-    // Status badge
-    // -----------------------------------------------------------------------
 
-    const StatusBadge = ({ status }: { status: Category['approvalStatus'] }) => {
-        const config = {
-            approved: {
-                label: 'Approved',
-                bg: 'bg-[#EEF8F1]',
-                text: 'text-[#299E60]',
-                border: 'border-[#299E60]/10',
-                dot: 'bg-[#299E60]',
-            },
-            pending: {
-                label: 'Pending',
-                bg: 'bg-[#FFF7E6]',
-                text: 'text-[#F59E0B]',
-                border: 'border-[#F59E0B]/10',
-                dot: 'bg-[#F59E0B]',
-            },
-            rejected: {
-                label: 'Rejected',
-                bg: 'bg-[#FFF0F0]',
-                text: 'text-[#E74C3C]',
-                border: 'border-[#E74C3C]/10',
-                dot: 'bg-[#E74C3C]',
-            },
-        }[status];
-
-        return (
-            <span
-                className={cn(
-                    'inline-flex items-center gap-1.5 text-[11px] font-[900] px-3 py-1.5 rounded-[8px] uppercase tracking-wider border',
-                    config.bg,
-                    config.text,
-                    config.border
-                )}
-            >
-                <span className={cn('w-1.5 h-1.5 rounded-full', config.dot)} />
-                {config.label}
-            </span>
-        );
-    };
 
     // -----------------------------------------------------------------------
     // Category row renderer
     // -----------------------------------------------------------------------
 
-    const CategoryRow = ({
-        cat,
-        isChild = false,
-        hasChildren = false,
-        isExpanded = false,
-    }: {
-        cat: Category;
-        isChild?: boolean;
-        hasChildren?: boolean;
-        isExpanded?: boolean;
-    }) => (
-        <tr
-            className={cn(
-                'hover:bg-[#F8F9FB] transition-colors group',
-                isChild && 'bg-[#FAFBFC]'
-            )}
-        >
-            {/* Name + Image */}
-            <td className="px-8 py-4">
-                <div className={cn('flex items-center gap-3', isChild && 'pl-8')}>
-                    {/* Expand/collapse or indent indicator */}
-                    {!isChild && hasChildren ? (
-                        <button
-                            onClick={() => toggleExpand(cat.id)}
-                            className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[#EEEEEE] transition-colors shrink-0"
-                        >
-                            {isExpanded ? (
-                                <ChevronDown size={16} className="text-[#7C7C7C]" />
-                            ) : (
-                                <ChevronRight size={16} className="text-[#7C7C7C]" />
-                            )}
-                        </button>
-                    ) : !isChild ? (
-                        <div className="w-6 h-6 shrink-0" />
-                    ) : (
-                        <div className="w-[2px] h-6 bg-[#299E60]/20 rounded-full -ml-4 mr-2 shrink-0" />
-                    )}
 
-                    {/* Thumbnail */}
-                    {cat.imageUrl ? (
-                        <img
-                            src={cat.imageUrl}
-                            alt={cat.name}
-                            className="w-10 h-10 rounded-[10px] object-cover border border-[#EEEEEE] shrink-0"
-                        />
-                    ) : (
-                        <div className="w-10 h-10 rounded-[10px] bg-[#F1F4F9] flex items-center justify-center shrink-0">
-                            <Tag size={16} className="text-[#AEAEAE]" />
-                        </div>
-                    )}
-
-                    <div className="min-w-0">
-                        <p className="text-[15px] font-extrabold text-[#181725] truncate">
-                            {cat.name}
-                        </p>
-                        {isChild && (
-                            <p className="text-[11px] text-[#AEAEAE] font-medium">Subcategory</p>
-                        )}
-                    </div>
-                </div>
-            </td>
-
-            {/* Slug */}
-            <td className="px-6 py-4">
-                <code className="text-[13px] font-mono text-[#7C7C7C] bg-[#F8F9FB] px-2 py-1 rounded-md">
-                    {cat.slug}
-                </code>
-            </td>
-
-            {/* Products */}
-            <td className="px-6 py-4">
-                <div className="flex items-center gap-1.5">
-                    <Package size={14} className="text-[#AEAEAE]" />
-                    <span className="text-[14px] font-bold text-[#181725]">
-                        {cat._count?.products ?? 0}
-                    </span>
-                </div>
-            </td>
-
-            {/* Status */}
-            <td className="px-6 py-4">
-                <StatusBadge status={cat.approvalStatus} />
-            </td>
-
-            {/* Active toggle */}
-            <td className="px-6 py-4">
-                <button
-                    onClick={() => handleToggleActive(cat)}
-                    disabled={toggleLoadingId === cat.id}
-                    className="flex items-center gap-2 disabled:opacity-50"
-                    title={cat.isActive ? 'Click to deactivate' : 'Click to activate'}
-                >
-                    {toggleLoadingId === cat.id ? (
-                        <Loader2 size={20} className="animate-spin text-[#AEAEAE]" />
-                    ) : (
-                        <div
-                            className="relative inline-flex h-[22px] w-[40px] shrink-0 items-center rounded-full transition-colors duration-200"
-                            style={{ backgroundColor: cat.isActive ? '#299E60' : '#D1D5DB' }}
-                        >
-                            <span className="inline-block h-[16px] w-[16px] rounded-full bg-white shadow-sm transition-transform duration-200" style={{ transform: cat.isActive ? 'translateX(20px)' : 'translateX(3px)' }} />
-                        </div>
-                    )}
-                    <span
-                        className={cn(
-                            'text-[12px] font-bold',
-                            cat.isActive ? 'text-[#299E60]' : 'text-[#AEAEAE]'
-                        )}
-                    >
-                        {cat.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                </button>
-            </td>
-
-            {/* Actions */}
-            <td className="px-8 py-4">
-                <div className="flex items-center gap-2">
-                    {perms.canWriteProducts && (
-                        <button
-                            onClick={() => openEditModal(cat)}
-                            className="w-[36px] h-[36px] flex items-center justify-center rounded-[10px] bg-[#F1F4F9] text-[#7C7C7C] hover:bg-[#299E60] hover:text-white transition-all"
-                            title="Edit category"
-                        >
-                            <Edit2 size={15} />
-                        </button>
-                    )}
-                    {perms.canWriteProducts && (
-                        <button
-                            onClick={() => openDeleteModal(cat)}
-                            className="w-[36px] h-[36px] flex items-center justify-center rounded-[10px] bg-[#F1F4F9] text-[#7C7C7C] hover:bg-[#E74C3C] hover:text-white transition-all"
-                            title="Delete category"
-                        >
-                            <Trash2 size={15} />
-                        </button>
-                    )}
-                </div>
-            </td>
-        </tr>
-    );
 
     // -----------------------------------------------------------------------
     // Render
@@ -804,25 +719,28 @@ export default function CategoriesPage() {
 
                 {/* Table */}
                 <div className="overflow-x-auto min-h-[300px]">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse min-w-[1200px]">
                         <thead>
-                            <tr className="bg-[#F8F9FB]">
-                                <th className="px-8 py-5 text-[13px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                            <tr className="bg-[#F8F9FB] text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                <th className="px-8 py-4 sticky left-0 bg-[#F8F9FB] z-20 min-w-[280px]">
                                     Category
                                 </th>
-                                <th className="px-6 py-5 text-[13px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                <th className="px-6 py-4 min-w-[200px]">
                                     Slug
                                 </th>
-                                <th className="px-6 py-5 text-[13px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                <th className="px-6 py-4 min-w-[110px]">
                                     Products
                                 </th>
-                                <th className="px-6 py-5 text-[13px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                <th className="px-6 py-4 min-w-[110px] text-right">
+                                    Sort Order
+                                </th>
+                                <th className="px-6 py-4 min-w-[130px]">
                                     Status
                                 </th>
-                                <th className="px-6 py-5 text-[13px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                <th className="px-6 py-4 min-w-[130px]">
                                     Active
                                 </th>
-                                <th className="px-8 py-5 text-[13px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                <th className="px-8 py-4 text-right sticky right-0 bg-[#F8F9FB] z-20 min-w-[100px]">
                                     Actions
                                 </th>
                             </tr>
@@ -839,6 +757,15 @@ export default function CategoriesPage() {
                                             cat={parent}
                                             hasChildren={hasChildren}
                                             isExpanded={isExpanded}
+                                            toggleExpand={toggleExpand}
+                                            handleCellChange={handleCellChange}
+                                            handleInlineEdit={handleInlineEdit}
+                                            originalCat={originalCategoriesRef.current[parent.id]}
+                                            toggleLoadingId={toggleLoadingId}
+                                            savingRows={savingRows}
+                                            openEditModal={openEditModal}
+                                            openDeleteModal={openDeleteModal}
+                                            handleToggleActive={handleToggleActive}
                                         />
                                         {hasChildren &&
                                             isExpanded &&
@@ -847,6 +774,15 @@ export default function CategoriesPage() {
                                                     key={child.id}
                                                     cat={child}
                                                     isChild
+                                                    toggleExpand={toggleExpand}
+                                                    handleCellChange={handleCellChange}
+                                                    handleInlineEdit={handleInlineEdit}
+                                                    originalCat={originalCategoriesRef.current[child.id]}
+                                                    toggleLoadingId={toggleLoadingId}
+                                                    savingRows={savingRows}
+                                                    openEditModal={openEditModal}
+                                                    openDeleteModal={openDeleteModal}
+                                                    handleToggleActive={handleToggleActive}
                                                 />
                                             ))}
                                     </React.Fragment>
@@ -855,7 +791,7 @@ export default function CategoriesPage() {
 
                             {filteredCategories.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="px-8 py-20 text-center">
+                                    <td colSpan={7} className="px-8 py-20 text-center">
                                         <div className="flex flex-col items-center gap-3">
                                             <div className="w-16 h-16 bg-[#F8F9FB] rounded-full flex items-center justify-center text-[#AEAEAE]">
                                                 <FolderTree size={32} />
@@ -884,185 +820,195 @@ export default function CategoriesPage() {
             </div>
 
             {/* ============================================================= */}
-            {/* Add / Edit Modal */}
+            {/* Add / Edit Sliding Panel                                       */}
             {/* ============================================================= */}
-            {showFormModal && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-                    onClick={closeFormModal}
-                >
-                    <div
-                        className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-2xl w-full max-w-[540px] mx-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200"
-                        onClick={(e) => e.stopPropagation()}
+
+            {/* Backdrop */}
+            <div
+                className={cn(
+                    'fixed inset-0 bg-black/40 z-[60] transition-opacity duration-300',
+                    showFormModal ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
+                )}
+                onClick={closeFormModal}
+            />
+
+            {/* Panel */}
+            <div
+                className={cn(
+                    'fixed top-0 right-0 h-full w-full max-w-[540px] bg-white z-[70] shadow-2xl transition-transform duration-300 ease-in-out flex flex-col',
+                    showFormModal ? 'translate-x-0' : 'translate-x-full',
+                )}
+            >
+                {/* Panel Header */}
+                <div className="flex items-center justify-between px-8 py-6 border-b border-[#EEEEEE] shrink-0">
+                    <h2 className="text-[22px] font-[900] text-[#181725]">
+                        {editingCategory ? 'Edit Category' : 'Add Category'}
+                    </h2>
+                    <button
+                        onClick={closeFormModal}
+                        className="w-[40px] h-[40px] rounded-[12px] flex items-center justify-center hover:bg-[#F8F9FB] text-[#7C7C7C] hover:text-[#181725] transition-all"
                     >
-                        {/* Modal header */}
-                        <div className="flex items-center justify-between p-6 border-b border-[#EEEEEE]">
-                            <h2 className="text-[20px] font-[900] text-[#181725]">
-                                {editingCategory ? 'Edit Category' : 'Add New Category'}
-                            </h2>
-                            <button
-                                onClick={closeFormModal}
-                                className="w-[36px] h-[36px] flex items-center justify-center rounded-[10px] bg-[#F1F4F9] text-[#7C7C7C] hover:bg-[#EEEEEE] transition-colors"
-                            >
-                                <X size={18} />
-                            </button>
+                        <X size={20} />
+                    </button>
+                </div>
+
+                {/* Panel Body */}
+                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 bg-[#F8F9FB]">
+                    {formError && (
+                        <div className="flex items-center gap-3 bg-[#FFF0F0] border border-[#E74C3C]/20 text-[#E74C3C] rounded-[12px] px-5 py-4 text-[13px] font-semibold">
+                            <AlertTriangle size={18} />
+                            {formError}
+                        </div>
+                    )}
+
+                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-5">
+                        {/* Name */}
+                        <div>
+                            <label className="block text-[13px] font-bold text-[#181725] mb-2">
+                                Name <span className="text-[#E74C3C]">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={formData.name}
+                                onChange={(e) => handleNameChange(e.target.value)}
+                                placeholder="e.g. Dairy & Milk Products"
+                                className="w-full h-[46px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
+                                autoFocus
+                            />
                         </div>
 
-                        {/* Modal body */}
-                        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                            {formError && (
-                                <div className="bg-[#FFF0F0] border border-[#E74C3C]/20 rounded-[10px] p-3 flex items-center gap-2">
-                                    <AlertTriangle size={16} className="text-[#E74C3C] shrink-0" />
-                                    <p className="text-[13px] font-medium text-[#E74C3C]">
-                                        {formError}
-                                    </p>
-                                </div>
-                            )}
+                        {/* Slug */}
+                        <div>
+                            <label className="block text-[13px] font-bold text-[#181725] mb-2">
+                                Slug <span className="text-[#E74C3C]">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={formData.slug}
+                                onChange={(e) => handleSlugChange(e.target.value)}
+                                placeholder="auto-generated-from-name"
+                                className="w-full h-[46px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-mono font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
+                            />
+                            <p className="text-[11px] text-[#AEAEAE] mt-1.5 font-medium">
+                                Auto-generated from name. Edit manually if needed.
+                            </p>
+                        </div>
 
-                            {/* Name */}
+                        {/* Parent Category */}
+                        <div>
+                            <label className="block text-[13px] font-bold text-[#181725] mb-2">
+                                Parent Category
+                            </label>
+                            <select
+                                value={formData.parentId || ''}
+                                onChange={(e) =>
+                                    setFormData((prev) => ({
+                                        ...prev,
+                                        parentId: e.target.value || null,
+                                    }))
+                                }
+                                className="w-full h-[46px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm appearance-none cursor-pointer"
+                            >
+                                <option value="">None (Top-level category)</option>
+                                {parentOptions.map((cat) => (
+                                    <option key={cat.id} value={cat.id}>
+                                        {cat.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Category Image */}
+                        <div>
+                            <ImageUpload
+                                value={formData.imageUrl}
+                                onChange={(url) =>
+                                    setFormData((prev) => ({
+                                        ...prev,
+                                        imageUrl: url,
+                                    }))
+                                }
+                                folder="categories"
+                                label="Category Image"
+                                size="md"
+                            />
+                        </div>
+
+                        {/* Sort Order + Is Active row */}
+                        <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-[13px] font-bold text-[#181725] mb-2">
-                                    Name <span className="text-[#E74C3C]">*</span>
+                                    Sort Order
                                 </label>
                                 <input
-                                    type="text"
-                                    value={formData.name}
-                                    onChange={(e) => handleNameChange(e.target.value)}
-                                    placeholder="e.g. Dairy & Milk Products"
-                                    className="w-full h-[46px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
-                                    autoFocus
-                                />
-                            </div>
-
-                            {/* Slug */}
-                            <div>
-                                <label className="block text-[13px] font-bold text-[#181725] mb-2">
-                                    Slug <span className="text-[#E74C3C]">*</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={formData.slug}
-                                    onChange={(e) => handleSlugChange(e.target.value)}
-                                    placeholder="auto-generated-from-name"
-                                    className="w-full h-[46px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-mono font-medium outline-none transition-all placeholder:text-[#AEAEAE] focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
-                                />
-                                <p className="text-[11px] text-[#AEAEAE] mt-1.5 font-medium">
-                                    Auto-generated from name. Edit manually if needed.
-                                </p>
-                            </div>
-
-                            {/* Parent Category */}
-                            <div>
-                                <label className="block text-[13px] font-bold text-[#181725] mb-2">
-                                    Parent Category
-                                </label>
-                                <select
-                                    value={formData.parentId || ''}
+                                    type="number"
+                                    min={0}
+                                    value={formData.sortOrder}
                                     onChange={(e) =>
                                         setFormData((prev) => ({
                                             ...prev,
-                                            parentId: e.target.value || null,
+                                            sortOrder: parseInt(e.target.value, 10) || 0,
                                         }))
                                     }
-                                    className="w-full h-[46px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm appearance-none cursor-pointer"
-                                >
-                                    <option value="">None (Top-level category)</option>
-                                    {parentOptions.map((cat) => (
-                                        <option key={cat.id} value={cat.id}>
-                                            {cat.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Category Image */}
-                            <div>
-                                <ImageUpload
-                                    value={formData.imageUrl}
-                                    onChange={(url) =>
-                                        setFormData((prev) => ({
-                                            ...prev,
-                                            imageUrl: url,
-                                        }))
-                                    }
-                                    folder="categories"
-                                    label="Category Image"
-                                    size="md"
+                                    className="w-full h-[46px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
                                 />
                             </div>
-
-                            {/* Sort Order + Is Active row */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[13px] font-bold text-[#181725] mb-2">
-                                        Sort Order
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        value={formData.sortOrder}
-                                        onChange={(e) =>
-                                            setFormData((prev) => ({
-                                                ...prev,
-                                                sortOrder: parseInt(e.target.value, 10) || 0,
-                                            }))
-                                        }
-                                        className="w-full h-[46px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm"
-                                    />
-                                </div>
-                                <div className="flex items-end pb-1">
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            setFormData((prev) => ({
-                                                ...prev,
-                                                isActive: !prev.isActive,
-                                            }))
-                                        }
-                                        className="flex items-center gap-3 select-none"
+                            <div className="flex items-end pb-1">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setFormData((prev) => ({
+                                            ...prev,
+                                            isActive: !prev.isActive,
+                                        }))
+                                    }
+                                    className="flex items-center gap-3 select-none"
+                                >
+                                    <div
+                                        className={cn(
+                                            'relative w-[44px] h-[24px] rounded-full transition-colors',
+                                            formData.isActive ? 'bg-[#299E60]' : 'bg-[#EEEEEE]'
+                                        )}
                                     >
                                         <div
                                             className={cn(
-                                                'relative w-[44px] h-[24px] rounded-full transition-colors',
-                                                formData.isActive ? 'bg-[#299E60]' : 'bg-[#EEEEEE]'
+                                                'absolute top-[2px] left-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-sm transition-transform',
+                                                formData.isActive && 'translate-x-[20px]'
                                             )}
-                                        >
-                                            <div
-                                                className={cn(
-                                                    'absolute top-[2px] left-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-sm transition-transform',
-                                                    formData.isActive && 'translate-x-[20px]'
-                                                )}
-                                            />
-                                        </div>
-                                        <span className="text-[13px] font-bold text-[#181725]">
-                                            Is Active
-                                        </span>
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Submit button */}
-                            <div className="flex items-center gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={closeFormModal}
-                                    className="flex-1 h-[46px] bg-[#F8F9FB] border border-[#EEEEEE] text-[#7C7C7C] rounded-[10px] text-[14px] font-bold hover:bg-[#EEEEEE] transition-all"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={formLoading}
-                                    className="flex-1 h-[46px] bg-[#299E60] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#238a54] shadow-sm shadow-[#299E60]/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    {formLoading && <Loader2 size={16} className="animate-spin" />}
-                                    {editingCategory ? 'Update Category' : 'Create Category'}
+                                        />
+                                    </div>
+                                    <span className="text-[13px] font-bold text-[#181725]">
+                                        Is Active
+                                    </span>
                                 </button>
                             </div>
-                        </form>
+                        </div>
                     </div>
                 </div>
-            )}
+
+                {/* Panel Footer */}
+                <div className="px-8 py-6 border-t border-[#EEEEEE] shrink-0 flex items-center gap-4">
+                    <button
+                        type="button"
+                        onClick={closeFormModal}
+                        className="flex-1 h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[12px] text-[14px] font-bold hover:bg-[#EEEEEE] transition-all"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            handleSubmit(e as any);
+                        }}
+                        disabled={formLoading}
+                        className="flex-1 h-[48px] bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] shadow-sm shadow-[#299E60]/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                        {formLoading && <Loader2 size={16} className="animate-spin" />}
+                        {editingCategory ? 'Update Category' : 'Create Category'}
+                    </button>
+                </div>
+            </div>
 
             {/* ============================================================= */}
             {/* Delete Confirmation Modal */}
@@ -1261,3 +1207,274 @@ export default function CategoriesPage() {
         </div>
     );
 }
+
+const CategoryRow = ({
+    cat,
+    isChild = false,
+    hasChildren = false,
+    isExpanded = false,
+    toggleExpand,
+    handleCellChange,
+    handleInlineEdit,
+    originalCat,
+    toggleLoadingId,
+    savingRows,
+    openEditModal,
+    openDeleteModal,
+    handleToggleActive,
+}: {
+    cat: Category;
+    isChild?: boolean;
+    hasChildren?: boolean;
+    isExpanded?: boolean;
+    toggleExpand: (id: string) => void;
+    handleCellChange: (catId: string, field: keyof Category, value: any) => void;
+    handleInlineEdit: (catId: string, field: keyof Category, value: any, originalValue: any) => Promise<void>;
+    originalCat?: Category;
+    toggleLoadingId: string | null;
+    savingRows: Set<string>;
+    openEditModal: (cat: Category) => void;
+    openDeleteModal: (cat: Category) => void;
+    handleToggleActive: (cat: Category) => void;
+}) => {
+    const perms = useAdminPermissions();
+
+    return (
+        <tr
+            className={cn(
+                'hover:bg-[#F8F9FB]/60 transition-colors group text-[13px]',
+                isChild && 'bg-[#FAFBFC]'
+            )}
+        >
+            {/* Name + Image (sticky left) */}
+            <td className={cn(
+                "px-8 py-3 sticky left-0 z-10 border-r border-[#EEEEEE]/40 transition-colors",
+                isChild ? "bg-[#FAFBFC] group-hover:bg-[#F8F9FB]" : "bg-white group-hover:bg-[#F8F9FB]"
+            )}>
+                <div className={cn('flex items-center gap-3', isChild && 'pl-8')}>
+                    {/* Expand/collapse or indent indicator */}
+                    {!isChild && hasChildren ? (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleExpand(cat.id);
+                            }}
+                            className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[#EEEEEE] transition-colors shrink-0"
+                        >
+                            {isExpanded ? (
+                                <ChevronDown size={16} className="text-[#7C7C7C]" />
+                            ) : (
+                                <ChevronRight size={16} className="text-[#7C7C7C]" />
+                            )}
+                        </button>
+                    ) : !isChild ? (
+                        <div className="w-6 h-6 shrink-0" />
+                    ) : (
+                        <div className="flex items-center text-gray-300 -ml-5 mr-1 shrink-0 select-none">
+                            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M9 5v7a2 2 0 0 0 2 2h8" />
+                            </svg>
+                        </div>
+                    )}
+
+                    {/* Thumbnail */}
+                    {cat.imageUrl ? (
+                        <img
+                            src={cat.imageUrl}
+                            alt={cat.name}
+                            className="w-9 h-9 rounded-[8px] object-cover border border-[#EEEEEE] shrink-0"
+                        />
+                    ) : (
+                        <div className="w-9 h-9 rounded-[8px] bg-[#F1F4F9] flex items-center justify-center shrink-0">
+                            <Tag size={15} className="text-[#AEAEAE]" />
+                        </div>
+                    )}
+
+                    <div className="min-w-0 flex-1">
+                        <input
+                            type="text"
+                            value={cat.name}
+                            onChange={e => handleCellChange(cat.id, 'name', e.target.value)}
+                            onBlur={e => handleInlineEdit(cat.id, 'name', e.target.value, originalCat?.name)}
+                            className={cn(cellInput, isChild ? "font-semibold text-[#4B5563] text-[13px] -ml-1.5 px-1.5 py-0.5" : "font-extrabold text-[#181725] text-[13.5px] -ml-1.5 px-1.5 py-0.5")}
+                        />
+                        {isChild && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase tracking-wider bg-[#F3F4F6] text-[#6B7280] rounded-[4px] mt-1 select-none">
+                                Subcategory
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </td>
+
+            {/* Slug */}
+            <td className="px-6 py-3 border-r border-[#EEEEEE]/40">
+                <input
+                    type="text"
+                    value={cat.slug}
+                    onChange={e => handleCellChange(cat.id, 'slug', e.target.value)}
+                    onBlur={e => handleInlineEdit(cat.id, 'slug', e.target.value, originalCat?.slug)}
+                    className={cn(cellInput, "font-mono text-[#7C7C7C] px-1.5 py-0.5")}
+                />
+            </td>
+
+            {/* Products */}
+            <td className="px-6 py-3 border-r border-[#EEEEEE]/40">
+                <div className="flex items-center gap-1.5 px-1.5 font-semibold text-[#181725]">
+                    <Package size={14} className="text-[#AEAEAE]" />
+                    <span>{cat._count?.products ?? 0}</span>
+                </div>
+            </td>
+
+            {/* Sort Order */}
+            <td className="px-6 py-3 border-r border-[#EEEEEE]/40 bg-[#FAFAFA]/10">
+                <input
+                    type="number"
+                    value={cat.sortOrder}
+                    onChange={e => handleCellChange(cat.id, 'sortOrder', parseInt(e.target.value, 10) || 0)}
+                    onBlur={e => handleInlineEdit(cat.id, 'sortOrder', parseInt(e.target.value, 10) || 0, originalCat?.sortOrder ?? 0)}
+                    className={cn(cellInput, "text-right font-medium text-[#7C7C7C] max-w-[65px] px-1.5 py-0.5 ml-auto")}
+                />
+            </td>
+
+            {/* Status */}
+            <td className="px-6 py-3 border-r border-[#EEEEEE]/40">
+                <select
+                    value={cat.approvalStatus}
+                    onChange={e => {
+                        const val = e.target.value as Category['approvalStatus'];
+                        handleCellChange(cat.id, 'approvalStatus', val);
+                        handleInlineEdit(cat.id, 'approvalStatus', val, originalCat?.approvalStatus);
+                    }}
+                    className={cn(cellInput, "font-semibold appearance-none py-1 px-1.5 cursor-pointer max-w-[110px]", 
+                        cat.approvalStatus === 'approved' && "text-[#299E60]",
+                        cat.approvalStatus === 'pending' && "text-[#F59E0B]",
+                        cat.approvalStatus === 'rejected' && "text-[#E74C3C]"
+                    )}
+                >
+                    <option value="pending" className="text-[#F59E0B] font-semibold">Pending</option>
+                    <option value="approved" className="text-[#299E60] font-semibold">Approved</option>
+                    <option value="rejected" className="text-[#E74C3C] font-semibold">Rejected</option>
+                </select>
+            </td>
+
+            {/* Active toggle */}
+            <td className="px-6 py-3 border-r border-[#EEEEEE]/40">
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleToggleActive(cat);
+                    }}
+                    disabled={toggleLoadingId === cat.id}
+                    className="flex items-center gap-2 disabled:opacity-50 px-1 py-0.5"
+                    title={cat.isActive ? 'Click to deactivate' : 'Click to activate'}
+                >
+                    {toggleLoadingId === cat.id ? (
+                        <Loader2 size={15} className="animate-spin text-[#AEAEAE]" />
+                    ) : (
+                        <div
+                            className="relative inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full transition-colors duration-200"
+                            style={{ backgroundColor: cat.isActive ? '#299E60' : '#D1D5DB' }}
+                        >
+                            <span className="inline-block h-[12px] w-[12px] rounded-full bg-white shadow-sm transition-transform duration-200" style={{ transform: cat.isActive ? 'translateX(17px)' : 'translateX(3px)' }} />
+                        </div>
+                    )}
+                    <span
+                        className={cn(
+                            'text-[12.5px] font-bold',
+                            cat.isActive ? 'text-[#299E60]' : 'text-[#AEAEAE]'
+                        )}
+                    >
+                        {cat.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                </button>
+            </td>
+
+            {/* Actions (sticky right) */}
+            <td className="px-8 py-3 sticky right-0 bg-white group-hover:bg-[#F8F9FB] z-10 border-l border-[#EEEEEE]/40 text-right">
+                <div className="flex items-center justify-end gap-2">
+                    {savingRows.has(cat.id) ? (
+                        <Loader2 size={16} className="animate-spin text-[#299E60] mx-auto mr-4" />
+                    ) : (
+                        <>
+                            {perms.canWriteProducts && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        openEditModal(cat);
+                                    }}
+                                    className="w-[32px] h-[32px] flex items-center justify-center rounded-[8px] bg-[#F1F4F9] text-[#7C7C7C] hover:bg-[#EEF8F1] hover:text-[#299E60] transition-all"
+                                    title="Edit category"
+                                >
+                                    <Edit2 size={14} />
+                                </button>
+                            )}
+                            {perms.canWriteProducts && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        openDeleteModal(cat);
+                                    }}
+                                    className="w-[32px] h-[32px] flex items-center justify-center rounded-[8px] bg-[#F1F4F9] text-[#7C7C7C] hover:bg-[#FFF0F0] hover:text-[#E74C3C] transition-all"
+                                    title="Delete category"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                            )}
+                        </>
+                    )}
+                </div>
+            </td>
+        </tr>
+    );
+}
+
+const StatusBadge = ({ status }: { status: Category['approvalStatus'] }) => {
+    const config = {
+        approved: {
+            label: 'Approved',
+            bg: 'bg-[#EEF8F1]',
+            text: 'text-[#299E60]',
+            border: 'border-[#299E60]/10',
+            dot: 'bg-[#299E60]',
+        },
+        pending: {
+            label: 'Pending',
+            bg: 'bg-[#FFF7E6]',
+            text: 'text-[#F59E0B]',
+            border: 'border-[#F59E0B]/10',
+            dot: 'bg-[#F59E0B]',
+        },
+        rejected: {
+            label: 'Rejected',
+            bg: 'bg-[#FFF0F0]',
+            text: 'text-[#E74C3C]',
+            border: 'border-[#E74C3C]/10',
+            dot: 'bg-[#E74C3C]',
+        },
+    }[status];
+
+    return (
+        <span
+            className={cn(
+                'inline-flex items-center gap-1.5 text-[11px] font-[900] px-3 py-1.5 rounded-[8px] uppercase tracking-wider border',
+                config.bg,
+                config.text,
+                config.border
+            )}
+        >
+            <span className={cn('w-1.5 h-1.5 rounded-full', config.dot)} />
+            {config.label}
+        </span>
+    );
+};
+
+

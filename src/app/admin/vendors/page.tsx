@@ -15,6 +15,13 @@ import {
     List,
     LayoutDashboard,
     Plus,
+    Users,
+    Boxes,
+    ShoppingBag,
+    ShieldCheck,
+    AlertCircle,
+    Building2,
+    ArrowUpRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddVendorWizard } from '@/components/features/admin/AddVendorWizard';
@@ -49,9 +56,7 @@ export default function VendorsPage() {
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
 
-    // Add-Vendor wizard. All form state lives inside the wizard component
-    // (src/components/features/admin/AddVendorWizard.tsx) so this page only
-    // tracks "is the modal open" and consumes the resulting vendor on close.
+    // Add-Vendor wizard modal open state
     const [showCreate, setShowCreate] = useState(false);
 
     const viewDashboard = async (vendorId: string) => {
@@ -93,275 +98,395 @@ export default function VendorsPage() {
         }
     };
 
+    // Calculate metrics for stats cards
+    const totalVendors = vendors.length;
+    const pendingVerification = vendors.filter(v => !v.isVerified).length;
+    const totalProducts = vendors.reduce((sum, v) => sum + (v._count?.products || 0), 0);
+    const totalOrders = vendors.reduce((sum, v) => sum + (v._count?.orders || 0), 0);
+
     return (
-        <div className="space-y-8 pb-10">
+        <div className="space-y-8 pb-10 px-4 md:px-0">
             {/* Page Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-[#EEEEEE] pb-5">
                 <div>
-                    <h1 className="text-[28px] font-bold text-[#000000] leading-none mb-1">Vendors List</h1>
-                    <p className="text-[#000000] text-[13px] font-medium opacity-70">Whole data about your Vendors</p>
+                    <h1 className="text-[30px] font-extrabold text-[#111827] tracking-tight mb-1">Vendors Registry</h1>
+                    <p className="text-[#6B7280] text-[14px] font-medium">Manage and audit commercial supplier profiles, catalog size, and onboarding verification</p>
                 </div>
 
                 <div className="flex items-center gap-3">
                     {perms.canWriteSettings && (
                         <button
                             onClick={() => setShowCreate(true)}
-                            className="h-[44px] px-5 bg-[#299E60] text-white rounded-[12px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 shrink-0"
+                            className="h-[44px] px-5 bg-[#299E60] text-white rounded-[12px] text-[13px] font-bold hover:bg-[#238a54] active:scale-95 transition-all shadow-md shadow-[#299E60]/10 flex items-center gap-2 shrink-0"
                         >
                             <Plus size={16} />
                             Add Vendor
                         </button>
                     )}
-                    <div className="relative group w-full md:w-[240px]">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={16} />
-                        <input
-                            type="text"
-                            placeholder="Search Vendors..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="h-[44px] w-full bg-white border border-[#EEEEEE] rounded-[12px] pl-10 pr-4 text-[13px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 shadow-sm"
-                        />
+                </div>
+            </div>
+
+            {/* Dashboard Mini Stats Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {/* Stat 1: Total Sellers */}
+                <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-[12px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]">
+                        <Users size={22} />
                     </div>
-                    {/* Grid / Table toggle */}
-                    <div className="flex items-center bg-white border border-[#EEEEEE] rounded-[10px] p-1 shadow-sm">
+                    <div>
+                        <span className="text-[12px] font-bold text-[#9CA3AF] uppercase tracking-wider block">Total Sellers</span>
+                        <span className="text-[22px] font-black text-[#1F2937] leading-none mt-1 inline-block">{totalVendors}</span>
+                    </div>
+                </div>
+
+                {/* Stat 2: Pending Approval */}
+                <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-[12px] bg-[#FFF8EB] flex items-center justify-center text-[#D97706]">
+                        <ShieldCheck size={22} className="text-[#D97706] opacity-60" />
+                    </div>
+                    <div>
+                        <span className="text-[12px] font-bold text-[#9CA3AF] uppercase tracking-wider block">Pending Approval</span>
+                        <span className="text-[22px] font-black text-[#1F2937] leading-none mt-1 inline-block">{pendingVerification}</span>
+                    </div>
+                </div>
+
+                {/* Stat 3: Products Catalog */}
+                <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-[12px] bg-[#EFF6FF] flex items-center justify-center text-[#3B82F6]">
+                        <Boxes size={22} />
+                    </div>
+                    <div>
+                        <span className="text-[12px] font-bold text-[#9CA3AF] uppercase tracking-wider block">Total Products</span>
+                        <span className="text-[22px] font-black text-[#1F2937] leading-none mt-1 inline-block">{totalProducts}</span>
+                    </div>
+                </div>
+
+                {/* Stat 4: Total Orders */}
+                <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-[12px] bg-[#FDF2F2] flex items-center justify-center text-[#EF4444]">
+                        <ShoppingBag size={22} />
+                    </div>
+                    <div>
+                        <span className="text-[12px] font-bold text-[#9CA3AF] uppercase tracking-wider block">Orders Placed</span>
+                        <span className="text-[22px] font-black text-[#1F2937] leading-none mt-1 inline-block">{totalOrders}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Filter Panel */}
+            <div className="bg-white p-4 rounded-[16px] border border-[#EEEEEE] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                {/* Search Bar */}
+                <div className="relative group w-full sm:w-[320px]">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" size={16} />
+                    <input
+                        type="text"
+                        placeholder="Search by vendor, owner, email..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="h-[42px] w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-[10px] pl-10 pr-4 text-[13px] outline-none transition-all placeholder:text-[#9CA3AF] font-medium focus:border-[#299E60]/50 focus:bg-white focus:shadow-sm"
+                    />
+                </div>
+
+                {/* View Toggler */}
+                <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+                    <span className="text-[12px] font-bold text-[#9CA3AF] uppercase mr-1 hidden md:inline">View:</span>
+                    <div className="flex items-center bg-[#F3F4F6] border border-[#E5E7EB] rounded-[10px] p-1">
                         <button
                             onClick={() => setViewMode('grid')}
                             className={cn(
-                                "p-2 rounded-[8px] transition-all",
-                                viewMode === 'grid' ? "bg-[#299E60] text-white shadow-sm" : "text-[#AEAEAE] hover:text-[#181725]"
+                                "p-2 rounded-[8px] transition-all flex items-center gap-1.5 text-[12px] font-bold",
+                                viewMode === 'grid' ? "bg-white text-[#111827] shadow-sm" : "text-[#6B7280] hover:text-[#111827]"
                             )}
                         >
-                            <LayoutGrid size={18} />
+                            <LayoutGrid size={15} />
+                            <span className="hidden sm:inline">Cards</span>
                         </button>
                         <button
                             onClick={() => setViewMode('table')}
                             className={cn(
-                                "p-2 rounded-[8px] transition-all",
-                                viewMode === 'table' ? "bg-[#299E60] text-white shadow-sm" : "text-[#AEAEAE] hover:text-[#181725]"
+                                "p-2 rounded-[8px] transition-all flex items-center gap-1.5 text-[12px] font-bold",
+                                viewMode === 'table' ? "bg-white text-[#111827] shadow-sm" : "text-[#6B7280] hover:text-[#111827]"
                             )}
                         >
-                            <List size={18} />
+                            <List size={15} />
+                            <span className="hidden sm:inline">Table</span>
                         </button>
                     </div>
                 </div>
             </div>
 
             {loading ? (
-                <div className="flex items-center justify-center py-20">
-                    <Loader2 className="animate-spin text-[#299E60]" size={32} />
+                <div className="flex flex-col items-center justify-center py-24 gap-3 bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm">
+                    <Loader2 className="animate-spin text-[#299E60]" size={36} />
+                    <span className="text-[13px] font-bold text-[#6B7280]">Loading vendors directory...</span>
                 </div>
             ) : filteredVendors.length === 0 ? (
-                <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-20 text-center text-[#AEAEAE] font-medium">
-                    {searchQuery ? `No vendors found matching "${searchQuery}"` : 'No vendors yet'}
+                <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-24 text-center text-[#6B7280] font-medium shadow-sm">
+                    <Building2 className="mx-auto text-[#D1D5DB] mb-3" size={40} />
+                    {searchQuery ? (
+                        <>
+                            <h4 className="text-[15px] font-bold text-[#374151]">No matched results</h4>
+                            <p className="text-[13px] text-[#9CA3AF] mt-1">We couldn't find any vendor matching "{searchQuery}"</p>
+                        </>
+                    ) : (
+                        <>
+                            <h4 className="text-[15px] font-bold text-[#374151]">No vendors registered yet</h4>
+                            <p className="text-[13px] text-[#9CA3AF] mt-1">Click the "Add Vendor" button to register your first seller partner.</p>
+                        </>
+                    )}
                 </div>
             ) : (
-            /* Vendors — Grid or Table view */
+            /* Vendors Display Area */
             viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-[24px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredVendors.map((vendor) => (
                     <div
                         key={vendor.id}
-                        className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden flex flex-col h-full hover:shadow-md transition-all max-w-[381px] w-full mx-auto"
+                        className="bg-white rounded-[16px] border border-[#E5E7EB] shadow-sm overflow-hidden flex flex-col h-full hover:shadow-md hover:border-[#299E60]/30 hover:-translate-y-0.5 transition-all w-full"
                     >
-                        {/* Top Logo Box */}
-                        <div className="p-3">
-                            <div className="bg-[#F1F4F9] rounded-[12px] h-[144px] relative flex items-center justify-center p-6">
-                                {/* Verification badge */}
+                        {/* Upper Section */}
+                        <div className="p-4 flex-1 flex flex-col">
+                            {/* Visual Logo Container */}
+                            <div className="bg-[#F9FAFB] rounded-[12px] h-[120px] relative flex items-center justify-center p-4 border border-[#F3F4F6] mb-4">
+                                {/* Verification Status Pin */}
                                 <div className={cn(
-                                    "absolute top-3 left-3 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold",
-                                    vendor.isVerified ? "bg-[#EEF8F1] text-[#299E60]" : "bg-[#FFF4E5] text-[#976538]"
+                                    "absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm border",
+                                    vendor.isVerified 
+                                        ? "bg-[#EEF8F1] border-[#299E60]/20 text-[#299E60]" 
+                                        : "bg-[#FFF8EB] border-[#D97706]/20 text-[#D97706]"
                                 )}>
-                                    {vendor.isVerified ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                                    {vendor.isVerified ? 'Verified' : 'Pending'}
+                                    {vendor.isVerified ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
+                                    {vendor.isVerified ? 'Verified' : 'Pending Verification'}
                                 </div>
+
                                 {vendor.logoUrl ? (
                                     <img
                                         src={vendor.logoUrl}
                                         alt={vendor.businessName}
-                                        className="w-[100px] h-[100px] object-contain rounded-full"
+                                        className="w-[80px] h-[80px] object-contain rounded-lg"
                                     />
                                 ) : (
-                                    <div className="w-[100px] h-[100px] rounded-full bg-[#299E60]/10 flex items-center justify-center">
-                                        <span className="text-[32px] font-black text-[#299E60]">
+                                    <div className="w-[70px] h-[70px] rounded-full bg-[#299E60]/10 flex items-center justify-center border border-[#299E60]/20">
+                                        <span className="text-[26px] font-black text-[#299E60]">
                                             {vendor.businessName.charAt(0)}
                                         </span>
                                     </div>
                                 )}
                             </div>
-                        </div>
 
-                        {/* Content Area */}
-                        <div className="px-6 pb-6 pt-2 flex flex-col flex-1">
-                            <div className="mb-4">
-                                <div className="flex items-center justify-between gap-1.5">
-                                    <h3 className="text-[17px] font-extrabold text-[#181725] line-clamp-1">{vendor.businessName}</h3>
-                                    <div className="flex items-center gap-1.5 bg-[#F5F9FD] px-2 py-1 rounded-md shrink-0">
-                                        <Star size={14} fill="#F59E0B" className="text-[#F59E0B]" />
-                                        <span className="text-[13px] font-bold text-[#181725]">{Number(vendor.rating).toFixed(1)}</span>
+                            {/* Name & Star */}
+                            <div className="mb-3">
+                                <div className="flex items-start justify-between gap-2">
+                                    <h3 className="text-[16px] font-extrabold text-[#111827] line-clamp-1 group-hover:text-[#299E60]">{vendor.businessName}</h3>
+                                    <div className="flex items-center gap-1 bg-[#FFFBEB] border border-[#FDE68A] px-1.5 py-0.5 rounded-md shrink-0">
+                                        <Star size={12} fill="#F59E0B" className="text-[#F59E0B]" />
+                                        <span className="text-[11px] font-bold text-[#D97706]">{Number(vendor.rating).toFixed(1)}</span>
                                     </div>
                                 </div>
-                                <p className="text-[13px] text-[#7C7C7C] font-medium mt-1">Owner: {vendor.user.fullName}</p>
+                                <span className="text-[12px] text-[#6B7280] font-semibold block mt-0.5">Owner: {vendor.user.fullName}</span>
                             </div>
 
-                            {/* Contact Details */}
-                            <div className="space-y-3 my-2">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-[32px] h-[32px] rounded-[10px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
-                                        <Mail size={15} />
-                                    </div>
-                                    <span className="text-[13px] font-[800] text-[#7C7C7C] truncate">{vendor.user.email}</span>
+                            {/* Details Details */}
+                            <div className="space-y-2 mt-auto pt-2 border-t border-[#F3F4F6]">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <Mail size={13} className="text-[#9CA3AF] shrink-0" />
+                                    <span className="text-[12px] font-medium text-[#4B5563] truncate">{vendor.user.email}</span>
                                 </div>
                                 {vendor.user.phone && (
-                                <div className="flex items-center gap-3">
-                                    <div className="w-[32px] h-[32px] rounded-[10px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
-                                        <Phone size={15} />
-                                    </div>
-                                    <span className="text-[13px] font-[800] text-[#7C7C7C]">{vendor.user.phone}</span>
+                                <div className="flex items-center gap-2">
+                                    <Phone size={13} className="text-[#9CA3AF] shrink-0" />
+                                    <span className="text-[12px] font-medium text-[#4B5563]">{vendor.user.phone}</span>
                                 </div>
                                 )}
                             </div>
 
-                            {/* Stats Row */}
-                            <div className="mt-auto flex items-center border-t border-[#EEEEEE] -mx-6 pt-6 px-6">
-                                <div className="flex-1 text-center">
-                                    <p className="text-[16px] font-[900] text-[#181725] leading-none">{vendor._count.products}</p>
-                                    <p className="text-[12px] font-bold text-[#AEAEAE] mt-2">Products</p>
+                            {/* Core Counts */}
+                            <div className="flex items-center justify-around border-t border-[#F3F4F6] pt-3 mt-4 -mx-4 px-4 bg-[#F9FAFB] rounded-b-[10px]">
+                                <div className="text-center py-1 flex-1">
+                                    <p className="text-[14px] font-black text-[#111827] leading-none">{vendor._count.products}</p>
+                                    <p className="text-[10px] font-bold text-[#9CA3AF] mt-1 uppercase">Products</p>
                                 </div>
-                                <div className="w-[1px] h-10 bg-[#EEEEEE]" />
-                                <div className="flex-1 text-center">
-                                    <p className="text-[16px] font-[900] text-[#181725] leading-none">{vendor._count.orders}</p>
-                                    <p className="text-[12px] font-bold text-[#AEAEAE] mt-2">Orders</p>
+                                <div className="w-[1px] h-6 bg-[#E5E7EB]" />
+                                <div className="text-center py-1 flex-1">
+                                    <p className="text-[14px] font-black text-[#111827] leading-none">{vendor._count.orders}</p>
+                                    <p className="text-[10px] font-bold text-[#9CA3AF] mt-1 uppercase">Orders</p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Footer Buttons */}
-                        <div className="p-6 border-t border-[#EEEEEE] flex flex-col gap-2">
+                        {/* Card Buttons */}
+                        <div className="p-4 border-t border-[#EEEEEE] bg-white flex flex-col gap-2 rounded-b-[16px]">
                             <button
                                 onClick={() => viewDashboard(vendor.id)}
-                                className="w-full h-[42px] bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center justify-center gap-2"
+                                className="w-full h-[38px] bg-[#299E60] text-white rounded-[10px] text-[12px] font-bold hover:bg-[#238a54] active:scale-98 transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-[#299E60]/10"
                             >
-                                <LayoutDashboard size={14} />
+                                <LayoutDashboard size={13} />
                                 View Dashboard
                             </button>
                             <div className="flex items-center gap-2">
-                            <Link
-                                href={`/admin/vendors/${vendor.id}`}
-                                className="flex-1 h-[38px] bg-[#EEF8F1] text-[#299E60] rounded-[10px] text-[13px] font-bold hover:bg-[#e0f0e5] transition-all flex items-center justify-center"
-                            >
-                                Details
-                            </Link>
-                            {!vendor.isVerified ? (
-                                <button
-                                    onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
-                                    className="flex-1 h-[38px] bg-[#EEF8F1] text-[#299E60] rounded-[10px] text-[13px] font-bold hover:bg-[#e0f0e5] transition-all flex items-center justify-center gap-1.5"
+                                <Link
+                                    href={`/admin/vendors/${vendor.id}`}
+                                    className="flex-1 h-[36px] bg-[#F3F4F6] text-[#374151] hover:bg-[#E5E7EB] rounded-[10px] text-[12px] font-bold transition-all flex items-center justify-center border border-[#E5E7EB]"
                                 >
-                                    <CheckCircle size={14} />
-                                    Approve
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
-                                    className="flex-1 h-[38px] bg-[#FFF0F0] text-[#E74C3C] rounded-[10px] text-[13px] font-bold hover:bg-[#ffe5e5] transition-all flex items-center justify-center gap-1.5"
-                                >
-                                    <XCircle size={16} />
-                                    Revoke
-                                </button>
-                            )}
+                                    Details
+                                </Link>
+                                {!vendor.isVerified ? (
+                                    <button
+                                        onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
+                                        className="flex-1 h-[36px] bg-[#EEF8F1] text-[#299E60] border border-[#D1FAE5] hover:bg-[#D1FAE5] rounded-[10px] text-[12px] font-bold transition-all flex items-center justify-center gap-1"
+                                    >
+                                        <CheckCircle size={12} />
+                                        Verify
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
+                                        className="flex-1 h-[36px] bg-[#FDF2F2] text-[#EF4444] border border-[#FEE2E2] hover:bg-[#FEE2E2] rounded-[10px] text-[12px] font-bold transition-all flex items-center justify-center gap-1"
+                                    >
+                                        <XCircle size={12} />
+                                        Revoke
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
                 ))}
             </div>
             ) : (
-            /* Table View */
-            <div className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                {/* Table Header */}
-                <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-[#FAFAFA] border-b border-[#EEEEEE] text-[12px] font-bold text-[#AEAEAE] uppercase">
-                    <div className="col-span-1">#</div>
-                    <div className="col-span-2">Vendor</div>
-                    <div className="col-span-2">Owner</div>
-                    <div className="col-span-2">Contact</div>
-                    <div className="col-span-1 text-center">Products</div>
-                    <div className="col-span-1 text-center">Orders</div>
-                    <div className="col-span-3 text-center">Actions</div>
-                </div>
-                {filteredVendors.map((vendor, i) => (
-                    <div
-                        key={vendor.id}
-                        className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#F5F5F5] items-center hover:bg-[#FAFAFA] transition-colors"
-                    >
-                        <div className="col-span-1 text-[13px] font-bold text-[#AEAEAE]">{i + 1}</div>
-                        <div className="col-span-2 flex items-center gap-3">
-                            <div className="w-[40px] h-[40px] rounded-full bg-[#F1F4F9] overflow-hidden shrink-0 flex items-center justify-center">
-                                {vendor.logoUrl ? (
-                                    <img src={vendor.logoUrl} alt={vendor.businessName} className="w-full h-full object-cover" />
-                                ) : (
-                                    <span className="text-[16px] font-black text-[#299E60]">{vendor.businessName.charAt(0)}</span>
-                                )}
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-[14px] font-bold text-[#181725] truncate">{vendor.businessName}</p>
-                                <div className="flex items-center gap-1 mt-0.5">
-                                    <Star size={11} fill="#F59E0B" className="text-[#F59E0B]" />
-                                    <span className="text-[11px] font-bold text-[#7C7C7C]">{Number(vendor.rating).toFixed(1)}</span>
-                                    <span className={cn(
-                                        "ml-1 text-[10px] font-[900] px-1.5 py-0.5 rounded-full",
-                                        vendor.isVerified ? "bg-[#EEF8F1] text-[#299E60]" : "bg-[#FFF4E5] text-[#976538]"
-                                    )}>
-                                        {vendor.isVerified ? 'Verified' : 'Pending'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="col-span-2 text-[13px] font-medium text-[#4B4B4B] truncate">{vendor.user.fullName}</div>
-                        <div className="col-span-2 min-w-0">
-                            <p className="text-[12px] font-medium text-[#4B4B4B] truncate">{vendor.user.email}</p>
-                            {vendor.user.phone && <p className="text-[11px] text-[#AEAEAE] font-medium mt-0.5">{vendor.user.phone}</p>}
-                        </div>
-                        <div className="col-span-1 text-center text-[14px] font-bold text-[#181725]">{vendor._count.products}</div>
-                        <div className="col-span-1 text-center text-[14px] font-bold text-[#181725]">{vendor._count.orders}</div>
-                        <div className="col-span-3 flex items-center justify-center gap-2">
-                            <button
-                                onClick={() => viewDashboard(vendor.id)}
-                                className="h-[34px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-1"
+            /* Table View - Semantic Premium Table */
+            <div className="w-full overflow-x-auto rounded-[16px] border border-[#EEEEEE] bg-white shadow-sm">
+                <table className="w-full border-collapse text-left text-[13px] min-w-[1000px]">
+                    <thead>
+                        <tr className="bg-[#F9FAFB] border-b border-[#EEEEEE] text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">
+                            <th className="px-6 py-4 font-bold text-center w-[60px]">#</th>
+                            <th className="px-6 py-4 font-bold min-w-[280px]">Vendor Partner</th>
+                            <th className="px-6 py-4 font-bold min-w-[150px]">Owner</th>
+                            <th className="px-6 py-4 font-bold min-w-[220px]">Contact Information</th>
+                            <th className="px-6 py-4 font-bold text-center w-[100px]">Products</th>
+                            <th className="px-6 py-4 font-bold text-center w-[100px]">Orders</th>
+                            <th className="px-6 py-4 font-bold text-right pr-8 min-w-[340px]">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F3F4F6]">
+                        {filteredVendors.map((vendor, i) => (
+                            <tr
+                                key={vendor.id}
+                                className="group hover:bg-[#F9FAFB]/60 transition-colors"
                             >
-                                <LayoutDashboard size={12} />
-                                Dashboard
-                            </button>
-                            <Link
-                                href={`/admin/vendors/${vendor.id}`}
-                                className="h-[34px] px-3 bg-[#EEF8F1] text-[#299E60] rounded-[8px] text-[12px] font-bold hover:bg-[#e0f0e5] transition-all flex items-center justify-center"
-                            >
-                                Details
-                            </Link>
-                            {!vendor.isVerified ? (
-                                <button
-                                    onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
-                                    className="h-[34px] px-3 bg-[#EEF8F1] text-[#299E60] rounded-[8px] text-[12px] font-bold hover:bg-[#e0f0e5] transition-all flex items-center justify-center gap-1"
-                                >
-                                    <CheckCircle size={13} />
-                                    Approve
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
-                                    className="h-[34px] px-3 bg-[#FFF0F0] text-[#E74C3C] rounded-[8px] text-[12px] font-bold hover:bg-[#ffe5e5] transition-all flex items-center justify-center gap-1"
-                                >
-                                    <XCircle size={13} />
-                                    Revoke
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                ))}
+                                {/* Index */}
+                                <td className="px-6 py-4 text-center font-bold text-[#9CA3AF] text-[12px]">
+                                    {i + 1}
+                                </td>
+
+                                {/* Vendor Partner */}
+                                <td className="px-6 py-4">
+                                    <div className="flex items-center gap-3">
+                                        {/* Avatar Box */}
+                                        <div className="w-[42px] h-[42px] rounded-[10px] bg-[#F3F4F6] overflow-hidden shrink-0 border border-[#E5E7EB] flex items-center justify-center">
+                                            {vendor.logoUrl ? (
+                                                <img src={vendor.logoUrl} alt={vendor.businessName} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <span className="text-[15px] font-black text-[#299E60]">
+                                                    {vendor.businessName.charAt(0)}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {/* Details */}
+                                        <div className="min-w-0">
+                                            <p className="text-[14px] font-bold text-[#111827] truncate group-hover:text-[#299E60] transition-colors">
+                                                {vendor.businessName}
+                                            </p>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                {/* Rating badge */}
+                                                <div className="flex items-center gap-0.5">
+                                                    <Star size={11} fill="#F59E0B" className="text-[#F59E0B]" />
+                                                    <span className="text-[11px] font-bold text-[#4B5563]">{Number(vendor.rating).toFixed(1)}</span>
+                                                </div>
+                                                <span className="w-1.5 h-1.5 rounded-full bg-[#E5E7EB]"></span>
+                                                {/* Verified badge */}
+                                                <span className={cn(
+                                                    "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                                                    vendor.isVerified 
+                                                        ? "bg-[#EEF8F1] border-[#299E60]/10 text-[#299E60]" 
+                                                        : "bg-[#FFF8EB] border-[#D97706]/10 text-[#D97706]"
+                                                )}>
+                                                    {vendor.isVerified ? 'Verified' : 'Pending'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                {/* Owner */}
+                                <td className="px-6 py-4 text-[13px] font-bold text-[#374151]">
+                                    {vendor.user.fullName}
+                                </td>
+
+                                {/* Contact Information */}
+                                <td className="px-6 py-4">
+                                    <div className="flex flex-col gap-0.5">
+                                        <span className="text-[13px] font-medium text-[#4B5563] truncate block max-w-[200px]">{vendor.user.email}</span>
+                                        {vendor.user.phone && (
+                                            <span className="text-[11px] text-[#9CA3AF] font-semibold font-mono">{vendor.user.phone}</span>
+                                        )}
+                                    </div>
+                                </td>
+
+                                {/* Products Count */}
+                                <td className="px-6 py-4 text-center font-bold text-[#111827] text-[14px]">
+                                    {vendor._count.products}
+                                </td>
+
+                                {/* Orders Count */}
+                                <td className="px-6 py-4 text-center font-bold text-[#111827] text-[14px]">
+                                    {vendor._count.orders}
+                                </td>
+
+                                {/* Action buttons */}
+                                <td className="px-6 py-4 text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                        <button
+                                            onClick={() => viewDashboard(vendor.id)}
+                                            className="h-[34px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold hover:bg-[#238a54] active:scale-97 transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-[#299E60]/5 whitespace-nowrap"
+                                        >
+                                            <LayoutDashboard size={12} />
+                                            <span>Dashboard</span>
+                                            <ArrowUpRight size={12} className="opacity-70" />
+                                        </button>
+                                        <Link
+                                            href={`/admin/vendors/${vendor.id}`}
+                                            className="h-[34px] px-3 bg-white border border-[#E5E7EB] text-[#374151] rounded-[8px] text-[12px] font-bold hover:bg-[#F9FAFB] transition-all flex items-center justify-center whitespace-nowrap"
+                                        >
+                                            Details
+                                        </Link>
+                                        {!vendor.isVerified ? (
+                                            <button
+                                                onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
+                                                className="h-[34px] px-3 bg-[#EEF8F1] text-[#299E60] border border-[#299E60]/10 rounded-[8px] text-[12px] font-bold hover:bg-[#D1FAE5] transition-all flex items-center justify-center gap-1 whitespace-nowrap"
+                                            >
+                                                <CheckCircle size={12} />
+                                                Verify
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
+                                                className="h-[34px] px-3 bg-[#FDF2F2] text-[#EF4444] border border-[#EF4444]/10 rounded-[8px] text-[12px] font-bold hover:bg-[#FEE2E2] transition-all flex items-center justify-center gap-1 whitespace-nowrap"
+                                            >
+                                                <XCircle size={12} />
+                                                Revoke
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
             )
             )}
 
-            {/* Add Vendor — full KYC wizard. Form state + validation lives
-                in the wizard component; this page just opens/closes it and
-                prepends the new vendor to the local list on success. */}
+            {/* Add Vendor wizard modal overlay */}
             {showCreate && (
                 <AddVendorWizard
                     onClose={() => setShowCreate(false)}

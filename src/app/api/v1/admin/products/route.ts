@@ -70,6 +70,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
     const search = params.get('search') || undefined;
     const categoryId = params.get('categoryId') || undefined;
     const cursor = params.get('cursor') || undefined;
+    const pageParam = params.get('page') || undefined;
     const limit = Math.min(Number(params.get('limit')) || 20, 50);
 
     // Build where clause
@@ -102,7 +103,12 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
     // a vendor's pending "Basmati Rice" if another vendor already has one.
     if (approvalStatus) {
       let startIdx = 0;
-      if (cursor) startIdx = allProducts.findIndex(p => p.id === cursor) + 1;
+      const pNum = Number(pageParam) || 1;
+      if (pageParam) {
+        startIdx = (pNum - 1) * limit;
+      } else if (cursor) {
+        startIdx = allProducts.findIndex(p => p.id === cursor) + 1;
+      }
 
       const page = allProducts.slice(startIdx, startIdx + limit + 1);
       const hasMore = page.length > limit;
@@ -129,6 +135,12 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
           nextCursor,
           hasMore,
           stats: { total: totalCount, approved: approvedCount, pending: pendingCount, rejected: rejectedCount },
+          pagination: {
+            page: pNum,
+            limit,
+            total: totalCount,
+            totalPages: Math.ceil(totalCount / limit),
+          },
         },
       });
     }
@@ -171,7 +183,12 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
     const catalogEntries = Array.from(catalogMap.values());
 
     let startIdx = 0;
-    if (cursor) startIdx = catalogEntries.findIndex(e => e.product.id === cursor) + 1;
+    const pNum = Number(pageParam) || 1;
+    if (pageParam) {
+      startIdx = (pNum - 1) * limit;
+    } else if (cursor) {
+      startIdx = catalogEntries.findIndex(e => e.product.id === cursor) + 1;
+    }
 
     const page = catalogEntries.slice(startIdx, startIdx + limit + 1);
     const hasMore = page.length > limit;
@@ -198,6 +215,12 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
         nextCursor,
         hasMore,
         stats: { total: totalCount, approved: approvedCount, pending: pendingCount, rejected: rejectedCount },
+        pagination: {
+          page: pNum,
+          limit,
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / limit),
+        },
       },
     });
   } catch (error) {

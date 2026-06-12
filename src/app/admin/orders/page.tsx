@@ -2,7 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, Loader2 } from 'lucide-react';
+import { 
+    Search, 
+    Loader2, 
+    ShoppingBag, 
+    Clock, 
+    CheckCircle2, 
+    IndianRupee, 
+    Eye, 
+    ChevronDown,
+    Calendar,
+    ArrowUpRight,
+    ShoppingBasket
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -20,19 +32,18 @@ interface AdminOrder {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-    draft: 'bg-gray-50 text-gray-600',
-    delivered: 'bg-[#EEF8F1] text-[#299E60]',
-    confirmed: 'bg-blue-50 text-blue-600',
-    processing: 'bg-indigo-50 text-indigo-600',
-    pending: 'bg-[#FFF4E5] text-[#976538]',
-    ready_for_dispatch: 'bg-cyan-50 text-cyan-600',
-    shipped: 'bg-purple-50 text-purple-600',
-    partially_delivered: 'bg-orange-50 text-orange-600',
-    returned: 'bg-rose-50 text-rose-600',
-    cancelled: 'bg-[#FFF0F0] text-[#E74C3C]',
+    draft: 'bg-gray-100 text-gray-700 border-gray-200',
+    delivered: 'bg-[#EEF8F1] text-[#299E60] border-[#D1FAE5]',
+    confirmed: 'bg-blue-50 text-blue-700 border-blue-100',
+    processing: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+    pending: 'bg-[#FFF8EB] text-[#D97706] border-[#FEF3C7]',
+    ready_for_dispatch: 'bg-cyan-50 text-cyan-700 border-cyan-100',
+    shipped: 'bg-purple-50 text-purple-700 border-purple-100',
+    partially_delivered: 'bg-orange-50 text-orange-700 border-orange-100',
+    returned: 'bg-rose-50 text-rose-700 border-rose-100',
+    cancelled: 'bg-[#FDF2F2] text-[#EF4444] border-[#FEE2E2]',
 };
 
-// Statuses an admin can set directly from the list (draft is customer-side only).
 const STATUS_OPTIONS = [
     'pending', 'confirmed', 'processing', 'ready_for_dispatch',
     'shipped', 'partially_delivered', 'delivered', 'returned', 'cancelled',
@@ -44,12 +55,11 @@ export default function OrdersPage() {
     const [loading, setLoading] = useState(true);
     const [busyId, setBusyId] = useState<string | null>(null);
 
-    // Inline status change straight from the list (admin force override on the API).
     const updateOrderStatus = async (orderId: string, newStatus: string) => {
         const prev = orders.find(o => o.id === orderId)?.status;
         if (!prev || prev === newStatus) return;
         setBusyId(orderId);
-        setOrders(os => os.map(o => o.id === orderId ? { ...o, status: newStatus } : o)); // optimistic
+        setOrders(os => os.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
         try {
             const res = await fetch(`/api/v1/admin/orders/${orderId}`, {
                 method: 'PATCH',
@@ -60,7 +70,7 @@ export default function OrdersPage() {
             if (!res.ok || !json.success) throw new Error(json.error?.message || json.message || 'Failed to update status');
             toast.success(`Order set to ${newStatus.replace(/_/g, ' ')}`);
         } catch (e) {
-            setOrders(os => os.map(o => o.id === orderId ? { ...o, status: prev } : o)); // revert
+            setOrders(os => os.map(o => o.id === orderId ? { ...o, status: prev } : o));
             toast.error(e instanceof Error ? e.message : 'Failed to update status');
         } finally {
             setBusyId(null);
@@ -83,100 +93,206 @@ export default function OrdersPage() {
         return () => { cancelled = true; clearTimeout(timer); };
     }, [searchQuery]);
 
-    const filteredOrders = orders;
+    // Summary calculations
+    const totalOrdersCount = orders.length;
+    const pendingOrdersCount = orders.filter(o => o.status === 'pending' || o.status === 'confirmed').length;
+    const deliveredCount = orders.filter(o => o.status === 'delivered').length;
+    const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
 
     return (
-        <div className="space-y-8 pb-10">
+        <div className="space-y-8 pb-10 px-4 md:px-0">
             {/* Page Header */}
-            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-[#EEEEEE] pb-5">
                 <div>
-                    <h1 className="text-[28px] font-bold text-[#000000] leading-none mb-1">Orders</h1>
-                    <p className="text-[#000000] text-[13px] font-medium opacity-70">Whole data about your Order by Customers</p>
+                    <h1 className="text-[30px] font-extrabold text-[#111827] tracking-tight mb-1">Orders Registry</h1>
+                    <p className="text-[#6B7280] text-[14px] font-medium">Monitor customer purchase requests, track shipment statuses, and reassign/split order details</p>
                 </div>
 
                 {/* Search Bar */}
-                <div className="relative group w-full max-w-[210px]">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={16} />
+                <div className="relative group w-full md:w-[260px]">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" size={16} />
                     <input
                         type="text"
-                        placeholder="search Order ID"
+                        placeholder="Search Order Number..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="h-[40px] w-full bg-white border border-[#DCDCDC] rounded-[10px] pl-10 pr-4 text-[13px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 shadow-sm"
+                        className="h-[42px] w-full bg-white border border-[#E5E7EB] rounded-[10px] pl-10 pr-4 text-[13px] outline-none transition-all placeholder:text-[#9CA3AF] font-medium focus:border-[#299E60]/50 focus:shadow-sm"
                     />
                 </div>
             </div>
 
+            {/* Dashboard Mini Stats Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {/* Stat 1: Total Orders */}
+                <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-[12px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]">
+                        <ShoppingBag size={22} />
+                    </div>
+                    <div>
+                        <span className="text-[12px] font-bold text-[#9CA3AF] uppercase tracking-wider block">Total POs</span>
+                        <span className="text-[22px] font-black text-[#1F2937] leading-none mt-1 inline-block">{totalOrdersCount}</span>
+                    </div>
+                </div>
+
+                {/* Stat 2: Pending Processing */}
+                <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-[12px] bg-[#FFF8EB] flex items-center justify-center text-[#D97706]">
+                        <Clock size={22} />
+                    </div>
+                    <div>
+                        <span className="text-[12px] font-bold text-[#9CA3AF] uppercase tracking-wider block">Pending Queue</span>
+                        <span className="text-[22px] font-black text-[#1F2937] leading-none mt-1 inline-block">{pendingOrdersCount}</span>
+                    </div>
+                </div>
+
+                {/* Stat 3: Delivered Orders */}
+                <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-[12px] bg-[#EFF6FF] flex items-center justify-center text-[#3B82F6]">
+                        <CheckCircle2 size={22} />
+                    </div>
+                    <div>
+                        <span className="text-[12px] font-bold text-[#9CA3AF] uppercase tracking-wider block">Delivered</span>
+                        <span className="text-[22px] font-black text-[#1F2937] leading-none mt-1 inline-block">{deliveredCount}</span>
+                    </div>
+                </div>
+
+                {/* Stat 4: Revenue Value */}
+                <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-[12px] bg-[#FDF2F2] flex items-center justify-center text-[#EF4444]">
+                        <IndianRupee size={22} />
+                    </div>
+                    <div>
+                        <span className="text-[12px] font-bold text-[#9CA3AF] uppercase tracking-wider block">Total Value</span>
+                        <span className="text-[20px] font-black text-[#1F2937] leading-none mt-1.5 inline-block">
+                            ₹{totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
             {/* Orders Table Container */}
-            <div className="bg-white p-6 md:p-10 rounded-[12px] border border-[#DCDCDC] shadow-sm max-w-[1360px]">
-                <h3 className="text-[18px] font-bold text-[#000000] mb-8">All Orders</h3>
+            <div className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                <div className="px-6 py-5 border-b border-[#EEEEEE] flex items-center justify-between">
+                    <h3 className="text-[16px] font-extrabold text-[#111827] flex items-center gap-2">
+                        <ShoppingBasket size={18} className="text-[#299E60]" />
+                        All Orders
+                    </h3>
+                </div>
 
                 {loading ? (
-                    <div className="flex items-center justify-center py-20">
-                        <Loader2 className="animate-spin text-[#299E60]" size={32} />
+                    <div className="flex flex-col items-center justify-center py-24 gap-3">
+                        <Loader2 className="animate-spin text-[#299E60]" size={36} />
+                        <span className="text-[13px] font-bold text-[#6B7280]">Loading orders registry...</span>
+                    </div>
+                ) : orders.length === 0 ? (
+                    <div className="p-20 text-center bg-white">
+                        <ShoppingBag size={40} className="text-[#D1D5DB] mx-auto mb-3" />
+                        <h4 className="text-[15px] font-bold text-[#374151]">No orders found</h4>
+                        <p className="text-[13px] text-[#9CA3AF] mt-1">
+                            {searchQuery ? `No orders matched search query "${searchQuery}"` : 'No orders recorded yet.'}
+                        </p>
                     </div>
                 ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full border-separate border-spacing-0">
+                <div className="overflow-x-auto w-full">
+                    <table className="w-full border-collapse text-left text-[13px] min-w-[1000px]">
                         <thead>
-                            <tr className="bg-[#EFEFEF] h-[52px]">
-                                <th className="px-6 text-center text-[14px] font-bold text-[#4B4B4B] first:rounded-l-[10px]">Order ID</th>
-                                <th className="px-6 text-center text-[14px] font-bold text-[#4B4B4B]">Customer</th>
-                                <th className="px-6 text-center text-[14px] font-bold text-[#4B4B4B]">Vendor</th>
-                                <th className="px-6 text-center text-[14px] font-bold text-[#4B4B4B]">Total</th>
-                                <th className="px-6 text-center text-[14px] font-bold text-[#4B4B4B]">Date</th>
-                                <th className="px-6 text-center text-[14px] font-bold text-[#4B4B4B]">Status</th>
-                                <th className="px-6 text-center text-[14px] font-bold text-[#4B4B4B] last:rounded-r-[10px]">Action</th>
+                            <tr className="bg-[#F9FAFB] border-b border-[#EEEEEE] text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">
+                                <th className="px-6 py-4 font-bold text-center w-[160px]">Order ID</th>
+                                <th className="px-6 py-4 font-bold min-w-[200px]">Customer</th>
+                                <th className="px-6 py-4 font-bold min-w-[200px]">Vendor Partner</th>
+                                <th className="px-6 py-4 font-bold w-[120px] text-right">Total Amount</th>
+                                <th className="px-6 py-4 font-bold w-[150px] text-center">Date Created</th>
+                                <th className="px-6 py-4 font-bold w-[180px] text-center">Status</th>
+                                <th className="px-6 py-4 font-bold text-right pr-8 w-[180px]">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-[#EEEEEE]">
-                            {filteredOrders.length > 0 ? (
-                                filteredOrders.map((order) => (
-                                    <tr key={order.id} className="hover:bg-gray-50/30 transition-colors">
-                                        <td className="py-5 px-6 text-center font-bold text-[14px] text-[#181725]">{order.orderNumber}</td>
-                                        <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-semibold">{order.user.fullName}</td>
-                                        <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-semibold">{order.vendor.businessName}</td>
-                                        <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-semibold">₹ {Number(order.totalAmount).toLocaleString('en-IN')}</td>
-                                        <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-semibold">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-                                        <td className="py-5 px-6 text-center">
-                                            <div className="flex justify-center">
+                        <tbody className="divide-y divide-[#F3F4F6]">
+                            {orders.map((order) => (
+                                <tr key={order.id} className="group hover:bg-[#F9FAFB]/50 transition-colors">
+                                    {/* Order ID */}
+                                    <td className="px-6 py-4 text-center font-bold text-[#111827] text-[13px] font-mono">
+                                        {order.orderNumber}
+                                    </td>
+
+                                    {/* Customer */}
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col">
+                                            <span className="text-[13px] font-bold text-[#374151]">{order.user.fullName}</span>
+                                            <span className="text-[11px] text-[#9CA3AF] font-medium max-w-[180px] truncate">{order.user.email}</span>
+                                        </div>
+                                    </td>
+
+                                    {/* Vendor Partner */}
+                                    <td className="px-6 py-4">
+                                        <span className="text-[13px] font-semibold text-[#374151]">{order.vendor.businessName}</span>
+                                    </td>
+
+                                    {/* Total */}
+                                    <td className="px-6 py-4 text-right font-black text-[#111827] text-[14px]">
+                                        ₹{Number(order.totalAmount).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                                    </td>
+
+                                    {/* Date */}
+                                    <td className="px-6 py-4 text-center">
+                                        <div className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#4B5563]">
+                                            <Calendar size={13} className="text-[#9CA3AF]" />
+                                            <span>
+                                                {new Date(order.createdAt).toLocaleDateString('en-IN', { 
+                                                    day: '2-digit', 
+                                                    month: 'short', 
+                                                    year: 'numeric' 
+                                                })}
+                                            </span>
+                                        </div>
+                                    </td>
+
+                                    {/* Status Inline Select Pill */}
+                                    <td className="px-6 py-4 text-center">
+                                        <div className="flex justify-center items-center">
+                                            <div className="relative inline-block">
                                                 <select
                                                     value={order.status}
                                                     disabled={busyId === order.id}
                                                     onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                                                    title="Change status"
                                                     className={cn(
-                                                        "cursor-pointer rounded-[8px] text-[13px] font-semibold capitalize px-4 py-2 outline-none border border-transparent hover:border-black/10 focus:border-[#299E60]/40 disabled:opacity-50 transition-colors",
-                                                        STATUS_STYLE[order.status] || 'bg-gray-100 text-gray-600'
+                                                        "cursor-pointer rounded-[8px] text-[11px] font-black uppercase tracking-wider pl-3.5 pr-8 py-2 outline-none border border-transparent appearance-none disabled:opacity-50 transition-all shadow-sm",
+                                                        STATUS_STYLE[order.status] || 'bg-gray-100 text-gray-700 border-gray-200'
                                                     )}
                                                 >
-                                                    {/* keep a non-settable status (e.g. draft) visible for that row */}
                                                     {!STATUS_OPTIONS.includes(order.status) && (
-                                                        <option value={order.status} disabled className="bg-white text-gray-800 capitalize">{order.status.replace(/_/g, ' ')}</option>
+                                                        <option value={order.status} disabled className="bg-white text-gray-800 capitalize">
+                                                            {order.status.replace(/_/g, ' ')}
+                                                        </option>
                                                     )}
                                                     {STATUS_OPTIONS.map((s) => (
-                                                        <option key={s} value={s} className="bg-white text-gray-800 capitalize">{s.replace(/_/g, ' ')}</option>
+                                                        <option key={s} value={s} className="bg-white text-gray-800 capitalize">
+                                                            {s.replace(/_/g, ' ')}
+                                                        </option>
                                                     ))}
                                                 </select>
-                                                {busyId === order.id && <Loader2 size={14} className="animate-spin text-gray-400 ml-1 self-center" />}
+                                                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
                                             </div>
-                                        </td>
-                                        <td className="py-5 px-6 text-center">
-                                            <div className="flex justify-center">
-                                                <Link href={`/admin/orders/${order.id}`} className="bg-[#299E60] hover:bg-[#238b54] text-white text-[13px] font-bold h-[32px] px-6 rounded-[6px] transition-colors cursor-pointer flex items-center justify-center">
-                                                    View Details
-                                                </Link>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
-                                <tr>
-                                    <td colSpan={7} className="py-20 text-center text-[#AEAEAE] font-medium">
-                                        {searchQuery ? `No orders found matching "${searchQuery}"` : 'No orders yet'}
+                                            {busyId === order.id && (
+                                                <Loader2 size={13} className="animate-spin text-[#299E60] ml-1.5 shrink-0" />
+                                            )}
+                                        </div>
+                                    </td>
+
+                                    {/* Actions */}
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex justify-end pr-2">
+                                            <Link 
+                                                href={`/admin/orders/${order.id}`} 
+                                                className="h-[34px] px-3.5 bg-[#EEF8F1] border border-[#299E60]/10 hover:bg-[#D1FAE5] text-[#299E60] text-[12px] font-bold rounded-[8px] transition-all flex items-center justify-center gap-1 shadow-sm active:scale-97 whitespace-nowrap"
+                                            >
+                                                <Eye size={13} />
+                                                <span>View Details</span>
+                                                <ArrowUpRight size={11} className="opacity-65" />
+                                            </Link>
+                                        </div>
                                     </td>
                                 </tr>
-                            )}
+                            ))}
                         </tbody>
                     </table>
                 </div>

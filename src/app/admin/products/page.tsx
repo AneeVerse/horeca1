@@ -9,6 +9,8 @@ import {
     Upload,
     Download,
     ChevronDown,
+    ChevronLeft,
+    ChevronRight,
     Pencil,
     Trash2,
     X,
@@ -35,6 +37,7 @@ import ProductImportModal from '@/components/features/admin/ProductImportModal';
 import ProductBulkUpdateModal from '@/components/features/admin/ProductBulkUpdateModal';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 import { CategoryMultiPickerById } from '@/components/features/brand/CategoryMultiPickerById';
+import { toast } from 'sonner';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -135,6 +138,18 @@ interface ProductFormData {
 const UNIT_OPTIONS = ['kg', 'g', 'ml', 'L', 'piece', 'pack', 'box', 'dozen', 'case', 'bag', 'bottle', 'can', 'carton', 'tray'];
 const TAX_OPTIONS = ['0', '5', '12', '18', '28'];
 
+function getPageRange(current: number, total: number): (number | 'gap')[] {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    const pages: (number | 'gap')[] = [1];
+    if (current > 3) pages.push('gap');
+    const lo = Math.max(2, current - 1);
+    const hi = Math.min(total - 1, current + 1);
+    for (let i = lo; i <= hi; i++) pages.push(i);
+    if (current < total - 2) pages.push('gap');
+    pages.push(total);
+    return pages;
+}
+
 const EMPTY_FORM: ProductFormData = {
     name: '',
     sku: '',
@@ -191,6 +206,7 @@ function FieldLabel({ children, required }: { children: React.ReactNode; require
 const inputCls = 'w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors bg-white';
 const selectCls = 'w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors bg-white appearance-none';
 const textareaCls = 'w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors resize-none bg-white';
+const cellInput = 'bg-transparent border border-transparent hover:border-[#D1D5DB] focus:border-[#299E60] focus:bg-white focus:ring-1 focus:ring-[#299E60]/20 px-1.5 py-1 rounded-[4px] outline-none w-full text-[12.5px] tabular-nums transition-colors';
 
 function TagInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
     const [input, setInput] = useState('');
@@ -331,8 +347,13 @@ export default function ProductsPage() {
     const [loadingProduct, setLoadingProduct] = useState(false);
 
     // Pagination
-    const [cursor, setCursor] = useState<string | null>(null);
-    const [hasMore, setHasMore] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalProductsCount, setTotalProductsCount] = useState(0);
+
+    // Unsaved edits / Original reference
+    const originalProductsRef = useRef<Product[]>([]);
+    const [savingRows, setSavingRows] = useState<Record<string, Record<string, boolean>>>({});
 
     // Filters
     const [searchInput, setSearchInput] = useState('');
@@ -343,6 +364,7 @@ export default function ProductsPage() {
 
     // Panel / Modal state
     const [panelOpen, setPanelOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState<'general' | 'pricing' | 'advanced'>('general');
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [formData, setFormData] = useState<ProductFormData>(EMPTY_FORM);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -424,49 +446,13 @@ export default function ProductsPage() {
     // -----------------------------------------------------------------------
 
     const fetchProducts = useCallback(
-        async (append = false) => {
-            if (append) setLoadingMore(true);
-            else setLoading(true);
-
-            try {
-                const params = new URLSearchParams();
-                params.set('limit', String(PAGE_LIMIT));
-                if (debouncedSearch) params.set('search', debouncedSearch);
-                if (filterStatus) params.set('approvalStatus', filterStatus);
-                if (filterVendor) params.set('vendorId', filterVendor);
-                if (filterCategory) params.set('categoryId', filterCategory);
-                if (append && cursor) params.set('cursor', cursor);
-
-                const res = await fetch(`/api/v1/admin/products?${params.toString()}`);
-                const json = await res.json();
-
-                if (json.success) {
-                    const incoming: Product[] = json.data?.products ?? json.data ?? [];
-                    setProducts(prev => append ? [...prev, ...incoming] : incoming);
-                    setCursor(json.data?.nextCursor ?? null);
-                    setHasMore(!!json.data?.nextCursor);
-                    if (json.data?.stats) setStats(json.data.stats);
-                }
-            } catch (err) {
-                console.error('Failed to fetch products:', err);
-            } finally {
-                setLoading(false);
-                setLoadingMore(false);
-            }
-        },
-        [debouncedSearch, filterStatus, filterVendor, filterCategory, cursor],
-    );
-
-    // Refetch on filter change (reset list)
-    useEffect(() => {
-        setCursor(null);
-        setHasMore(false);
-        // We need a fresh fetch without cursor — call directly
-        const doFetch = async () => {
+        async (targetPage = 1) => {
             setLoading(true);
+
             try {
                 const params = new URLSearchParams();
                 params.set('limit', String(PAGE_LIMIT));
+                params.set('page', String(targetPage));
                 if (debouncedSearch) params.set('search', debouncedSearch);
                 if (filterStatus) params.set('approvalStatus', filterStatus);
                 if (filterVendor) params.set('vendorId', filterVendor);
@@ -478,8 +464,18 @@ export default function ProductsPage() {
                 if (json.success) {
                     const incoming: Product[] = json.data?.products ?? json.data ?? [];
                     setProducts(incoming);
-                    setCursor(json.data?.nextCursor ?? null);
-                    setHasMore(!!json.data?.nextCursor);
+                    originalProductsRef.current = JSON.parse(JSON.stringify(incoming));
+                    
+                    const pagination = json.data?.pagination;
+                    if (pagination) {
+                        setCurrentPage(pagination.page);
+                        setTotalPages(pagination.totalPages);
+                        setTotalProductsCount(pagination.total);
+                    } else {
+                        setCurrentPage(targetPage);
+                        setTotalPages(1);
+                        setTotalProductsCount(incoming.length);
+                    }
                     if (json.data?.stats) setStats(json.data.stats);
                 }
             } catch (err) {
@@ -487,10 +483,110 @@ export default function ProductsPage() {
             } finally {
                 setLoading(false);
             }
-        };
-        doFetch();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [debouncedSearch, filterStatus, filterVendor, filterCategory]);
+        },
+        [debouncedSearch, filterStatus, filterVendor, filterCategory],
+    );
+
+    // Refetch on filter change (reset to page 1)
+    useEffect(() => {
+        fetchProducts(1);
+    }, [debouncedSearch, filterStatus, filterVendor, filterCategory, fetchProducts]);
+
+    // -----------------------------------------------------------------------
+    // Inline Cell Editing Handlers
+    // -----------------------------------------------------------------------
+
+    const handleCellChange = (productId: string, field: string, value: any) => {
+        setProducts(prev => prev.map(p => {
+            if (p.id !== productId) return p;
+            if (field === 'category') {
+                return { ...p, category: value };
+            }
+            return { ...p, [field]: value };
+        }));
+    };
+
+    const handleInlineEdit = async (productId: string, field: string, value: any, originalValue: any) => {
+        if (value === originalValue) return;
+
+        if (field === 'name' && (!value || !value.trim())) {
+            toast.error('Product name cannot be empty');
+            handleCellChange(productId, 'name', originalValue);
+            return;
+        }
+        if (field === 'basePrice' && (isNaN(value) || value <= 0)) {
+            toast.error('Please enter a valid base price');
+            handleCellChange(productId, 'basePrice', originalValue);
+            return;
+        }
+
+        setSavingRows(prev => ({
+            ...prev,
+            [productId]: { ...(prev[productId] || {}), [field]: true }
+        }));
+
+        try {
+            let url = `/api/v1/admin/products/${productId}`;
+            let method = 'PATCH';
+            let bodyPayload: Record<string, any> = {};
+
+            if (field === 'approvalStatus') {
+                url = `/api/v1/admin/products/${productId}/approval`;
+                bodyPayload = {
+                    action: value === 'approved' ? 'approve' : 'reject',
+                    note: value === 'rejected' ? 'Rejected from list view' : undefined
+                };
+            } else if (field === 'primaryCategoryId') {
+                bodyPayload = {
+                    primaryCategoryId: value,
+                    categoryIds: value ? [value] : []
+                };
+            } else {
+                bodyPayload = { [field]: value };
+            }
+
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bodyPayload),
+            });
+            const json = await res.json();
+
+            if (json.success) {
+                toast.success('Product updated');
+                const updatedProduct = json.data;
+                setProducts(prev => prev.map(p => p.id === productId ? { ...p, ...updatedProduct } : p));
+                originalProductsRef.current = originalProductsRef.current.map(p => 
+                    p.id === productId ? { ...p, ...updatedProduct } : p
+                );
+            } else {
+                toast.error(json.message || 'Failed to update product');
+                if (field === 'primaryCategoryId') {
+                    const origCat = originalProductsRef.current.find(p => p.id === productId)?.category;
+                    handleCellChange(productId, 'category', origCat);
+                } else {
+                    handleCellChange(productId, field, originalValue);
+                }
+            }
+        } catch (err) {
+            toast.error('Network error. Failed to save product.');
+            if (field === 'primaryCategoryId') {
+                const origCat = originalProductsRef.current.find(p => p.id === productId)?.category;
+                handleCellChange(productId, 'category', origCat);
+            } else {
+                handleCellChange(productId, field, originalValue);
+            }
+        } finally {
+            setSavingRows(prev => {
+                const next = { ...prev };
+                if (next[productId]) {
+                    delete next[productId][field];
+                    if (Object.keys(next[productId]).length === 0) delete next[productId];
+                }
+                return next;
+            });
+        }
+    };
 
     // -----------------------------------------------------------------------
     // Stats (from API — counts ALL products, not just loaded page)
@@ -559,6 +655,7 @@ export default function ProductsPage() {
         setEditingProduct(null);
         setFormData(EMPTY_FORM);
         setFormErrors({});
+        setActiveTab('general');
         setPanelOpen(true);
     };
 
@@ -577,6 +674,7 @@ export default function ProductsPage() {
         setPanelOpen(true);
         setLoadingProduct(true);
         setFormErrors({});
+        setActiveTab('general');
 
         try {
             const res = await fetch(`/api/v1/admin/products/${product.id}`);
@@ -665,6 +763,7 @@ export default function ProductsPage() {
             setEditingProduct(null);
             setFormData(EMPTY_FORM);
             setFormErrors({});
+            setActiveTab('general');
         }, 300);
     };
 
@@ -777,26 +876,8 @@ export default function ProductsPage() {
     const openImport = () => setImportOpen(true);
 
     const handleImportComplete = () => {
-        // Refresh products list after import
-        setCursor(null);
-        setHasMore(false);
-        const params = new URLSearchParams();
-        params.set('limit', String(PAGE_LIMIT));
-        if (debouncedSearch) params.set('search', debouncedSearch);
-        if (filterStatus) params.set('approvalStatus', filterStatus);
-        if (filterVendor) params.set('vendorId', filterVendor);
-        if (filterCategory) params.set('categoryId', filterCategory);
-        fetch(`/api/v1/admin/products?${params.toString()}`)
-            .then(r => r.json())
-            .then(json => {
-                if (json.success) {
-                    const incoming: Product[] = json.data?.products ?? json.data ?? [];
-                    setProducts(incoming);
-                    setCursor(json.data?.nextCursor ?? null);
-                    setHasMore(!!json.data?.nextCursor);
-                }
-            })
-            .catch(console.error);
+        // Refresh products list after import (reset to page 1)
+        fetchProducts(1);
     };
 
     // -----------------------------------------------------------------------
@@ -1011,241 +1092,364 @@ export default function ProductsPage() {
                 ) : (
                     <>
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse min-w-[1280px]">
-                                <thead>
-                                    {/* Product (left) + Actions (right) stay pinned while the
-                                        middle columns scroll horizontally — power-admin view. */}
-                                    <tr className="bg-[#F8F9FB]">
-                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider sticky left-0 bg-[#F8F9FB] z-20 min-w-[280px]">
-                                            Product
-                                        </th>
-                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
-                                            Brand
-                                        </th>
-                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
-                                            Category
-                                        </th>
-                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
-                                            Vendors
-                                        </th>
-                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider text-right">
-                                            Base ₹
-                                        </th>
-                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider text-right">
-                                            GST %
-                                        </th>
-                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
-                                            Unit
-                                        </th>
-                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
-                                            Status
-                                        </th>
-                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">
-                                            Inventory
-                                        </th>
-                                        <th className="px-5 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider text-right sticky right-0 bg-[#F8F9FB] z-20">
-                                            Actions
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-[#EEEEEE]">
-                                    {products.map(product => {
-                                        const statusCfg = STATUS_CONFIG[product.approvalStatus];
-                                        return (
-                                            <tr key={product.id} className="hover:bg-[#F8F9FB]/60 transition-colors group">
-                                                {/* Product — thumbnail + name + SKU, pinned left */}
-                                                <td className="px-5 py-4 sticky left-0 bg-white group-hover:bg-[#F8F9FB] z-10">
-                                                    <div className="flex items-center gap-3">
-                                                        {product.imageUrl ? (
-                                                            <img
-                                                                src={product.imageUrl}
-                                                                alt={product.name}
-                                                                className="w-[42px] h-[42px] rounded-[10px] object-cover border border-[#EEEEEE] shrink-0"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-[42px] h-[42px] rounded-[10px] bg-[#F8F9FB] border border-[#EEEEEE] flex items-center justify-center text-[#AEAEAE] shrink-0">
-                                                                <ImageIcon size={18} />
-                                                            </div>
-                                                        )}
-                                                        <div className="min-w-0">
-                                                            <p className="text-[14px] font-bold text-[#181725] line-clamp-1">
-                                                                {product.name}
-                                                            </p>
-                                                            <p className="text-[11px] text-[#AEAEAE] font-medium mt-0.5">
-                                                                {product.sku ? `SKU: ${product.sku}` : 'No SKU'}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </td>
-
-                                                {/* Brand */}
-                                                <td className="px-5 py-4">
-                                                    <span className="text-[13px] font-medium text-[#7C7C7C]">
-                                                        {product.brand || '--'}
-                                                    </span>
-                                                </td>
-
-                                                {/* Category */}
-                                                <td className="px-5 py-4">
-                                                    <span className="text-[13px] font-medium text-[#7C7C7C]">
-                                                        {product.category?.name ?? '--'}
-                                                    </span>
-                                                </td>
-
-                                                {/* Vendors */}
-                                                <td className="px-5 py-4">
-                                                    {(product.vendorCount ?? 0) > 0 ? (
-                                                        <span className="text-[13px] font-semibold text-[#181725]" title={product.vendors?.join(', ')}>
-                                                            {product.vendorCount} vendor{product.vendorCount !== 1 ? 's' : ''}
-                                                        </span>
+                        <table className="w-full text-left border-collapse min-w-[1440px]">
+                            <thead>
+                                {/* Product (left) + Actions (right) stay pinned while the
+                                    middle columns scroll horizontally — power-admin view. */}
+                                <tr className="bg-[#F8F9FB] text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wider">
+                                    <th className="px-5 py-3 sticky left-0 bg-[#F8F9FB] z-20 min-w-[320px]">
+                                        Product
+                                    </th>
+                                    <th className="px-5 py-3 min-w-[150px]">
+                                        Brand
+                                    </th>
+                                    <th className="px-5 py-3 min-w-[180px]">
+                                        Category
+                                    </th>
+                                    <th className="px-5 py-3 min-w-[110px]">
+                                        Vendors
+                                    </th>
+                                    <th className="px-5 py-3 min-w-[100px] text-right">
+                                        Base ₹
+                                    </th>
+                                    <th className="px-5 py-3 min-w-[85px] text-right">
+                                        GST %
+                                    </th>
+                                    <th className="px-5 py-3 min-w-[105px] text-right text-[#299E60]">
+                                        Gross ₹
+                                    </th>
+                                    <th className="px-5 py-3 min-w-[140px]">
+                                        Unit
+                                    </th>
+                                    <th className="px-5 py-3 min-w-[120px]">
+                                        Status
+                                    </th>
+                                    <th className="px-5 py-3 min-w-[150px]">
+                                        Inventory
+                                    </th>
+                                    <th className="px-5 py-3 text-right sticky right-0 bg-[#F8F9FB] z-20 min-w-[120px]">
+                                        Actions
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#EEEEEE]">
+                                {products.map(product => {
+                                    return (
+                                        <tr key={product.id} className="hover:bg-[#F8F9FB]/60 transition-colors group text-[12.5px]">
+                                            {/* Product — thumbnail + name + SKU, pinned left */}
+                                            <td className="px-5 py-3 sticky left-0 bg-white group-hover:bg-[#F8F9FB] z-10 border-r border-[#EEEEEE]/40">
+                                                <div className="flex items-center gap-3">
+                                                    {product.imageUrl ? (
+                                                        <img
+                                                            src={product.imageUrl}
+                                                            alt={product.name}
+                                                            className="w-[42px] h-[42px] rounded-[10px] object-cover border border-[#EEEEEE] shrink-0"
+                                                        />
                                                     ) : (
-                                                        <span className="text-[11px] font-bold text-[#3B82F6] bg-[#EFF6FF] px-2.5 py-1 rounded-[6px] uppercase tracking-wider">
-                                                            Catalog
-                                                        </span>
+                                                        <div className="w-[42px] h-[42px] rounded-[10px] bg-[#F8F9FB] border border-[#EEEEEE] flex items-center justify-center text-[#AEAEAE] shrink-0">
+                                                            <ImageIcon size={18} />
+                                                        </div>
                                                     )}
-                                                </td>
+                                                    <div className="min-w-0 flex-1">
+                                                        <input
+                                                            type="text"
+                                                            value={product.name}
+                                                            onChange={e => handleCellChange(product.id, 'name', e.target.value)}
+                                                            onBlur={e => handleInlineEdit(product.id, 'name', e.target.value, originalProductsRef.current.find(p => p.id === product.id)?.name)}
+                                                            className={cn(cellInput, "font-bold text-[#181725] text-[13.5px] -ml-1.5 px-1.5 py-0.5")}
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={product.sku || ''}
+                                                            placeholder="No SKU"
+                                                            onChange={e => handleCellChange(product.id, 'sku', e.target.value)}
+                                                            onBlur={e => handleInlineEdit(product.id, 'sku', e.target.value || null, originalProductsRef.current.find(p => p.id === product.id)?.sku || '')}
+                                                            className={cn(cellInput, "text-[#AEAEAE] text-[11px] font-medium -ml-1.5 mt-0.5 px-1.5 py-0.5")}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </td>
 
-                                                {/* Base price (taxable rate) */}
-                                                <td className="px-5 py-4 text-right">
-                                                    <span className="text-[13px] font-bold text-[#181725] tabular-nums">
-                                                        ₹{Number(product.basePrice ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                                            {/* Brand */}
+                                            <td className="px-5 py-3 border-r border-[#EEEEEE]/40">
+                                                <select
+                                                    value={product.brand || ''}
+                                                    onChange={e => {
+                                                        const val = e.target.value || null;
+                                                        handleCellChange(product.id, 'brand', val);
+                                                        handleInlineEdit(product.id, 'brand', val, originalProductsRef.current.find(p => p.id === product.id)?.brand || null);
+                                                    }}
+                                                    className={cn(cellInput, "text-[#7C7C7C] font-medium appearance-none")}
+                                                >
+                                                    <option value="">— Select Brand —</option>
+                                                    {brands.map(b => (
+                                                        <option key={b.id} value={b.name}>{b.name}</option>
+                                                    ))}
+                                                </select>
+                                            </td>
+
+                                            {/* Category */}
+                                            <td className="px-5 py-3 border-r border-[#EEEEEE]/40">
+                                                <select
+                                                    value={product.category?.id ?? ''}
+                                                    onChange={e => {
+                                                        const val = e.target.value || null;
+                                                        const matchedCat = categories.find(c => c.id === val);
+                                                        handleCellChange(product.id, 'category', matchedCat ? { id: matchedCat.id, name: matchedCat.name } : null);
+                                                        handleInlineEdit(product.id, 'primaryCategoryId', val, originalProductsRef.current.find(p => p.id === product.id)?.category?.id ?? null);
+                                                    }}
+                                                    className={cn(cellInput, "text-[#7C7C7C] font-medium appearance-none")}
+                                                >
+                                                    <option value="">— Select Category —</option>
+                                                    {categories.map(c => (
+                                                        <option key={c.id} value={c.id}>
+                                                            {c.parentId ? `— ${c.name}` : c.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </td>
+
+                                            {/* Vendors */}
+                                            <td className="px-5 py-3 border-r border-[#EEEEEE]/40">
+                                                {(product.vendorCount ?? 0) > 0 ? (
+                                                    <span className="font-semibold text-[#181725]" title={product.vendors?.join(', ')}>
+                                                        {product.vendorCount} vendor{product.vendorCount !== 1 ? 's' : ''}
                                                     </span>
-                                                </td>
-
-                                                {/* GST % */}
-                                                <td className="px-5 py-4 text-right">
-                                                    <span className="text-[13px] font-medium text-[#7C7C7C] tabular-nums">
-                                                        {Number(product.taxPercent ?? 0)}%
+                                                ) : (
+                                                    <span className="text-[10px] font-bold text-[#3B82F6] bg-[#EFF6FF] px-2 py-0.5 rounded-[4px] uppercase tracking-wider">
+                                                        Catalog
                                                     </span>
-                                                </td>
+                                                )}
+                                            </td>
 
-                                                {/* Unit / pack */}
-                                                <td className="px-5 py-4">
-                                                    <span className="text-[13px] font-medium text-[#7C7C7C]">
-                                                        {product.unit || product.packSize || '--'}
-                                                    </span>
-                                                </td>
+                                            {/* Base price (taxable rate) */}
+                                            <td className="px-5 py-3 text-right border-r border-[#EEEEEE]/40 bg-[#FAFAFA]/20">
+                                                <div className="flex items-center justify-end gap-0.5 max-w-[90px] ml-auto">
+                                                    <span className="font-bold text-[#181725]">₹</span>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0"
+                                                        value={product.basePrice ?? ''}
+                                                        onChange={e => handleCellChange(product.id, 'basePrice', parseFloat(e.target.value) || 0)}
+                                                        onBlur={e => handleInlineEdit(product.id, 'basePrice', parseFloat(e.target.value) || 0, originalProductsRef.current.find(p => p.id === product.id)?.basePrice)}
+                                                        className={cn(cellInput, "text-right font-bold text-[#181725] px-1 py-0.5")}
+                                                    />
+                                                </div>
+                                            </td>
 
-                                                {/* Status */}
-                                                <td className="px-5 py-4">
-                                                    <span
-                                                        className={cn(
-                                                            'inline-flex items-center gap-1.5 text-[11px] font-[900] px-3 py-1.5 rounded-[8px] uppercase tracking-wider border whitespace-nowrap',
-                                                            statusCfg.bg,
-                                                            statusCfg.text,
-                                                        )}
-                                                        style={{ borderColor: 'transparent' }}
+                                            {/* GST % */}
+                                            <td className="px-5 py-3 text-right border-r border-[#EEEEEE]/40 bg-[#FAFAFA]/20">
+                                                <select
+                                                    value={String(product.taxPercent ?? 0)}
+                                                    onChange={e => {
+                                                        const val = parseFloat(e.target.value) || 0;
+                                                        handleCellChange(product.id, 'taxPercent', val);
+                                                        handleInlineEdit(product.id, 'taxPercent', val, originalProductsRef.current.find(p => p.id === product.id)?.taxPercent || 0);
+                                                    }}
+                                                    className={cn(cellInput, "text-right font-medium text-[#7C7C7C] w-[65px] ml-auto appearance-none")}
+                                                >
+                                                    {TAX_OPTIONS.map(t => (
+                                                        <option key={t} value={t}>{t}%</option>
+                                                    ))}
+                                                </select>
+                                            </td>
+
+                                            {/* Gross Price */}
+                                            <td className="px-5 py-3 text-right border-r border-[#EEEEEE]/40 bg-[#299E60]/[0.02]">
+                                                <span className="font-extrabold text-[#299E60] tabular-nums">
+                                                    ₹{(product.basePrice * (1 + (product.taxPercent || 0) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </span>
+                                            </td>
+
+                                            {/* Unit */}
+                                            <td className="px-5 py-3 border-r border-[#EEEEEE]/40">
+                                                <select
+                                                    value={product.unit || ''}
+                                                    onChange={e => {
+                                                        const val = e.target.value || null;
+                                                        handleCellChange(product.id, 'unit', val);
+                                                        handleInlineEdit(product.id, 'unit', val, originalProductsRef.current.find(p => p.id === product.id)?.unit || null);
+                                                    }}
+                                                    className={cn(cellInput, "text-[#7C7C7C] font-medium appearance-none")}
+                                                >
+                                                    <option value="">— Select Unit —</option>
+                                                    {UNIT_OPTIONS.map(u => (
+                                                        <option key={u} value={u}>{u}</option>
+                                                    ))}
+                                                </select>
+                                            </td>
+
+                                            {/* Status */}
+                                            <td className="px-5 py-3 border-r border-[#EEEEEE]/40">
+                                                <select
+                                                    value={product.approvalStatus}
+                                                    onChange={e => {
+                                                        const val = e.target.value as 'approved' | 'rejected' | 'pending';
+                                                        handleCellChange(product.id, 'approvalStatus', val);
+                                                        handleInlineEdit(product.id, 'approvalStatus', val, originalProductsRef.current.find(p => p.id === product.id)?.approvalStatus);
+                                                    }}
+                                                    className={cn(
+                                                        "text-[10px] font-extrabold px-2 py-1 rounded-[6px] uppercase tracking-wider border outline-none bg-transparent cursor-pointer",
+                                                        product.approvalStatus === 'approved' ? 'text-[#299E60] bg-[#EEF8F1] border-transparent' :
+                                                        product.approvalStatus === 'rejected' ? 'text-[#E74C3C] bg-[#FFF0F0] border-transparent' :
+                                                        'text-[#F59E0B] bg-[#FFF7E6] border-transparent'
+                                                    )}
+                                                >
+                                                    <option value="pending">Pending</option>
+                                                    <option value="approved">Approved</option>
+                                                    <option value="rejected">Rejected</option>
+                                                </select>
+                                            </td>
+
+                                            {/* Inventory — aggregated across vendors */}
+                                            <td className="px-5 py-3 whitespace-nowrap border-r border-[#EEEEEE]/40">
+                                                {(product.vendorCount ?? 0) > 0 ? (
+                                                    <div
+                                                        className="cursor-default"
+                                                        title={product.vendorStock?.map(vs => `${vs.vendor}: ${vs.qty}`).join('\n')}
                                                     >
-                                                        <span className={cn('w-1.5 h-1.5 rounded-full', statusCfg.dot)} />
-                                                        {statusCfg.label}
+                                                        <span className={cn(
+                                                            'font-bold',
+                                                            (product.totalStock ?? 0) > 0 ? 'text-[#181725]' : 'text-[#AEAEAE]',
+                                                        )}>
+                                                            {product.totalStock ?? 0}
+                                                        </span>
+                                                        <span className="text-[11px] text-[#AEAEAE] ml-1">
+                                                            across {product.vendorCount}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[11px] font-medium text-[#AEAEAE]">
+                                                        —
                                                     </span>
-                                                </td>
+                                                )}
+                                            </td>
 
-                                                {/* Inventory — aggregated across vendors */}
-                                                <td className="px-5 py-4 whitespace-nowrap">
-                                                    {(product.vendorCount ?? 0) > 0 ? (
-                                                        <div
-                                                            className="cursor-default"
-                                                            title={product.vendorStock?.map(vs => `${vs.vendor}: ${vs.qty}`).join('\n')}
-                                                        >
-                                                            <span className={cn(
-                                                                'text-[13px] font-bold',
-                                                                (product.totalStock ?? 0) > 0 ? 'text-[#181725]' : 'text-[#AEAEAE]',
-                                                            )}>
-                                                                {product.totalStock ?? 0}
-                                                            </span>
-                                                            <span className="text-[11px] text-[#AEAEAE] ml-1">
-                                                                across {product.vendorCount} vendor{product.vendorCount !== 1 ? 's' : ''}
-                                                            </span>
+                                            {/* Actions — pinned right */}
+                                            <td className="px-5 py-3 sticky right-0 bg-white group-hover:bg-[#F8F9FB] z-10 border-l border-[#EEEEEE]/40">
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    {savingRows[product.id] && Object.keys(savingRows[product.id]).length > 0 ? (
+                                                        <div className="w-[36px] h-[36px] flex items-center justify-center text-[#299E60]">
+                                                            <Loader2 className="animate-spin" size={16} />
                                                         </div>
                                                     ) : (
-                                                        <span className="text-[11px] font-medium text-[#AEAEAE]">
-                                                            —
-                                                        </span>
-                                                    )}
-                                                </td>
-
-                                                {/* Actions — pinned right */}
-                                                <td className="px-5 py-4 sticky right-0 bg-white group-hover:bg-[#F8F9FB] z-10">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        {/* Edit */}
-                                                        {perms.canWriteProducts && (
-                                                            <button
-                                                                onClick={() => openEdit(product)}
-                                                                title="Edit product"
-                                                                className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center text-[#7C7C7C] hover:bg-[#EEF8F1] hover:text-[#299E60] transition-all"
-                                                            >
-                                                                <Pencil size={16} />
-                                                            </button>
-                                                        )}
-
-                                                        {/* Toggle Active */}
-                                                        {perms.canWriteProducts && (
-                                                        <button
-                                                            onClick={() => toggleActive(product)}
-                                                            disabled={actionLoading === product.id}
-                                                            title={product.isActive ? 'Deactivate' : 'Activate'}
-                                                            className={cn(
-                                                                'w-[36px] h-[36px] rounded-[10px] flex items-center justify-center transition-all disabled:opacity-50',
-                                                                product.isActive
-                                                                    ? 'text-[#299E60] hover:bg-[#EEF8F1]'
-                                                                    : 'text-[#AEAEAE] hover:bg-[#F8F9FB]',
-                                                            )}
-                                                        >
-                                                            {actionLoading === product.id ? (
-                                                                <Loader2 size={16} className="animate-spin" />
-                                                            ) : (
-                                                                <div
-                                                                    className="relative inline-flex h-[20px] w-[36px] shrink-0 items-center rounded-full transition-colors duration-200"
-                                                                    style={{ backgroundColor: product.isActive ? '#299E60' : '#D1D5DB' }}
+                                                        <>
+                                                            {/* Edit */}
+                                                            {perms.canWriteProducts && (
+                                                                <button
+                                                                    onClick={() => openEdit(product)}
+                                                                    title="Edit product"
+                                                                    className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center text-[#7C7C7C] hover:bg-[#EEF8F1] hover:text-[#299E60] transition-all"
                                                                 >
-                                                                    <span className="inline-block h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform duration-200" style={{ transform: product.isActive ? 'translateX(18px)' : 'translateX(3px)' }} />
-                                                                </div>
+                                                                    <Pencil size={15} />
+                                                                </button>
                                                             )}
-                                                        </button>
-                                                        )}
 
-                                                        {/* Delete */}
-                                                        {perms.canWriteProducts && (
+                                                            {/* Toggle Active */}
+                                                            {perms.canWriteProducts && (
                                                             <button
-                                                                onClick={() => setDeleteTarget(product)}
-                                                                title="Delete product"
-                                                                className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center text-[#7C7C7C] hover:bg-[#FFF0F0] hover:text-[#E74C3C] transition-all"
+                                                                onClick={() => toggleActive(product)}
+                                                                disabled={actionLoading === product.id}
+                                                                title={product.isActive ? 'Deactivate' : 'Activate'}
+                                                                className={cn(
+                                                                    'w-[34px] h-[34px] rounded-[10px] flex items-center justify-center transition-all disabled:opacity-50',
+                                                                    product.isActive
+                                                                        ? 'text-[#299E60] hover:bg-[#EEF8F1]'
+                                                                        : 'text-[#AEAEAE] hover:bg-[#F8F9FB]',
+                                                                )}
                                                             >
-                                                                <Trash2 size={16} />
+                                                                {actionLoading === product.id ? (
+                                                                    <Loader2 size={15} className="animate-spin" />
+                                                                ) : (
+                                                                    <div
+                                                                        className="relative inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full transition-colors duration-200"
+                                                                        style={{ backgroundColor: product.isActive ? '#299E60' : '#D1D5DB' }}
+                                                                    >
+                                                                        <span className="inline-block h-[12px] w-[12px] rounded-full bg-white shadow-sm transition-transform duration-200" style={{ transform: product.isActive ? 'translateX(17px)' : 'translateX(3px)' }} />
+                                                                    </div>
+                                                                )}
                                                             </button>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
+                                                            )}
 
-                        {/* Footer / Load More */}
-                        <div className="p-6 bg-[#FDFDFD] border-t border-[#EEEEEE] flex items-center justify-between">
-                            <p className="text-[13px] text-[#AEAEAE] font-bold uppercase tracking-wider">
-                                Showing <span className="text-[#181725]">{products.length}</span> product{products.length !== 1 ? 's' : ''}
-                            </p>
-                            {hasMore && (
+                                                            {/* Delete */}
+                                                            {perms.canWriteProducts && (
+                                                                <button
+                                                                    onClick={() => setDeleteTarget(product)}
+                                                                    title="Delete product"
+                                                                    className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center text-[#7C7C7C] hover:bg-[#FFF0F0] hover:text-[#E74C3C] transition-all"
+                                                                >
+                                                                    <Trash2 size={15} />
+                                                                </button>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Footer / Pagination */}
+                    <div className="p-6 bg-[#FDFDFD] border-t border-[#EEEEEE] flex items-center justify-between flex-wrap gap-4">
+                        <p className="text-[13px] text-[#7C7C7C] font-semibold">
+                            Showing{' '}
+                            <span className="text-[#181725] font-bold">
+                                {totalProductsCount === 0 ? 0 : (currentPage - 1) * PAGE_LIMIT + 1}–{Math.min(currentPage * PAGE_LIMIT, totalProductsCount)}
+                            </span>
+                            {' '}of{' '}
+                            <span className="text-[#181725] font-bold">{totalProductsCount}</span>
+                            {' '}products
+                        </p>
+                        
+                        {totalPages > 1 && (
+                            <div className="flex items-center gap-1">
+                                {/* Prev Button */}
                                 <button
-                                    onClick={() => fetchProducts(true)}
-                                    disabled={loadingMore}
-                                    className="h-[40px] px-6 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] transition-all flex items-center gap-2 shadow-sm disabled:opacity-60"
+                                    onClick={() => fetchProducts(Math.max(1, currentPage - 1))}
+                                    disabled={currentPage === 1 || loading}
+                                    className="w-[34px] h-[34px] flex items-center justify-center rounded-[8px] border border-[#EEEEEE] text-[#7C7C7C] hover:bg-[#F5F5F5] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                                 >
-                                    {loadingMore ? (
-                                        <Loader2 size={16} className="animate-spin" />
-                                    ) : (
-                                        <Download size={14} />
-                                    )}
-                                    Load More
+                                    <ChevronLeft size={16} />
                                 </button>
-                            )}
-                        </div>
-                    </>
-                )}
+
+                                {/* Page numbers */}
+                                {getPageRange(currentPage, totalPages).map((item, idx) =>
+                                    item === 'gap' ? (
+                                        <span key={`gap-${idx}`} className="w-[34px] h-[34px] flex items-center justify-center text-[#AEAEAE] text-[13px]">…</span>
+                                    ) : (
+                                        <button
+                                            key={item}
+                                            onClick={() => fetchProducts(item)}
+                                            disabled={loading}
+                                            className={cn(
+                                                'w-[34px] h-[34px] flex items-center justify-center rounded-[8px] text-[13px] font-bold transition-colors',
+                                                item === currentPage
+                                                    ? 'bg-[#299E60] text-white'
+                                                    : 'border border-[#EEEEEE] text-[#7C7C7C] hover:bg-[#F5F5F5]'
+                                            )}
+                                        >
+                                            {item}
+                                        </button>
+                                    )
+                                )}
+
+                                {/* Next Button */}
+                                <button
+                                    onClick={() => fetchProducts(Math.min(totalPages, currentPage + 1))}
+                                    disabled={currentPage === totalPages || loading}
+                                    className="w-[34px] h-[34px] flex items-center justify-center rounded-[8px] border border-[#EEEEEE] text-[#7C7C7C] hover:bg-[#F5F5F5] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <ChevronRight size={16} />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
             </div>
 
             {/* ============================================================= */}
@@ -1281,6 +1485,37 @@ export default function ProductsPage() {
                     </button>
                 </div>
 
+                {/* Tab Bar */}
+                <div className="flex bg-white border-b border-[#EEEEEE] px-8 py-0.5 gap-6 shrink-0 z-10 sticky top-0">
+                    {(['general', 'pricing', 'advanced'] as const).map(tab => {
+                        const isActive = activeTab === tab;
+                        const labels = {
+                            general: { label: 'General Info', icon: Info, color: 'text-[#299E60]', bg: 'bg-[#EEF8F1]' },
+                            pricing: { label: 'Pricing & Stock', icon: DollarSign, color: 'text-[#3B82F6]', bg: 'bg-[#EFF6FF]' },
+                            advanced: { label: 'Advanced Settings', icon: SettingsIcon, color: 'text-[#F59E0B]', bg: 'bg-[#FFF7E6]' },
+                        };
+                        const cfg = labels[tab];
+                        return (
+                            <button
+                                key={tab}
+                                type="button"
+                                onClick={() => setActiveTab(tab)}
+                                className={cn(
+                                    "flex items-center gap-2 py-3.5 text-[13px] font-extrabold border-b-2 transition-all relative outline-none",
+                                    isActive 
+                                        ? "border-[#299E60] text-[#181725]" 
+                                        : "border-transparent text-[#AEAEAE] hover:text-[#7C7C7C]"
+                                )}
+                            >
+                                <div className={cn("w-6 h-6 rounded-[6px] flex items-center justify-center transition-colors", isActive ? cfg.bg + " " + cfg.color : "bg-gray-100 text-[#AEAEAE]")}>
+                                    <cfg.icon size={13} strokeWidth={2.5} />
+                                </div>
+                                {cfg.label}
+                            </button>
+                        );
+                    })}
+                </div>
+
                 {/* Panel Body */}
                 <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 bg-[#F8F9FB]">
                     {loadingProduct ? (
@@ -1296,527 +1531,529 @@ export default function ProductsPage() {
                                 </div>
                             )}
 
-                    {/* ======== Section 1: Basic Information ======== */}
-                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                        <SectionHeader icon={<Info size={16} />} title="Basic Information" />
-                        <div className="space-y-4">
-                            {/* Product Name */}
-                            <div>
-                                <FieldLabel required>Product Name</FieldLabel>
-                                <input
-                                    type="text"
-                                    value={formData.name}
-                                    onChange={e => updateField('name', e.target.value)}
-                                    placeholder="Enter product name"
-                                    className={cn(
-                                        inputCls,
-                                        formErrors.name && 'border-[#E74C3C] focus:border-[#E74C3C]',
-                                    )}
-                                />
-                                {formErrors.name && (
-                                    <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.name}</p>
-                                )}
-                            </div>
-
-                            {/* SKU, HSN, Brand, Barcode — 2-column grid */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <FieldLabel>SKU</FieldLabel>
-                                    <input
-                                        type="text"
-                                        value={formData.sku}
-                                        onChange={e => updateField('sku', e.target.value)}
-                                        placeholder="e.g., RIC-BAS-001"
-                                        className={inputCls}
-                                    />
-                                </div>
-                                <div>
-                                    <FieldLabel>HSN Code</FieldLabel>
-                                    <input
-                                        type="text"
-                                        value={formData.hsn}
-                                        onChange={e => updateField('hsn', e.target.value)}
-                                        placeholder="e.g., 1006"
-                                        className={inputCls}
-                                    />
-                                </div>
-                                <div>
-                                    <FieldLabel>Brand</FieldLabel>
-                                    <select
-                                        value={formData.brand}
-                                        onChange={e => updateField('brand', e.target.value)}
-                                        className={cn(selectCls, 'cursor-pointer')}
-                                    >
-                                        <option value="">Select brand</option>
-                                        {brands.map(b => (
-                                            <option key={b.id} value={b.name}>{b.name}</option>
-                                        ))}
-                                    </select>
-                                    {brands.length === 0 && (
-                                        <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
-                                            No brands yet — add one in <Link href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</Link>
-                                        </p>
-                                    )}
-                                </div>
-                                <div>
-                                    <FieldLabel>Barcode</FieldLabel>
-                                    <input
-                                        type="text"
-                                        value={formData.barcode}
-                                        onChange={e => updateField('barcode', e.target.value)}
-                                        placeholder="e.g., 8901234567890"
-                                        className={inputCls}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Categories — multi-select. First chip is the primary (mirrored
-                                into Product.categoryId on the server). disableSuggest hides
-                                the "request new" CTA since admin can create categories
-                                directly via the Categories page. */}
-                            <CategoryMultiPickerById
-                                value={formData.categoryIds}
-                                onChange={(ids) => setFormData(prev => ({ ...prev, categoryIds: ids }))}
-                                max={5}
-                                disableSuggest
-                                label="Categories"
-                                helper="Pick up to 5 — first chip is the primary. Customers can find this product under any of these categories."
-                            />
-
-                            {/* Description */}
-                            <div>
-                                <FieldLabel>Description</FieldLabel>
-                                <textarea
-                                    value={formData.description}
-                                    onChange={e => updateField('description', e.target.value)}
-                                    rows={4}
-                                    className={textareaCls}
-                                    placeholder="Describe the product, its quality, origin, etc."
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ======== Section 2: Pricing & Tax ======== */}
-                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                        <SectionHeader icon={<DollarSign size={16} />} title="Pricing & Tax" />
-
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-3 gap-4">
-                                <div>
-                                    <FieldLabel required>Taxable Rate (Amt)</FieldLabel>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={formData.basePrice}
-                                        onChange={e => updateField('basePrice', e.target.value)}
-                                        placeholder="0.00"
-                                        className={cn(
-                                            inputCls,
-                                            formErrors.basePrice && 'border-[#E74C3C] focus:border-[#E74C3C]',
-                                        )}
-                                    />
-                                    {formErrors.basePrice && (
-                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.basePrice}</p>
-                                    )}
-                                </div>
-                                <div>
-                                    <FieldLabel required>Tax % (GST)</FieldLabel>
-                                    <select
-                                        value={formData.taxPercent}
-                                        onChange={e => updateField('taxPercent', e.target.value)}
-                                        className={cn(selectCls, 'cursor-pointer')}
-                                    >
-                                        {TAX_OPTIONS.map(t => (
-                                            <option key={t} value={t}>{t}%</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <FieldLabel required>Gross Rate (Customer Price)</FieldLabel>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={formData.basePrice && formData.taxPercent
-                                            ? (parseFloat(formData.basePrice) * (1 + parseFloat(formData.taxPercent || '0') / 100)).toFixed(2)
-                                            : formData.originalPrice || ''}
-                                        onChange={e => {
-                                            const gross = e.target.value;
-                                            updateField('originalPrice', gross);
-                                            const tp = parseFloat(formData.taxPercent || '0');
-                                            const g = parseFloat(gross);
-                                            if (!isNaN(g) && !isNaN(tp)) {
-                                                updateField('basePrice', (g / (1 + tp / 100)).toFixed(2));
-                                            }
-                                        }}
-                                        placeholder="0.00"
-                                        className={inputCls}
-                                    />
-                                    {formData.basePrice && parseFloat(formData.taxPercent || '0') > 0 && (
-                                        <p className="text-[11px] text-[#7C7C7C] font-medium mt-1.5">
-                                            Taxable: {'\u20B9'}{parseFloat(formData.basePrice).toFixed(2)} | GST {formData.taxPercent}%: {'\u20B9'}{(parseFloat(formData.basePrice) * parseFloat(formData.taxPercent || '0') / 100).toFixed(2)}
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ======== Section 3: Bulk Pricing Tiers (only when assigned to a vendor) ======== */}
-                    {formData.vendorId && (
-                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                            <div className="flex items-start justify-between mb-5">
-                                <div>
-                                    <SectionHeader icon={<Tag size={16} />} title="Bulk Pricing Tiers" />
-                                    <p className="text-[12px] text-[#AEAEAE] font-medium -mt-3 ml-[42px]">
-                                        Up to 3 quantity-based discount tiers (taxable rate, ex-GST)
-                                    </p>
-                                </div>
-                                {formData.priceSlabs.length < 3 && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData(prev => ({
-                                            ...prev,
-                                            priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '' }],
-                                        }))}
-                                        className="h-[40px] px-5 bg-[#1a365d] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#1a365d]/90 transition-colors flex items-center gap-2 shrink-0"
-                                    >
-                                        <Plus size={14} />
-                                        Add Bulk Tier
-                                    </button>
-                                )}
-                            </div>
-
-                            <div className="space-y-4">
-                                {formData.priceSlabs.map((slab, index) => (
-                                    <div key={index} className="rounded-[14px] border border-[#EEEEEE] overflow-hidden">
-                                        {/* Tier header */}
-                                        <div className="flex items-center justify-between px-5 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE]">
-                                            <div className="flex items-center gap-2.5">
-                                                <span className="w-[28px] h-[28px] rounded-full bg-[#299E60] text-white text-[12px] font-bold flex items-center justify-center">
-                                                    {index + 1}
-                                                </span>
-                                                <h4 className="text-[14px] font-bold text-[#181725]">Bulk Tier {index + 1}</h4>
+                            {activeTab === 'general' && (
+                                <>
+                                    {/* ======== Section 1: Basic Information ======== */}
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                                        <SectionHeader icon={<Info size={16} />} title="Basic Information" />
+                                        <div className="space-y-4">
+                                            {/* Product Name */}
+                                            <div>
+                                                <FieldLabel required>Product Name</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.name}
+                                                    onChange={e => updateField('name', e.target.value)}
+                                                    placeholder="Enter product name"
+                                                    className={cn(
+                                                        inputCls,
+                                                        formErrors.name && 'border-[#E74C3C] focus:border-[#E74C3C]',
+                                                    )}
+                                                />
+                                                {formErrors.name && (
+                                                    <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.name}</p>
+                                                )}
                                             </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => setFormData(prev => ({
-                                                    ...prev,
-                                                    priceSlabs: prev.priceSlabs.filter((_, idx) => idx !== index),
-                                                }))}
-                                                className="p-1.5 hover:bg-[#FFF0F0] rounded-[6px] transition-colors text-[#AEAEAE] hover:text-[#E74C3C]"
-                                            >
-                                                <Trash2 size={15} />
-                                            </button>
-                                        </div>
 
-                                        {/* Tier body */}
-                                        <div className="p-5">
+                                            {/* SKU, HSN, Brand, Barcode — 2-column grid */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>SKU</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.sku}
+                                                        onChange={e => updateField('sku', e.target.value)}
+                                                        placeholder="e.g., RIC-BAS-001"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>HSN Code</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.hsn}
+                                                        onChange={e => updateField('hsn', e.target.value)}
+                                                        placeholder="e.g., 1006"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Brand</FieldLabel>
+                                                    <select
+                                                        value={formData.brand}
+                                                        onChange={e => updateField('brand', e.target.value)}
+                                                        className={cn(selectCls, 'cursor-pointer')}
+                                                    >
+                                                        <option value="">Select brand</option>
+                                                        {brands.map(b => (
+                                                            <option key={b.id} value={b.name}>{b.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    {brands.length === 0 && (
+                                                        <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
+                                                            No brands yet — add one in <Link href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</Link>
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Barcode</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.barcode}
+                                                        onChange={e => updateField('barcode', e.target.value)}
+                                                        placeholder="e.g., 8901234567890"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Categories — multi-select */}
+                                            <CategoryMultiPickerById
+                                                value={formData.categoryIds}
+                                                onChange={(ids) => setFormData(prev => ({ ...prev, categoryIds: ids }))}
+                                                max={5}
+                                                disableSuggest
+                                                label="Categories"
+                                                helper="Pick up to 5 — first chip is the primary. Customers can find this product under any of these categories."
+                                            />
+
+                                            {/* Description */}
+                                            <div>
+                                                <FieldLabel>Description</FieldLabel>
+                                                <textarea
+                                                    value={formData.description}
+                                                    onChange={e => updateField('description', e.target.value)}
+                                                    rows={4}
+                                                    className={textareaCls}
+                                                    placeholder="Describe the product, its quality, origin, etc."
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* ======== Section 6: Media ======== */}
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                                        <SectionHeader icon={<ImageIcon size={16} />} title="Media" />
+                                        <div className="space-y-5">
+                                            {/* Primary Image */}
+                                            <ImageUpload
+                                                value={formData.imageUrl}
+                                                onChange={(url) => updateField('imageUrl', url)}
+                                                folder="products"
+                                                label="Primary Image"
+                                                size="lg"
+                                            />
+
+                                            {/* Additional Images */}
+                                            <MultiImageUpload
+                                                values={formData.images.filter(Boolean)}
+                                                onChange={(urls) => setFormData(prev => ({ ...prev, images: urls }))}
+                                                folder="products"
+                                                label="Additional Images"
+                                                max={8}
+                                            />
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
+                            {activeTab === 'pricing' && (
+                                <>
+                                    {/* ======== Section 2: Pricing & Tax ======== */}
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                                        <SectionHeader icon={<DollarSign size={16} />} title="Pricing & Tax" />
+                                        <div className="space-y-4">
                                             <div className="grid grid-cols-3 gap-4">
                                                 <div>
-                                                    <FieldLabel>Min Quantity</FieldLabel>
+                                                    <FieldLabel required>Taxable Rate (Amt)</FieldLabel>
                                                     <input
                                                         type="number"
-                                                        min="1"
-                                                        value={slab.minQty}
-                                                        onChange={e => setFormData(prev => ({
-                                                            ...prev,
-                                                            priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, minQty: e.target.value } : s),
-                                                        }))}
-                                                        className={inputCls}
-                                                        placeholder="e.g., 10"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={formData.basePrice}
+                                                        onChange={e => updateField('basePrice', e.target.value)}
+                                                        placeholder="0.00"
+                                                        className={cn(
+                                                            inputCls,
+                                                            formErrors.basePrice && 'border-[#E74C3C] focus:border-[#E74C3C]',
+                                                        )}
                                                     />
+                                                    {formErrors.basePrice && (
+                                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.basePrice}</p>
+                                                    )}
                                                 </div>
                                                 <div>
-                                                    <FieldLabel>Max Quantity</FieldLabel>
+                                                    <FieldLabel required>Tax % (GST)</FieldLabel>
+                                                    <select
+                                                        value={formData.taxPercent}
+                                                        onChange={e => updateField('taxPercent', e.target.value)}
+                                                        className={cn(selectCls, 'cursor-pointer')}
+                                                    >
+                                                        {TAX_OPTIONS.map(t => (
+                                                            <option key={t} value={t}>{t}%</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <FieldLabel required>Gross Rate (Customer Price)</FieldLabel>
                                                     <input
                                                         type="number"
-                                                        min="1"
-                                                        value={slab.maxQty}
-                                                        onChange={e => setFormData(prev => ({
-                                                            ...prev,
-                                                            priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, maxQty: e.target.value } : s),
-                                                        }))}
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={formData.basePrice && formData.taxPercent
+                                                            ? (parseFloat(formData.basePrice) * (1 + parseFloat(formData.taxPercent || '0') / 100)).toFixed(2)
+                                                            : formData.originalPrice || ''}
+                                                        onChange={e => {
+                                                            const gross = e.target.value;
+                                                            updateField('originalPrice', gross);
+                                                            const tp = parseFloat(formData.taxPercent || '0');
+                                                            const g = parseFloat(gross);
+                                                            if (!isNaN(g) && !isNaN(tp)) {
+                                                                updateField('basePrice', (g / (1 + tp / 100)).toFixed(2));
+                                                            }
+                                                        }}
+                                                        placeholder="0.00"
                                                         className={inputCls}
-                                                        placeholder="(optional)"
                                                     />
-                                                </div>
-                                                <div>
-                                                    <FieldLabel required>Taxable Rate (per Unit)</FieldLabel>
-                                                    <div className="relative">
-                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] text-[14px]">{'\u20B9'}</span>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            value={slab.price}
-                                                            onChange={e => setFormData(prev => ({
-                                                                ...prev,
-                                                                priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, price: e.target.value } : s),
-                                                            }))}
-                                                            className={cn(inputCls, 'pl-8')}
-                                                            placeholder="0.00"
-                                                        />
-                                                    </div>
+                                                    {formData.basePrice && parseFloat(formData.taxPercent || '0') > 0 && (
+                                                        <p className="text-[11px] text-[#7C7C7C] font-medium mt-1.5">
+                                                            Taxable: {'\u20B9'}{parseFloat(formData.basePrice).toFixed(2)} | GST {formData.taxPercent}%: {'\u20B9'}{(parseFloat(formData.basePrice) * parseFloat(formData.taxPercent || '0') / 100).toFixed(2)}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                ))}
 
-                                {formData.priceSlabs.length === 0 && (
-                                    <div className="text-center py-8 text-[#AEAEAE]">
-                                        <BarChart3 size={32} className="mx-auto mb-2 text-[#E5E7EB]" />
-                                        <p className="text-[13px] font-medium">No bulk tiers yet. Click &quot;Add Bulk Tier&quot; to add quantity-based pricing.</p>
+                                    {/* ======== Section 5: Inventory & Packaging ======== */}
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                                        <SectionHeader icon={<BoxIcon size={16} />} title="Inventory & Packaging" />
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Pack Size</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.packSize}
+                                                        onChange={e => updateField('packSize', e.target.value)}
+                                                        className={inputCls}
+                                                        placeholder="e.g., 1 kg, 500 ml"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Unit</FieldLabel>
+                                                    <select
+                                                        value={formData.unit}
+                                                        onChange={e => updateField('unit', e.target.value)}
+                                                        className={cn(selectCls, 'cursor-pointer')}
+                                                    >
+                                                        <option value="">Select unit</option>
+                                                        {UNIT_OPTIONS.map(u => (
+                                                            <option key={u} value={u}>{u}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Min Order Quantity</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        value={formData.minOrderQty}
+                                                        onChange={e => updateField('minOrderQty', e.target.value)}
+                                                        className={inputCls}
+                                                        placeholder="1"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                )}
-                            </div>
-                        </div>
+
+                                    {/* ======== Section 4: Vendor Assignment ======== */}
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                                        <SectionHeader icon={<SettingsIcon size={16} />} title="Vendor Assignment" />
+                                        <div>
+                                            <FieldLabel>
+                                                Vendor <span className="text-[11px] font-medium text-[#AEAEAE]">(optional — leave empty for catalog product)</span>
+                                            </FieldLabel>
+                                            <select
+                                                value={formData.vendorId}
+                                                onChange={e => updateField('vendorId', e.target.value)}
+                                                className={cn(selectCls, 'cursor-pointer')}
+                                            >
+                                                <option value="">No vendor (Catalog product)</option>
+                                                {vendors.map(v => (
+                                                    <option key={v.id} value={v.id}>{v.businessName}</option>
+                                                ))}
+                                            </select>
+                                            <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
+                                                Catalog products are auto-approved and any vendor can adopt them.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* ======== Section 3: Bulk Pricing Tiers ======== */}
+                                    {formData.vendorId && (
+                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                                            <div className="flex items-start justify-between mb-5">
+                                                <div>
+                                                    <SectionHeader icon={<Tag size={16} />} title="Bulk Pricing Tiers" />
+                                                    <p className="text-[12px] text-[#AEAEAE] font-medium -mt-3 ml-[42px]">
+                                                        Up to 3 quantity-based discount tiers (taxable rate, ex-GST)
+                                                    </p>
+                                                </div>
+                                                {formData.priceSlabs.length < 3 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData(prev => ({
+                                                            ...prev,
+                                                            priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '' }],
+                                                        }))}
+                                                        className="h-[40px] px-5 bg-[#1a365d] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#1a365d]/90 transition-colors flex items-center gap-2 shrink-0"
+                                                    >
+                                                        <Plus size={14} />
+                                                        Add Bulk Tier
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                {formData.priceSlabs.map((slab, index) => (
+                                                    <div key={index} className="rounded-[14px] border border-[#EEEEEE] overflow-hidden">
+                                                        <div className="flex items-center justify-between px-5 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE]">
+                                                            <div className="flex items-center gap-2.5">
+                                                                <span className="w-[28px] h-[28px] rounded-full bg-[#299E60] text-white text-[12px] font-bold flex items-center justify-center">
+                                                                    {index + 1}
+                                                                </span>
+                                                                <h4 className="text-[14px] font-bold text-[#181725]">Bulk Tier {index + 1}</h4>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setFormData(prev => ({
+                                                                    ...prev,
+                                                                    priceSlabs: prev.priceSlabs.filter((_, idx) => idx !== index),
+                                                                }))}
+                                                                className="p-1.5 hover:bg-[#FFF0F0] rounded-[6px] transition-colors text-[#AEAEAE] hover:text-[#E74C3C]"
+                                                            >
+                                                                <Trash2 size={15} />
+                                                            </button>
+                                                        </div>
+
+                                                        <div className="p-5">
+                                                            <div className="grid grid-cols-3 gap-4">
+                                                                <div>
+                                                                    <FieldLabel>Min Quantity</FieldLabel>
+                                                                    <input
+                                                                        type="number"
+                                                                        min="1"
+                                                                        value={slab.minQty}
+                                                                        onChange={e => setFormData(prev => ({
+                                                                            ...prev,
+                                                                            priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, minQty: e.target.value } : s),
+                                                                        }))}
+                                                                        className={inputCls}
+                                                                        placeholder="e.g., 10"
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <FieldLabel>Max Quantity</FieldLabel>
+                                                                    <input
+                                                                        type="number"
+                                                                        min="1"
+                                                                        value={slab.maxQty}
+                                                                        onChange={e => setFormData(prev => ({
+                                                                            ...prev,
+                                                                            priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, maxQty: e.target.value } : s),
+                                                                        }))}
+                                                                        className={inputCls}
+                                                                        placeholder="(optional)"
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <FieldLabel required>Taxable Rate (per Unit)</FieldLabel>
+                                                                    <div className="relative">
+                                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] text-[14px]">{'\u20B9'}</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            min="0"
+                                                                            value={slab.price}
+                                                                            onChange={e => setFormData(prev => ({
+                                                                                ...prev,
+                                                                                priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, price: e.target.value } : s),
+                                                                            }))}
+                                                                            className={cn(inputCls, 'pl-8')}
+                                                                            placeholder="0.00"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+
+                                                {formData.priceSlabs.length === 0 && (
+                                                    <div className="text-center py-8 text-[#AEAEAE]">
+                                                        <BarChart3 size={32} className="mx-auto mb-2 text-[#E5E7EB]" />
+                                                        <p className="text-[13px] font-medium">No bulk tiers yet. Click &quot;Add Bulk Tier&quot; to add quantity-based pricing.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {activeTab === 'advanced' && (
+                                <>
+                                    {/* ======== Section 7: Tags & Settings ======== */}
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
+                                        <SectionHeader icon={<SettingsIcon size={16} />} title="Tags & Settings" />
+                                        <div className="space-y-4">
+                                            {/* Tags */}
+                                            <div>
+                                                <FieldLabel>Tags</FieldLabel>
+                                                <TagInput
+                                                    tags={formData.tags}
+                                                    onChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
+                                                />
+                                            </div>
+
+                                            {/* Credit Eligible & Featured Product */}
+                                            <div className="grid grid-cols-2 gap-4 bg-[#F8F9FB] p-4 rounded-[12px] border border-[#EEEEEE]">
+                                                <label className="flex items-start gap-3 cursor-pointer py-1">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.creditEligible}
+                                                        onChange={(e) => updateField('creditEligible', e.target.checked)}
+                                                        className="w-5 h-5 accent-[#299E60] shrink-0 mt-0.5"
+                                                    />
+                                                    <div>
+                                                        <span className="text-[13.5px] font-bold text-[#181725]">Credit Eligible</span>
+                                                        <p className="text-[11px] text-[#AEAEAE] font-medium leading-tight mt-0.5">Allow buyers to purchase on credit</p>
+                                                    </div>
+                                                </label>
+                                                <label className="flex items-start gap-3 cursor-pointer py-1">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.isFeatured}
+                                                        onChange={(e) => updateField('isFeatured', e.target.checked)}
+                                                        className="w-5 h-5 accent-[#F59E0B] shrink-0 mt-0.5"
+                                                    />
+                                                    <div>
+                                                        <span className="text-[13.5px] font-bold text-[#181725]">Featured Product</span>
+                                                        <p className="text-[11px] text-[#AEAEAE] font-medium leading-tight mt-0.5">Highlight product in catalogs</p>
+                                                    </div>
+                                                </label>
+                                            </div>
+
+                                            {/* Veg / Non-Veg */}
+                                            <div>
+                                                <FieldLabel>Veg / Non-Veg</FieldLabel>
+                                                <div className="flex gap-2">
+                                                    {([['', 'Not Set'], ['veg', '🟢 Veg'], ['nonveg', '🔴 Non-Veg'], ['egg', '🟡 Egg']] as ['' | 'veg' | 'nonveg' | 'egg', string][]).map(([v, label]) => (
+                                                        <button
+                                                            key={v}
+                                                            type="button"
+                                                            onClick={() => updateField('vegNonVeg', v)}
+                                                            className={cn(
+                                                                'flex-1 h-[40px] rounded-[10px] text-[12px] font-bold border transition-colors',
+                                                                formData.vegNonVeg === v
+                                                                    ? 'bg-[#299E60] text-white border-[#299E60]'
+                                                                    : 'bg-white text-[#7C7C7C] border-[#EEEEEE] hover:border-[#299E60]/40'
+                                                            )}
+                                                        >
+                                                            {label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Storage Type & FSSAI */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Storage Type</FieldLabel>
+                                                    <select
+                                                        value={formData.storageType}
+                                                        onChange={(e) => updateField('storageType', e.target.value)}
+                                                        className={selectCls}
+                                                    >
+                                                        <option value="">Not specified</option>
+                                                        <option value="ambient">Ambient (Room Temp)</option>
+                                                        <option value="refrigerated">Refrigerated (2–8°C)</option>
+                                                        <option value="frozen">Frozen (−18°C)</option>
+                                                        <option value="dry">Dry Storage</option>
+                                                        <option value="cool">Cool / Dark (10–15°C)</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>FSSAI Reference</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        maxLength={50}
+                                                        placeholder="e.g. 10016011000015"
+                                                        value={formData.fssaiRef}
+                                                        onChange={e => updateField('fssaiRef', e.target.value)}
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Alias / Search Names */}
+                                            <div>
+                                                <FieldLabel>Alias / Search Names</FieldLabel>
+                                                <TagInput
+                                                    tags={formData.aliasNames}
+                                                    onChange={(names) => setFormData(prev => ({ ...prev, aliasNames: names }))}
+                                                />
+                                                <p className="text-[11px] text-[#AEAEAE] font-medium mt-1">Alternate search keywords</p>
+                                            </div>
+
+                                            {/* Shelf Life & Country of Origin */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Shelf Life (days)</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        value={formData.shelfLifeDays}
+                                                        onChange={(e) => updateField('shelfLifeDays', e.target.value)}
+                                                        className={inputCls}
+                                                        placeholder="e.g. 180"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Country of Origin</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.countryOfOrigin}
+                                                        onChange={(e) => updateField('countryOfOrigin', e.target.value)}
+                                                        className={inputCls}
+                                                        placeholder="e.g. India"
+                                                        maxLength={100}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Substitute Products */}
+                                            <div>
+                                                <FieldLabel>Substitute Products</FieldLabel>
+                                                <SubstituteProductPicker
+                                                    selectedIds={formData.substituteIds}
+                                                    currentProductId={editingProduct?.id}
+                                                    products={products}
+                                                    onChange={(ids) => setFormData(prev => ({ ...prev, substituteIds: ids }))}
+                                                />
+                                                <p className="text-[11px] text-[#AEAEAE] font-medium mt-1">Shown when this item is out of stock</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </>
                     )}
-
-                    {/* ======== Section 4: Vendor Assignment (admin-only) ======== */}
-                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                        <SectionHeader icon={<SettingsIcon size={16} />} title="Vendor Assignment" />
-                        <div>
-                            <FieldLabel>
-                                Vendor <span className="text-[11px] font-medium text-[#AEAEAE]">(optional — leave empty for catalog product)</span>
-                            </FieldLabel>
-                            <select
-                                value={formData.vendorId}
-                                onChange={e => updateField('vendorId', e.target.value)}
-                                className={cn(selectCls, 'cursor-pointer')}
-                            >
-                                <option value="">No vendor (Catalog product)</option>
-                                {vendors.map(v => (
-                                    <option key={v.id} value={v.id}>{v.businessName}</option>
-                                ))}
-                            </select>
-                            <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
-                                Catalog products are auto-approved and any vendor can adopt them.
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* ======== Section 5: Inventory & Packaging ======== */}
-                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                        <SectionHeader icon={<BoxIcon size={16} />} title="Inventory & Packaging" />
-
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <FieldLabel>Pack Size</FieldLabel>
-                                    <input
-                                        type="text"
-                                        value={formData.packSize}
-                                        onChange={e => updateField('packSize', e.target.value)}
-                                        className={inputCls}
-                                        placeholder="e.g., 1 kg, 500 ml"
-                                    />
-                                </div>
-                                <div>
-                                    <FieldLabel>Unit</FieldLabel>
-                                    <select
-                                        value={formData.unit}
-                                        onChange={e => updateField('unit', e.target.value)}
-                                        className={cn(selectCls, 'cursor-pointer')}
-                                    >
-                                        <option value="">Select unit</option>
-                                        {UNIT_OPTIONS.map(u => (
-                                            <option key={u} value={u}>{u}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <FieldLabel>Min Order Quantity</FieldLabel>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={formData.minOrderQty}
-                                        onChange={e => updateField('minOrderQty', e.target.value)}
-                                        className={inputCls}
-                                        placeholder="1"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ======== Section 6: Media ======== */}
-                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                        <SectionHeader icon={<ImageIcon size={16} />} title="Media" />
-
-                        <div className="space-y-5">
-                            {/* Primary Image */}
-                            <ImageUpload
-                                value={formData.imageUrl}
-                                onChange={(url) => updateField('imageUrl', url)}
-                                folder="products"
-                                label="Primary Image"
-                                size="lg"
-                            />
-
-                            {/* Additional Images */}
-                            <MultiImageUpload
-                                values={formData.images.filter(Boolean)}
-                                onChange={(urls) => setFormData(prev => ({ ...prev, images: urls }))}
-                                folder="products"
-                                label="Additional Images"
-                                max={8}
-                            />
-                        </div>
-                    </div>
-
-                    {/* ======== Section 7: Tags & Settings ======== */}
-                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                        <SectionHeader icon={<SettingsIcon size={16} />} title="Tags & Settings" />
-
-                        <div className="space-y-4">
-                            {/* Tags */}
-                            <div>
-                                <FieldLabel>Tags</FieldLabel>
-                                <TagInput
-                                    tags={formData.tags}
-                                    onChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
-                                />
-                            </div>
-
-                            {/* Credit Eligible */}
-                            <label className="flex items-center gap-3 cursor-pointer py-1">
-                                <input
-                                    type="checkbox"
-                                    checked={formData.creditEligible}
-                                    onChange={(e) => updateField('creditEligible', e.target.checked)}
-                                    className="w-5 h-5 accent-[#299E60] shrink-0"
-                                />
-                                <div>
-                                    <span className="text-[14px] font-bold text-[#181725]">Credit Eligible</span>
-                                    <p className="text-[11px] text-[#AEAEAE] font-medium">Allow buyers to purchase this product on credit terms</p>
-                                </div>
-                            </label>
-
-                            {/* Featured Product */}
-                            <label className="flex items-center gap-3 cursor-pointer py-1">
-                                <input
-                                    type="checkbox"
-                                    checked={formData.isFeatured}
-                                    onChange={(e) => updateField('isFeatured', e.target.checked)}
-                                    className="w-5 h-5 accent-[#F59E0B] shrink-0"
-                                />
-                                <div>
-                                    <span className="text-[14px] font-bold text-[#181725]">Featured Product</span>
-                                    <p className="text-[11px] text-[#AEAEAE] font-medium">Highlight this product in search results and vendor page</p>
-                                </div>
-                            </label>
-
-                            {/* Veg / Non-Veg */}
-                            <div>
-                                <FieldLabel>Veg / Non-Veg</FieldLabel>
-                                <div className="flex gap-2">
-                                    {([['', 'Not Set'], ['veg', '🟢 Veg'], ['nonveg', '🔴 Non-Veg'], ['egg', '🟡 Egg']] as ['' | 'veg' | 'nonveg' | 'egg', string][]).map(([v, label]) => (
-                                        <button
-                                            key={v}
-                                            type="button"
-                                            onClick={() => updateField('vegNonVeg', v)}
-                                            className={cn(
-                                                'flex-1 h-[40px] rounded-[10px] text-[12px] font-bold border transition-colors',
-                                                formData.vegNonVeg === v
-                                                    ? 'bg-[#299E60] text-white border-[#299E60]'
-                                                    : 'bg-white text-[#7C7C7C] border-[#EEEEEE] hover:border-[#299E60]/40'
-                                            )}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Storage Type */}
-                            <div>
-                                <FieldLabel>Storage Type</FieldLabel>
-                                <select
-                                    value={formData.storageType}
-                                    onChange={(e) => updateField('storageType', e.target.value)}
-                                    className={selectCls}
-                                >
-                                    <option value="">Not specified</option>
-                                    <option value="ambient">Ambient (Room Temp)</option>
-                                    <option value="refrigerated">Refrigerated (2–8°C)</option>
-                                    <option value="frozen">Frozen (−18°C)</option>
-                                    <option value="dry">Dry Storage</option>
-                                    <option value="cool">Cool / Dark (10–15°C)</option>
-                                </select>
-                            </div>
-
-                            {/* FSSAI Reference */}
-                            <div>
-                                <FieldLabel>FSSAI Reference</FieldLabel>
-                                <input
-                                    type="text"
-                                    maxLength={50}
-                                    placeholder="e.g. 10016011000015"
-                                    value={formData.fssaiRef}
-                                    onChange={e => updateField('fssaiRef', e.target.value)}
-                                    className={inputCls}
-                                />
-                            </div>
-
-                            {/* Alias / Search Names */}
-                            <div>
-                                <FieldLabel>Alias / Search Names</FieldLabel>
-                                <TagInput
-                                    tags={formData.aliasNames}
-                                    onChange={(names) => setFormData(prev => ({ ...prev, aliasNames: names }))}
-                                />
-                                <p className="text-[11px] text-[#AEAEAE] font-medium mt-1">Alternate names buyers may search by (e.g. local language variants)</p>
-                            </div>
-
-                            {/* Shelf Life & Country of Origin */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <FieldLabel>Shelf Life (days)</FieldLabel>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        value={formData.shelfLifeDays}
-                                        onChange={(e) => updateField('shelfLifeDays', e.target.value)}
-                                        className={inputCls}
-                                        placeholder="e.g. 180"
-                                    />
-                                </div>
-                                <div>
-                                    <FieldLabel>Country of Origin</FieldLabel>
-                                    <input
-                                        type="text"
-                                        value={formData.countryOfOrigin}
-                                        onChange={(e) => updateField('countryOfOrigin', e.target.value)}
-                                        className={inputCls}
-                                        placeholder="e.g. India"
-                                        maxLength={100}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Substitute Products */}
-                            <div>
-                                <FieldLabel>Substitute Products</FieldLabel>
-                                <SubstituteProductPicker
-                                    selectedIds={formData.substituteIds}
-                                    currentProductId={editingProduct?.id}
-                                    products={products}
-                                    onChange={(ids) => setFormData(prev => ({ ...prev, substituteIds: ids }))}
-                                />
-                                <p className="text-[11px] text-[#AEAEAE] font-medium mt-1">Products shown to buyers when this item is out of stock</p>
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
-        </div>
+                </div>
 
                 {/* Panel Footer */}
                 <div className="px-8 py-6 border-t border-[#EEEEEE] shrink-0 flex items-center gap-4">
