@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import type { OrderStatus, Prisma } from '@prisma/client';
 import { emitEvent } from '@/events/emitter';
@@ -10,11 +11,18 @@ import {
 import { resolveUnitPrice, type CustomerContext } from '@/modules/pricing/pricing.service';
 import { CartService, type CartContext } from '@/modules/cart/cart.service';
 import { creditWalletService } from '@/modules/credit/creditWallet.service';
+import {
+  promotionService,
+  type CheckoutDraftItem,
+  type CouponApplication,
+} from '@/modules/promotion/promotion.service';
 
 // Payment methods that draw on a CreditWallet. 'h1_wallet'/'wallet' uses the platform
 // (vendor-less) wallet; the rest use the order's vendor credit line.
 const CREDIT_PAYMENTS = ['credit', 'vendor_credit', 'h1_wallet', 'wallet'];
 const isCreditPayment = (m: string | null | undefined): boolean => !!m && CREDIT_PAYMENTS.includes(m);
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 interface VendorOrderInput {
   vendorId: string;
@@ -29,6 +37,10 @@ interface CreateOrderInput {
   // Draft PO (Req 7): persist the order(s) without reserving stock, running the
   // credit check, or clearing the cart. Submitted later via submitDraft().
   saveDraft?: boolean;
+  // Promo Engine Phase 1 — one coupon per checkout (stacking Rule 1) and
+  // optional prepaid-wallet redemption (Rule 6). Both rejected on drafts.
+  couponCode?: string;
+  useWallet?: boolean;
 }
 
 /**
@@ -73,6 +85,20 @@ export class OrderService {
         totalAmount: unknown;
         items: Array<{ productId: string; quantity: number }>;
       }> = [];
+
+      // ── PASS 1 — validate + price every vendor order. No writes happen
+      // here: the coupon and wallet allocations (below) need ALL subtotals
+      // before any order row can be created with its final totals.
+      interface PreparedOrder {
+        vo: VendorOrderInput;
+        itemDetails: Array<{ productId: string; productName: string; quantity: number; unitPrice: number; totalPrice: number }>;
+        draftItems: CheckoutDraftItem[];
+        subtotal: number;
+        promoDiscount: number;
+        appliedPromoId: string | null;
+        salespersonId: string | null;
+      }
+      const prepared: PreparedOrder[] = [];
 
       for (const vo of input.vendorOrders) {
         // 1. Validate stock (skipped for drafts — no reservation happens yet)
@@ -142,11 +168,13 @@ export class OrderService {
         // 4. Calculate subtotal (GST-inclusive gross prices — DB prices are ex-GST taxable rates)
         let subtotal = 0;
         const itemDetails = [];
+        const draftItems: CheckoutDraftItem[] = [];
 
         for (const item of vo.items) {
           const product = await tx.product.findUnique({
             where: { id: item.productId },
-            select: { id: true, name: true, taxPercent: true, creditEligible: true },
+            // categoryId + brand feed coupon scope matching (Promo Engine Phase 1)
+            select: { id: true, name: true, taxPercent: true, creditEligible: true, categoryId: true, brand: true },
           });
           if (!product) throw Errors.notFound('Product');
 
@@ -185,13 +213,21 @@ export class OrderService {
             unitPrice: grossUnitPrice,
             totalPrice,
           });
+          draftItems.push({
+            productId: item.productId,
+            categoryId: product.categoryId,
+            brand: product.brand,
+            lineTotal: totalPrice,
+          });
         }
 
         if (!isDraft && subtotal < Number(vendor.minOrderValue)) {
           throw Errors.belowMOV(vendor.businessName, Number(vendor.minOrderValue), subtotal);
         }
 
-        // 4a. Apply best active promotion (pct_discount or flat_discount)
+        // 4a. Pick the best active vendor promotion (pct_discount or flat_discount).
+        //     Usage is counted in PASS 2 — a non-stacking coupon (Rule 3) may
+        //     suppress the promo, and a suppressed promo must not consume a use.
         let promoDiscount = 0;
         let appliedPromoId: string | null = null;
         const now = new Date();
@@ -217,19 +253,82 @@ export class OrderService {
             promoDiscount = Math.min(Number(promo.discountFlat), subtotal);
           }
           appliedPromoId = promo.id;
-          await tx.promotion.update({ where: { id: promo.id }, data: { usageCount: { increment: 1 } } });
           break;
         }
-        const totalAmount = Math.max(0, subtotal - promoDiscount);
 
-        // 4b. Credit is debited from the CreditWallet AFTER the order row exists
-        //     (debitWallet needs the orderId as the ledger reference). The debit
-        //     itself enforces wallet status, repayment-mode, and limit — see below.
+        prepared.push({
+          vo,
+          itemDetails,
+          draftItems,
+          subtotal,
+          promoDiscount,
+          appliedPromoId,
+          salespersonId: vendorCustomer?.salespersonId ?? null,
+        });
+      }
 
-        // 4. Generate order number
+      // ── Coupon (Rule 1: ONE code per checkout). Validated + allocated over
+      // the prepared orders; a coupon that can't be clubbed with vendor promos
+      // (Rule 3) suppresses them for this checkout — without consuming a use.
+      let couponApp: CouponApplication | null = null;
+      if (!isDraft && input.couponCode) {
+        couponApp = await promotionService.applyCouponToCheckout(tx, {
+          code: input.couponCode,
+          userId,
+          drafts: prepared.map((p) => ({
+            vendorId: p.vo.vendorId,
+            subtotal: p.subtotal,
+            promoDiscount: p.promoDiscount,
+            items: p.draftItems,
+          })),
+        });
+        if (couponApp.suppressVendorPromos) {
+          for (const p of prepared) {
+            p.promoDiscount = 0;
+            p.appliedPromoId = null;
+          }
+        }
+      }
+
+      // ── Prepaid wallet redemption (Rule 6). Applied AFTER discounts in the
+      // brief's calculation sequence. Online payments keep a ₹1 combined floor
+      // because Razorpay cannot charge ₹0.
+      let walletShares: number[] = prepared.map(() => 0);
+      if (!isDraft && input.useWallet) {
+        const balance = await promotionService.getWalletBalance(tx, userId);
+        const payables = prepared.map((p, i) =>
+          round2(Math.max(0, p.subtotal - p.promoDiscount - (couponApp?.perOrder[i] ?? 0))),
+        );
+        const reserveMin = input.paymentMethod === 'online' ? 1 : 0;
+        walletShares = promotionService.allocateWallet(balance, payables, reserveMin);
+      }
+
+      // ── PASS 2 — create the order rows with final totals + side-effects.
+      const checkoutGroupId = randomUUID();
+      const redemptionRows: Array<{ orderId: string; amount: number }> = [];
+      const walletRows: Array<{ orderId: string; amount: number }> = [];
+
+      for (let i = 0; i < prepared.length; i++) {
+        const p = prepared[i];
+        const vo = p.vo;
+        const couponShare = couponApp?.perOrder[i] ?? 0;
+        const walletApplied = walletShares[i] ?? 0;
+        const totalAmount = round2(
+          Math.max(0, p.subtotal - p.promoDiscount - couponShare - walletApplied),
+        );
+
+        // Vendor promo consumes a use only when it actually applies.
+        if (p.appliedPromoId) {
+          await tx.promotion.update({
+            where: { id: p.appliedPromoId },
+            data: { usageCount: { increment: 1 } },
+          });
+        }
+
+        // Generate order number
         const orderNumber = `PO-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
 
-        // 5. Create order — salespersonId snapshotted from VendorCustomer
+        // Create order — salespersonId snapshotted from VendorCustomer
         // (null if no rep assigned) so commission attribution survives later
         // reassignment of the customer's salesperson.
         const order = await tx.order.create({
@@ -241,32 +340,66 @@ export class OrderService {
             outletId,
             deliveryAddressSnapshot,
             status: isDraft ? 'draft' : 'pending',
-            subtotal,
-            promoDiscount,
-            promotionId: appliedPromoId,
+            subtotal: p.subtotal,
+            promoDiscount: p.promoDiscount,
+            promotionId: p.appliedPromoId,
+            couponId: couponShare > 0 ? couponApp!.coupon.id : null,
+            couponCode: couponShare > 0 ? couponApp!.coupon.code : null,
+            couponDiscount: couponShare,
+            walletApplied,
             totalAmount,
             paymentMethod: input.paymentMethod,
             deliverySlotId: vo.deliverySlotId,
             notes: vo.notes,
-            salespersonId: vendorCustomer?.salespersonId ?? null,
-            items: { create: itemDetails },
+            salespersonId: p.salespersonId,
+            items: { create: p.itemDetails },
           },
           include: { items: true },
         });
 
-        // 6. Reserve inventory (drafts reserve nothing until submitted)
+        // Reserve inventory (drafts reserve nothing until submitted)
         if (!isDraft) await this.inventoryService.reserveStock(vo.items, tx);
 
-        // 6b. Debit the credit wallet for credit orders. debitWallet validates the
-        //     wallet (active, not blacklisted), repayment-mode reuse rules, and
-        //     available limit — all inside this tx, so any failure rolls back the
-        //     whole order. Outstanding is created now (per the wallet brief).
-        if (!isDraft && isCreditPayment(input.paymentMethod)) {
+        // Debit the credit wallet for credit orders. debitWallet validates the
+        // wallet (active, not blacklisted), repayment-mode reuse rules, and
+        // available limit — all inside this tx, so any failure rolls back the
+        // whole order. Outstanding is created now (per the wallet brief).
+        // Skipped when discounts + wallet cover the full amount (nothing owed).
+        if (!isDraft && isCreditPayment(input.paymentMethod) && totalAmount > 0) {
           const creditVendorId = (input.paymentMethod === 'h1_wallet' || input.paymentMethod === 'wallet') ? null : vo.vendorId;
           await creditWalletService.debitWallet(userId, creditVendorId, totalAmount, order.id, tx);
         }
 
+        if (couponShare > 0) redemptionRows.push({ orderId: order.id, amount: couponShare });
+        if (walletApplied > 0) walletRows.push({ orderId: order.id, amount: walletApplied });
+
+        // Cashback (Rule 5 — single highest source) evaluated per order on the
+        // goods value the customer pays (wallet is payment, not discount).
+        if (!isDraft) {
+          await promotionService.evaluateCashbackForOrder(tx, {
+            userId,
+            orderId: order.id,
+            vendorId: vo.vendorId,
+            base: round2(Math.max(0, p.subtotal - p.promoDiscount - couponShare)),
+            couponAppliedOnOrder: couponShare > 0,
+            couponBlocksCashback: !!couponApp && !couponApp.coupon.stacksWithCashback,
+          });
+        }
+
         orders.push(order);
+      }
+
+      // ── Persist the coupon use (one per checkout) + the wallet debit ledger.
+      if (couponApp && redemptionRows.length > 0) {
+        await promotionService.finalizeCouponRedemptions(tx, {
+          couponId: couponApp.coupon.id,
+          userId,
+          checkoutGroupId,
+          rows: redemptionRows,
+        });
+      }
+      if (walletRows.length > 0) {
+        await promotionService.debitWalletForCheckout(tx, { userId, rows: walletRows });
       }
 
       // 7. Clear the (user, account, outlet)-scoped cart — but keep it for drafts.
@@ -504,6 +637,18 @@ export class OrderService {
 
       const updated = await tx.order.update({ where: { id: orderId }, data: { status: 'pending', paymentMethod: effectivePaymentMethod } });
 
+      // Promo Engine Phase 1 — drafts skip cashback at save time; evaluate it
+      // now that the order is real. (Drafts can't carry coupons, but compute
+      // the base defensively in case that ever changes.)
+      await promotionService.evaluateCashbackForOrder(tx, {
+        userId: ctx.userId,
+        orderId: order.id,
+        vendorId: order.vendorId,
+        base: round2(Math.max(0, Number(order.subtotal) - Number(order.promoDiscount) - Number(order.couponDiscount))),
+        couponAppliedOnOrder: Number(order.couponDiscount) > 0,
+        couponBlocksCashback: false,
+      });
+
       setImmediate(() => emitEvent('OrderCreated', {
         orderId: order.id, orderNumber: order.orderNumber, userId: ctx.userId,
         vendorId: order.vendorId, totalAmount: Number(order.totalAmount), items,
@@ -558,7 +703,9 @@ export class OrderService {
 
       return tx.order.update({
         where: { id: orderId },
-        data: { subtotal, totalAmount: Math.max(0, subtotal - Number(order.promoDiscount)) },
+        // Coupon + wallet amounts stay fixed when ops edit quantities; the
+        // payable just shrinks/grows around them (clamped at 0).
+        data: { subtotal, totalAmount: Math.max(0, subtotal - Number(order.promoDiscount) - Number(order.couponDiscount) - Number(order.walletApplied)) },
       });
     }, { isolationLevel: 'Serializable' });
   }
@@ -613,7 +760,14 @@ export class OrderService {
       });
       await tx.order.update({
         where: { id: orderId },
-        data: { subtotal: parentSubtotal, totalAmount: Math.max(0, parentSubtotal - Number(order.promoDiscount)) },
+        // Coupon discount + wallet redemption stay on the parent — the child
+        // is a fresh PO with plain totals (split is an internal ops action).
+        // Cashback also stays with the parent: its pending entry recomputes
+        // against the reduced parent subtotal on delivery. The child does NOT
+        // earn separate campaign cashback — re-evaluating would risk
+        // double-counting per-user limits and bypassing a coupon's
+        // stacksWithCashback=false block. (Deliberate Phase-1 behaviour.)
+        data: { subtotal: parentSubtotal, totalAmount: Math.max(0, parentSubtotal - Number(order.promoDiscount) - Number(order.couponDiscount) - Number(order.walletApplied)) },
       });
       // Reservation total is unchanged — the same units now span two orders.
       return { parentId: orderId, childId: child.id, childOrderNumber: child.orderNumber };
@@ -672,7 +826,7 @@ export class OrderService {
           salespersonId: vc?.salespersonId ?? null,
           deliverySlotId: null,
           subtotal,
-          totalAmount: Math.max(0, subtotal - Number(order.promoDiscount)),
+          totalAmount: Math.max(0, subtotal - Number(order.promoDiscount) - Number(order.couponDiscount) - Number(order.walletApplied)),
         },
       });
     }, { isolationLevel: 'Serializable' });
@@ -822,7 +976,11 @@ export class OrderService {
           status: 'confirmed',
           isPartial,
           subtotal: newSubtotal,
-          totalAmount: newSubtotal,
+          // Discounts (vendor promo + coupon + prepaid wallet) stay fixed as the
+          // order shrinks; payable is recomputed around them, clamped at 0. The
+          // delivered-time cashback recompute reads this final subtotal, so a
+          // partial accept also shrinks the cashback base correctly.
+          totalAmount: Math.max(0, newSubtotal - Number(order.promoDiscount) - Number(order.couponDiscount) - Number(order.walletApplied)),
           acceptedAt: new Date(),
         },
       });
@@ -953,6 +1111,28 @@ export class OrderService {
       if (isCreditPayment(order.paymentMethod) && status === 'cancelled') {
         const creditVendorId = (order.paymentMethod === 'h1_wallet' || order.paymentMethod === 'wallet') ? null : vendorId;
         await creditWalletService.reverseOrderDebit(orderId, order.userId, creditVendorId, tx);
+      }
+
+      // Promo Engine Phase 1 side-effects — all idempotent, all inside this tx:
+      //   cancelled → reverse the coupon use, refund the prepaid-wallet amount,
+      //               void the pending cashback.
+      //   delivered → settle the cashback (credit wallet / approve UPI payout).
+      //   returned  → void the cashback; a credited one is clawed back from
+      //               the wallet (clamped at the current balance).
+      if (status === 'cancelled') {
+        await promotionService.reverseCouponForOrder(tx, orderId);
+        await promotionService.refundWalletForOrder(tx, {
+          id: orderId,
+          userId: order.userId,
+          walletApplied: Number(order.walletApplied),
+        });
+        await promotionService.cancelCashbackForOrder(tx, orderId);
+      }
+      if (status === 'delivered') {
+        await promotionService.settleCashbackForOrder(tx, orderId);
+      }
+      if (status === 'returned') {
+        await promotionService.cancelCashbackForOrder(tx, orderId);
       }
 
       // V2.2 Phase 1 — Commission accrual hook.

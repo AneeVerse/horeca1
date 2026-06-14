@@ -26,7 +26,15 @@ export const createOrderSchema = z.object({
   // Draft PO (Req 7): persist without reserving stock / charging credit /
   // clearing the cart. Submitted later via PATCH /orders/:id/submit.
   saveDraft: z.boolean().optional(),
-});
+  // Promo Engine Phase 1 — one coupon per checkout (Rule 1) + optional
+  // prepaid-wallet redemption (Rule 6). Both are live-money moves, so they
+  // are not allowed on drafts (validated below).
+  couponCode: z.string().min(3).max(40).regex(/^[A-Za-z0-9_-]+$/).optional(),
+  useWallet: z.boolean().optional(),
+}).refine(
+  (d) => !d.saveDraft || (!d.couponCode && !d.useWallet),
+  { message: 'Coupons and wallet redemption cannot be applied to draft orders', path: ['couponCode'] },
+);
 
 // PATCH /orders/:id/submit — drafts are saved with a placeholder method; the
 // user picks the real one on submit.

@@ -375,11 +375,23 @@ export const dal = {
   },
 
   orders: {
-    /** Create new order(s) from cart. Pass saveDraft to persist as draft PO(s). */
-    async create(vendorOrders: Array<{ vendorId: string; items: Array<{ productId: string; quantity: number }>; deliverySlotId?: string; notes?: string }>, paymentMethod: string, saveDraft = false) {
+    /** Create new order(s) from cart. Pass saveDraft to persist as draft PO(s).
+     *  Promo Engine Phase 1: optional couponCode + useWallet (ignored on drafts). */
+    async create(
+      vendorOrders: Array<{ vendorId: string; items: Array<{ productId: string; quantity: number }>; deliverySlotId?: string; notes?: string }>,
+      paymentMethod: string,
+      saveDraft = false,
+      promo?: { couponCode?: string; useWallet?: boolean },
+    ) {
       return apiFetch('/api/v1/orders', {
         method: 'POST',
-        body: JSON.stringify({ vendorOrders, paymentMethod, ...(saveDraft ? { saveDraft: true } : {}) }),
+        body: JSON.stringify({
+          vendorOrders,
+          paymentMethod,
+          ...(saveDraft ? { saveDraft: true } : {}),
+          ...(promo?.couponCode ? { couponCode: promo.couponCode } : {}),
+          ...(promo?.useWallet ? { useWallet: true } : {}),
+        }),
       });
     },
 
