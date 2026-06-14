@@ -11,6 +11,7 @@ interface OrderSummary {
     vendorId: string;
     vendorName: string;
     totalAmount: number;
+    savings: number;
     itemCount: number;
     status: string;
     deliverySlot?: string;
@@ -39,6 +40,7 @@ export default function OrderSuccessPage() {
                         vendorId: d.vendor?.id || d.vendorId,
                         vendorName: d.vendor?.businessName || d.vendorName || 'Vendor',
                         totalAmount: Number(d.totalAmount) || 0,
+                        savings: (Number(d.promoDiscount) || 0) + (Number(d.couponDiscount) || 0) + (Number(d.walletApplied) || 0),
                         itemCount: d.items?.length || 0,
                         status: d.status || 'pending',
                         deliverySlot: d.deliverySlot?.slotStart ? `${d.deliverySlot.slotStart}` : undefined,
@@ -90,11 +92,16 @@ export default function OrderSuccessPage() {
                             </div>
                             <div className="flex items-center gap-4 text-[11px] text-gray-500 font-medium">
                                 <span className="flex items-center gap-1"><Package size={11} />{order.itemCount} items</span>
-                                <span>₹{order.totalAmount.toLocaleString('en-IN')}</span>
+                                <span>₹{Number(order.totalAmount).toLocaleString('en-IN')}</span>
                                 {order.deliverySlot && (
                                     <span className="flex items-center gap-1"><Clock size={11} />{order.deliverySlot}</span>
                                 )}
                             </div>
+                            {order.savings > 0 && (
+                                <p className="mt-2 text-[11px] font-bold text-[#53B175]">
+                                    You saved ₹{Number(order.savings).toLocaleString('en-IN')} on this order
+                                </p>
+                            )}
                             <Link
                                 href={`/api/v1/orders/${order.id}/invoice`}
                                 className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-black text-[#53B175] hover:text-[#489d67] transition-colors"

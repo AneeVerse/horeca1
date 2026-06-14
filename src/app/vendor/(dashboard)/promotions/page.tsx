@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { VendorCouponsTab, VendorCashbackTab } from '@/components/features/vendor/promotions/PromoEngineTabs';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -406,9 +407,9 @@ function PromotionModal({
   );
 }
 
-// ─── Main Page ─────────────────────────────────────────────────────────────────
+// ─── Store Offers tab (legacy auto-applied store promotions + BXGY) ───────────
 
-export default function PromotionsPage() {
+function StoreOffersTab() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -487,8 +488,8 @@ export default function PromotionsPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-[22px] font-bold text-[#181725]">Promotions</h1>
-          <p className="text-[12px] text-[#AEAEAE]">Create discounts, offers, and Buy X Get Y deals</p>
+          <h2 className="text-[16px] font-bold text-[#181725]">Store Offers</h2>
+          <p className="text-[12px] text-[#AEAEAE]">Auto-applied discounts and Buy X Get Y deals on your store</p>
         </div>
         <button
           onClick={() => setShowCreate(true)}
@@ -626,6 +627,43 @@ export default function PromotionsPage() {
       {/* Modals */}
       {showCreate && <PromotionModal onClose={() => setShowCreate(false)} onSaved={handleSaved} />}
       {editing && <PromotionModal existing={editing} onClose={() => setEditing(null)} onSaved={handleSaved} />}
+    </div>
+  );
+}
+
+// ─── Main Page (Promo Engine Phase 1) ─────────────────────────────────────────
+// Three tools side by side: auto-applied Store Offers (legacy), Coupons
+// (code-based, customer applies at checkout) and Cashback campaigns
+// (earned on delivery → Rewards Wallet / UPI).
+
+export default function PromotionsPage() {
+  const [tab, setTab] = useState<'offers' | 'coupons' | 'cashback'>('offers');
+
+  return (
+    <div className="space-y-5 pb-10 max-w-5xl">
+      <div>
+        <h1 className="text-[22px] font-bold text-[#181725]">Promotions</h1>
+        <p className="text-[12px] text-[#AEAEAE]">Discounts, coupons and cashback to grow repeat orders</p>
+      </div>
+
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+        {([['offers', 'Store Offers'], ['coupons', 'Coupons'], ['cashback', 'Cashback']] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={cn(
+              'px-4 py-2 rounded-lg text-[12px] font-bold transition-colors cursor-pointer',
+              tab === id ? 'bg-white text-[#181725] shadow-sm' : 'text-gray-500 hover:text-gray-700',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'offers' && <StoreOffersTab />}
+      {tab === 'coupons' && <VendorCouponsTab />}
+      {tab === 'cashback' && <VendorCashbackTab />}
     </div>
   );
 }

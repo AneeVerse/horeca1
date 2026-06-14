@@ -13,6 +13,7 @@ import {
     Tag,
     ClipboardList,
     LayoutDashboard,
+    Gift,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -109,6 +110,7 @@ export function Navbar() {
         ...(isLoggedIn && userRole === 'admin' ? [{ name: 'Dashboard', href: '/admin/dashboard', Icon: LayoutDashboard }] : []),
         ...(isLoggedIn && userRole === 'brand' ? [{ name: 'Brand Portal', href: '/brand/portal', Icon: LayoutDashboard }] : []),
         ...DESKTOP_NAV,
+        ...(isLoggedIn ? [{ name: 'Rewards', href: '/rewards', Icon: Gift }] : []),
     ];
 
     return (

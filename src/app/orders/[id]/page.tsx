@@ -36,6 +36,10 @@ interface ApiOrder {
     paymentMethod: string | null;
     subtotal: string | number;
     taxAmount?: string | number;
+    promoDiscount?: string | number;
+    couponDiscount?: string | number;
+    couponCode?: string | null;
+    walletApplied?: string | number;
     totalAmount: string | number;
     notes?: string | null;
     createdAt: string;
@@ -206,6 +210,9 @@ export default function OrderDetailPage() {
     const subtotal = typeof order.subtotal === 'string' ? parseFloat(order.subtotal) : order.subtotal;
     const total = typeof order.totalAmount === 'string' ? parseFloat(order.totalAmount) : order.totalAmount;
     const tax = order.taxAmount ? (typeof order.taxAmount === 'string' ? parseFloat(order.taxAmount) : order.taxAmount) : 0;
+    const promoDiscount = Number(order.promoDiscount) || 0;
+    const couponDiscount = Number(order.couponDiscount) || 0;
+    const walletApplied = Number(order.walletApplied) || 0;
 
     return (
         <div className="min-h-screen bg-[#F2F3F2]">
@@ -368,6 +375,24 @@ export default function OrderDetailPage() {
                                     <div className="flex justify-between text-[14px]">
                                         <span className="text-gray-500 font-medium">Tax</span>
                                         <span className="font-bold text-[#181725]">{fmt(tax)}</span>
+                                    </div>
+                                )}
+                                {promoDiscount > 0 && (
+                                    <div className="flex justify-between text-[14px]">
+                                        <span className="text-gray-500 font-medium">Store discount</span>
+                                        <span className="font-bold text-[#299e60]">−{fmt(promoDiscount)}</span>
+                                    </div>
+                                )}
+                                {couponDiscount > 0 && (
+                                    <div className="flex justify-between text-[14px]">
+                                        <span className="text-gray-500 font-medium">Coupon{order.couponCode ? ` (${order.couponCode})` : ''}</span>
+                                        <span className="font-bold text-[#299e60]">−{fmt(couponDiscount)}</span>
+                                    </div>
+                                )}
+                                {walletApplied > 0 && (
+                                    <div className="flex justify-between text-[14px]">
+                                        <span className="text-gray-500 font-medium">Rewards wallet</span>
+                                        <span className="font-bold text-[#299e60]">−{fmt(walletApplied)}</span>
                                     </div>
                                 )}
                                 <div className="border-t border-dashed border-gray-200 pt-3 flex justify-between items-baseline">

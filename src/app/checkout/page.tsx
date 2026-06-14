@@ -325,6 +325,14 @@ function CheckoutPageContent() {
     const [slotByVendor, setSlotByVendor] = useState<Record<string, string | null>>({});
     // Per-vendor order notes / delivery instructions (Req 7).
     const [notesByVendor, setNotesByVendor] = useState<Record<string, string>>({});
+    // Promo Engine Phase 1 — coupon + Rewards Wallet (prepaid cashback balance,
+    // distinct from the H1 credit wallet payment method).
+    const [couponInput, setCouponInput] = useState('');
+    const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; name: string; estimatedDiscount: number } | null>(null);
+    const [couponError, setCouponError] = useState<string | null>(null);
+    const [couponValidating, setCouponValidating] = useState(false);
+    const [rewardsBalance, setRewardsBalance] = useState(0);
+    const [useRewardsWallet, setUseRewardsWallet] = useState(false);
     // Collapsible vendor cards — collapsed by default for compact checkout.
     const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set());
     const toggleVendorExpand = (vendorId: string) => {
@@ -495,6 +503,58 @@ function CheckoutPageContent() {
 
     const creditAllSelectionsValid = creditEligibility.length > 0 && creditEligibility.every(c => c.ok);
 
+    // Rewards Wallet balance (cashback earnings) — loaded at the payment step.
+    useEffect(() => {
+        if (step !== 'payment' || sessionStatus !== 'authenticated') return;
+        fetch('/api/v1/promotions/rewards')
+            .then(r => r.json())
+            .then((d: { success?: boolean; data?: { walletBalance?: number } }) => {
+                if (d?.success) setRewardsBalance(Number(d.data?.walletBalance ?? 0));
+            })
+            .catch(() => {});
+    }, [step, sessionStatus]);
+
+    const applyCoupon = async () => {
+        const code = couponInput.trim().toUpperCase();
+        if (!code) return;
+        setCouponValidating(true);
+        setCouponError(null);
+        try {
+            const res = await fetch('/api/v1/promotions/validate-coupon', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code }),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.error?.message || 'Could not validate coupon');
+            if (json.data?.valid) {
+                setAppliedCoupon({
+                    code: json.data.code,
+                    name: json.data.name,
+                    estimatedDiscount: Number(json.data.estimatedDiscount) || 0,
+                });
+            } else {
+                setAppliedCoupon(null);
+                setCouponError(json.data?.message || 'Invalid coupon code');
+            }
+        } catch (err) {
+            setAppliedCoupon(null);
+            setCouponError(err instanceof Error ? err.message : 'Could not validate coupon');
+        } finally {
+            setCouponValidating(false);
+        }
+    };
+
+    // Display estimates — the order transaction recomputes everything
+    // server-side; these only drive the summary card.
+    const couponDiscountEst = appliedCoupon ? Math.min(appliedCoupon.estimatedDiscount, selectedTotal) : 0;
+    const payableAfterCoupon = Math.max(0, selectedTotal - couponDiscountEst);
+    // Online payments keep a ₹1 floor (Razorpay can't charge ₹0) — mirrors the server rule.
+    const walletUseEst = useRewardsWallet
+        ? Math.min(rewardsBalance, Math.max(0, payableAfterCoupon - (selectedPayment === 'online' ? 1 : 0)))
+        : 0;
+    const estimatedPayable = Math.max(0, Math.round((payableAfterCoupon - walletUseEst) * 100) / 100);
+
     const walletEligibility = useMemo(() => {
         if (!creditWalletsLoaded) return { ok: false, loading: true, reason: 'Loading H1 Wallet details...' };
         if (!platformWallet) {
@@ -554,7 +614,10 @@ function CheckoutPageContent() {
                 }
                 createdOrders = [submitRes.data];
             } else {
-                const result = await dal.orders.create(vendorOrders, selectedPayment) as {
+                const result = await dal.orders.create(vendorOrders, selectedPayment, false, {
+                    ...(appliedCoupon ? { couponCode: appliedCoupon.code } : {}),
+                    ...(useRewardsWallet && walletUseEst > 0 ? { useWallet: true } : {}),
+                }) as {
                     orders: Array<{ id: string; orderNumber: string }>;
                 };
                 createdOrders = result.orders || [];
@@ -1157,6 +1220,68 @@ function CheckoutPageContent() {
                                 </div>
                             )}
 
+                            {/* Coupon + Rewards Wallet (Promo Engine Phase 1) — drafts don't support promos */}
+                            {!draftId && (
+                                <div className="bg-white rounded-2xl border border-[#E2E2E2] p-5 text-left shadow-sm space-y-4">
+                                    <div>
+                                        <p className="text-[12px] font-bold text-[#181725] mb-2">Have a coupon?</p>
+                                        {appliedCoupon ? (
+                                            <div className="flex items-center justify-between bg-green-50 border border-green-100 rounded-xl px-3 py-2.5">
+                                                <div className="min-w-0">
+                                                    <p className="text-[13px] font-bold text-[#53B175] tracking-wide">{appliedCoupon.code}</p>
+                                                    <p className="text-[11px] text-gray-500 truncate">
+                                                        {appliedCoupon.name} · saves ~₹{couponDiscountEst.toLocaleString('en-IN')}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setAppliedCoupon(null); setCouponInput(''); setCouponError(null); }}
+                                                    className="text-[11px] font-bold text-red-500 hover:underline shrink-0 ml-3 cursor-pointer"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex gap-2">
+                                                <input
+                                                    value={couponInput}
+                                                    onChange={(e) => { setCouponInput(e.target.value.toUpperCase()); setCouponError(null); }}
+                                                    onKeyDown={(e) => { if (e.key === 'Enter') applyCoupon(); }}
+                                                    placeholder="Enter coupon code"
+                                                    className="flex-1 min-w-0 px-3 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold uppercase tracking-wide focus:outline-none focus:border-[#53B175]"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={applyCoupon}
+                                                    disabled={couponValidating || !couponInput.trim()}
+                                                    className="shrink-0 px-4 py-2.5 rounded-xl bg-[#181725] text-white text-[12px] font-bold disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed hover:bg-black transition-colors cursor-pointer"
+                                                >
+                                                    {couponValidating ? <Loader2 size={14} className="animate-spin" /> : 'Apply'}
+                                                </button>
+                                            </div>
+                                        )}
+                                        {couponError && <p className="text-[11px] font-bold text-red-500 mt-1.5">{couponError}</p>}
+                                    </div>
+                                    {rewardsBalance > 0 && (
+                                        <label className="flex items-center justify-between gap-3 bg-amber-50/60 border border-amber-100 rounded-xl px-3 py-2.5 cursor-pointer">
+                                            <div className="min-w-0">
+                                                <p className="text-[13px] font-bold text-[#181725]">Use Rewards Wallet</p>
+                                                <p className="text-[11px] text-gray-500">
+                                                    Balance ₹{rewardsBalance.toLocaleString('en-IN')}
+                                                    {useRewardsWallet && walletUseEst > 0 ? ` — applying ₹${walletUseEst.toLocaleString('en-IN')}` : ''}
+                                                </p>
+                                            </div>
+                                            <input
+                                                type="checkbox"
+                                                checked={useRewardsWallet}
+                                                onChange={(e) => setUseRewardsWallet(e.target.checked)}
+                                                className="w-4 h-4 accent-[#53B175] shrink-0"
+                                            />
+                                        </label>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Summary card */}
                             <div className="bg-white rounded-2xl border border-[#E2E2E2] overflow-hidden shadow-sm text-left">
                                 <div className="px-5 py-4 flex items-center gap-3 border-b border-[#F0F0F0] bg-gray-50/50">
@@ -1170,12 +1295,25 @@ function CheckoutPageContent() {
                                         <span className="text-gray-500 font-medium">Subtotal</span>
                                         <span className="font-bold text-[#181725]">₹{selectedTotal.toLocaleString('en-IN')}</span>
                                     </div>
+                                    {couponDiscountEst > 0 && (
+                                        <div className="flex justify-between items-center text-[13px]">
+                                            <span className="text-gray-500 font-medium">Coupon ({appliedCoupon?.code})</span>
+                                            <span className="font-bold text-[#53B175]">−₹{couponDiscountEst.toLocaleString('en-IN')}</span>
+                                        </div>
+                                    )}
+                                    {walletUseEst > 0 && (
+                                        <div className="flex justify-between items-center text-[13px]">
+                                            <span className="text-gray-500 font-medium">Rewards Wallet</span>
+                                            <span className="font-bold text-[#53B175]">−₹{walletUseEst.toLocaleString('en-IN')}</span>
+                                        </div>
+                                    )}
                                     <div className="border-t border-dashed border-[#D0D0D0] pt-4 flex justify-between items-baseline">
                                         <span className="text-[15px] font-bold text-[#181725]">Total Payable</span>
-                                        <span className="text-[22px] font-black text-[#53B175]">₹{selectedTotal.toLocaleString('en-IN')}</span>
+                                        <span className="text-[22px] font-black text-[#53B175]">₹{estimatedPayable.toLocaleString('en-IN')}</span>
                                     </div>
                                     <p className="text-[10px] text-gray-400 leading-normal">
                                         Checking out {selectedItemCount} items from {selectedVendorCount} vendor PO{selectedVendorCount > 1 ? 's' : ''}. Includes applicable GST and taxes.
+                                        {(couponDiscountEst > 0 || walletUseEst > 0) ? ' Discounts shown are estimates — exact amounts are confirmed at order placement.' : ''}
                                     </p>
                                 </div>
                             </div>
