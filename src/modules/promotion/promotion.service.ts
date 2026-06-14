@@ -1,0 +1,790 @@
+// Promo Engine Phase 1 — Coupons + Cashback (the two priority promos).
+//
+// All money logic lives here; routes stay thin. Stacking rules implemented:
+//   Rule 1  ONE coupon per checkout (hard-coded — single couponCode input).
+//   Rule 2  Coupon + Cashback        — per-campaign `stacksWithCoupon` +
+//                                      per-coupon `stacksWithCashback`.
+//   Rule 3  Coupon + Vendor discount — per-coupon `stacksWithVendorPromo`;
+//                                      when false the auto vendor promo is
+//                                      suppressed for that checkout.
+//   Rule 5  ONE cashback source       — highest eligible campaign wins.
+//   Rule 6  Wallet usable alongside promotions (prepaid Wallet redemption).
+//
+// Calculation sequence (per the brief): price → vendor discount → coupon →
+// wallet redemption → final payable → cashback computed on what the customer
+// actually pays for goods (subtotal − vendor promo − coupon; wallet is a
+// payment instrument, not a discount, so it does NOT reduce the cashback base).
+
+import { prisma } from '@/lib/prisma';
+import type { Prisma, Coupon, CashbackEntry } from '@prisma/client';
+import { Errors } from '@/middleware/errorHandler';
+import { resolveUnitPrice, type CustomerContext } from '@/modules/pricing/pricing.service';
+
+type Db = Prisma.TransactionClient;
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+// ─── Types shared with order.service ─────────────────────────────────────
+
+export interface CheckoutDraftItem {
+  productId: string;
+  categoryId: string | null;
+  brand: string | null;
+  lineTotal: number; // gross (GST-inclusive) line total
+}
+
+export interface CheckoutOrderDraft {
+  vendorId: string;
+  subtotal: number; // gross order subtotal
+  promoDiscount: number; // auto vendor promo (before suppression)
+  items: CheckoutDraftItem[];
+}
+
+export interface CouponApplication {
+  coupon: Pick<
+    Coupon,
+    'id' | 'code' | 'name' | 'stacksWithVendorPromo' | 'stacksWithCashback'
+  >;
+  /** When true, the caller must drop the auto vendor promos for this checkout. */
+  suppressVendorPromos: boolean;
+  /** Discount allocated per draft, aligned with the drafts array. */
+  perOrder: number[];
+  totalDiscount: number;
+}
+
+// ─── Internal helpers ─────────────────────────────────────────────────────
+
+function itemMatchesScope(coupon: Coupon, item: CheckoutDraftItem): boolean {
+  const hasScope =
+    coupon.productIds.length > 0 || coupon.categoryIds.length > 0 || coupon.brandNames.length > 0;
+  if (!hasScope) return true;
+  if (coupon.productIds.includes(item.productId)) return true;
+  if (item.categoryId && coupon.categoryIds.includes(item.categoryId)) return true;
+  if (item.brand) {
+    const b = item.brand.toLowerCase();
+    if (coupon.brandNames.some((n) => n.toLowerCase() === b)) return true;
+  }
+  return false;
+}
+
+/** Proportional split of `total` over `weights`, rounded to paise, exact sum. */
+function allocateProportional(total: number, weights: number[]): number[] {
+  const weightSum = weights.reduce((a, b) => a + b, 0);
+  if (weightSum <= 0 || total <= 0) return weights.map(() => 0);
+  const shares: number[] = [];
+  let allocated = 0;
+  let lastIdx = -1;
+  for (let i = 0; i < weights.length; i++) if (weights[i] > 0) lastIdx = i;
+  for (let i = 0; i < weights.length; i++) {
+    if (weights[i] <= 0) {
+      shares.push(0);
+      continue;
+    }
+    if (i === lastIdx) {
+      shares.push(r2(total - allocated));
+    } else {
+      const s = r2((total * weights[i]) / weightSum);
+      shares.push(s);
+      allocated = r2(allocated + s);
+    }
+  }
+  return shares;
+}
+
+async function loadAndValidateCoupon(
+  db: Db,
+  args: { code: string; userId: string; drafts: CheckoutOrderDraft[] },
+): Promise<CouponApplication> {
+  const code = args.code.trim().toUpperCase();
+  const coupon = await db.coupon.findUnique({ where: { code } });
+  if (!coupon || !coupon.isActive) throw Errors.badRequest('Invalid coupon code');
+
+  const now = new Date();
+  if (coupon.startDate && coupon.startDate > now) {
+    throw Errors.badRequest('This coupon is not active yet');
+  }
+  if (coupon.endDate && coupon.endDate < now) {
+    throw Errors.badRequest('This coupon has expired');
+  }
+  if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
+    throw Errors.badRequest('This coupon has reached its usage limit');
+  }
+  if (coupon.perUserLimit !== null) {
+    // One multi-vendor checkout = one use → count distinct active checkout groups.
+    const groups = await db.couponRedemption.findMany({
+      where: { couponId: coupon.id, userId: args.userId, status: 'active' },
+      distinct: ['checkoutGroupId'],
+      select: { checkoutGroupId: true },
+    });
+    if (groups.length >= coupon.perUserLimit) {
+      throw Errors.badRequest('You have already used this coupon the maximum number of times');
+    }
+  }
+
+  // MOV — platform coupon checks the combined checkout; vendor coupon checks
+  // only that vendor's orders (their MOV shouldn't be satisfiable with another
+  // vendor's items).
+  const relevantDrafts = coupon.vendorId
+    ? args.drafts.filter((d) => d.vendorId === coupon.vendorId)
+    : args.drafts;
+  const relevantSubtotal = r2(relevantDrafts.reduce((a, d) => a + d.subtotal, 0));
+  if (relevantSubtotal <= 0) {
+    throw Errors.badRequest('This coupon does not apply to items in your cart');
+  }
+  if (coupon.minOrderValue && relevantSubtotal < Number(coupon.minOrderValue)) {
+    throw Errors.badRequest(
+      `Add items worth ₹${Number(coupon.minOrderValue).toLocaleString('en-IN')} or more to use this coupon`,
+    );
+  }
+
+  // Eligible amount per draft (vendor + category/product/brand scope).
+  const eligible = args.drafts.map((d) => {
+    if (coupon.vendorId && d.vendorId !== coupon.vendorId) return 0;
+    return r2(d.items.filter((i) => itemMatchesScope(coupon, i)).reduce((a, i) => a + i.lineTotal, 0));
+  });
+  const totalEligible = r2(eligible.reduce((a, b) => a + b, 0));
+  if (totalEligible <= 0) {
+    throw Errors.badRequest('This coupon does not apply to items in your cart');
+  }
+
+  let discount: number;
+  if (coupon.discountType === 'flat') {
+    discount = Math.min(Number(coupon.discountValue), totalEligible);
+  } else {
+    discount = r2((totalEligible * Number(coupon.discountValue)) / 100);
+    if (coupon.maxDiscount) discount = Math.min(discount, Number(coupon.maxDiscount));
+  }
+  discount = r2(Math.max(0, discount));
+
+  // Rule 3 — when the coupon can't be clubbed with vendor promos the caller
+  // drops them, so the cap below must use the post-suppression promo value.
+  const suppressVendorPromos = !coupon.stacksWithVendorPromo;
+  const effPromo = args.drafts.map((d) => (suppressVendorPromos ? 0 : d.promoDiscount));
+
+  // Allocate proportionally over eligible amounts, capped so no order total
+  // can go negative.
+  let perOrder = allocateProportional(discount, eligible);
+  perOrder = perOrder.map((share, i) =>
+    r2(Math.min(share, Math.max(0, args.drafts[i].subtotal - effPromo[i]))),
+  );
+  const totalDiscount = r2(perOrder.reduce((a, b) => a + b, 0));
+  if (totalDiscount <= 0) {
+    throw Errors.badRequest('This coupon does not apply to items in your cart');
+  }
+
+  return {
+    coupon: {
+      id: coupon.id,
+      code: coupon.code,
+      name: coupon.name,
+      stacksWithVendorPromo: coupon.stacksWithVendorPromo,
+      stacksWithCashback: coupon.stacksWithCashback,
+    },
+    suppressVendorPromos,
+    perOrder,
+    totalDiscount,
+  };
+}
+
+async function notifyInApp(
+  db: Db,
+  userId: string,
+  title: string,
+  body: string,
+  referenceId?: string,
+  referenceType?: string,
+): Promise<void> {
+  await db.notification.create({
+    data: { userId, type: 'promo', channel: 'in_app', status: 'sent', title, body, referenceId, referenceType },
+  });
+}
+
+// ─── Service ──────────────────────────────────────────────────────────────
+
+export const promotionService = {
+  // ── Coupons: checkout lifecycle ────────────────────────────────────────
+
+  /** Validate + price a coupon against the prepared checkout. No writes. */
+  applyCouponToCheckout(
+    tx: Db,
+    args: { code: string; userId: string; drafts: CheckoutOrderDraft[] },
+  ): Promise<CouponApplication> {
+    return loadAndValidateCoupon(tx, args);
+  },
+
+  /** Persist redemption rows + count ONE use for the whole checkout. */
+  async finalizeCouponRedemptions(
+    tx: Db,
+    args: {
+      couponId: string;
+      userId: string;
+      checkoutGroupId: string;
+      rows: Array<{ orderId: string; amount: number }>;
+    },
+  ): Promise<void> {
+    const rows = args.rows.filter((row) => row.amount > 0);
+    if (rows.length === 0) return;
+    await tx.couponRedemption.createMany({
+      data: rows.map((row) => ({
+        couponId: args.couponId,
+        userId: args.userId,
+        orderId: row.orderId,
+        checkoutGroupId: args.checkoutGroupId,
+        amount: row.amount,
+      })),
+    });
+    await tx.coupon.update({
+      where: { id: args.couponId },
+      data: { usedCount: { increment: 1 } },
+    });
+  },
+
+  /**
+   * On order cancel: reverse this order's redemption. The checkout-level "use"
+   * is only refunded once every order in the group is reversed.
+   */
+  async reverseCouponForOrder(tx: Db, orderId: string): Promise<void> {
+    const redemption = await tx.couponRedemption.findUnique({ where: { orderId } });
+    if (!redemption || redemption.status !== 'active') return;
+    await tx.couponRedemption.update({
+      where: { id: redemption.id },
+      data: { status: 'reversed' },
+    });
+    const remaining = await tx.couponRedemption.count({
+      where: { checkoutGroupId: redemption.checkoutGroupId, status: 'active' },
+    });
+    if (remaining === 0) {
+      await tx.coupon.updateMany({
+        where: { id: redemption.couponId, usedCount: { gt: 0 } },
+        data: { usedCount: { decrement: 1 } },
+      });
+    }
+  },
+
+  // ── Cashback: checkout + delivery lifecycle ────────────────────────────
+
+  /**
+   * Rule 5 — evaluate all eligible campaigns (platform + this order's vendor)
+   * and create ONE pending entry for the single highest payout. Campaign terms
+   * are snapshotted on the entry so settlement at delivery survives campaign
+   * edits and admin order modifications.
+   */
+  async evaluateCashbackForOrder(
+    tx: Db,
+    args: {
+      userId: string;
+      orderId: string;
+      vendorId: string;
+      /** subtotal − vendor promo − coupon (what the customer pays for goods). */
+      base: number;
+      couponAppliedOnOrder: boolean;
+      /** Per-coupon stacksWithCashback=false blocks all cashback on the checkout. */
+      couponBlocksCashback: boolean;
+    },
+  ): Promise<{ id: string; amount: number } | null> {
+    if (args.base <= 0) return null;
+    if (args.couponAppliedOnOrder && args.couponBlocksCashback) return null;
+
+    const now = new Date();
+    const campaigns = await tx.cashbackCampaign.findMany({
+      where: {
+        isActive: true,
+        OR: [{ vendorId: null }, { vendorId: args.vendorId }],
+        AND: [
+          { OR: [{ startDate: null }, { startDate: { lte: now } }] },
+          { OR: [{ endDate: null }, { endDate: { gte: now } }] },
+        ],
+      },
+    });
+
+    let best: { campaign: (typeof campaigns)[number]; amount: number } | null = null;
+    for (const c of campaigns) {
+      if (args.couponAppliedOnOrder && !c.stacksWithCoupon) continue;
+      if (c.minOrderValue && args.base < Number(c.minOrderValue)) continue;
+
+      let amount =
+        c.cashbackType === 'flat'
+          ? Math.min(Number(c.cashbackValue), args.base)
+          : r2((args.base * Number(c.cashbackValue)) / 100);
+      if (c.cashbackType === 'percentage' && c.maxCashback) {
+        amount = Math.min(amount, Number(c.maxCashback));
+      }
+      amount = r2(amount);
+      if (amount <= 0) continue;
+
+      if (c.totalBudget && Number(c.usedAmount) + amount > Number(c.totalBudget)) continue;
+      if (c.perUserLimit !== null) {
+        const earned = await tx.cashbackEntry.count({
+          where: { campaignId: c.id, userId: args.userId, status: { not: 'cancelled' } },
+        });
+        if (earned >= c.perUserLimit) continue;
+      }
+
+      if (!best || amount > best.amount) best = { campaign: c, amount };
+    }
+    if (!best) return null;
+
+    const entry = await tx.cashbackEntry.create({
+      data: {
+        campaignId: best.campaign.id,
+        userId: args.userId,
+        orderId: args.orderId,
+        vendorId: best.campaign.vendorId,
+        source: 'order',
+        amount: best.amount,
+        destination: best.campaign.destination,
+        status: 'pending',
+        cashbackType: best.campaign.cashbackType,
+        cashbackValue: best.campaign.cashbackValue,
+        maxCashback: best.campaign.maxCashback,
+        minOrderValue: best.campaign.minOrderValue,
+      },
+    });
+    await tx.cashbackCampaign.update({
+      where: { id: best.campaign.id },
+      data: { usedAmount: { increment: best.amount }, usedCount: { increment: 1 } },
+    });
+    return { id: entry.id, amount: best.amount };
+  },
+
+  /**
+   * On delivery: recompute from the snapshot against the order's FINAL totals
+   * (admin may have edited/split the order), then credit the wallet or move a
+   * UPI payout to `approved`. Idempotent — only acts on `pending` entries.
+   */
+  async settleCashbackForOrder(tx: Db, orderId: string): Promise<void> {
+    const entry = await tx.cashbackEntry.findUnique({ where: { orderId } });
+    if (!entry || entry.status !== 'pending') return;
+
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      select: { subtotal: true, promoDiscount: true, couponDiscount: true },
+    });
+    if (!order) return;
+    const base = r2(
+      Math.max(0, Number(order.subtotal) - Number(order.promoDiscount) - Number(order.couponDiscount)),
+    );
+
+    // Re-qualify + recompute from the snapshotted terms.
+    if (entry.minOrderValue && base < Number(entry.minOrderValue)) {
+      await this.cancelCashbackForOrder(tx, orderId);
+      return;
+    }
+    let amount = Number(entry.amount);
+    if (entry.cashbackType && entry.cashbackValue) {
+      amount =
+        entry.cashbackType === 'flat'
+          ? Math.min(Number(entry.cashbackValue), base)
+          : r2((base * Number(entry.cashbackValue)) / 100);
+      if (entry.cashbackType === 'percentage' && entry.maxCashback) {
+        amount = Math.min(amount, Number(entry.maxCashback));
+      }
+      amount = r2(amount);
+    }
+    if (amount <= 0) {
+      await this.cancelCashbackForOrder(tx, orderId);
+      return;
+    }
+    const delta = r2(amount - Number(entry.amount));
+    if (delta !== 0 && entry.campaignId) {
+      await tx.cashbackCampaign.update({
+        where: { id: entry.campaignId },
+        data: { usedAmount: { increment: delta } },
+      });
+    }
+
+    if (entry.destination === 'wallet') {
+      const wallet = await tx.wallet.upsert({
+        where: { userId: entry.userId },
+        create: { userId: entry.userId, balance: amount },
+        update: { balance: { increment: amount } },
+      });
+      const walletTxn = await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'credit',
+          amount,
+          referenceId: entry.id,
+          referenceType: 'cashback',
+          notes: `Cashback for order ${orderId}`,
+        },
+      });
+      await tx.cashbackEntry.update({
+        where: { id: entry.id },
+        data: { amount, status: 'credited', walletTxnId: walletTxn.id, creditedAt: new Date() },
+      });
+      await notifyInApp(
+        tx,
+        entry.userId,
+        'Cashback credited 🎉',
+        `₹${amount.toLocaleString('en-IN')} cashback has been credited to your wallet.`,
+        entry.id,
+        'cashback',
+      );
+    } else {
+      await tx.cashbackEntry.update({
+        where: { id: entry.id },
+        data: { amount, status: 'approved' },
+      });
+      await notifyInApp(
+        tx,
+        entry.userId,
+        'Cashback approved 🎉',
+        entry.upiId
+          ? `₹${amount.toLocaleString('en-IN')} cashback approved — it will be transferred to your UPI ID shortly.`
+          : `₹${amount.toLocaleString('en-IN')} cashback approved! Add your UPI ID on the Rewards page to receive it.`,
+        entry.id,
+        'cashback',
+      );
+    }
+  },
+
+  /**
+   * On cancel/return: void a pending/approved entry; claw back a credited one
+   * from the wallet (clamped at the current balance). Paid UPI entries are left
+   * for manual ops follow-up.
+   */
+  async cancelCashbackForOrder(tx: Db, orderId: string): Promise<void> {
+    const entry = await tx.cashbackEntry.findUnique({ where: { orderId } });
+    if (!entry || entry.status === 'cancelled' || entry.status === 'paid') return;
+
+    if (entry.status === 'credited') {
+      const wallet = await tx.wallet.findUnique({ where: { userId: entry.userId } });
+      const clawback = r2(Math.min(Number(wallet?.balance ?? 0), Number(entry.amount)));
+      if (wallet && clawback > 0) {
+        await tx.wallet.update({
+          where: { id: wallet.id },
+          data: { balance: { decrement: clawback } },
+        });
+        await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: 'debit',
+            amount: clawback,
+            referenceId: entry.id,
+            referenceType: 'cashback_reversal',
+            notes: `Cashback reversed — order ${orderId} cancelled/returned`,
+          },
+        });
+      }
+    }
+    if (entry.campaignId) {
+      await tx.cashbackCampaign.updateMany({
+        where: { id: entry.campaignId, usedCount: { gt: 0 } },
+        data: { usedAmount: { decrement: Number(entry.amount) }, usedCount: { decrement: 1 } },
+      });
+    }
+    await tx.cashbackEntry.update({
+      where: { id: entry.id },
+      data: { status: 'cancelled', cancelledAt: new Date() },
+    });
+  },
+
+  // ── Prepaid wallet redemption (Rule 6) ─────────────────────────────────
+
+  async getWalletBalance(db: Db, userId: string): Promise<number> {
+    const wallet = await db.wallet.findUnique({ where: { userId } });
+    return r2(Number(wallet?.balance ?? 0));
+  },
+
+  /**
+   * Allocate up to `balance` over the per-order payables. `reserveMin` keeps
+   * the COMBINED payable at/above that floor (Razorpay can't charge ₹0) —
+   * pass 1 for online payments, 0 otherwise.
+   */
+  allocateWallet(balance: number, payables: number[], reserveMin: number): number[] {
+    const totalPayable = r2(payables.reduce((a, b) => a + b, 0));
+    const usable = r2(Math.min(balance, Math.max(0, totalPayable - reserveMin)));
+    if (usable <= 0) return payables.map(() => 0);
+    let shares = allocateProportional(usable, payables);
+    shares = shares.map((s, i) => r2(Math.min(s, payables[i])));
+    return shares;
+  },
+
+  /** Debit the prepaid wallet once for the checkout — one ledger row per order. */
+  async debitWalletForCheckout(
+    tx: Db,
+    args: { userId: string; rows: Array<{ orderId: string; amount: number }> },
+  ): Promise<void> {
+    const rows = args.rows.filter((row) => row.amount > 0);
+    if (rows.length === 0) return;
+    const total = r2(rows.reduce((a, row) => a + row.amount, 0));
+    const wallet = await tx.wallet.findUnique({ where: { userId: args.userId } });
+    if (!wallet || Number(wallet.balance) < total) {
+      throw Errors.badRequest('Insufficient wallet balance');
+    }
+    await tx.wallet.update({
+      where: { id: wallet.id },
+      data: { balance: { decrement: total } },
+    });
+    await tx.walletTransaction.createMany({
+      data: rows.map((row) => ({
+        walletId: wallet.id,
+        type: 'debit' as const,
+        amount: row.amount,
+        referenceId: row.orderId,
+        referenceType: 'order_redemption',
+        notes: 'Wallet applied at checkout',
+      })),
+    });
+  },
+
+  /** On order cancel: return the wallet amount applied to that order. Idempotent. */
+  async refundWalletForOrder(
+    tx: Db,
+    order: { id: string; userId: string; walletApplied: number },
+  ): Promise<void> {
+    if (order.walletApplied <= 0) return;
+    const existing = await tx.walletTransaction.findFirst({
+      where: { referenceId: order.id, referenceType: 'order_redemption_refund' },
+    });
+    if (existing) return;
+    const wallet = await tx.wallet.upsert({
+      where: { userId: order.userId },
+      create: { userId: order.userId, balance: order.walletApplied },
+      update: { balance: { increment: order.walletApplied } },
+    });
+    await tx.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type: 'credit',
+        amount: order.walletApplied,
+        referenceId: order.id,
+        referenceType: 'order_redemption_refund',
+        notes: 'Wallet refund — order cancelled',
+      },
+    });
+  },
+
+  // ── Customer-facing: preview + rewards + UPI claim ─────────────────────
+
+  /**
+   * Preview a coupon against the user's server-side cart (same pricing chain
+   * as checkout). Estimate only — checkout re-validates inside the order tx.
+   */
+  async previewCoupon(args: {
+    userId: string;
+    businessAccountId: string;
+    outletId: string;
+    code: string;
+  }): Promise<
+    | { valid: true; code: string; name: string; estimatedDiscount: number; stacksWithCashback: boolean }
+    | { valid: false; message: string }
+  > {
+    const cart = await prisma.cart.findFirst({
+      where: { userId: args.userId, businessAccountId: args.businessAccountId, outletId: args.outletId },
+      include: {
+        outlet: { select: { pincode: true, city: true, state: true } },
+        items: {
+          include: {
+            product: { select: { id: true, taxPercent: true, categoryId: true, brand: true } },
+          },
+        },
+      },
+    });
+    if (!cart || cart.items.length === 0) {
+      return { valid: false, message: 'Your cart is empty' };
+    }
+
+    const vendorIds = Array.from(new Set(cart.items.map((i) => i.vendorId)));
+    const vendorCustomers = await prisma.vendorCustomer.findMany({
+      where: { userId: args.userId, vendorId: { in: vendorIds } },
+      select: { vendorId: true, tags: true },
+    });
+    const tagsByVendor = new Map(vendorCustomers.map((vc) => [vc.vendorId, vc.tags]));
+
+    const draftsByVendor = new Map<string, CheckoutOrderDraft>();
+    for (const item of cart.items) {
+      const customer: CustomerContext = {
+        userId: args.userId,
+        businessAccountId: args.businessAccountId,
+        outletId: args.outletId,
+        outletPincode: cart.outlet?.pincode ?? null,
+        outletCity: cart.outlet?.city ?? null,
+        outletState: cart.outlet?.state ?? null,
+        tags: tagsByVendor.get(item.vendorId) ?? [],
+      };
+      const resolved = await resolveUnitPrice(
+        { productId: item.productId, vendorId: item.vendorId, quantity: item.quantity, customer },
+        prisma,
+      );
+      const taxPercent = Number(item.product.taxPercent) || 0;
+      const grossUnit = r2(Number(resolved.unitPrice) * (1 + taxPercent / 100));
+      const lineTotal = r2(grossUnit * item.quantity);
+
+      let draft = draftsByVendor.get(item.vendorId);
+      if (!draft) {
+        draft = { vendorId: item.vendorId, subtotal: 0, promoDiscount: 0, items: [] };
+        draftsByVendor.set(item.vendorId, draft);
+      }
+      draft.subtotal = r2(draft.subtotal + lineTotal);
+      draft.items.push({
+        productId: item.productId,
+        categoryId: item.product.categoryId,
+        brand: item.product.brand,
+        lineTotal,
+      });
+    }
+
+    try {
+      const app = await loadAndValidateCoupon(prisma, {
+        code: args.code,
+        userId: args.userId,
+        drafts: Array.from(draftsByVendor.values()),
+      });
+      return {
+        valid: true,
+        code: app.coupon.code,
+        name: app.coupon.name,
+        estimatedDiscount: app.totalDiscount,
+        stacksWithCashback: app.coupon.stacksWithCashback,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid coupon code';
+      return { valid: false, message };
+    }
+  },
+
+  /** Wallet balance + cashback history for the rewards page. */
+  async getRewards(userId: string) {
+    const [balance, entries] = await Promise.all([
+      this.getWalletBalance(prisma, userId),
+      prisma.cashbackEntry.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        include: {
+          campaign: { select: { name: true } },
+          order: { select: { orderNumber: true } },
+        },
+      }),
+    ]);
+    const txns = await prisma.walletTransaction.findMany({
+      where: { wallet: { userId } },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    return { walletBalance: balance, entries, walletTransactions: txns };
+  },
+
+  /** Customer attaches their UPI ID to an unclaimed UPI cashback. */
+  async claimUpi(entryId: string, userId: string, upiId: string): Promise<CashbackEntry> {
+    const entry = await prisma.cashbackEntry.findFirst({
+      where: { id: entryId, userId },
+    });
+    if (!entry) throw Errors.notFound('Cashback entry');
+    if (entry.destination !== 'upi') {
+      throw Errors.badRequest('This cashback is credited to your wallet — no UPI ID needed');
+    }
+    if (entry.status !== 'pending' && entry.status !== 'approved') {
+      throw Errors.badRequest('This cashback can no longer be claimed');
+    }
+    return prisma.cashbackEntry.update({
+      where: { id: entry.id },
+      data: { upiId },
+    });
+  },
+
+  // ── Admin ops: direct grants + UPI payout queue ────────────────────────
+
+  /**
+   * "User Cashback" direct incentive — admin rewards an individual user.
+   * Wallet grants credit immediately; UPI grants enter the payout queue as
+   * `approved` and the user is nudged to claim with their UPI ID.
+   */
+  async grantDirectIncentive(args: {
+    adminId: string;
+    userId: string;
+    amount: number;
+    destination: 'wallet' | 'upi';
+    notes?: string | null;
+  }): Promise<CashbackEntry> {
+    const amount = r2(args.amount);
+    return prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: args.userId }, select: { id: true } });
+      if (!user) throw Errors.notFound('User');
+
+      const entry = await tx.cashbackEntry.create({
+        data: {
+          userId: args.userId,
+          source: 'direct_grant',
+          amount,
+          destination: args.destination,
+          status: args.destination === 'wallet' ? 'credited' : 'approved',
+          notes: args.notes ?? null,
+          createdById: args.adminId,
+          creditedAt: args.destination === 'wallet' ? new Date() : null,
+        },
+      });
+
+      if (args.destination === 'wallet') {
+        const wallet = await tx.wallet.upsert({
+          where: { userId: args.userId },
+          create: { userId: args.userId, balance: amount },
+          update: { balance: { increment: amount } },
+        });
+        const walletTxn = await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: 'credit',
+            amount,
+            referenceId: entry.id,
+            referenceType: 'direct_grant',
+            notes: args.notes ?? 'Incentive from Horeca1',
+          },
+        });
+        await tx.cashbackEntry.update({
+          where: { id: entry.id },
+          data: { walletTxnId: walletTxn.id },
+        });
+        await notifyInApp(
+          tx,
+          args.userId,
+          'You received an incentive 🎁',
+          `₹${amount.toLocaleString('en-IN')} has been credited to your Horeca1 wallet.`,
+          entry.id,
+          'cashback',
+        );
+      } else {
+        await notifyInApp(
+          tx,
+          args.userId,
+          'Grab your incentive 🎁',
+          `You've been rewarded ₹${amount.toLocaleString('en-IN')}! Add your UPI ID on the Rewards page to receive it.`,
+          entry.id,
+          'cashback',
+        );
+      }
+      return entry;
+    });
+  },
+
+  /** Admin records a completed UPI transfer (UTR reference) for an approved entry. */
+  async markEntryPaid(entryId: string, adminId: string, paidReference: string): Promise<CashbackEntry> {
+    return prisma.$transaction(async (tx) => {
+      const entry = await tx.cashbackEntry.findUnique({ where: { id: entryId } });
+      if (!entry) throw Errors.notFound('Cashback entry');
+      if (entry.destination !== 'upi' || entry.status !== 'approved') {
+        throw Errors.badRequest('Only approved UPI cashbacks can be marked paid');
+      }
+      const updated = await tx.cashbackEntry.update({
+        where: { id: entry.id },
+        data: {
+          status: 'paid',
+          paidReference,
+          paidAt: new Date(),
+          notes: entry.notes ? `${entry.notes} | paid by ${adminId}` : `paid by ${adminId}`,
+        },
+      });
+      await notifyInApp(
+        tx,
+        entry.userId,
+        'Cashback paid 🎉',
+        `₹${Number(entry.amount).toLocaleString('en-IN')} has been transferred to your UPI ID${entry.upiId ? ` (${entry.upiId})` : ''}.`,
+        entry.id,
+        'cashback',
+      );
+      return updated;
+    });
+  },
+};
