@@ -46,6 +46,25 @@ export function errorResponse(error: unknown): NextResponse<ErrorResponse> {
     );
   }
 
+  // Prisma unique-constraint violation (P2002) — a TOCTOU race past a
+  // pre-insert existence check (e.g. two admins creating the same coupon code
+  // at once) reaches the DB constraint. Translate it to a clean 409 instead of
+  // a 500. Detected structurally so we don't couple the handler to Prisma.
+  if (
+    typeof error === 'object' && error !== null && 'code' in error &&
+    (error as { code?: unknown }).code === 'P2002'
+  ) {
+    const target = (error as { meta?: { target?: unknown } }).meta?.target;
+    const field = Array.isArray(target) ? String(target[target.length - 1]) : 'Record';
+    return NextResponse.json(
+      {
+        success: false as const,
+        error: { code: 'DUPLICATE', message: `${field} already exists` },
+      },
+      { status: 409 }
+    );
+  }
+
   // Known API error
   if (error instanceof ApiError) {
     return NextResponse.json(

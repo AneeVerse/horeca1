@@ -130,6 +130,7 @@ export const SCOPE_MODULES: Record<RoleScope, readonly Module[]> = {
     'brands',
     'products',
     'payments',
+    'promotions',
     'analytics',
     'users',
     'auditLogs',

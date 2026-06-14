@@ -15,6 +15,14 @@ export const AUDIT_ACTIONS = {
   brandMappingVerified: 'brand_mapping.verified',
   brandMappingRejected: 'brand_mapping.rejected',
   brandMappingUnlinked: 'brand_mapping.unlinked',
+  couponCreate: 'coupon.create',
+  couponUpdate: 'coupon.update',
+  couponDelete: 'coupon.delete',
+  cashbackCampaignCreate: 'cashback_campaign.create',
+  cashbackCampaignUpdate: 'cashback_campaign.update',
+  cashbackCampaignDelete: 'cashback_campaign.delete',
+  cashbackGrant: 'cashback.grant',
+  cashbackMarkPaid: 'cashback.mark_paid',
 } as const;
 
 export type AuditAction = typeof AUDIT_ACTIONS[keyof typeof AUDIT_ACTIONS];
