@@ -112,6 +112,9 @@ model User {
   // V2.2 Phase 4 — Pricelist assignments targeting this user
   priceListAssignments   PriceListAssignment[] @relation("PriceListAssignmentUser")
 
+  // Promo Engine Phase 1 — cashback earned by this user (order-linked + direct grants)
+  cashbackEntries        CashbackEntry[]
+
   @@index([email])
   @@index([phone])
   @@index([pincode])
@@ -213,6 +216,8 @@ model Vendor {
   salespersons       Salesperson[]
   commissionRules    CommissionRule[]
   commissionAccruals CommissionAccrual[]
+  coupons            Coupon[]
+  cashbackCampaigns  CashbackCampaign[]
 
   // Ordering defaults applied to new products and checkout
   defaultMOQ          Int?      @map("default_moq")
@@ -585,6 +590,12 @@ model Order {
   subtotal       Decimal      @db.Decimal(12, 2)
   promoDiscount  Decimal      @default(0) @map("promo_discount") @db.Decimal(10, 2)
   promotionId    String?      @map("promotion_id") @db.Uuid
+  // Promo Engine Phase 1 — coupon applied at checkout (code snapshotted so the
+  // order history survives coupon deletion) + prepaid-wallet amount redeemed.
+  couponId       String?      @map("coupon_id") @db.Uuid
+  couponCode     String?      @map("coupon_code") @db.VarChar(40)
+  couponDiscount Decimal      @default(0) @map("coupon_discount") @db.Decimal(10, 2)
+  walletApplied  Decimal      @default(0) @map("wallet_applied") @db.Decimal(12, 2)
   taxAmount      Decimal      @default(0) @map("tax_amount") @db.Decimal(12, 2)
   totalAmount    Decimal      @map("total_amount") @db.Decimal(12, 2)
   paymentMethod  String?      @map("payment_method") @db.VarChar(30)
@@ -617,6 +628,9 @@ model Order {
   user            User            @relation(fields: [userId], references: [id])
   vendor          Vendor          @relation(fields: [vendorId], references: [id])
   promotion       Promotion?      @relation(fields: [promotionId], references: [id])
+  coupon          Coupon?         @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  couponRedemption CouponRedemption?
+  cashbackEntry   CashbackEntry?
   businessAccount BusinessAccount @relation(fields: [businessAccountId], references: [id])
   outlet          Outlet          @relation(fields: [outletId], references: [id])
   deliverySlot    DeliverySlot?   @relation(fields: [deliverySlotId], references: [id])
@@ -2101,4 +2115,209 @@ enum CommissionAccrualStatus {
   cancelled
 
   @@map("commission_accrual_status")
+}
+
+// ═══════════════════════════════════════════════════════
+//  PROMO ENGINE — Phase 1 (Coupons + Cashback)
+// ═══════════════════════════════════════════════════════
+//
+// Two priority promos per the Marketing & Sales brief:
+//   • Coupon  — immediate discount at checkout (one coupon per order, Rule 1)
+//   • Cashback — earned on delivery, paid to prepaid Wallet or user's UPI
+//
+// Ownership: vendorId NULL = platform promo (admin-created, platform-wide
+// or scope-narrowed); vendorId set = vendor promo, valid only on that
+// vendor's orders — enforced in promotion.service, never trusted from input.
+
+enum PromoDiscountType {
+  flat
+  percentage
+
+  @@map("promo_discount_type")
+}
+
+enum CouponRedemptionStatus {
+  active
+  reversed
+
+  @@map("coupon_redemption_status")
+}
+
+enum CashbackDestination {
+  wallet
+  upi
+
+  @@map("cashback_destination")
+}
+
+// pending   — order placed, waiting for delivery
+// approved  — delivered, UPI payout awaiting claim/manual transfer
+// credited  — paid into the prepaid Wallet (walletTxnId set)
+// paid      — UPI transfer done by admin (paidReference = UTR)
+// cancelled — order cancelled/returned or grant revoked
+enum CashbackEntryStatus {
+  pending
+  approved
+  credited
+  paid
+  cancelled
+
+  @@map("cashback_entry_status")
+}
+
+enum CashbackEntrySource {
+  order
+  direct_grant
+
+  @@map("cashback_entry_source")
+}
+
+model Coupon {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique @db.VarChar(40) // stored UPPERCASE; lookups normalise
+  name        String  @db.VarChar(120)
+  description String? @db.Text
+  vendorId    String? @map("vendor_id") @db.Uuid // null = platform coupon
+
+  discountType  PromoDiscountType @map("discount_type")
+  discountValue Decimal           @map("discount_value") @db.Decimal(10, 2)
+  maxDiscount   Decimal?          @map("max_discount") @db.Decimal(10, 2) // cap for percentage type
+  minOrderValue Decimal?          @map("min_order_value") @db.Decimal(12, 2)
+
+  startDate DateTime? @map("start_date") @db.Timestamptz
+  endDate   DateTime? @map("end_date") @db.Timestamptz
+
+  usageLimit   Int? @map("usage_limit") // total checkouts, across all users
+  perUserLimit Int? @map("per_user_limit")
+  usedCount    Int  @default(0) @map("used_count")
+
+  // Optional scope narrowing — empty arrays mean "whole store" (vendor coupon)
+  // or "whole platform" (platform coupon). Brand match is on Product.brand text.
+  categoryIds String[] @default([]) @map("category_ids") @db.Uuid
+  productIds  String[] @default([]) @map("product_ids") @db.Uuid
+  brandNames  String[] @default([]) @map("brand_names")
+
+  // Stacking (brief: per-promo "can be clubbed" checkboxes).
+  // Rule 1 (one coupon per checkout) is hard-coded in the service.
+  stacksWithVendorPromo Boolean @default(true) @map("stacks_with_vendor_promo")
+  stacksWithCashback    Boolean @default(true) @map("stacks_with_cashback")
+
+  isActive    Boolean @default(true) @map("is_active")
+  createdById String? @map("created_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor      Vendor?            @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  redemptions CouponRedemption[]
+  orders      Order[]
+
+  @@index([vendorId, isActive])
+  @@index([isActive, endDate])
+  @@map("coupons")
+}
+
+// One row per ORDER touched by a coupon. A multi-vendor checkout creates
+// several orders but counts as ONE use — rows share a checkoutGroupId and
+// usage counting is per distinct group with ≥1 active row.
+model CouponRedemption {
+  id              String                 @id @default(uuid()) @db.Uuid
+  couponId        String                 @map("coupon_id") @db.Uuid
+  userId          String                 @map("user_id") @db.Uuid
+  orderId         String                 @unique @map("order_id") @db.Uuid
+  checkoutGroupId String                 @map("checkout_group_id") @db.Uuid
+  amount          Decimal                @db.Decimal(10, 2)
+  status          CouponRedemptionStatus @default(active)
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([couponId, userId, status])
+  @@index([checkoutGroupId])
+  @@map("coupon_redemptions")
+}
+
+model CashbackCampaign {
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String  @db.VarChar(120)
+  description String? @db.Text
+  vendorId    String? @map("vendor_id") @db.Uuid // null = platform campaign
+
+  cashbackType  PromoDiscountType @map("cashback_type")
+  cashbackValue Decimal           @map("cashback_value") @db.Decimal(10, 2)
+  maxCashback   Decimal?          @map("max_cashback") @db.Decimal(10, 2) // cap for percentage type
+  minOrderValue Decimal?          @map("min_order_value") @db.Decimal(12, 2)
+
+  destination CashbackDestination @default(wallet)
+
+  startDate DateTime? @map("start_date") @db.Timestamptz
+  endDate   DateTime? @map("end_date") @db.Timestamptz
+
+  perUserLimit Int?     @map("per_user_limit") // max earns per user
+  totalBudget  Decimal? @map("total_budget") @db.Decimal(12, 2) // hard spend cap
+  usedAmount   Decimal  @default(0) @map("used_amount") @db.Decimal(12, 2)
+  usedCount    Int      @default(0) @map("used_count")
+
+  // Rule 2 (coupon + cashback) — per-campaign "can be clubbed" checkbox.
+  // Rule 5 (single highest cashback source) is hard-coded in the service.
+  stacksWithCoupon Boolean @default(true) @map("stacks_with_coupon")
+
+  isActive    Boolean @default(true) @map("is_active")
+  createdById String? @map("created_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor  Vendor?         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  entries CashbackEntry[]
+
+  @@index([vendorId, isActive])
+  @@index([isActive, endDate])
+  @@map("cashback_campaigns")
+}
+
+// A single earned (or granted) cashback. Order-linked entries are created at
+// checkout in `pending` and settled on delivery; direct grants (admin "reward
+// this user" flow) are created already-approved/credited with no order.
+// Campaign terms are snapshotted so settlement survives campaign edits AND
+// admin order modifications (amount is recomputed from the snapshot at delivery).
+model CashbackEntry {
+  id         String              @id @default(uuid()) @db.Uuid
+  campaignId String?             @map("campaign_id") @db.Uuid
+  userId     String              @map("user_id") @db.Uuid
+  orderId    String?             @unique @map("order_id") @db.Uuid
+  vendorId   String?             @map("vendor_id") @db.Uuid // funding vendor, for reporting
+  source     CashbackEntrySource @default(order)
+
+  amount      Decimal             @db.Decimal(10, 2)
+  destination CashbackDestination
+  upiId       String?             @map("upi_id") @db.VarChar(100) // captured via claim flow
+  status      CashbackEntryStatus @default(pending)
+
+  // Campaign snapshot for recompute-at-delivery
+  cashbackType  PromoDiscountType? @map("cashback_type")
+  cashbackValue Decimal?           @map("cashback_value") @db.Decimal(10, 2)
+  maxCashback   Decimal?           @map("max_cashback") @db.Decimal(10, 2)
+  minOrderValue Decimal?           @map("min_order_value") @db.Decimal(12, 2)
+
+  walletTxnId   String? @unique @map("wallet_txn_id") @db.Uuid // ledger link when credited
+  paidReference String? @map("paid_reference") @db.VarChar(100) // UTR / payout ref for UPI
+  notes         String? @db.Text
+  createdById   String? @map("created_by_id") @db.Uuid // admin who granted (direct grants)
+
+  creditedAt  DateTime? @map("credited_at") @db.Timestamptz
+  paidAt      DateTime? @map("paid_at") @db.Timestamptz
+  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  campaign CashbackCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  user     User              @relation(fields: [userId], references: [id])
+  order    Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([campaignId])
+  @@index([status, destination])
+  @@map("cashback_entries")
 }
