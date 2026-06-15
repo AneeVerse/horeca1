@@ -287,7 +287,11 @@ async function runTests() {
 
     orderCustomer = await prisma.user.findFirst({ where: { role: 'customer' } });
     orderVendor = await prisma.vendor.findFirst({ where: { creditEnabled: true } });
-    orderProduct = orderVendor ? await prisma.product.findFirst({ where: { vendorId: orderVendor.id, basePrice: { gt: 0 } } }) : null;
+    // Deterministically pick the vendor's highest-priced product so the test order
+    // (and the post-split parent) stays above the vendor's minimum order value —
+    // otherwise findFirst could pick a sub-MOV product and the later order-modify
+    // step would (correctly) reject on MOV, making this suite non-deterministic.
+    orderProduct = orderVendor ? await prisma.product.findFirst({ where: { vendorId: orderVendor.id, basePrice: { gt: 0 } }, orderBy: { basePrice: 'desc' } }) : null;
     
     const orderMember = orderCustomer ? await prisma.businessAccountMember.findFirst({ where: { userId: orderCustomer.id } }) : null;
     orderBA = orderMember ? await prisma.businessAccount.findUnique({ where: { id: orderMember.businessAccountId } }) : null;

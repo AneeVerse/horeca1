@@ -13,10 +13,14 @@ import { PrismaPg } from '@prisma/adapter-pg';
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
+// Canonical role templates — must match SEED_TEMPLATES in prisma/seed.ts and
+// prisma/migrations/20260520_hcid_architecture_step_a/data_migrate.ts (the
+// scripts that actually create these rows). Previously this list asserted names
+// (Editor / Vendor Manager / Brand Editor …) that no seeder ever created.
 const EXPECTED_BY_SCOPE = {
-  admin:  ['Super Admin', 'Ops Admin', 'Finance Admin', 'Support Agent', 'Editor', 'Viewer'],
-  vendor: ['Vendor Admin', 'Vendor Manager', 'Vendor Editor', 'Vendor Viewer'],
-  brand:  ['Brand Admin', 'Brand Manager', 'Brand Editor', 'Brand Viewer'],
+  admin:  ['Super Admin', 'Ops Admin', 'Finance Admin', 'Support Agent'],
+  vendor: ['Vendor Admin', 'Sales Rep', 'Order Manager', 'Warehouse Manager', 'Finance Executive'],
+  brand:  ['Brand Admin', 'Brand Manager', 'Marketing Executive'],
 };
 
 async function main() {
