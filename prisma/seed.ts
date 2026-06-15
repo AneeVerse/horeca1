@@ -6,8 +6,96 @@ import { hash } from 'bcryptjs';
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// V2.2 HCID helpers — every User needs a unique hcid_display, and every
+// Vendor / Brand / customer User must be backed by a BusinessAccount.
+// Role-template definitions mirror prisma/migrations/.../data_migrate.ts so a
+// freshly-seeded DB matches a migrated+backfilled one.
+// ═══════════════════════════════════════════════════════════════════════════
+type PermissionsJson = Record<string, Record<string, boolean>>;
+
+const ALL_MODULES = [
+  'dashboard', 'products', 'brandStore', 'orders', 'repeatOrders', 'inventory',
+  'grn', 'dispatch', 'deliveries', 'payments', 'creditLine', 'customers',
+  'vendors', 'brands', 'users', 'outlets', 'analytics', 'promotions',
+  'support', 'logistics', 'auditLogs', 'settings',
+] as const;
+const ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve'] as const;
+
+function allPermissions(): PermissionsJson {
+  const out: PermissionsJson = {};
+  for (const m of ALL_MODULES) { out[m] = {}; for (const a of ALL_ACTIONS) out[m][a] = true; }
+  return out;
+}
+function viewOnly(modules: readonly string[]): PermissionsJson {
+  const out: PermissionsJson = {};
+  for (const m of modules) out[m] = { view: true };
+  return out;
+}
+function perms(spec: Record<string, readonly string[]>): PermissionsJson {
+  const out: PermissionsJson = {};
+  for (const [m, actions] of Object.entries(spec)) { out[m] = {}; for (const a of actions) out[m][a] = true; }
+  return out;
+}
+
+const SEED_TEMPLATES: Array<{ name: string; scope: 'account' | 'vendor' | 'brand' | 'admin' | 'delivery'; description: string; permissions: PermissionsJson }> = [
+  { name: 'Owner', scope: 'account', description: 'Account owner — full access', permissions: allPermissions() },
+  { name: 'Procurement Manager', scope: 'account', description: 'Manages procurement, orders, repeat orders', permissions: perms({ dashboard: ['view'], orders: ['view','create','edit','approve'], repeatOrders: ['view','create','edit'], products: ['view'], inventory: ['view'], grn: ['view','create'], payments: ['view'], vendors: ['view'], outlets: ['view'], analytics: ['view'] }) },
+  { name: 'Store Manager', scope: 'account', description: 'Operates a single outlet', permissions: perms({ dashboard: ['view'], orders: ['view','create','edit'], grn: ['view','create','edit'], inventory: ['view','edit'], deliveries: ['view'], outlets: ['view'] }) },
+  { name: 'Chef', scope: 'account', description: 'Creates orders from approved lists', permissions: perms({ orders: ['view','create'], repeatOrders: ['view','create'], products: ['view'], outlets: ['view'] }) },
+  { name: 'Accountant', scope: 'account', description: 'Finance + payments visibility', permissions: perms({ dashboard: ['view'], orders: ['view'], payments: ['view','approve'], creditLine: ['view','approve'], analytics: ['view'], auditLogs: ['view'] }) },
+  { name: 'Viewer', scope: 'account', description: 'Read-only across modules', permissions: viewOnly(ALL_MODULES) },
+  { name: 'Vendor Admin', scope: 'vendor', description: 'Full vendor portal access', permissions: allPermissions() },
+  { name: 'Sales Rep', scope: 'vendor', description: 'Customer-facing sales', permissions: perms({ dashboard: ['view'], orders: ['view','create','edit'], customers: ['view','create','edit'], products: ['view'], inventory: ['view'], promotions: ['view','create','edit'] }) },
+  { name: 'Order Manager', scope: 'vendor', description: 'Order processing + dispatch', permissions: perms({ dashboard: ['view'], orders: ['view','edit','approve'], dispatch: ['view','create','edit'], deliveries: ['view','edit'], grn: ['view'], inventory: ['view'] }) },
+  { name: 'Warehouse Manager', scope: 'vendor', description: 'Inventory + GRN', permissions: perms({ inventory: ['view','create','edit','delete'], grn: ['view','create','edit'], dispatch: ['view','create'], products: ['view'] }) },
+  { name: 'Finance Executive', scope: 'vendor', description: 'Payments + ledgers', permissions: perms({ dashboard: ['view'], payments: ['view','create','approve'], creditLine: ['view','approve'], orders: ['view'], analytics: ['view'], auditLogs: ['view'] }) },
+  { name: 'Brand Admin', scope: 'brand', description: 'Full brand portal access', permissions: allPermissions() },
+  { name: 'Brand Manager', scope: 'brand', description: 'Catalog + mappings', permissions: perms({ dashboard: ['view'], brandStore: ['view','edit'], products: ['view','create','edit'], brands: ['view','edit'], analytics: ['view'] }) },
+  { name: 'Marketing Executive', scope: 'brand', description: 'Promotions + analytics', permissions: perms({ dashboard: ['view'], brandStore: ['view'], promotions: ['view','create','edit'], analytics: ['view'] }) },
+  { name: 'Super Admin', scope: 'admin', description: 'Full platform access', permissions: allPermissions() },
+  { name: 'Ops Admin', scope: 'admin', description: 'Operations: orders, vendors, customers', permissions: perms({ dashboard: ['view'], orders: ['view','edit','approve'], vendors: ['view','edit','approve'], customers: ['view','edit'], deliveries: ['view','edit','approve'], support: ['view','edit'], auditLogs: ['view'], settings: ['view'] }) },
+  { name: 'Finance Admin', scope: 'admin', description: 'Finance + credit oversight', permissions: perms({ dashboard: ['view'], payments: ['view','approve'], creditLine: ['view','approve'], analytics: ['view'], auditLogs: ['view'] }) },
+  { name: 'Support Agent', scope: 'admin', description: 'Customer support tickets', permissions: perms({ support: ['view','edit'], orders: ['view'], customers: ['view'], auditLogs: ['view'] }) },
+];
+
+function generateHcid(): string {
+  const seg = () => Math.random().toString(36).substring(2, 6).toUpperCase().padEnd(4, '0');
+  return `HC-${seg()}-${seg()}`;
+}
+async function uniqueHcid(): Promise<string> {
+  for (let i = 0; i < 20; i++) {
+    const candidate = generateHcid();
+    const existing = await prisma.user.findUnique({ where: { hcidDisplay: candidate }, select: { id: true } });
+    if (!existing) return candidate;
+  }
+  throw new Error('Could not generate unique HCID after 20 attempts');
+}
+async function seedRoleTemplates() {
+  let created = 0;
+  for (const tpl of SEED_TEMPLATES) {
+    const existing = await prisma.accountRole.findFirst({ where: { businessAccountId: null, name: tpl.name, isTemplate: true }, select: { id: true } });
+    if (existing) continue;
+    await prisma.accountRole.create({
+      data: {
+        businessAccountId: null,
+        name: tpl.name,
+        description: tpl.description,
+        permissions: tpl.permissions as object,
+        isTemplate: true,
+        scope: tpl.scope,
+      },
+    });
+    created++;
+  }
+  console.log(`  Role templates: ${created} created, ${SEED_TEMPLATES.length - created} already present`);
+}
+
 async function main() {
   console.log('🌱 Seeding database...');
+
+  // ═══ ROLE TEMPLATES (RBAC) ═══
+  await seedRoleTemplates();
 
   // ═══ ADMIN USER ═══
   const adminPw = await hash('admin123', 12);
@@ -22,6 +110,7 @@ async function main() {
       phone: '+919999900000',
       pincode: '400001',
       emailVerified: new Date(),
+      hcidDisplay: await uniqueHcid(),
     },
   });
   console.log(`  Admin: ${admin.email}`);
@@ -123,20 +212,32 @@ async function main() {
         pincode: '400001',
         businessName: v.business.businessName,
         emailVerified: new Date(),
+        hcidDisplay: await uniqueHcid(),
       },
     });
     vendorUsers.push(user.id);
 
-    const vendor = await prisma.vendor.upsert({
-      where: { userId: user.id },
-      update: { logoUrl: v.business.logoUrl },
-      create: {
-        userId: user.id,
-        ...v.business,
-        rating: v.business.rating,
-        minOrderValue: v.business.minOrderValue,
-      },
-    });
+    // V2.2 HCID: a vendor is owned by a BusinessAccount (isVendor) with a primary member.
+    // NOTE: Vendor.userId is no longer @unique (migration 20260529) — look up via findFirst.
+    let vendor = await prisma.vendor.findFirst({ where: { userId: user.id }, select: { id: true, businessName: true } });
+    if (vendor) {
+      await prisma.vendor.update({ where: { id: vendor.id }, data: { logoUrl: v.business.logoUrl } });
+    } else {
+      const ba = await prisma.businessAccount.create({
+        data: { legalName: v.business.businessName, displayName: v.business.businessName, isVendor: true, isCustomer: false, status: 'active' },
+      });
+      await prisma.businessAccountMember.create({ data: { userId: user.id, businessAccountId: ba.id, isPrimary: true } });
+      vendor = await prisma.vendor.create({
+        data: {
+          userId: user.id,
+          businessAccountId: ba.id,
+          ...v.business,
+          rating: v.business.rating,
+          minOrderValue: v.business.minOrderValue,
+        },
+        select: { id: true, businessName: true },
+      });
+    }
     vendors.push({ id: vendor.id, businessName: vendor.businessName });
     console.log(`  Vendor: ${vendor.businessName}`);
   }
@@ -151,6 +252,7 @@ async function main() {
   ];
 
   const customers: string[] = [];
+  const customerBAs: string[] = [];
   for (const c of customerData) {
     const user = await prisma.user.upsert({
       where: { email: c.email },
@@ -164,9 +266,29 @@ async function main() {
         pincode: c.pincode,
         businessName: c.businessName,
         emailVerified: new Date(),
+        hcidDisplay: await uniqueHcid(),
       },
     });
     customers.push(user.id);
+
+    // V2.2 HCID: customer User is backed by a BusinessAccount (isCustomer) with a primary outlet + membership.
+    const existingMember = await prisma.businessAccountMember.findFirst({
+      where: { userId: user.id, isPrimary: true, businessAccount: { isCustomer: true } },
+      select: { businessAccountId: true },
+    });
+    if (existingMember) {
+      customerBAs.push(existingMember.businessAccountId);
+    } else {
+      const ba = await prisma.businessAccount.create({
+        data: { legalName: c.businessName, displayName: c.businessName, isCustomer: true, status: 'active' },
+      });
+      const outlet = await prisma.outlet.create({
+        data: { businessAccountId: ba.id, name: `${c.businessName} — Main`, addressLine: 'Main Branch', city: 'Mumbai', state: 'Maharashtra', pincode: c.pincode, isActive: true },
+      });
+      await prisma.businessAccount.update({ where: { id: ba.id }, data: { primaryOutletId: outlet.id } });
+      await prisma.businessAccountMember.create({ data: { userId: user.id, businessAccountId: ba.id, isPrimary: true } });
+      customerBAs.push(ba.id);
+    }
     console.log(`  Customer: ${user.fullName} (${c.businessName})`);
   }
 
@@ -273,11 +395,23 @@ async function main() {
   for (const { vendorIdx, products } of allVendorProducts) {
     const vendor = vendors[vendorIdx];
     for (const p of products) {
+      // V2.2 Central Item: every vendor Product maps to a canonical Horeca1 MasterProduct (SKU).
+      // Required so order reassignment / brand-distributor routing can match the same item
+      // across vendors. masterProductId is nullable in schema, but the platform invariant is
+      // that catalogued products carry a master SKU.
+      const sku = `H1-SEED-${String(totalProducts + 1).padStart(4, '0')}`;
+      const master = await prisma.masterProduct.upsert({
+        where: { sku },
+        update: {},
+        create: { sku, name: p.name, uom: p.unit, categoryId: categories[p.categorySlug], isActive: true },
+      });
+
       const product = await prisma.product.upsert({
         where: { vendorId_slug: { vendorId: vendor.id, slug: p.slug } },
-        update: { imageUrl: p.imageUrl },
+        update: { imageUrl: p.imageUrl, masterProductId: master.id },
         create: {
           vendorId: vendor.id,
+          masterProductId: master.id,
           categoryId: categories[p.categorySlug],
           name: p.name,
           slug: p.slug,
@@ -355,18 +489,19 @@ async function main() {
   console.log(`  Delivery slots: Mon-Sat, 2 slots/day/vendor`);
 
   // ═══ CUSTOMER-VENDOR RELATIONSHIPS ═══
+  // V2.2: CustomerVendor is scoped by (businessAccountId, vendorId); userId is creator/audit metadata.
   for (const vendor of vendors) {
     await prisma.customerVendor.upsert({
-      where: { userId_vendorId: { userId: customers[0], vendorId: vendor.id } },
+      where: { businessAccountId_vendorId: { businessAccountId: customerBAs[0], vendorId: vendor.id } },
       update: {},
-      create: { userId: customers[0], vendorId: vendor.id, isFavorite: true },
+      create: { userId: customers[0], businessAccountId: customerBAs[0], vendorId: vendor.id, isFavorite: true },
     });
   }
   for (let i = 0; i < 3; i++) {
     await prisma.customerVendor.upsert({
-      where: { userId_vendorId: { userId: customers[1], vendorId: vendors[i].id } },
+      where: { businessAccountId_vendorId: { businessAccountId: customerBAs[1], vendorId: vendors[i].id } },
       update: {},
-      create: { userId: customers[1], vendorId: vendors[i].id, isFavorite: i === 0 },
+      create: { userId: customers[1], businessAccountId: customerBAs[1], vendorId: vendors[i].id, isFavorite: i === 0 },
     });
   }
   console.log(`  Customer-vendor relationships created`);
@@ -461,14 +596,26 @@ async function main() {
         phone: b.phone,
         role: 'brand',
         emailVerified: new Date(),
+        hcidDisplay: await uniqueHcid(),
       },
     });
 
-    const brand = await prisma.brand.upsert({
-      where: { userId: brandUser.id },
-      update: {},
-      create: {
+    // V2.2 HCID: a brand is owned by a BusinessAccount (isBrand) with a primary member.
+    // NOTE: Brand.userId is no longer @unique (migration 20260529) — look up via findFirst.
+    const existingBrand = await prisma.brand.findFirst({ where: { userId: brandUser.id }, select: { id: true, businessAccountId: true } });
+    if (existingBrand) {
+      console.log(`  Brand: ${b.brand.name} (exists)`);
+      continue;
+    }
+    const brandBa = await prisma.businessAccount.create({
+      data: { legalName: b.brand.name, displayName: b.brand.name, isBrand: true, isCustomer: false, status: 'active' },
+    });
+    await prisma.businessAccountMember.create({ data: { userId: brandUser.id, businessAccountId: brandBa.id, isPrimary: true } });
+
+    const brand = await prisma.brand.create({
+      data: {
         userId: brandUser.id,
+        businessAccountId: brandBa.id,
         name: b.brand.name,
         slug: b.brand.slug,
         tagline: b.brand.tagline,
