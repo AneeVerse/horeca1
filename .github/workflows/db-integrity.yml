@@ -1,0 +1,65 @@
+name: DB integrity
+
+# Safety net against the schema drift that broke a fresh `prisma migrate deploy`
+# in June 2026: several tables/columns existed only because the schema had been
+# `prisma db push`-ed onto prod, with no migration. This job rebuilds a database
+# from migrations alone and fails if schema.prisma has drifted from them.
+#
+# RULE GOING FORWARD: never `prisma db push` against prod. Every schema change
+# goes through `prisma migrate dev` -> reviewed migration -> deploy.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  migrations:
+    name: Migrations rebuild a fresh DB with no drift
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: horeca1
+          POSTGRES_PASSWORD: horeca1_dev
+          POSTGRES_DB: horeca1
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U horeca1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://horeca1:horeca1_dev@localhost:5432/horeca1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Migrations apply cleanly to a fresh database
+        run: npx prisma migrate deploy
+      - name: schema.prisma has not drifted from the migrations
+        run: |
+          npx prisma migrate diff \
+            --from-config-datasource prisma.config.ts \
+            --to-schema prisma/schema.prisma \
+            --script > drift.sql 2>/dev/null || true
+          # The only DDL Prisma does not model is the trigram GIN search indexes,
+          # which the baseline creates as raw SQL. Allow exactly those; fail on anything else.
+          REAL=$(grep -vE '^[[:space:]]*(--.*)?$' drift.sql | grep -viE 'products_(name|brand)_trgm' || true)
+          if [ -n "$REAL" ]; then
+            echo "::error::Schema drift detected — schema.prisma differs from the migrations."
+            echo "Fix it by generating a migration:  npx prisma migrate dev --name <describe-change>"
+            echo "----- unexpected diff -----"
+            echo "$REAL"
+            exit 1
+          fi
+          echo "✓ No drift — migrations reproduce schema.prisma exactly."
