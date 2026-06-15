@@ -19,10 +19,13 @@ interface EditProfileOverlayProps {
     onSave: (data: EditProfileOverlayProps['userData']) => void | Promise<void>;
 }
 
+// Reduce any stored phone (e.g. "+919999900000") to the editable 10-digit local part.
+const toLocalPhone = (p: string) => (p || '').replace(/\D/g, '').slice(-10);
+
 export function EditProfileOverlay({ isOpen, onClose, userData, onSave }: EditProfileOverlayProps) {
     const [fullName, setFullName] = useState(userData.fullName);
     const [businessName, setBusinessName] = useState(userData.businessName);
-    const [phone, setPhone] = useState(userData.phone);
+    const [phone, setPhone] = useState(toLocalPhone(userData.phone));
     const [address, setAddress] = useState(userData.address);
     const [address2, setAddress2] = useState(userData.address2);
     const [pincode, setPincode] = useState(userData.pincode);
@@ -36,7 +39,7 @@ export function EditProfileOverlay({ isOpen, onClose, userData, onSave }: EditPr
         if (!isOpen) return;
         setFullName(userData.fullName);
         setBusinessName(userData.businessName);
-        setPhone(userData.phone);
+        setPhone(toLocalPhone(userData.phone));
         setAddress(userData.address);
         setAddress2(userData.address2);
         setPincode(userData.pincode);
@@ -164,12 +167,18 @@ export function EditProfileOverlay({ isOpen, onClose, userData, onSave }: EditPr
                         </div>
                         <div>
                             <label className="text-[12px] md:text-[13px] font-semibold text-[#181725] ml-0.5 mb-1.5 block">Phone number</label>
-                            <input
-                                type="tel"
-                                value={phone ? `+91 ${phone}` : '+91'}
-                                readOnly
-                                className="w-full px-3.5 py-2.5 md:px-4 md:py-3 bg-gray-50 border border-gray-200 rounded-lg md:rounded-xl text-[13px] md:text-[14px] font-medium text-gray-400 outline-none cursor-not-allowed"
-                            />
+                            <div className="flex items-center w-full bg-white border border-gray-200 rounded-lg md:rounded-xl overflow-hidden focus-within:border-[#53B175] focus-within:ring-2 focus-within:ring-[#53B175]/10 transition-all">
+                                <span className="px-3 md:px-3.5 py-2.5 md:py-3 text-[13px] md:text-[14px] font-medium text-gray-500 bg-gray-50 border-r border-gray-200 select-none">+91</span>
+                                <input
+                                    type="tel"
+                                    inputMode="numeric"
+                                    maxLength={10}
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                    placeholder="10-digit mobile number"
+                                    className="flex-1 px-3.5 py-2.5 md:px-4 md:py-3 bg-white text-[13px] md:text-[14px] font-medium text-gray-700 placeholder:text-gray-400 outline-none"
+                                />
+                            </div>
                         </div>
                         <div>
                             <label className="text-[12px] md:text-[13px] font-semibold text-[#181725] ml-0.5 mb-1.5 block">Address line 1</label>

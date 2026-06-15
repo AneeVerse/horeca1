@@ -887,6 +887,8 @@ export function ProfileScreen({ isOpen, onClose }: ProfileScreenProps) {
                         if (data.fullName) patch.fullName = data.fullName;
                         if (data.businessName) patch.businessName = data.businessName;
                         if (/^\d{6}$/.test(data.pincode)) patch.pincode = data.pincode;
+                        // Phone is editable now (10-digit local part; the API normalizes to +91…).
+                        if (/^[6-9]\d{9}$/.test(data.phone)) patch.phone = data.phone;
                         await fetch('/api/v1/auth/me', {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
