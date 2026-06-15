@@ -691,7 +691,10 @@ export class OrderService {
       }
 
       if (subtotal <= 0) throw Errors.badRequest('Order would have no items left. Cancel the order instead.');
-      if (subtotal < Number(vendor.minOrderValue)) throw Errors.belowMOV(vendor.businessName, Number(vendor.minOrderValue), subtotal);
+      // MOV is a customer placement-time gate (enforced in createOrder + submitDraft).
+      // It is intentionally NOT re-enforced here: once an order is accepted, ops/vendor
+      // edits (quantity adjustments, partial fulfilment) must not be blocked because the
+      // revised total dipped below the minimum.
 
       if (reserveDeltas.length) {
         const check = await this.inventoryService.bulkCheck(reserveDeltas, tx);
