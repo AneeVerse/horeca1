@@ -292,30 +292,73 @@ async function main() {
     console.log(`  Customer: ${user.fullName} (${c.businessName})`);
   }
 
-  // ═══ CATEGORIES (with images) ═══
-  const categoryData = [
-    { name: 'Vegetables', slug: 'vegetables', sortOrder: 1, imageUrl: '/images/category/vegitable.png' },
-    { name: 'Fruits', slug: 'fruits', sortOrder: 2, imageUrl: '/images/category/fruits.png' },
-    { name: 'Dairy & Eggs', slug: 'dairy-eggs', sortOrder: 3, imageUrl: '/images/category/milk.png' },
-    { name: 'Spices & Masala', slug: 'spices-masala', sortOrder: 4, imageUrl: '/images/category/candy.png' },
-    { name: 'Grains & Pulses', slug: 'grains-pulses', sortOrder: 5, imageUrl: '/images/category/snacks.png' },
-    { name: 'Meat & Poultry', slug: 'meat-poultry', sortOrder: 6, imageUrl: '/images/category/fish & meat.png' },
-    { name: 'Seafood', slug: 'seafood', sortOrder: 7, imageUrl: '/images/category/fish & meat.png' },
-    { name: 'Beverages', slug: 'beverages', sortOrder: 8, imageUrl: '/images/category/drink-juice.png' },
-    { name: 'Oils & Ghee', slug: 'oils-ghee', sortOrder: 9, imageUrl: '/images/category/fruits.png' },
-    { name: 'Packaging & Supplies', slug: 'packaging-supplies', sortOrder: 10, imageUrl: '/images/category/vegitable.png' },
+  // ═══ CATEGORIES (2-level: Category → Sub-category) ═══
+  // Client rule (Go-Live §5): every Item maps to exactly one Sub-category (Level 2),
+  // and every Sub-category maps to one parent Category (Level 1).
+  const parentCategoryData = [
+    { name: 'Fresh Produce', slug: 'fresh-produce', sortOrder: 1, imageUrl: '/images/category/vegitable.png' },
+    { name: 'Dairy, Cheese & Eggs', slug: 'dairy-cheese-eggs', sortOrder: 2, imageUrl: '/images/category/milk.png' },
+    { name: 'Pantry & Staples', slug: 'pantry-staples', sortOrder: 3, imageUrl: '/images/category/snacks.png' },
+    { name: 'Meat, Poultry & Seafood', slug: 'meat-poultry-seafood', sortOrder: 4, imageUrl: '/images/category/fish & meat.png' },
+    { name: 'Beverages & Drinks', slug: 'beverages-drinks', sortOrder: 5, imageUrl: '/images/category/drink-juice.png' },
+    { name: 'Packaging & Cleaning', slug: 'packaging-cleaning', sortOrder: 6, imageUrl: '/images/category/frozen foods.png' },
   ];
-
-  const categories: Record<string, string> = {};
-  for (const cat of categoryData) {
+  const parentCats: Record<string, string> = {};
+  for (const pc of parentCategoryData) {
     const c = await prisma.category.upsert({
-      where: { slug: cat.slug },
-      update: { imageUrl: cat.imageUrl },
-      create: { ...cat, approvalStatus: 'approved' as const },
+      where: { slug: pc.slug },
+      update: { imageUrl: pc.imageUrl, parentId: null },
+      create: { ...pc, approvalStatus: 'approved' as const },
     });
-    categories[cat.slug] = c.id;
+    parentCats[pc.slug] = c.id;
   }
-  console.log(`  Categories: ${Object.keys(categories).length} created`);
+
+  // Level-2 sub-categories (these slugs are what every product maps to).
+  const subCategoryData = [
+    { name: 'Vegetables', slug: 'vegetables', parent: 'fresh-produce', sortOrder: 1, imageUrl: '/images/category/vegitable.png' },
+    { name: 'Fruits', slug: 'fruits', parent: 'fresh-produce', sortOrder: 2, imageUrl: '/images/category/fruits.png' },
+    { name: 'Dairy & Eggs', slug: 'dairy-eggs', parent: 'dairy-cheese-eggs', sortOrder: 3, imageUrl: '/images/category/milk.png' },
+    { name: 'Spices & Masala', slug: 'spices-masala', parent: 'pantry-staples', sortOrder: 4, imageUrl: '/images/masala-salt/everest-masala.png' },
+    { name: 'Grains & Pulses', slug: 'grains-pulses', parent: 'pantry-staples', sortOrder: 5, imageUrl: '/images/category/snacks.png' },
+    { name: 'Oils & Ghee', slug: 'oils-ghee', parent: 'pantry-staples', sortOrder: 6, imageUrl: '/images/edible-oil/saffola-gold-oil.png' },
+    { name: 'Meat & Poultry', slug: 'meat-poultry', parent: 'meat-poultry-seafood', sortOrder: 7, imageUrl: '/images/category/fish & meat.png' },
+    { name: 'Seafood', slug: 'seafood', parent: 'meat-poultry-seafood', sortOrder: 8, imageUrl: '/images/category/fish & meat.png' },
+    { name: 'Beverages', slug: 'beverages', parent: 'beverages-drinks', sortOrder: 9, imageUrl: '/images/category/drink-juice.png' },
+    { name: 'Packaging & Supplies', slug: 'packaging-supplies', parent: 'packaging-cleaning', sortOrder: 10, imageUrl: '/images/category/frozen foods.png' },
+  ];
+  const categories: Record<string, string> = {};
+  for (const sc of subCategoryData) {
+    const { parent, ...rest } = sc;
+    const c = await prisma.category.upsert({
+      where: { slug: sc.slug },
+      update: { imageUrl: sc.imageUrl, parentId: parentCats[parent] },
+      create: { ...rest, parentId: parentCats[parent], approvalStatus: 'approved' as const },
+    });
+    categories[sc.slug] = c.id;
+  }
+  console.log(`  Categories: ${parentCategoryData.length} parent + ${subCategoryData.length} sub-categories`);
+
+  // Valid LOCAL product images per sub-category — every product gets a real repo asset
+  // (no external URLs that can rot, no broken links). Cycled for visual variety.
+  const categoryImages: Record<string, string[]> = {
+    'vegetables': ['/images/fruits-vegetables/onion.png', '/images/product/brokali.png', '/images/fruits-vegetables/corriander.png', '/images/category/vegitable.png'],
+    'fruits': ['/images/category/fruits.png', '/images/organic/product-img20.png', '/images/organic/product-img21.png'],
+    'dairy-eggs': ['/images/dairy/amul-butter.png', '/images/dairy/amul-cheese.png', '/images/category/milk.png'],
+    'spices-masala': ['/images/masala-salt/everest-masala.png', '/images/masala-salt/tata-salt.png', '/images/recom-product/product-img7.png', '/images/recom-product/product-img8.png'],
+    'grains-pulses': ['/images/recom-product/product-img9.png', '/images/recom-product/product-img10.png', '/images/category/snacks.png'],
+    'oils-ghee': ['/images/edible-oil/saffola-gold-oil.png', '/images/edible-oil/gemini.png', '/images/recom-product/amul-ghee.png'],
+    'meat-poultry': ['/images/category/fish & meat.png', '/images/recom-product/product-img11.png'],
+    'seafood': ['/images/category/fish & meat.png', '/images/recom-product/product-img12.png'],
+    'beverages': ['/images/category/drink-juice.png', '/images/recom-product/kissan-ketchup.png', '/images/recom-product/product-img14.png'],
+    'packaging-supplies': ['/images/product/product-img1.png', '/images/product/product-img3.png', '/images/product/product-img5.png', '/images/product/product-img6.png'],
+  };
+  const imgCursor: Record<string, number> = {};
+  const pickImage = (slug: string): string => {
+    const list = categoryImages[slug] ?? ['/images/category/vegitable.png'];
+    const i = imgCursor[slug] ?? 0;
+    imgCursor[slug] = i + 1;
+    return list[i % list.length];
+  };
 
   // ═══ PRODUCTS + PRICE SLABS + INVENTORY ═══
   // Each product now has an imageUrl for proper display
@@ -406,9 +449,10 @@ async function main() {
         create: { sku, name: p.name, uom: p.unit, categoryId: categories[p.categorySlug], isActive: true },
       });
 
+      const imageUrl = pickImage(p.categorySlug); // guaranteed-valid local asset
       const product = await prisma.product.upsert({
         where: { vendorId_slug: { vendorId: vendor.id, slug: p.slug } },
-        update: { imageUrl: p.imageUrl, masterProductId: master.id },
+        update: { imageUrl, masterProductId: master.id, categoryId: categories[p.categorySlug] },
         create: {
           vendorId: vendor.id,
           masterProductId: master.id,
@@ -418,7 +462,7 @@ async function main() {
           basePrice: p.basePrice,
           packSize: p.packSize,
           unit: p.unit,
-          imageUrl: p.imageUrl,
+          imageUrl,
           creditEligible: vendorIdx < 2, // first 2 vendors have credit
           approvalStatus: 'approved',
         },
