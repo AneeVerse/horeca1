@@ -77,6 +77,18 @@ async function seedRoleTemplates() {
   console.log(`  Role templates: ${created} created, ${SEED_TEMPLATES.length - created} present`);
 }
 
+// Vendor logos — use assets already deployed on prod (the /images/vendors/*.webp
+// covers) so the reseed renders correctly without waiting on a new image deploy.
+const VENDOR_LOGOS = [
+  '/images/vendors/chad-peltola-BTvQ2ET_iKc-unsplash.webp',
+  '/images/vendors/eryka-ragna-K5dvZHBJp3k-unsplash.webp',
+  '/images/vendors/gioia-m-EGjfIKl_ZvE-unsplash.webp',
+  '/images/vendors/kylle-pangan-LjpD-uW4dH0-unsplash.webp',
+  '/images/vendors/m-veven-4oHtqbwy7Lo-unsplash.webp',
+  '/images/vendors/sleeba-thomas-h-T2VPkw9Kw-unsplash.webp',
+  '/images/vendors/young-kane-kSDOJRNol9E-unsplash.webp',
+];
+
 // ── Service areas: Mumbai + Navi Mumbai (includes Sanpada 400705, Vashi, Nerul…) ──
 const SERVICE_PINCODES = [
   '400001','400002','400003','400004','400005','400006','400007','400008','400009','400010',
@@ -101,19 +113,19 @@ const CATALOG: Array<{ name: string; slug: string; img: string; subs: Array<{ na
     { name: 'Pulses & Dal', slug: 'pulses-dal', img: '/images/recom-product/product-img8.png' },
     { name: 'Oils & Ghee', slug: 'oils-ghee', img: '/images/edible-oil/saffola-gold-oil.png' },
   ]},
-  { name: 'Meat, Poultry & Seafood', slug: 'meat-poultry-seafood', img: '/images/seed/cat-meat.png', subs: [
-    { name: 'Poultry', slug: 'poultry', img: '/images/seed/cat-meat.png' },
-    { name: 'Mutton & Lamb', slug: 'mutton-lamb', img: '/images/seed/cat-meat.png' },
-    { name: 'Seafood', slug: 'seafood', img: '/images/seed/cat-meat.png' },
+  { name: 'Meat, Poultry & Seafood', slug: 'meat-poultry-seafood', img: '/images/recom-product/product-img12.png', subs: [
+    { name: 'Poultry', slug: 'poultry', img: '/images/recom-product/product-img12.png' },
+    { name: 'Mutton & Lamb', slug: 'mutton-lamb', img: '/images/recom-product/product-img12.png' },
+    { name: 'Seafood', slug: 'seafood', img: '/images/recom-product/product-img12.png' },
   ]},
   { name: 'Beverages & Drinks', slug: 'beverages-drinks', img: '/images/category/drink-juice.png', subs: [
     { name: 'Soft Drinks & Water', slug: 'soft-drinks-water', img: '/images/category/drink-juice.png' },
     { name: 'Tea & Coffee', slug: 'tea-coffee', img: '/images/recom-product/product-img14.png' },
     { name: 'Juices & Energy', slug: 'juices-energy', img: '/images/category/drink-juice.png' },
   ]},
-  { name: 'Bakery & Frozen', slug: 'bakery-frozen', img: '/images/seed/cat-frozen.png', subs: [
+  { name: 'Bakery & Frozen', slug: 'bakery-frozen', img: '/images/category/desset.png', subs: [
     { name: 'Bakery & Bread', slug: 'bakery-bread', img: '/images/category/desset.png' },
-    { name: 'Frozen Foods', slug: 'frozen-foods', img: '/images/seed/cat-frozen.png' },
+    { name: 'Frozen Foods', slug: 'frozen-foods', img: '/images/category/desset.png' },
   ]},
   { name: 'Cleaning & Hygiene', slug: 'cleaning-hygiene', img: '/images/product/product-img5.png', subs: [
     { name: 'Cleaning Supplies', slug: 'cleaning-supplies', img: '/images/product/product-img5.png' },
@@ -137,14 +149,14 @@ const SUB_IMAGES: Record<string, string[]> = {
   'grains-rice': ['/images/recom-product/product-img9.png', '/images/recom-product/product-img10.png'],
   'pulses-dal': ['/images/recom-product/product-img8.png', '/images/recom-product/product-img11.png'],
   'oils-ghee': ['/images/edible-oil/saffola-gold-oil.png', '/images/edible-oil/gemini.png', '/images/recom-product/amul-ghee.png'],
-  'poultry': ['/images/seed/cat-meat.png', '/images/recom-product/product-img12.png'],
-  'mutton-lamb': ['/images/seed/cat-meat.png', '/images/recom-product/product-img16.png'],
-  'seafood': ['/images/seed/cat-meat.png', '/images/recom-product/product-img17.png'],
+  'poultry': ['/images/recom-product/product-img12.png', '/images/recom-product/product-img12.png'],
+  'mutton-lamb': ['/images/recom-product/product-img12.png', '/images/recom-product/product-img16.png'],
+  'seafood': ['/images/recom-product/product-img12.png', '/images/recom-product/product-img17.png'],
   'soft-drinks-water': ['/images/category/drink-juice.png', '/images/recom-product/product-img18.png'],
   'tea-coffee': ['/images/recom-product/product-img14.png', '/images/recom-product/kissan-ketchup.png'],
   'juices-energy': ['/images/category/drink-juice.png', '/images/recom-product/product-img12.png'],
   'bakery-bread': ['/images/category/desset.png', '/images/daily-best-sell/best-sell1.png'],
-  'frozen-foods': ['/images/seed/cat-frozen.png', '/images/daily-best-sell/best-sell2.png'],
+  'frozen-foods': ['/images/category/desset.png', '/images/daily-best-sell/best-sell2.png'],
   'cleaning-supplies': ['/images/product/product-img5.png', '/images/product/product-img3.png'],
   'disposables-packaging': ['/images/product/product-img6.png', '/images/product/product-img1.png'],
   'snacks-namkeen': ['/images/category/snacks.png', '/images/daily-best-sell/best-sell3.png', '/images/daily-best-sell/special-snacks-img.png'],
@@ -243,11 +255,11 @@ async function main() {
       const ba = await prisma.businessAccount.create({ data: { legalName: v.name, displayName: v.name, isVendor: true, isCustomer: false, status: 'active' } });
       await prisma.businessAccountMember.create({ data: { userId: user.id, businessAccountId: ba.id, isPrimary: true } });
       vendor = await prisma.vendor.create({
-        data: { userId: user.id, businessAccountId: ba.id, businessName: v.name, slug: v.slug, description: `${v.name} — bulk supplies for HoReCa businesses across Mumbai & Navi Mumbai.`, logoUrl: v.logo, rating: v.rating, minOrderValue: v.mov, creditEnabled: v.credit, isVerified: true, isActive: true, pickupCity: v.city, pickupState: 'Maharashtra' },
+        data: { userId: user.id, businessAccountId: ba.id, businessName: v.name, slug: v.slug, description: `${v.name} — bulk supplies for HoReCa businesses across Mumbai & Navi Mumbai.`, logoUrl: VENDOR_LOGOS[vi % VENDOR_LOGOS.length], rating: v.rating, minOrderValue: v.mov, creditEnabled: v.credit, isVerified: true, isActive: true, pickupCity: v.city, pickupState: 'Maharashtra' },
         select: { id: true },
       });
     } else {
-      await prisma.vendor.update({ where: { id: vendor.id }, data: { logoUrl: v.logo, isActive: true } });
+      await prisma.vendor.update({ where: { id: vendor.id }, data: { logoUrl: VENDOR_LOGOS[vi % VENDOR_LOGOS.length], isActive: true } });
     }
     vendorIds.push(vendor.id);
 
