@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { Settings, Bell, Building2, User, Save, Check } from 'lucide-react';
+import { Settings, Bell, Building2, User, Save, Check, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function SettingsPage() {
@@ -24,24 +24,63 @@ export default function SettingsPage() {
     const [pushNotifications, setPushNotifications] = useState(false);
 
     // Toast state
-    const [toast, setToast] = useState<{ show: boolean; message: string } | null>(null);
+    const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' } | null>(null);
 
-    const showToast = (message: string) => {
-        setToast({ show: true, message });
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ show: true, message, type });
         setTimeout(() => setToast(null), 3000);
     };
 
-    const handleSaveGeneral = () => {
-        showToast('General settings saved successfully');
+    // Load the saved platform settings on mount
+    useEffect(() => {
+        fetch('/api/v1/admin/settings', { credentials: 'include' })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((json) => {
+                const d = json?.data;
+                if (!d) return;
+                setPlatformName(d.platformName ?? '');
+                setContactEmail(d.contactEmail ?? '');
+                setSupportPhone(d.supportPhone ?? '');
+                setCommissionRate(String(d.defaultCommissionPct ?? ''));
+                setMinOrderValue(String(d.minOrderValue ?? ''));
+                setFreeDeliveryThreshold(String(d.freeDeliveryThreshold ?? ''));
+                setEmailNotifications(!!d.emailNotifications);
+                setSmsNotifications(!!d.smsNotifications);
+                setPushNotifications(!!d.pushNotifications);
+            })
+            .catch(() => { /* keep defaults if the fetch fails */ });
+    }, []);
+
+    const patchSettings = async (payload: Record<string, unknown>, successMsg: string) => {
+        try {
+            const res = await fetch('/api/v1/admin/settings', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error('save failed');
+            showToast(successMsg, 'success');
+        } catch {
+            showToast('Could not save — please try again', 'error');
+        }
     };
 
-    const handleSaveBusiness = () => {
-        showToast('Business settings saved successfully');
-    };
+    const handleSaveGeneral = () =>
+        patchSettings({ platformName, contactEmail, supportPhone }, 'General settings saved');
 
-    const handleSaveNotifications = () => {
-        showToast('Notification preferences saved successfully');
-    };
+    const handleSaveBusiness = () =>
+        patchSettings(
+            {
+                defaultCommissionPct: Number(commissionRate) || 0,
+                minOrderValue: Number(minOrderValue) || 0,
+                freeDeliveryThreshold: Number(freeDeliveryThreshold) || 0,
+            },
+            'Business settings saved',
+        );
+
+    const handleSaveNotifications = () =>
+        patchSettings({ emailNotifications, smsNotifications, pushNotifications }, 'Notification preferences saved');
 
     return (
         <div className="max-w-[960px] space-y-8 pb-12">
@@ -284,8 +323,8 @@ export default function SettingsPage() {
             {toast && (
                 <div className="fixed bottom-10 right-10 z-[100] animate-in slide-in-from-bottom-5 duration-300">
                     <div className="bg-[#181725] text-white px-6 py-4 rounded-[16px] shadow-2xl flex items-center gap-3 border border-white/10">
-                        <div className="w-8 h-8 rounded-full bg-[#299E60] flex items-center justify-center">
-                            <Check size={18} className="text-white" />
+                        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", toast.type === 'error' ? "bg-red-500" : "bg-[#299E60]")}>
+                            {toast.type === 'error' ? <AlertCircle size={18} className="text-white" /> : <Check size={18} className="text-white" />}
                         </div>
                         <p className="text-[14px] font-bold">{toast.message}</p>
                     </div>

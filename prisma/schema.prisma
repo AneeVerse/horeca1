@@ -2321,3 +2321,21 @@ model CashbackEntry {
   @@index([status, destination])
   @@map("cashback_entries")
 }
+
+// Global, single-row platform configuration edited from the admin Settings page.
+model PlatformSetting {
+  id                    String   @id @default(uuid()) @db.Uuid
+  platformName          String   @default("HoReCa1") @map("platform_name") @db.VarChar(120)
+  contactEmail          String?  @map("contact_email") @db.VarChar(255)
+  supportPhone          String?  @map("support_phone") @db.VarChar(30)
+  defaultCommissionPct  Decimal  @default(10) @map("default_commission_pct") @db.Decimal(5, 2)
+  minOrderValue         Decimal  @default(500) @map("min_order_value") @db.Decimal(10, 2)
+  freeDeliveryThreshold Decimal  @default(2000) @map("free_delivery_threshold") @db.Decimal(10, 2)
+  emailNotifications    Boolean  @default(true) @map("email_notifications")
+  smsNotifications      Boolean  @default(true) @map("sms_notifications")
+  pushNotifications     Boolean  @default(false) @map("push_notifications")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("platform_settings")
+}
