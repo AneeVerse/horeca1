@@ -14,6 +14,7 @@ import { CatalogService } from '@/modules/catalog/catalog.service';
 import { emitEvent } from '@/events/emitter';
 import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
+import { syncProductToBrand } from '@/modules/brand/brand.service';
 
 // Validation schema for product creation
 const createProductSchema = z.object({
@@ -154,6 +155,18 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
         vendorId,
         productName: data.name,
       });
+    }
+
+    if (product.approvalStatus === 'approved' && product.brand) {
+      syncProductToBrand(
+        product.brand,
+        product.name,
+        product.categoryId,
+        product.imageUrl,
+        product.packSize ?? undefined,
+        product.unit ?? undefined,
+        product.masterProductId || undefined
+      ).catch(console.error);
     }
 
     return NextResponse.json({ success: true, data: product }, { status: 201 });

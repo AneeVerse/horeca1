@@ -52,7 +52,7 @@ export const GET = withAuth(async (_req: NextRequest, ctx) => {
 const CreateBody = z.object({
   legalName: z.string().min(2).max(255),
   displayName: z.string().max(255).optional(),
-  gstin: z.string().regex(GST_RE, 'Invalid GSTIN format').optional().or(z.literal('')),
+  gstin: z.string().max(20).optional().or(z.literal('')),
   pan: z.string().max(20).optional(),
   fssaiNumber: z.string().max(50).optional().or(z.literal('')),
   billingAddressLine: z.string().optional(),
@@ -173,7 +173,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
 
             ...(vd ? {
               vendorType: vd.vendorType,
-              panNumber: vd.panNumber,
+              panNumber: vd.panNumber || null,
               authorizedPersonName: vd.authorizedPersonName,
               authorizedPersonPhone: vd.authorizedPersonPhone,
               authorizedPersonEmail: vd.authorizedPersonEmail || null,

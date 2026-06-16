@@ -33,9 +33,10 @@ interface ProductFormData {
     imageUrl: string;
     sku: string;
     description: string;
+    masterProductId?: string;
 }
 
-const EMPTY_FORM: ProductFormData = { name: '', packSize: '', unit: '', categoryIds: [], imageUrl: '', sku: '', description: '' };
+const EMPTY_FORM: ProductFormData = { name: '', packSize: '', unit: '', categoryIds: [], imageUrl: '', sku: '', description: '', masterProductId: '' };
 
 export default function BrandProductsPage() {
     const confirm = useConfirm();
@@ -48,6 +49,73 @@ export default function BrandProductsPage() {
     const [formError, setFormError] = useState<string | null>(null);
     const [uploadingImage, setUploadingImage] = useState(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
+
+    const [brandName, setBrandName] = useState<string>('');
+    const [searchingMasters, setSearchingMasters] = useState(false);
+    const [masterSuggestions, setMasterSuggestions] = useState<any[]>([]);
+    const [showMasterSuggestions, setShowMasterSuggestions] = useState(false);
+    const searchRef = useRef<HTMLDivElement>(null);
+
+    // Fetch Brand Name
+    useEffect(() => {
+        fetch('/api/v1/brand/profile')
+            .then(r => r.json())
+            .then(j => {
+                if (j.success) setBrandName(j.data.name || '');
+            })
+            .catch(() => {});
+    }, []);
+
+    // Close suggestions on outside click
+    useEffect(() => {
+        function handleClick(e: MouseEvent) {
+            if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+                setShowMasterSuggestions(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, []);
+
+    const handleSearchMasterProducts = async (q: string) => {
+        if (!q.trim() || q.trim().length < 2) {
+            setMasterSuggestions([]);
+            setShowMasterSuggestions(false);
+            return;
+        }
+        setSearchingMasters(true);
+        try {
+            // First search strictly within the brand
+            let res = await fetch(`/api/v1/master-products?brand=${encodeURIComponent(brandName)}&search=${encodeURIComponent(q)}&limit=10`);
+            let json = await res.json();
+            
+            // If no brand-specific results, fall back to searching all products in master catalog
+            if (json.success && (!json.data || json.data.length === 0)) {
+                res = await fetch(`/api/v1/master-products?search=${encodeURIComponent(q)}&limit=10`);
+                json = await res.json();
+            }
+            
+            if (json.success) {
+                setMasterSuggestions(json.data || []);
+                setShowMasterSuggestions(true);
+            }
+        } catch { /* ignore */ }
+        finally { setSearchingMasters(false); }
+    };
+
+    const handleSelectMasterProduct = (m: any) => {
+        setForm(prev => ({
+            ...prev,
+            name: m.name,
+            packSize: m.uom ?? prev.packSize,
+            imageUrl: m.imageUrl ?? prev.imageUrl,
+            sku: m.sku ?? prev.sku,
+            categoryIds: m.categoryId ? [m.categoryId] : prev.categoryIds,
+            masterProductId: m.id
+        }));
+        setShowMasterSuggestions(false);
+        toast.info(`Pre-filled from master catalog: "${m.name}"`);
+    };
 
     const fetchProducts = useCallback(async () => {
         setLoading(true);
@@ -76,6 +144,7 @@ export default function BrandProductsPage() {
             imageUrl: p.imageUrl ?? '',
             sku: p.sku ?? '',
             description: '',
+            masterProductId: '',
         });
         setFormError(null);
         setShowForm(true);
@@ -94,6 +163,7 @@ export default function BrandProductsPage() {
                 ...(form.imageUrl && { imageUrl: form.imageUrl }),
                 ...(form.sku && { sku: form.sku }),
                 ...(form.description && { description: form.description }),
+                ...(form.masterProductId && { masterProductId: form.masterProductId }),
             };
             const res = editingId
                 ? await fetch(`/api/v1/brand/products/${editingId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -313,22 +383,82 @@ export default function BrandProductsPage() {
                                 />
                             </div>
 
-                            {[
-                                { key: 'name' as const, label: 'Product Name *', placeholder: 'e.g. Tomato Ketchup 1kg' },
-                                { key: 'packSize' as const, label: 'Pack Size', placeholder: 'e.g. 1 kg, 500 ml' },
-                                { key: 'unit' as const, label: 'Unit', placeholder: 'e.g. kg, ml, pack' },
-                            ].map(field => (
-                                <div key={field.key}>
-                                    <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">{field.label}</label>
+                            {/* Product Name (Searchable dropdown) */}
+                            <div>
+                                <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">Product Name *</label>
+                                <div className="relative" ref={searchRef}>
                                     <input
                                         type="text"
-                                        value={form[field.key]}
-                                        onChange={e => setForm(prev => ({ ...prev, [field.key]: e.target.value }))}
-                                        placeholder={field.placeholder}
+                                        value={form.name}
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            setForm(prev => ({ ...prev, name: val, masterProductId: '' }));
+                                            handleSearchMasterProducts(val);
+                                        }}
+                                        onFocus={() => {
+                                            if (form.name.trim().length >= 2) {
+                                                handleSearchMasterProducts(form.name);
+                                            }
+                                        }}
+                                        placeholder="e.g. Tomato Ketchup 1kg"
                                         className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-2.5 text-[14px] font-medium outline-none focus:border-[#53B175]/50 focus:bg-white bg-[#FAFAFA]"
                                     />
+                                    {searchingMasters && (
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                            <Loader2 size={16} className="animate-spin text-[#53B175]" />
+                                        </div>
+                                    )}
+                                    {showMasterSuggestions && masterSuggestions.length > 0 && (
+                                        <div className="absolute left-0 right-0 top-full mt-1 border border-[#EEEEEE] rounded-xl bg-white shadow-lg max-h-[200px] overflow-y-auto z-[60]">
+                                            <div className="px-3 py-1.5 bg-gray-50 border-b border-[#EEEEEE] text-[10px] font-bold text-[#AEAEAE] uppercase tracking-wider">
+                                                Master Catalog Suggestions
+                                            </div>
+                                            {masterSuggestions.map(m => (
+                                                <button
+                                                    key={m.id}
+                                                    type="button"
+                                                    onClick={() => handleSelectMasterProduct(m)}
+                                                    className="w-full text-left px-4 py-2.5 text-[13px] hover:bg-[#EEF8F1] transition-colors flex items-center justify-between gap-3 border-b border-[#F5F5F5] last:border-0"
+                                                >
+                                                    <div className="min-w-0">
+                                                        <p className="font-bold text-[#181725] truncate">{m.name}</p>
+                                                        <p className="text-[11px] text-[#AEAEAE] truncate">
+                                                            {m.brand ? `Brand: ${m.brand}` : ''} {m.sku ? `• SKU: ${m.sku}` : ''}
+                                                        </p>
+                                                    </div>
+                                                    {m.imageUrl && (
+                                                        <img src={m.imageUrl} alt="" className="w-8 h-8 rounded-[6px] object-cover border border-[#EEEEEE] shrink-0" />
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
-                            ))}
+                            </div>
+
+                            {/* Pack Size */}
+                            <div>
+                                <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">Pack Size</label>
+                                <input
+                                    type="text"
+                                    value={form.packSize}
+                                    onChange={e => setForm(prev => ({ ...prev, packSize: e.target.value }))}
+                                    placeholder="e.g. 1 kg, 500 ml"
+                                    className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-2.5 text-[14px] font-medium outline-none focus:border-[#53B175]/50 focus:bg-white bg-[#FAFAFA]"
+                                />
+                            </div>
+
+                            {/* Unit */}
+                            <div>
+                                <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">Unit</label>
+                                <input
+                                    type="text"
+                                    value={form.unit}
+                                    onChange={e => setForm(prev => ({ ...prev, unit: e.target.value }))}
+                                    placeholder="e.g. kg, ml, pack"
+                                    className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-2.5 text-[14px] font-medium outline-none focus:border-[#53B175]/50 focus:bg-white bg-[#FAFAFA]"
+                                />
+                            </div>
 
                             {/* Category — searchable dropdown of admin categories + request-new */}
                             <CategoryMultiPickerById

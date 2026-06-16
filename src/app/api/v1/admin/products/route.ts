@@ -12,6 +12,7 @@ import { adminOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
 import { assertLeafCategory, findOrCreateMaster } from '@/modules/catalog/catalog.service';
+import { syncProductToBrand } from '@/modules/brand/brand.service';
 
 // Validation schema for admin product creation
 // vendorId is optional — admin can create catalog products without a vendor
@@ -345,6 +346,18 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 
       return created;
     });
+
+    if (product.brand) {
+      syncProductToBrand(
+        product.brand,
+        product.name,
+        product.categoryId,
+        product.imageUrl,
+        product.packSize ?? undefined,
+        product.unit ?? undefined,
+        product.masterProductId || undefined
+      ).catch(console.error);
+    }
 
     return NextResponse.json({ success: true, data: product }, { status: 201 });
   } catch (error) {

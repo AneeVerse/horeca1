@@ -1,26 +1,32 @@
 // GET /api/v1/master-products — search/list the Horeca1 master catalog.
-// WHY: vendor + admin product forms pick a master SKU; this powers that picker.
-// PROTECTED: vendor + admin.
-// SUPPORTS: ?search=&limit=20
+// WHY: vendor + admin + brand product forms pick a master SKU; this powers that picker.
+// PROTECTED: vendor + brand + admin.
+// SUPPORTS: ?search=&limit=20&brand=Everest
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { vendorOnly } from '@/middleware/rbac';
+import { withRole } from '@/middleware/rbac';
 import { errorResponse } from '@/middleware/errorHandler';
 
-export const GET = vendorOnly(async (req: NextRequest) => {
+export const GET = withRole(['vendor', 'brand', 'admin'], async (req: NextRequest) => {
   try {
     const params = req.nextUrl.searchParams;
     const search = params.get('search')?.trim() || undefined;
+    const brandParam = params.get('brand')?.trim() || undefined;
     const limit = Math.min(Number(params.get('limit')) || 20, 50);
 
     const where: Prisma.MasterProductWhereInput = { isActive: true };
+
+    if (brandParam) {
+      where.brand = { equals: brandParam, mode: 'insensitive' as const };
+    }
+
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { sku: { contains: search, mode: 'insensitive' } },
-        { brand: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' as const } },
+        { sku: { contains: search, mode: 'insensitive' as const } },
+        ...(brandParam ? [] : [{ brand: { contains: search, mode: 'insensitive' as const } }]),
         { aliasNames: { has: search.toLowerCase() } },
       ];
     }

@@ -38,7 +38,9 @@ export type DeliveryCapability = (typeof DELIVERY_CAPABILITIES)[number];
  */
 export const VendorDetailsSchema = z.object({
   vendorType: z.enum(VENDOR_TYPES),
-  panNumber: z.string().regex(PAN_RE, 'Invalid PAN format'),
+  // PAN is optional with no format check — vendors can be onboarded before KYC
+  // docs are in hand; admin verifies later at /admin/vendors/[id].
+  panNumber: z.string().max(20).optional().or(z.literal('')),
   authorizedPersonName: z.string().min(2).max(255),
   authorizedPersonPhone: z.string().regex(PHONE_RE, 'Invalid authorized person phone'),
   authorizedPersonEmail: z.string().email().optional().or(z.literal('')),

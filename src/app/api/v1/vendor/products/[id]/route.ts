@@ -12,6 +12,7 @@ import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { CatalogService } from '@/modules/catalog/catalog.service';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
+import { syncProductToBrand } from '@/modules/brand/brand.service';
 
 // Validation schema for product updates (all fields optional)
 const updateProductSchema = z.object({
@@ -90,6 +91,18 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
           })),
         });
       }
+    }
+
+    if (updated.approvalStatus === 'approved' && updated.brand) {
+      syncProductToBrand(
+        updated.brand,
+        updated.name,
+        updated.categoryId,
+        updated.imageUrl,
+        updated.packSize ?? undefined,
+        updated.unit ?? undefined,
+        updated.masterProductId || undefined
+      ).catch(console.error);
     }
 
     return NextResponse.json({ success: true, data: updated });

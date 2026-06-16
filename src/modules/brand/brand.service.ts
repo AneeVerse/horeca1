@@ -44,6 +44,7 @@ interface CreateBrandProductInput {
   categoryId?: string;        // primary (back-compat); auto-derived from categoryIds[0] when omitted
   categoryIds?: string[];     // multi-category
   sortOrder?: number;
+  masterProductId?: string;
 }
 
 // ── Service ──────────────────────────────────────────────────
@@ -543,6 +544,32 @@ export class BrandService {
       productName: product.name,
     });
 
+    // Directly create mappings if a masterProductId is specified
+    if (input.masterProductId) {
+      try {
+        const distProducts = await prisma.product.findMany({
+          where: { masterProductId: input.masterProductId, isActive: true },
+          select: { id: true },
+        });
+
+        if (distProducts.length > 0) {
+          await prisma.brandProductMapping.createMany({
+            data: distProducts.map(dp => ({
+              brandId,
+              brandMasterProductId: product.id,
+              distributorProductId: dp.id,
+              status: 'verified',
+              matchedBy: 'manually_verified',
+              confidenceScore: 1.0,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to auto-create mappings for masterProductId:', err);
+      }
+    }
+
     // Embed first so the AI signal is available, then auto-map. Non-blocking.
     embedBrandMasterProduct(product.id)
       .catch(console.error)
@@ -799,5 +826,88 @@ export class BrandService {
         },
       });
     });
+  }
+}
+
+export async function syncProductToBrand(
+  brandName: string | null | undefined,
+  name: string,
+  categoryId: string | null | undefined,
+  imageUrl: string | null | undefined,
+  uom: string | null | undefined,
+  sku: string | null | undefined,
+  masterProductId?: string
+) {
+  if (!brandName) return;
+
+  try {
+    // Find approved brand with matching name (case-insensitive)
+    const brand = await prisma.brand.findFirst({
+      where: { name: { equals: brandName.trim(), mode: 'insensitive' }, approvalStatus: 'approved' },
+      select: { id: true }
+    });
+    if (!brand) return;
+
+    const slug = slugify(name);
+    const existing = await prisma.brandMasterProduct.findFirst({
+      where: { brandId: brand.id, OR: [{ slug }, { name: { equals: name.trim(), mode: 'insensitive' } }] }
+    });
+
+    let brandMasterProduct = existing;
+    if (!existing) {
+      brandMasterProduct = await prisma.brandMasterProduct.create({
+        data: {
+          brandId: brand.id,
+          name: name.trim(),
+          slug,
+          imageUrl: imageUrl || null,
+          packSize: uom || null,
+          sku: sku || null,
+          categoryId: categoryId || null,
+          categoryIds: categoryId ? [categoryId] : [],
+        }
+      });
+
+      // Embed and map in the background
+      embedBrandMasterProduct(brandMasterProduct.id)
+        .catch(console.error)
+        .finally(() => runMappingForProduct(brandMasterProduct!.id).catch(console.error));
+    } else {
+      // Update existing brand master product fields if they are different or missing
+      brandMasterProduct = await prisma.brandMasterProduct.update({
+        where: { id: existing.id },
+        data: {
+          imageUrl: imageUrl || existing.imageUrl || null,
+          packSize: uom || existing.packSize || null,
+          sku: sku || existing.sku || null,
+          categoryId: categoryId || existing.categoryId || null,
+          categoryIds: categoryId
+            ? Array.from(new Set([...(existing.categoryIds || []), categoryId]))
+            : existing.categoryIds,
+        }
+      });
+    }
+
+    if (masterProductId && brandMasterProduct) {
+      const distProducts = await prisma.product.findMany({
+        where: { masterProductId, isActive: true },
+        select: { id: true }
+      });
+      if (distProducts.length > 0) {
+        await prisma.brandProductMapping.createMany({
+          data: distProducts.map(dp => ({
+            brandId: brand.id,
+            brandMasterProductId: brandMasterProduct!.id,
+            distributorProductId: dp.id,
+            status: 'verified',
+            matchedBy: 'manually_verified',
+            confidenceScore: 1.0,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('syncProductToBrand failed:', err);
   }
 }

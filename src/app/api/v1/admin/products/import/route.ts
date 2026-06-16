@@ -5,6 +5,7 @@ import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { parseProductImport, type ParsedProductRow } from '@/modules/import-export/excel.service';
 import { requirePermission } from '@/lib/permissions/engine';
 import { findOrCreateMaster } from '@/modules/catalog/catalog.service';
+import { syncProductToBrand } from '@/modules/brand/brand.service';
 
 // ── Preview mode: parse file, match SKUs, return diff without committing ──
 // ── Commit mode: actually create/update products with backup ──
@@ -358,7 +359,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           // ── UPDATE existing product ──
           // SKU also gets written through — previously the update path
           // dropped SKU edits silently. Admin edits land everywhere.
-          await prisma.product.update({
+          const updatedProduct = await prisma.product.update({
             where: { id: existing.id },
             data: {
               name: r.name,
@@ -406,6 +407,18 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
               create: { productId: existing.id, categoryId, isPrimary: true },
               update: { isPrimary: true },
             });
+          }
+
+          if (updatedProduct.brand) {
+            syncProductToBrand(
+              updatedProduct.brand,
+              updatedProduct.name,
+              updatedProduct.categoryId,
+              updatedProduct.imageUrl,
+              updatedProduct.packSize ?? undefined,
+              updatedProduct.unit ?? undefined,
+              updatedProduct.masterProductId || undefined
+            ).catch(console.error);
           }
 
           updated++;
@@ -461,6 +474,18 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 
           // Create price slabs (requires vendorId)
           if (vendorId) await updatePriceSlabs(product.id, vendorId, r);
+
+          if (product.brand) {
+            syncProductToBrand(
+              product.brand,
+              product.name,
+              product.categoryId,
+              product.imageUrl,
+              product.packSize ?? undefined,
+              product.unit ?? undefined,
+              product.masterProductId || undefined
+            ).catch(console.error);
+          }
 
           created++;
         }

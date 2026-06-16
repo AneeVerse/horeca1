@@ -11,6 +11,7 @@ import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
 import { CatalogService, assertLeafCategory } from '@/modules/catalog/catalog.service';
+import { syncProductToBrand } from '@/modules/brand/brand.service';
 
 // Helper: extract the [id] segment from the URL
 function extractId(req: NextRequest): string {
@@ -169,6 +170,19 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
 
       return updated;
     });
+
+    // Sync to brand catalog in background
+    if (product.brand) {
+      syncProductToBrand(
+        product.brand,
+        product.name,
+        product.categoryId,
+        product.imageUrl,
+        product.packSize ?? undefined,
+        product.sku ?? undefined,
+        product.masterProductId || undefined
+      ).catch(console.error);
+    }
 
     return NextResponse.json({ success: true, data: product });
   } catch (error) {

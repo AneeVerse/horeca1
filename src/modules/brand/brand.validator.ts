@@ -24,6 +24,7 @@ export const createBrandProductSchema = z.object({
   categoryId: z.string().uuid().optional(),
   categoryIds: z.array(z.string().uuid()).max(12).optional(),
   sortOrder: z.number().int().optional(),
+  masterProductId: z.string().uuid().optional(),
 });
 
 export const updateBrandProductSchema = createBrandProductSchema.partial();

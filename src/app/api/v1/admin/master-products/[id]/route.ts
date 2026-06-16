@@ -9,6 +9,7 @@ import { adminOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
 import { assertLeafCategory } from '@/modules/catalog/catalog.service';
+import { syncProductToBrand } from '@/modules/brand/brand.service';
 
 function extractId(req: NextRequest): string {
   const segments = new URL(req.url).pathname.split('/');
@@ -37,6 +38,18 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     if (data.categoryId) await assertLeafCategory([data.categoryId]);
 
     const updated = await prisma.masterProduct.update({ where: { id }, data });
+
+    // Sync to brand catalog in background
+    syncProductToBrand(
+      updated.brand,
+      updated.name,
+      updated.categoryId,
+      updated.imageUrl,
+      updated.uom,
+      updated.sku,
+      updated.id
+    ).catch(console.error);
+
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {
     return errorResponse(error);

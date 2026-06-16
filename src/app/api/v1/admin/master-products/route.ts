@@ -11,6 +11,7 @@ import { errorResponse } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
 import { assertLeafCategory } from '@/modules/catalog/catalog.service';
 import { nextMasterSku } from '@/lib/sku';
+import { syncProductToBrand } from '@/modules/brand/brand.service';
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -92,6 +93,17 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
         },
       });
     });
+
+    // Sync to brand catalog in background
+    syncProductToBrand(
+      master.brand,
+      master.name,
+      master.categoryId,
+      master.imageUrl,
+      master.uom,
+      master.sku,
+      master.id
+    ).catch(console.error);
 
     return NextResponse.json({ success: true, data: master }, { status: 201 });
   } catch (error) {

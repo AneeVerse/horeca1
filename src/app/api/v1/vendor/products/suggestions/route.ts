@@ -34,8 +34,13 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
           isActive: true,
           slug: { not: { startsWith: '_deleted_' } },
           name: { contains: q, mode: 'insensitive' },
-          // Exclude this vendor's own products from suggestions
-          ...(vendor ? { vendorId: { not: vendor.id } } : {}),
+          // Surface BOTH other vendors' listings AND admin-created catalog
+          // products (vendorId = null). A plain `{ not: vendor.id }` filter
+          // silently drops the catalog rows: in SQL `NULL <> 'uuid'` is unknown,
+          // not true, so null-vendor products never matched — which is why an
+          // admin "catalog" product wouldn't show up in vendor search. Only
+          // this vendor's OWN rows must be excluded.
+          ...(vendor ? { OR: [{ vendorId: null }, { vendorId: { not: vendor.id } }] } : {}),
         },
         select: {
           id: true,

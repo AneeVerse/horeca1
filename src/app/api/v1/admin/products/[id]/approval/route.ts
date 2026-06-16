@@ -11,6 +11,7 @@ import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
 import { requirePermission } from '@/lib/permissions/engine';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
+import { syncProductToBrand } from '@/modules/brand/brand.service';
 
 // Helper: extract the [id] segment from /api/v1/admin/products/{id}/approval
 function extractId(req: NextRequest): string {
@@ -66,6 +67,18 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
         after: { approvalStatus: 'approved', note: note ?? null },
         metadata: { vendorId: existing.vendorId, productName: existing.name },
       });
+
+      if (product.brand) {
+        syncProductToBrand(
+          product.brand,
+          product.name,
+          product.categoryId,
+          product.imageUrl,
+          product.packSize ?? undefined,
+          product.unit ?? undefined,
+          product.masterProductId || undefined
+        ).catch(console.error);
+      }
 
       return NextResponse.json({ success: true, data: product });
     }
