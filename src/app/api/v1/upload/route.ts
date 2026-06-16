@@ -13,7 +13,7 @@ import { toFile } from '@imagekit/nodejs';
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
-export const POST = withRateLimit(withRole(['admin', 'vendor', 'customer'], async (req: NextRequest) => {
+export const POST = withRateLimit(withRole(['admin', 'vendor', 'customer', 'brand'], async (req: NextRequest) => {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;

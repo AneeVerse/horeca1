@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil, Users, Crown, Shield, Eye, Edit3, FileText, CheckCircle2, AlertCircle, Settings2, Building2 } from 'lucide-react';
+import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil, Users, Eye, EyeOff, FileText, CheckCircle2, AlertCircle, Settings2, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImageUploadField } from '@/components/ui/ImageUploadField';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -66,14 +66,6 @@ interface VendorDocument {
     uploadedAt: string;
 }
 
-interface TeamMember {
-    id: string;
-    role: 'owner' | 'manager' | 'editor' | 'viewer';
-    isOwner: boolean;
-    createdAt: string;
-    user: { id: string; fullName: string; email: string; isActive: boolean };
-}
-
 const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 function formatTime(t: string): string {
@@ -81,17 +73,6 @@ function formatTime(t: string): string {
     const h = parseInt(hours, 10);
     return `${h % 12 || 12}:${minutes} ${h >= 12 ? 'PM' : 'AM'}`;
 }
-
-function getInitials(name: string) {
-    return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-}
-
-const ROLE_CONFIG = {
-    owner:   { label: 'Owner',   color: '#F59E0B', bg: '#FFF7E6', Icon: Crown  },
-    manager: { label: 'Manager', color: '#3B82F6', bg: '#EFF6FF', Icon: Shield },
-    editor:  { label: 'Editor',  color: '#8B5CF6', bg: '#F3F0FF', Icon: Edit3  },
-    viewer:  { label: 'Viewer',  color: '#6B7280', bg: '#F3F4F6', Icon: Eye    },
-};
 
 export default function VendorSettingsPage() {
     const confirm = useConfirm();
@@ -152,15 +133,6 @@ export default function VendorSettingsPage() {
     const [docForm, setDocForm] = useState({ type: 'fssai' as VendorDocument['type'], fileUrl: '', fileName: '' });
     const [uploadingDoc, setUploadingDoc] = useState(false);
 
-    // Team state
-    const [team, setTeam] = useState<TeamMember[]>([]);
-    const [teamLoading, setTeamLoading] = useState(true);
-    const [myTeamRole, setMyTeamRole] = useState<TeamMember['role']>('viewer');
-    const [showAddMember, setShowAddMember] = useState(false);
-    const [memberForm, setMemberForm] = useState({ fullName: '', email: '', password: '', role: 'viewer' as 'manager' | 'editor' | 'viewer' });
-    const [addingMember, setAddingMember] = useState(false);
-    const [memberError, setMemberError] = useState<string | null>(null);
-
     const fetchSettings = useCallback(async () => {
         try {
             setLoading(true);
@@ -202,27 +174,6 @@ export default function VendorSettingsPage() {
         }
     }, []);
 
-    const fetchTeam = useCallback(async () => {
-        try {
-            setTeamLoading(true);
-            const res = await fetch('/api/v1/vendor/team');
-            const json = await res.json();
-            if (json.success) {
-                setTeam(json.data);
-                // Determine my role: first member where isOwner=true is owner; others look for current session
-                // We detect "self" by checking who the owner is — owner always sees team:manage button
-                const ownerRow = json.data.find((m: TeamMember) => m.isOwner);
-                // For simplicity, if the list has an owner row and we can fetch team at all, check if owner
-                const selfRow = json.data[0]; // owner is always first
-                setMyTeamRole(selfRow?.isOwner ? 'owner' : (selfRow?.role ?? 'viewer'));
-            }
-        } catch (err) {
-            console.error('Failed to load team:', err);
-        } finally {
-            setTeamLoading(false);
-        }
-    }, []);
-
     const fetchDocuments = useCallback(async () => {
         try {
             const res = await fetch('/api/v1/vendor/documents');
@@ -233,7 +184,7 @@ export default function VendorSettingsPage() {
         }
     }, []);
 
-    useEffect(() => { fetchSettings(); fetchTeam(); fetchDocuments(); }, [fetchSettings, fetchTeam, fetchDocuments]);
+    useEffect(() => { fetchSettings(); fetchDocuments(); }, [fetchSettings, fetchDocuments]);
 
     const handleUploadDoc = async () => {
         if (!docForm.fileUrl || !docForm.fileName) return;
@@ -266,9 +217,12 @@ export default function VendorSettingsPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     businessName,
-                    description: description || null,
-                    logoUrl: logoUrl || null,
-                    bannerUrl: bannerUrl || null,
+                    // These three are optional-but-not-nullable on the API (z.string().url() etc.).
+                    // Sending `null` for an empty value fails Zod and rejects the whole save, so
+                    // omit empties instead (undefined → key dropped by JSON.stringify).
+                    description: description || undefined,
+                    logoUrl: logoUrl || undefined,
+                    bannerUrl: bannerUrl || undefined,
                     minOrderValue: parseFloat(minOrderValue) || 0,
                     creditEnabled,
                     addressLine: addressLine || undefined,
@@ -454,65 +408,6 @@ export default function VendorSettingsPage() {
         }
     };
 
-    // ── Team CRUD ──
-    const handleAddMember = async () => {
-        if (!memberForm.fullName.trim() || !memberForm.email.trim() || !memberForm.password.trim()) {
-            setMemberError('All fields are required'); return;
-        }
-        try {
-            setAddingMember(true);
-            setMemberError(null);
-            const res = await fetch('/api/v1/vendor/team', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(memberForm),
-            });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed to add member');
-            setTeam(prev => [...prev, json.data]);
-            setShowAddMember(false);
-            setMemberForm({ fullName: '', email: '', password: '', role: 'viewer' });
-        } catch (err: unknown) {
-            setMemberError(err instanceof Error ? err.message : 'Failed to add member');
-        } finally {
-            setAddingMember(false);
-        }
-    };
-
-    const handleRemoveMember = async (member: TeamMember) => {
-        const ok = await confirm({
-            title: 'Remove team member?',
-            message: `${member.user.fullName} will lose access to this portal. They can be re-added later.`,
-            confirmText: 'Remove',
-            tone: 'danger',
-        });
-        if (!ok) return;
-        try {
-            const res = await fetch(`/api/v1/vendor/team/${member.id}`, { method: 'DELETE' });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed to remove');
-            setTeam(prev => prev.filter(m => m.id !== member.id));
-            toast.success(`${member.user.fullName} removed from team`);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : 'Failed to remove member');
-        }
-    };
-
-    const handleChangeRole = async (member: TeamMember, newRole: 'manager' | 'editor' | 'viewer') => {
-        try {
-            const res = await fetch(`/api/v1/vendor/team/${member.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ role: newRole }),
-            });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed to update role');
-            setTeam(prev => prev.map(m => m.id === member.id ? { ...m, role: newRole } : m));
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : 'Failed to update role');
-        }
-    };
-
     if (loading) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
@@ -528,8 +423,6 @@ export default function VendorSettingsPage() {
             </div>
         );
     }
-
-    const isOwner = myTeamRole === 'owner';
 
     return (
         <div className="space-y-6 pb-10 max-w-[800px]">
@@ -581,7 +474,7 @@ export default function VendorSettingsPage() {
                             variant="vendor-cover"
                         />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Minimum Order Value (₹)</label>
                             <input
@@ -615,7 +508,7 @@ export default function VendorSettingsPage() {
                                     className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#299E60]/40 resize-none"
                                 />
                             </div>
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <div>
                                     <label className="block text-[13px] font-bold text-[#181725] mb-1.5">City</label>
                                     <input
@@ -700,12 +593,10 @@ export default function VendorSettingsPage() {
 
             {/* Service Areas */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-[#EEEEEE] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <MapPin size={20} className="text-[#F59E0B]" />
-                        <h2 className="text-[18px] font-bold text-[#181725]">Service Areas</h2>
-                        <span className="text-[14px] text-[#AEAEAE]">({settings.serviceAreas.length})</span>
-                    </div>
+                <div className="p-6 border-b border-[#EEEEEE] flex items-center gap-2">
+                    <MapPin size={20} className="text-[#F59E0B]" />
+                    <h2 className="text-[18px] font-bold text-[#181725]">Service Areas</h2>
+                    <span className="text-[14px] text-[#AEAEAE]">({settings.serviceAreas.length})</span>
                 </div>
                 <div className="p-6 space-y-4">
                     <div className="flex items-center gap-3">
@@ -902,7 +793,7 @@ export default function VendorSettingsPage() {
                     <div className="w-[32px] h-[32px] rounded-[8px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]"><Settings2 size={16} /></div>
                     <h3 className="text-[16px] font-bold text-[#181725]">Ordering Defaults</h3>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-[13px] font-bold text-[#181725] mb-1.5">Default MOQ</label>
                         <input type="number" min={1} value={defaultMOQ} onChange={e => setDefaultMOQ(e.target.value)} placeholder="e.g. 1" className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 bg-white" />
@@ -980,14 +871,15 @@ export default function VendorSettingsPage() {
                             <button
                                 type="button"
                                 onClick={() => setBankShowNumber(v => !v)}
+                                aria-label={bankShowNumber ? 'Hide account number' : 'Show account number'}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] hover:text-[#181725] transition-colors"
                                 tabIndex={-1}
                             >
-                                <Eye size={16} />
+                                {bankShowNumber ? <EyeOff size={16} /> : <Eye size={16} />}
                             </button>
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-[13px] font-bold text-[#181725] mb-1.5">IFSC Code</label>
                             <input

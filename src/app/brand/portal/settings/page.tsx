@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Loader2, Check, Save, Users, Plus, Trash2, Crown, Shield, Edit3, Eye, Upload, X } from 'lucide-react';
+import { Loader2, Check, Save, Users, Upload, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { toast } from 'sonner';
 import { CategoryMultiPicker } from '@/components/features/brand/CategoryMultiPicker';
 import { ImagePreview } from '@/components/ui/ImagePreview';
@@ -25,55 +24,13 @@ interface BrandProfile {
     approvalStatus: string;
 }
 
-interface TeamMember {
-    id: string;
-    role: 'owner' | 'manager' | 'editor' | 'viewer';
-    isOwner: boolean;
-    createdAt: string;
-    user: { id: string; fullName: string; email: string; isActive: boolean };
-}
-
-function getInitials(name: string) {
-    return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-}
-
-const ROLE_CONFIG = {
-    owner:   { label: 'Owner',   color: '#F59E0B', bg: '#FFF7E6', Icon: Crown  },
-    manager: { label: 'Manager', color: '#3B82F6', bg: '#EFF6FF', Icon: Shield },
-    editor:  { label: 'Editor',  color: '#8B5CF6', bg: '#F3F0FF', Icon: Edit3  },
-    viewer:  { label: 'Viewer',  color: '#6B7280', bg: '#F3F4F6', Icon: Eye    },
-};
-
 export default function BrandSettingsPage() {
-    const confirm = useConfirm();
     const [profile, setProfile] = useState<BrandProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [form, setForm] = useState({ name: '', tagline: '', description: '', logoUrl: '' as string | null, bannerUrl: '' as string | null, website: '', categories: [] as string[], bgColor: '#f0faf4', showcaseImages: [] as string[] });
     const [error, setError] = useState<string | null>(null);
-
-    // Team state
-    const [team, setTeam] = useState<TeamMember[]>([]);
-    const [teamLoading, setTeamLoading] = useState(true);
-    const [isOwner, setIsOwner] = useState(false);
-    const [showAddMember, setShowAddMember] = useState(false);
-    const [memberForm, setMemberForm] = useState({ fullName: '', email: '', password: '', role: 'viewer' as 'manager' | 'editor' | 'viewer' });
-    const [addingMember, setAddingMember] = useState(false);
-    const [memberError, setMemberError] = useState<string | null>(null);
-
-    const fetchTeam = useCallback(async () => {
-        try {
-            setTeamLoading(true);
-            const res = await fetch('/api/v1/brand/team');
-            const json = await res.json();
-            if (json.success) {
-                setTeam(json.data);
-                setIsOwner(json.data[0]?.isOwner ?? false);
-            }
-        } catch { /* silent */ }
-        finally { setTeamLoading(false); }
-    }, []);
 
     useEffect(() => {
         fetch('/api/v1/brand/profile')
@@ -96,13 +53,15 @@ export default function BrandSettingsPage() {
             })
             .catch(() => {})
             .finally(() => setLoading(false));
-
-        fetchTeam();
-    }, [fetchTeam]);
+    }, []);
 
     const handleSave = async () => {
         setSaving(true); setSaved(false); setError(null);
         try {
+            // The brand profile schema validates URL fields as `z.string().url().optional()`,
+            // which rejects both empty strings and `null`. Send only non-empty URLs so a blank
+            // field doesn't fail validation. (NOTE: clearing an image therefore does not persist —
+            // that needs the validator to accept null on logoUrl/bannerUrl. See report.)
             const res = await fetch('/api/v1/brand/profile', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
@@ -110,8 +69,8 @@ export default function BrandSettingsPage() {
                     name: form.name || undefined,
                     tagline: form.tagline || undefined,
                     description: form.description || undefined,
-                    logoUrl: form.logoUrl,
-                    bannerUrl: form.bannerUrl,
+                    logoUrl: form.logoUrl || undefined,
+                    bannerUrl: form.bannerUrl || undefined,
                     website: form.website || undefined,
                     categories: form.categories,
                     bgColor: form.bgColor,
@@ -119,65 +78,20 @@ export default function BrandSettingsPage() {
                 }),
             });
             const json = await res.json();
-            if (json.success) { setSaved(true); setTimeout(() => setSaved(false), 3000); }
-            else setError(json.error?.message ?? 'Failed to save');
-        } catch { setError('Network error'); }
+            if (json.success) {
+                setSaved(true);
+                toast.success('Brand profile saved');
+                setTimeout(() => setSaved(false), 3000);
+            } else {
+                const msg = json.error?.message ?? 'Failed to save';
+                setError(msg);
+                toast.error(msg);
+            }
+        } catch {
+            setError('Network error — please try again');
+            toast.error('Network error — please try again');
+        }
         finally { setSaving(false); }
-    };
-
-    const handleAddMember = async () => {
-        if (!memberForm.fullName.trim() || !memberForm.email.trim() || !memberForm.password.trim()) {
-            setMemberError('All fields are required'); return;
-        }
-        try {
-            setAddingMember(true); setMemberError(null);
-            const res = await fetch('/api/v1/brand/team', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(memberForm),
-            });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed to add member');
-            setTeam(prev => [...prev, json.data]);
-            setShowAddMember(false);
-            setMemberForm({ fullName: '', email: '', password: '', role: 'viewer' });
-        } catch (err: unknown) {
-            setMemberError(err instanceof Error ? err.message : 'Failed to add member');
-        } finally { setAddingMember(false); }
-    };
-
-    const handleRemoveMember = async (member: TeamMember) => {
-        const ok = await confirm({
-            title: 'Remove team member?',
-            message: `${member.user.fullName} will lose access to this portal. They can be re-added later.`,
-            confirmText: 'Remove',
-            tone: 'danger',
-        });
-        if (!ok) return;
-        try {
-            const res = await fetch(`/api/v1/brand/team/${member.id}`, { method: 'DELETE' });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed');
-            setTeam(prev => prev.filter(m => m.id !== member.id));
-            toast.success(`${member.user.fullName} removed from team`);
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : 'Failed to remove');
-        }
-    };
-
-    const handleChangeRole = async (member: TeamMember, newRole: 'manager' | 'editor' | 'viewer') => {
-        try {
-            const res = await fetch(`/api/v1/brand/team/${member.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ role: newRole }),
-            });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed');
-            setTeam(prev => prev.map(m => m.id === member.id ? { ...m, role: newRole } : m));
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : 'Failed to update role');
-        }
     };
 
     // Hooks must run on every render — do not put after early return below.
@@ -284,9 +198,9 @@ export default function BrandSettingsPage() {
                                 form.logoUrl ? <Image src={form.logoUrl} alt="logo" width={80} height={80} className="object-cover w-full h-full" /> :
                                 <Upload size={20} className="text-gray-400" />}
                         </div>
-                        <div className="flex-1 space-y-1">
+                        <div className="flex-1 space-y-2">
                             <button type="button" onClick={() => logoRef.current?.click()}
-                                className="text-[13px] font-bold text-[#53B175] hover:underline">Upload file</button>
+                                className="block text-[13px] font-bold text-[#53B175] hover:underline">Upload file</button>
                             <input type="url" value={form.logoUrl ?? ''} onChange={e => setForm(p => ({ ...p, logoUrl: e.target.value || null }))}
                                 placeholder="Or paste URL…"
                                 className="w-full border border-[#EEEEEE] rounded-[8px] px-3 py-2 text-[12px] focus:outline-none focus:border-[#53B175]/50 bg-[#FAFAFA]" />
@@ -365,12 +279,12 @@ export default function BrandSettingsPage() {
                 />
             </div>
 
-            {error && <p className="text-[13px] text-[#E74C3C] font-bold px-1">{error}</p>}
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-between gap-4">
+                <p className="text-[13px] text-[#E74C3C] font-bold px-1">{error ?? ''}</p>
                 <button onClick={handleSave} disabled={saving}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold disabled:opacity-60 hover:bg-[#3d9e41] transition-colors">
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold disabled:opacity-60 hover:bg-[#3d9e41] transition-colors shrink-0">
                     {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />}
-                    {saved ? 'Saved!' : 'Save Changes'}
+                    {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Changes'}
                 </button>
             </div>
 
