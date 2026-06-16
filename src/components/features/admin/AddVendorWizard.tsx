@@ -13,7 +13,7 @@
 // Backend contract: POST /api/v1/admin/vendors with the body shape
 // validated against src/lib/validators/vendor-kyc.ts schemas.
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   X, ChevronLeft, ChevronRight, Loader2, AlertCircle, Check,
   Info, UserPlus, Building2, IndianRupee, MapPin, Truck, Eye, EyeOff, Plus,
@@ -24,6 +24,7 @@ import {
   VENDOR_TYPES, DELIVERY_CAPABILITIES,
   type VendorType, type DeliveryCapability,
 } from '@/lib/validators/vendor-kyc';
+import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
 
 interface Props {
   onClose: () => void;
@@ -53,6 +54,7 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Step 1 — Owner + Business basics
   const [fullName, setFullName] = useState('');
@@ -92,36 +94,60 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
 
   const effectivePickup = pickupSameAsBilling ? billingAddress : pickupAddress;
 
-  // ── Step validation. Allow user to navigate; if a required field is
-  //    missing the Next/Submit button disables instead of silently failing.
-  const step1Ok =
-    fullName.trim().length >= 2 &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) &&
-    password.length >= 6 &&
-    PHONE_RE.test(phone) &&
-    businessName.trim().length >= 2 &&
-    !!vendorType &&
-    (!gstin.trim() || GST_RE.test(gstin.trim()));
+  // ── Step validation.
+  const validateStep = (s: number): Record<string, string> => {
+    const errors: Record<string, string> = {};
+    if (s === 1) {
+      if (fullName.trim().length < 2) errors.fullName = 'Owner full name is required (min 2 chars)';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = 'Enter a valid email address';
+      if (password.length < 6) errors.password = 'Password must be at least 6 characters';
+      if (!PHONE_RE.test(phone)) errors.phone = 'Phone number must be exactly 10 digits';
+      if (businessName.trim().length < 2) errors.businessName = 'Legal name is required (min 2 chars)';
+      if (!vendorType) errors.vendorType = 'Select a vendor type';
+      if (gstin.trim() && !GST_RE.test(gstin.trim())) errors.gstin = 'Format: 22ABCDE1234F1Z5';
+    } else if (s === 2) {
+      if (!PAN_RE.test(panNumber.trim())) errors.panNumber = 'Format: ABCDE1234F';
+      if (authorizedPersonName.trim().length < 2) errors.authorizedPersonName = 'Authorized person name is required (min 2 chars)';
+      if (!PHONE_RE.test(authorizedPersonPhone)) errors.authorizedPersonPhone = 'Authorized phone must be exactly 10 digits';
+      if (authorizedPersonEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authorizedPersonEmail.trim())) {
+        errors.authorizedPersonEmail = 'Enter a valid email address';
+      }
+      if (bankAccountName.trim().length < 2) errors.bankAccountName = 'Account holder name is required (min 2 chars)';
+      if (bankAccountNumber.trim().length < 8) errors.bankAccountNumber = 'Account number must be at least 8 digits';
+      if (!IFSC_RE.test(bankIfsc.trim())) errors.bankIfsc = 'IFSC must be 11 characters (e.g. HDFC0001234)';
+      if (bankName.trim().length < 2) errors.bankName = 'Bank name is required';
+      if (billingAddress.addressLine.trim().length < 5) errors.billingAddressLine = 'Address line must be at least 5 characters';
+      if (!billingAddress.city.trim()) errors.billingAddressCity = 'City is required';
+      if (!billingAddress.state.trim()) errors.billingAddressState = 'State is required';
+      if (!PINCODE_RE.test(billingAddress.pincode)) errors.billingAddressPincode = 'Pincode must be exactly 6 digits';
+    } else if (s === 3) {
+      if (outletName.trim().length < 1) errors.outletName = 'Outlet name is required';
+      if (effectivePickup.addressLine.trim().length < 5) errors.pickupAddressLine = 'Pickup address line must be at least 5 characters';
+      if (!effectivePickup.city.trim()) errors.pickupAddressCity = 'City is required';
+      if (!effectivePickup.state.trim()) errors.pickupAddressState = 'State is required';
+      if (!PINCODE_RE.test(effectivePickup.pincode)) errors.pickupAddressPincode = 'Pincode must be exactly 6 digits';
+      if (pincodes.length === 0) errors.serviceablePincodes = 'Add at least one serviceable pincode';
+      if (!deliveryCapability) errors.deliveryCapability = 'Select delivery capability';
+    }
+    return errors;
+  };
 
-  const step2Ok =
-    PAN_RE.test(panNumber.trim()) &&
-    authorizedPersonName.trim().length >= 2 &&
-    PHONE_RE.test(authorizedPersonPhone) &&
-    (!authorizedPersonEmail.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authorizedPersonEmail.trim())) &&
-    bankAccountName.trim().length >= 2 &&
-    bankAccountNumber.trim().length >= 8 &&
-    IFSC_RE.test(bankIfsc.trim()) &&
-    bankName.trim().length >= 2 &&
-    billingAddress.addressLine.trim().length >= 5 &&
-    billingAddress.city.trim() &&
-    billingAddress.state.trim() &&
-    PINCODE_RE.test(billingAddress.pincode);
-
-  const step3Ok =
-    outletName.trim().length >= 1 &&
-    effectivePickup.addressLine.trim().length >= 1 &&
-    pincodes.length > 0 &&
-    !!deliveryCapability;
+  const handleNext = () => {
+    setError(null);
+    const errors = validateStep(step);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError('Please complete the required fields and fix any errors.');
+      return;
+    }
+    setFieldErrors({});
+    if (step === 1) {
+      setStep(2);
+    } else if (step === 2) {
+      setStep(3);
+    }
+  };
+  const handleBack = () => { setError(null); setStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3) : s)); };
 
   const handleAddPincode = () => {
     const value = pincodeInput.trim();
@@ -141,24 +167,25 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
     setPincodes((prev) => prev.filter((x) => x !== p));
   };
 
-  const handleNext = () => {
-    setError(null);
-    if (step === 1) {
-      if (!step1Ok) { setError('Please complete the required fields'); return; }
-      setStep(2);
-    } else if (step === 2) {
-      if (!step2Ok) { setError('Please complete the required fields'); return; }
-      setStep(3);
-    }
-  };
-  const handleBack = () => { setError(null); setStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3) : s)); };
-
   const handleSubmit = async () => {
     setError(null);
-    if (!step1Ok || !step2Ok || !step3Ok) {
-      setError('Some fields are incomplete or invalid');
+    const errors1 = validateStep(1);
+    const errors2 = validateStep(2);
+    const errors3 = validateStep(3);
+    const allErrors = { ...errors1, ...errors2, ...errors3 };
+    if (Object.keys(allErrors).length > 0) {
+      setFieldErrors(allErrors);
+      if (Object.keys(errors1).length > 0) {
+        setStep(1);
+      } else if (Object.keys(errors2).length > 0) {
+        setStep(2);
+      } else {
+        setStep(3);
+      }
+      setError('Some fields are incomplete or invalid. Please check all steps.');
       return;
     }
+    setFieldErrors({});
     setSubmitting(true);
     try {
       const body = {
@@ -270,26 +297,40 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
             <div className="space-y-4">
               <SectionLabel>Owner Account</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Owner Full Name" required>
-                  <Input name="vendor-owner-name" value={fullName} onChange={setFullName} placeholder="Rajesh Kumar" />
+                <Field label="Owner Full Name" required error={fieldErrors.fullName}>
+                  <Input
+                    name="vendor-owner-name" value={fullName}
+                    onChange={(v) => { setFullName(v); setFieldErrors(prev => ({ ...prev, fullName: '' })); }}
+                    hasError={!!fieldErrors.fullName} placeholder="Rajesh Kumar"
+                  />
                 </Field>
-                <Field label="Owner Phone (10-digit)" required>
+                <Field label="Owner Phone (10-digit)" required error={fieldErrors.phone}>
                   <Input
                     name="vendor-owner-phone" value={phone}
-                    onChange={(v) => setPhone(v.replace(/\D/g, '').slice(0, 10))}
+                    onChange={(v) => {
+                      setPhone(v.replace(/\D/g, '').slice(0, 10));
+                      setFieldErrors(prev => ({ ...prev, phone: '' }));
+                    }}
+                    hasError={!!fieldErrors.phone}
                     placeholder="9876543210" inputMode="tel"
                   />
                 </Field>
               </div>
-              <Field label="Owner Email" required>
-                <Input name="vendor-owner-email" type="email" value={email} onChange={setEmail} placeholder="rajesh@dailyfreshfoods.com" />
+              <Field label="Owner Email" required error={fieldErrors.email}>
+                <Input
+                  name="vendor-owner-email" type="email" value={email}
+                  onChange={(v) => { setEmail(v); setFieldErrors(prev => ({ ...prev, email: '' })); }}
+                  hasError={!!fieldErrors.email} placeholder="rajesh@dailyfreshfoods.com"
+                />
               </Field>
-              <Field label="Owner Password" required>
+              <Field label="Owner Password" required error={fieldErrors.password}>
                 <div className="relative">
                   <Input
                     name="vendor-owner-password"
                     type={showPassword ? 'text' : 'password'}
-                    value={password} onChange={setPassword}
+                    value={password}
+                    onChange={(v) => { setPassword(v); setFieldErrors(prev => ({ ...prev, password: '' })); }}
+                    hasError={!!fieldErrors.password}
                     placeholder="Min 6 characters"
                     autoComplete="new-password"
                   />
@@ -302,27 +343,46 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
               <div className="pt-2 border-t border-[#EEEEEE]" />
               <SectionLabel>Business</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Legal Business Name" required>
-                  <Input name="vendor-legal-name" value={businessName} onChange={setBusinessName} placeholder="Daily Fresh Foods Pvt Ltd" />
+                <Field label="Legal Business Name" required error={fieldErrors.businessName}>
+                  <Input
+                    name="vendor-legal-name" value={businessName}
+                    onChange={(v) => { setBusinessName(v); setFieldErrors(prev => ({ ...prev, businessName: '' })); }}
+                    hasError={!!fieldErrors.businessName} placeholder="Daily Fresh Foods Pvt Ltd"
+                  />
                 </Field>
-                <Field label="Trade Name / Display Name">
-                  <Input name="vendor-trade-name" value={tradeName} onChange={setTradeName} placeholder="Daily Fresh" />
+                <Field label="Trade Name / Display Name" error={fieldErrors.tradeName}>
+                  <Input
+                    name="vendor-trade-name" value={tradeName}
+                    onChange={(v) => { setTradeName(v); setFieldErrors(prev => ({ ...prev, tradeName: '' })); }}
+                    hasError={!!fieldErrors.tradeName} placeholder="Daily Fresh"
+                  />
                 </Field>
               </div>
-              <Field label="Vendor Type" required>
+              <Field label="Vendor Type" required error={fieldErrors.vendorType}>
                 <select
                   value={vendorType}
-                  onChange={(e) => setVendorType(e.target.value as VendorType)}
-                  className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 bg-[#FAFAFA] focus:bg-white"
+                  onChange={(e) => {
+                    setVendorType(e.target.value as VendorType);
+                    setFieldErrors(prev => ({ ...prev, vendorType: '' }));
+                  }}
+                  className={`w-full h-[42px] border rounded-[10px] px-3 text-[13px] outline-none bg-[#FAFAFA] focus:bg-white transition-all ${
+                    fieldErrors.vendorType
+                      ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/10'
+                      : 'border-[#EEEEEE] focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10'
+                  }`}
                 >
                   <option value="">Select vendor type…</option>
                   {VENDOR_TYPES.map((t) => <option key={t} value={t}>{VENDOR_TYPE_LABEL[t]}</option>)}
                 </select>
               </Field>
-              <Field label="GSTIN (15-character)" hint="Optional, e.g. for unregistered small vendors">
+              <Field label="GSTIN (15-character)" hint="Optional, e.g. for unregistered small vendors" error={fieldErrors.gstin}>
                 <Input
                   name="vendor-gstin" value={gstin}
-                  onChange={(v) => setGstin(v.toUpperCase().slice(0, 15))}
+                  onChange={(v) => {
+                    setGstin(v.toUpperCase().slice(0, 15));
+                    setFieldErrors(prev => ({ ...prev, gstin: '' }));
+                  }}
+                  hasError={!!fieldErrors.gstin}
                   placeholder="22ABCDE1234F1Z5"
                 />
               </Field>
@@ -333,53 +393,101 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
           {step === 2 && (
             <div className="space-y-4">
               <SectionLabel>Identity</SectionLabel>
-              <Field label="PAN" required>
+              <Field label="PAN" required error={fieldErrors.panNumber}>
                 <Input
                   name="vendor-pan" value={panNumber}
-                  onChange={(v) => setPanNumber(v.toUpperCase().slice(0, 10))}
+                  onChange={(v) => {
+                    setPanNumber(v.toUpperCase().slice(0, 10));
+                    setFieldErrors(prev => ({ ...prev, panNumber: '' }));
+                  }}
+                  hasError={!!fieldErrors.panNumber}
                   placeholder="ABCDE1234F"
                 />
               </Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Authorized Person Name" required>
-                  <Input name="vendor-ap-name" value={authorizedPersonName} onChange={setAuthorizedPersonName} placeholder="Rajesh Kumar" />
+                <Field label="Authorized Person Name" required error={fieldErrors.authorizedPersonName}>
+                  <Input
+                    name="vendor-ap-name" value={authorizedPersonName}
+                    onChange={(v) => {
+                      setAuthorizedPersonName(v);
+                      setFieldErrors(prev => ({ ...prev, authorizedPersonName: '' }));
+                    }}
+                    hasError={!!fieldErrors.authorizedPersonName}
+                    placeholder="Rajesh Kumar"
+                  />
                 </Field>
-                <Field label="Authorized Person Phone" required>
+                <Field label="Authorized Person Phone" required error={fieldErrors.authorizedPersonPhone}>
                   <Input
                     name="vendor-ap-phone" value={authorizedPersonPhone}
-                    onChange={(v) => setAuthorizedPersonPhone(v.replace(/\D/g, '').slice(0, 10))}
+                    onChange={(v) => {
+                      setAuthorizedPersonPhone(v.replace(/\D/g, '').slice(0, 10));
+                      setFieldErrors(prev => ({ ...prev, authorizedPersonPhone: '' }));
+                    }}
+                    hasError={!!fieldErrors.authorizedPersonPhone}
                     placeholder="9876543210" inputMode="tel"
                   />
                 </Field>
               </div>
-              <Field label="Authorized Person Email">
-                <Input name="vendor-ap-email" type="email" value={authorizedPersonEmail} onChange={setAuthorizedPersonEmail} placeholder="rajesh@dailyfresh.com" />
+              <Field label="Authorized Person Email" error={fieldErrors.authorizedPersonEmail}>
+                <Input
+                  name="vendor-ap-email" type="email" value={authorizedPersonEmail}
+                  onChange={(v) => {
+                    setAuthorizedPersonEmail(v);
+                    setFieldErrors(prev => ({ ...prev, authorizedPersonEmail: '' }));
+                  }}
+                  hasError={!!fieldErrors.authorizedPersonEmail}
+                  placeholder="rajesh@dailyfresh.com"
+                />
               </Field>
 
               <div className="pt-2 border-t border-[#EEEEEE]" />
               <SectionLabel><IndianRupee size={12} className="inline mr-1" />Bank Details</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Account Holder Name" required>
-                  <Input name="vendor-bank-name" value={bankAccountName} onChange={setBankAccountName} placeholder="Daily Fresh Foods Pvt Ltd" />
+                <Field label="Account Holder Name" required error={fieldErrors.bankAccountName}>
+                  <Input
+                    name="vendor-bank-name" value={bankAccountName}
+                    onChange={(v) => {
+                      setBankAccountName(v);
+                      setFieldErrors(prev => ({ ...prev, bankAccountName: '' }));
+                    }}
+                    hasError={!!fieldErrors.bankAccountName}
+                    placeholder="Daily Fresh Foods Pvt Ltd"
+                  />
                 </Field>
-                <Field label="Account Number" required>
+                <Field label="Account Number" required error={fieldErrors.bankAccountNumber}>
                   <Input
                     name="vendor-bank-acc" value={bankAccountNumber}
-                    onChange={(v) => setBankAccountNumber(v.replace(/\D/g, '').slice(0, 30))}
+                    onChange={(v) => {
+                      setBankAccountNumber(v.replace(/\D/g, '').slice(0, 30));
+                      setFieldErrors(prev => ({ ...prev, bankAccountNumber: '' }));
+                    }}
+                    hasError={!!fieldErrors.bankAccountNumber}
                     placeholder="50100123456789"
                   />
                 </Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="IFSC" required>
+                <Field label="IFSC" required error={fieldErrors.bankIfsc}>
                   <Input
                     name="vendor-ifsc" value={bankIfsc}
-                    onChange={(v) => setBankIfsc(v.toUpperCase().slice(0, 11))}
+                    onChange={(v) => {
+                      setBankIfsc(v.toUpperCase().slice(0, 11));
+                      setFieldErrors(prev => ({ ...prev, bankIfsc: '' }));
+                    }}
+                    hasError={!!fieldErrors.bankIfsc}
                     placeholder="HDFC0001234"
                   />
                 </Field>
-                <Field label="Bank Name" required>
-                  <Input name="vendor-bank" value={bankName} onChange={setBankName} placeholder="HDFC Bank" />
+                <Field label="Bank Name" required error={fieldErrors.bankName}>
+                  <Input
+                    name="vendor-bank" value={bankName}
+                    onChange={(v) => {
+                      setBankName(v);
+                      setFieldErrors(prev => ({ ...prev, bankName: '' }));
+                    }}
+                    hasError={!!fieldErrors.bankName}
+                    placeholder="HDFC Bank"
+                  />
                 </Field>
               </div>
               <Field label="Account Type" required>
@@ -401,7 +509,22 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
               <SectionLabel><MapPin size={12} className="inline mr-1" />Billing Address (Bill From on invoices)</SectionLabel>
               <AddressFields
                 value={billingAddress}
-                onChange={setBillingAddress}
+                onChange={(v) => {
+                  setBillingAddress(v);
+                  setFieldErrors(prev => ({
+                    ...prev,
+                    billingAddressLine: '',
+                    billingAddressCity: '',
+                    billingAddressState: '',
+                    billingAddressPincode: '',
+                  }));
+                }}
+                errors={{
+                  addressLine: fieldErrors.billingAddressLine,
+                  city: fieldErrors.billingAddressCity,
+                  state: fieldErrors.billingAddressState,
+                  pincode: fieldErrors.billingAddressPincode,
+                }}
                 fieldPrefix="vendor-billing"
               />
             </div>
@@ -411,13 +534,27 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
           {step === 3 && (
             <div className="space-y-4">
               <SectionLabel><MapPin size={12} className="inline mr-1" />Pickup / Warehouse Outlet</SectionLabel>
-              <Field label="Outlet name" required hint="e.g. 'Mumbai Warehouse', 'Main Store'">
-                <Input name="vendor-outlet-name" value={outletName} onChange={setOutletName} placeholder="Main Warehouse" />
+              <Field label="Outlet name" required hint="e.g. 'Mumbai Warehouse', 'Main Store'" error={fieldErrors.outletName}>
+                <Input
+                  name="vendor-outlet-name" value={outletName}
+                  onChange={(v) => { setOutletName(v); setFieldErrors(prev => ({ ...prev, outletName: '' })); }}
+                  hasError={!!fieldErrors.outletName}
+                  placeholder="Main Warehouse"
+                />
               </Field>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox" checked={pickupSameAsBilling}
-                  onChange={(e) => setPickupSameAsBilling(e.target.checked)}
+                  onChange={(e) => {
+                    setPickupSameAsBilling(e.target.checked);
+                    setFieldErrors(prev => ({
+                      ...prev,
+                      pickupAddressLine: '',
+                      pickupAddressCity: '',
+                      pickupAddressState: '',
+                      pickupAddressPincode: '',
+                    }));
+                  }}
                   className="rounded border-gray-300"
                 />
                 <span className="text-[12.5px] text-[#181725]">Pickup address is same as billing address</span>
@@ -425,25 +562,53 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
               {!pickupSameAsBilling && (
                 <AddressFields
                   value={pickupAddress}
-                  onChange={setPickupAddress}
+                  onChange={(v) => {
+                    setPickupAddress(v);
+                    setFieldErrors(prev => ({
+                      ...prev,
+                      pickupAddressLine: '',
+                      pickupAddressCity: '',
+                      pickupAddressState: '',
+                      pickupAddressPincode: '',
+                    }));
+                  }}
+                  errors={{
+                    addressLine: fieldErrors.pickupAddressLine,
+                    city: fieldErrors.pickupAddressCity,
+                    state: fieldErrors.pickupAddressState,
+                    pincode: fieldErrors.pickupAddressPincode,
+                  }}
                   fieldPrefix="vendor-pickup"
                 />
               )}
 
               <div className="pt-2 border-t border-[#EEEEEE]" />
               <SectionLabel><Truck size={12} className="inline mr-1" />Operations</SectionLabel>
-              <Field label="Serviceable Pincodes" required hint="Press Enter or click + after each 6-digit pincode">
+              <Field label="Serviceable Pincodes" required hint="Press Enter or click + after each 6-digit pincode" error={fieldErrors.serviceablePincodes}>
                 <div className="flex items-center gap-2 mb-2">
                   <input
                     type="text" inputMode="numeric"
                     value={pincodeInput}
                     onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddPincode(); } }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddPincode();
+                        setFieldErrors(prev => ({ ...prev, serviceablePincodes: '' }));
+                      }
+                    }}
                     placeholder="400001"
-                    className="flex-1 h-[40px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 bg-[#FAFAFA] focus:bg-white"
+                    className={`flex-1 h-[40px] border rounded-[10px] px-3 text-[13px] outline-none bg-[#FAFAFA] focus:bg-white transition-all ${
+                      fieldErrors.serviceablePincodes
+                        ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/10'
+                        : 'border-[#EEEEEE] focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10'
+                    }`}
                   />
                   <button
-                    type="button" onClick={handleAddPincode}
+                    type="button" onClick={() => {
+                      handleAddPincode();
+                      setFieldErrors(prev => ({ ...prev, serviceablePincodes: '' }));
+                    }}
                     disabled={!PINCODE_RE.test(pincodeInput)}
                     className="h-[40px] px-3 bg-[#299E60] hover:bg-[#238a54] disabled:bg-gray-300 text-white rounded-[10px] text-[12.5px] font-bold flex items-center gap-1"
                   >
@@ -454,7 +619,7 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
                   {pincodes.length === 0 ? (
                     <p className="text-[11.5px] text-[#AEAEAE] italic">No pincodes added yet</p>
                   ) : pincodes.map((p) => (
-                    <span key={p} className="inline-flex items-center gap-1 text-[11.5px] font-mono font-bold bg-[#ECFDF5] text-[#299E60] px-2 py-1 rounded-full">
+                    <span key={p} className="inline-flex items-center gap-1.5 text-[11.5px] font-mono font-bold bg-[#ECFDF5] text-[#299E60] px-2 py-1 rounded-full">
                       {p}
                       <button type="button" onClick={() => handleRemovePincode(p)} className="hover:text-[#181725]">
                         <X size={11} />
@@ -464,14 +629,21 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
                 </div>
               </Field>
 
-              <Field label="Delivery Capability" required>
+              <Field label="Delivery Capability" required error={fieldErrors.deliveryCapability}>
                 <div className="grid grid-cols-3 gap-2">
                   {DELIVERY_CAPABILITIES.map((d) => (
                     <button
                       key={d} type="button"
-                      onClick={() => setDeliveryCapability(d)}
+                      onClick={() => {
+                        setDeliveryCapability(d);
+                        setFieldErrors(prev => ({ ...prev, deliveryCapability: '' }));
+                      }}
                       className={`p-3 rounded-[10px] text-[12px] font-bold border-2 text-left transition-all
-                        ${deliveryCapability === d ? 'border-[#299E60] bg-[#ECFDF5] text-[#299E60]' : 'border-[#EEEEEE] bg-white text-[#7C7C7C]'}`}
+                        ${deliveryCapability === d
+                          ? 'border-[#299E60] bg-[#ECFDF5] text-[#299E60]'
+                          : fieldErrors.deliveryCapability
+                            ? 'border-red-400 bg-white text-[#7C7C7C]'
+                            : 'border-[#EEEEEE] bg-white text-[#7C7C7C]'}`}
                     >
                       {DELIVERY_LABEL[d]}
                     </button>
@@ -497,7 +669,7 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
                 <Field label="Min Order Value (₹)">
                   <Input
                     name="vendor-mov" value={minOrderValue}
-                    onChange={(v) => setMinOrderValue(v.replace(/\D/g, '').slice(0, 7))}
+                    onChange={(v) => { setMinOrderValue(v.replace(/\D/g, '').slice(0, 7)); setFieldErrors(prev => ({ ...prev, minOrderValue: '' })); }}
                     placeholder="500" inputMode="numeric"
                   />
                 </Field>
@@ -535,16 +707,15 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
           {step < 3 ? (
             <button
               onClick={handleNext}
-              disabled={(step === 1 && !step1Ok) || (step === 2 && !step2Ok)}
-              className="h-[42px] px-6 bg-[#299E60] hover:bg-[#238a54] disabled:bg-gray-300 text-white rounded-[10px] text-[13px] font-bold flex items-center gap-2 transition-colors shadow-sm"
+              className="h-[42px] px-6 bg-[#299E60] hover:bg-[#238a54] text-white rounded-[10px] text-[13px] font-bold flex items-center gap-2 transition-colors shadow-sm active:scale-98"
             >
               Next <ChevronRight size={15} />
             </button>
           ) : (
             <button
               onClick={handleSubmit}
-              disabled={submitting || !step3Ok}
-              className="h-[42px] px-6 bg-[#299E60] hover:bg-[#238a54] disabled:bg-gray-300 text-white rounded-[10px] text-[13px] font-bold flex items-center gap-2 transition-colors shadow-sm"
+              disabled={submitting}
+              className="h-[42px] px-6 bg-[#299E60] hover:bg-[#238a54] disabled:bg-gray-300 text-white rounded-[10px] text-[13px] font-bold flex items-center gap-2 transition-colors shadow-sm active:scale-98"
             >
               {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
               {submitting ? 'Creating vendor…' : 'Create Vendor'}
@@ -584,40 +755,86 @@ function Step({ num, label, current, showConnector }: { num: 1 | 2 | 3; label: s
 
 // ── Address sub-block ───────────────────────────────────────────────────
 function AddressFields({
-  value, onChange, fieldPrefix,
+  value, onChange, fieldPrefix, errors,
 }: {
   value: AddressInput;
   onChange: (v: AddressInput) => void;
   fieldPrefix: string;
+  errors?: Record<string, string>;
 }) {
+  const lastFetchedPin = useRef('');
+
+  useEffect(() => {
+    const pin = value.pincode;
+    if (!/^\d{6}$/.test(pin)) return;
+    if (pin === lastFetchedPin.current) return;
+
+    lastFetchedPin.current = pin;
+    fetch(`https://api.postalpincode.in/pincode/${pin}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const po = data?.[0]?.PostOffice?.[0];
+        if (!po) return;
+        onChange({
+          ...value,
+          city: po.District || po.Division || value.city,
+          state: po.State || value.state,
+        });
+      })
+      .catch(() => {});
+  }, [value.pincode, value, onChange]);
+
+  const handlePick = (place: import('@/components/ui/AddressAutocomplete').AddressPickPayload) => {
+    if (place.pincode) {
+      lastFetchedPin.current = place.pincode;
+    }
+    onChange({
+      addressLine: place.fullAddress,
+      city: place.city || value.city,
+      state: place.state || value.state,
+      pincode: place.pincode || value.pincode,
+    });
+  };
+
   return (
     <div className="space-y-3">
-      <Field label="Address line" required>
+      <AddressAutocomplete
+        label="Search from maps"
+        placeholder="Type location, e.g. Vashi Rockville Diner..."
+        hint="Selecting a place from maps auto-fills address details below."
+        onPick={handlePick}
+        className="mb-2"
+      />
+      <Field label="Address line" required error={errors?.addressLine}>
         <Input
           name={`${fieldPrefix}-line`} value={value.addressLine}
           onChange={(v) => onChange({ ...value, addressLine: v })}
+          hasError={!!errors?.addressLine}
           placeholder="Plot 22, MIDC Phase II"
         />
       </Field>
       <div className="grid grid-cols-3 gap-3">
-        <Field label="City" required>
+        <Field label="City" required error={errors?.city}>
           <Input
             name={`${fieldPrefix}-city`} value={value.city}
             onChange={(v) => onChange({ ...value, city: v })}
+            hasError={!!errors?.city}
             placeholder="Mumbai"
           />
         </Field>
-        <Field label="State" required>
+        <Field label="State" required error={errors?.state}>
           <Input
             name={`${fieldPrefix}-state`} value={value.state}
             onChange={(v) => onChange({ ...value, state: v })}
+            hasError={!!errors?.state}
             placeholder="Maharashtra"
           />
         </Field>
-        <Field label="Pincode" required>
+        <Field label="Pincode" required error={errors?.pincode}>
           <Input
             name={`${fieldPrefix}-pin`} value={value.pincode}
             onChange={(v) => onChange({ ...value, pincode: v.replace(/\D/g, '').slice(0, 6) })}
+            hasError={!!errors?.pincode}
             placeholder="400001" inputMode="numeric"
           />
         </Field>
@@ -632,8 +849,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function Field({
-  label, required, hint, children,
-}: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
+  label, required, hint, children, error,
+}: { label: string; required?: boolean; hint?: string; children: React.ReactNode; error?: string }) {
   return (
     <div>
       <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
@@ -641,12 +858,13 @@ function Field({
         {hint && <span className="ml-1 text-[10px] text-[#AEAEAE] normal-case font-normal">— {hint}</span>}
       </label>
       {children}
+      {error && <p className="text-[11px] text-red-600 font-medium mt-1 normal-case">{error}</p>}
     </div>
   );
 }
 
 function Input({
-  value, onChange, type = 'text', placeholder, name, inputMode, autoComplete,
+  value, onChange, type = 'text', placeholder, name, inputMode, autoComplete, hasError, disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -655,6 +873,8 @@ function Input({
   name?: string;
   inputMode?: 'text' | 'numeric' | 'tel' | 'email';
   autoComplete?: string;
+  hasError?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <input

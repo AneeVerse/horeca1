@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle2, ChevronRight, ChevronLeft, Store, Truck, Package, Users, Rocket, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 
@@ -17,6 +18,7 @@ const STEPS = [
 
 export default function SetupWizardPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [step, setStep] = useState(1);
   const [logoUrl, setLogoUrl] = useState('');
   const [bannerUrl, setBannerUrl] = useState('');
@@ -24,15 +26,24 @@ export default function SetupWizardPage() {
   const [saving, setSaving] = useState(false);
   const [vendorName, setVendorName] = useState('');
 
+  const activeAccountId = (session?.user as { activeBusinessAccountId?: string } | undefined)?.activeBusinessAccountId;
+
   useEffect(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem('vendor_setup_completed')) {
-      router.replace('/vendor/dashboard');
+    if (typeof window !== 'undefined') {
+      const scopedKey = activeAccountId ? `vendor_setup_completed_${activeAccountId}` : null;
+      const setupCompleted = (scopedKey && localStorage.getItem(scopedKey)) || localStorage.getItem('vendor_setup_completed');
+      if (setupCompleted) {
+        router.replace('/vendor/dashboard');
+      }
     }
+  }, [activeAccountId, router]);
+
+  useEffect(() => {
     // Fetch vendor name
     fetch('/api/v1/vendor/settings').then(r => r.json()).then(j => {
       if (j.success) setVendorName(j.data.businessName || '');
     }).catch(() => {});
-  }, [router]);
+  }, []);
 
   const saveProfile = async () => {
     if (!logoUrl && !bannerUrl && !description) return;
@@ -47,7 +58,10 @@ export default function SetupWizardPage() {
   };
 
   const complete = () => {
-    if (typeof window !== 'undefined') localStorage.setItem('vendor_setup_completed', '1');
+    if (typeof window !== 'undefined') {
+      const key = activeAccountId ? `vendor_setup_completed_${activeAccountId}` : 'vendor_setup_completed';
+      localStorage.setItem(key, '1');
+    }
     router.push('/vendor/dashboard');
   };
 

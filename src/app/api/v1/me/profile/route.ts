@@ -25,8 +25,25 @@ export const GET = withAuth(async (_req: NextRequest, ctx) => {
     return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
   }
 
-  const hasCorePersonalization =
-    !!user.pincode && !!user.businessName && !!user.fullName;
+  // Find their business accounts and outlets to see if they resolved pincode/businessName there
+  const member = await prisma.businessAccountMember.findFirst({
+    where: { userId: ctx.userId },
+    include: {
+      businessAccount: {
+        include: {
+          outlets: {
+            take: 1
+          }
+        }
+      }
+    }
+  });
+
+  const hasBusinessName = !!(user.businessName || member?.businessAccount?.legalName || member?.businessAccount?.displayName);
+  const hasPincode = !!(user.pincode || member?.businessAccount?.billingPincode || member?.businessAccount?.outlets?.[0]?.pincode);
+  const hasFullName = !!user.fullName;
+
+  const hasCorePersonalization = hasPincode && hasBusinessName && hasFullName;
 
   return NextResponse.json({
     success: true,
@@ -35,11 +52,11 @@ export const GET = withAuth(async (_req: NextRequest, ctx) => {
       isComplete: !!user.profileCompletedAt,
       hasCorePersonalization,
       fields: {
-        fullName: !!user.fullName,
+        fullName: hasFullName,
         phone: !!user.phone,
-        pincode: !!user.pincode,
-        businessName: !!user.businessName,
-        gstNumber: !!user.gstNumber,
+        pincode: hasPincode,
+        businessName: hasBusinessName,
+        gstNumber: !!(user.gstNumber || member?.businessAccount?.gstin),
       },
     },
   });

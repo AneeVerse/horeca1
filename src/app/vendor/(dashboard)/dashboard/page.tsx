@@ -259,11 +259,19 @@ function PendingOrdersWidget({
 
 function SetupBanner() {
   const [show, setShow] = useState(true);
+  const { data: session } = useSession();
+  const activeAccountId = (session?.user as { activeBusinessAccountId?: string } | undefined)?.activeBusinessAccountId;
+
   useEffect(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem('vendor_setup_completed')) {
-      Promise.resolve().then(() => setShow(false));
+    if (typeof window !== 'undefined') {
+      const scopedKey = activeAccountId ? `vendor_setup_completed_${activeAccountId}` : null;
+      const setupCompleted = (scopedKey && localStorage.getItem(scopedKey)) || localStorage.getItem('vendor_setup_completed');
+      if (setupCompleted) {
+        Promise.resolve().then(() => setShow(false));
+      }
     }
-  }, []);
+  }, [activeAccountId]);
+
   if (!show) return null;
   return (
     <div className="bg-gradient-to-r from-[#299E60] to-[#1a7a49] rounded-[14px] p-5 text-white mb-6 flex items-center justify-between">
@@ -275,7 +283,11 @@ function SetupBanner() {
         <Link href="/vendor/setup" className="bg-white text-[#299E60] text-[13px] font-bold px-4 py-2 rounded-[8px] hover:bg-gray-50 transition-colors whitespace-nowrap">
           Start Setup
         </Link>
-        <button onClick={() => { localStorage.setItem('vendor_setup_completed', '1'); setShow(false); }} className="text-white/60 hover:text-white transition-colors text-[20px] leading-none">&times;</button>
+        <button onClick={() => { 
+          const key = activeAccountId ? `vendor_setup_completed_${activeAccountId}` : 'vendor_setup_completed';
+          localStorage.setItem(key, '1'); 
+          setShow(false); 
+        }} className="text-white/60 hover:text-white transition-colors text-[20px] leading-none">&times;</button>
       </div>
     </div>
   );

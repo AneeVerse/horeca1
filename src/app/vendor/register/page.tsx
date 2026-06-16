@@ -9,6 +9,7 @@ import {
   MapPin, Truck, ShieldCheck, X, Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
 
 const STEP_TITLES = [
   { id: 1, label: 'Verify Mobile', icon: Phone },
@@ -134,18 +135,28 @@ export default function VendorRegisterPage() {
   useEffect(() => {
     if (!isAuthMode || authSeedDone.current) return;
     authSeedDone.current = true;
-    let cancelled = false;
+    // An authenticated user adding a vendor under their existing HCID is
+    // already phone-verified — the OTP step doesn't apply. Advance past it
+    // SYNCHRONOUSLY here (not inside the fetch .then). The previous version
+    // set this dedupe ref before an async fetch and only called setStep(2) in
+    // the resolved callback; under React 18 StrictMode's double-invoke (dev),
+    // the first run's cleanup flagged the result `cancelled` and the second
+    // run bailed on the ref — so the jump was silently dropped and the wizard
+    // stayed stuck on step 1.
+    setPhoneVerified(true);
+    setOtpSent(true);
+    setStep(2);
+    // Best-effort prefill of known details. Functional updaters avoid
+    // clobbering anything the user may have already typed on a later step
+    // while this request was in flight. Submit in auth mode uses the session,
+    // not this phone, so failure here is harmless.
     fetch('/api/v1/auth/me').then(r => r.json()).then(j => {
-      if (cancelled || !j.success) return;
+      if (!j.success) return;
       const me = j.data ?? {};
-      if (me.phone) setPhone(String(me.phone));
-      if (me.fullName) setFullName(String(me.fullName));
-      if (me.email) setEmail(String(me.email));
-      setPhoneVerified(true);
-      setOtpSent(true);
-      setStep(2);
-    }).catch(() => { /* fall back to manual entry */ });
-    return () => { cancelled = true; };
+      if (me.phone) setPhone(prev => prev || String(me.phone));
+      if (me.fullName) setFullName(prev => prev || String(me.fullName));
+      if (me.email) setEmail(prev => prev || String(me.email));
+    }).catch(() => { /* prefill is optional */ });
   }, [isAuthMode]);
 
   // ─── Inline field errors ────────────────────────────────────────────────
@@ -303,6 +314,52 @@ export default function VendorRegisterPage() {
   useEffect(() => {
     if (pickupSameAsBilling) setPickupAddress({ ...billingAddress });
   }, [pickupSameAsBilling, billingAddress]);
+
+  const lastFetchedBillingPin = useRef('');
+  const lastFetchedPickupPin = useRef('');
+
+  // Auto-fill billing city & state when a valid 6-digit pincode is typed manually
+  useEffect(() => {
+    const pin = billingAddress.pincode;
+    if (!/^\d{6}$/.test(pin)) return;
+    if (pin === lastFetchedBillingPin.current) return;
+
+    lastFetchedBillingPin.current = pin;
+    fetch(`https://api.postalpincode.in/pincode/${pin}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const po = data?.[0]?.PostOffice?.[0];
+        if (!po) return;
+        setBillingAddress(prev => ({
+          ...prev,
+          city: po.District || po.Division || prev.city,
+          state: po.State || prev.state,
+        }));
+      })
+      .catch(() => {});
+  }, [billingAddress.pincode]);
+
+  // Auto-fill pickup city & state when a valid 6-digit pincode is typed manually
+  useEffect(() => {
+    if (pickupSameAsBilling) return;
+    const pin = pickupAddress.pincode;
+    if (!/^\d{6}$/.test(pin)) return;
+    if (pin === lastFetchedPickupPin.current) return;
+
+    lastFetchedPickupPin.current = pin;
+    fetch(`https://api.postalpincode.in/pincode/${pin}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const po = data?.[0]?.PostOffice?.[0];
+        if (!po) return;
+        setPickupAddress(prev => ({
+          ...prev,
+          city: po.District || po.Division || prev.city,
+          state: po.State || prev.state,
+        }));
+      })
+      .catch(() => {});
+  }, [pickupAddress.pincode, pickupSameAsBilling]);
 
   // ─── Validation per step ────────────────────────────────────────────────
   // Each input also runs validators on blur via setFE() so the user sees
@@ -464,6 +521,18 @@ export default function VendorRegisterPage() {
     } catch { setError('Submission failed. Please try again.'); }
     finally { setSubmitting(false); }
   };
+
+  // While the session is resolving we don't yet know whether this is the
+  // public signup flow or the "add a vendor under my HCID" flow. Hold the
+  // wizard behind a loader so an authenticated user never flashes the
+  // Verify-Mobile step before the auth-seed effect jumps them to step 2.
+  if (sessionStatus === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 size={28} className="animate-spin text-[#53B175]" />
+      </div>
+    );
+  }
 
   // ─── SUCCESS SCREEN ─────────────────────────────────────────────────────
   if (submitted) {
@@ -817,6 +886,30 @@ export default function VendorRegisterPage() {
               <div className="bg-white border border-gray-200 rounded-xl p-5 mb-5">
                 <h3 className="font-bold text-[15px] text-gray-800 mb-3">Billing Address</h3>
                 <div className="space-y-3">
+                  <AddressAutocomplete
+                    label="Search from maps"
+                    placeholder="Type location, e.g. Vashi Rockville Diner..."
+                    hint="Selecting a place from maps auto-fills address details below."
+                    onPick={(place) => {
+                      if (place.pincode) {
+                        lastFetchedBillingPin.current = place.pincode;
+                      }
+                      setBillingAddress({
+                        addressLine: place.fullAddress,
+                        city: place.city || billingAddress.city,
+                        state: place.state || billingAddress.state,
+                        pincode: place.pincode || billingAddress.pincode,
+                      });
+                      setFieldErrors(prev => ({
+                        ...prev,
+                        billingAddressLine: '',
+                        billingCity: '',
+                        billingState: '',
+                        billingPincode: ''
+                      }));
+                    }}
+                    className="mb-2"
+                  />
                   <Field label="Address line" required error={fieldErrors.billingAddressLine}>
                     <Input value={billingAddress.addressLine}
                       onChange={v => { setBillingAddress({ ...billingAddress, addressLine: v }); if (fieldErrors.billingAddressLine) setFE('billingAddressLine', v.trim().length < 5 ? 'Enter the full address' : ''); }}
@@ -858,6 +951,32 @@ export default function VendorRegisterPage() {
                   </label>
                 </div>
                 <div className="space-y-3">
+                  {!pickupSameAsBilling && (
+                    <AddressAutocomplete
+                      label="Search from maps"
+                      placeholder="Type location, e.g. Vashi Rockville Diner..."
+                      hint="Selecting a place from maps auto-fills address details below."
+                      onPick={(place) => {
+                        if (place.pincode) {
+                          lastFetchedPickupPin.current = place.pincode;
+                        }
+                        setPickupAddress({
+                          addressLine: place.fullAddress,
+                          city: place.city || pickupAddress.city,
+                          state: place.state || pickupAddress.state,
+                          pincode: place.pincode || pickupAddress.pincode,
+                        });
+                        setFieldErrors(prev => ({
+                          ...prev,
+                          pickupAddressLine: '',
+                          pickupCity: '',
+                          pickupState: '',
+                          pickupPincode: ''
+                        }));
+                      }}
+                      className="mb-2"
+                    />
+                  )}
                   <Field label="Address line" required error={!pickupSameAsBilling ? fieldErrors.pickupAddressLine : undefined}>
                     <Input value={pickupAddress.addressLine} disabled={pickupSameAsBilling}
                       onChange={v => { setPickupAddress({ ...pickupAddress, addressLine: v }); if (fieldErrors.pickupAddressLine) setFE('pickupAddressLine', v.trim().length < 5 ? 'Enter the full address' : ''); }}

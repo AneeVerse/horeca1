@@ -101,8 +101,12 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       allowedFields.isActive = body.isActive;
     }
 
+    // NOTE: field names must match the Prisma Vendor model exactly — the
+    // registered-office columns are `addressLine` / `addressPincode`, NOT
+    // `address` / `pincode` (those don't exist on Vendor). Passing an unknown
+    // key to prisma.vendor.update throws and the whole save fails.
     const vendorFields = [
-      'businessName', 'description', 'address', 'city', 'state', 'pincode',
+      'businessName', 'description', 'addressLine', 'city', 'state', 'addressPincode',
       'tradeName', 'vendorType', 'gstNumber', 'panNumber', 'fssaiNumber',
       'udyamNumber', 'cinNumber', 'deliveryCapability', 'authorizedPersonName',
       'authorizedPersonPhone', 'authorizedPersonEmail', 'pickupAddressLine',
@@ -132,7 +136,10 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     if (body.phone !== undefined) userUpdate.phone = body.phone;
     if (body.userGstNumber !== undefined) userUpdate.gstNumber = body.userGstNumber;
 
-    if (Object.keys(allowedFields).length === 0 && Object.keys(userUpdate).length === 0) {
+    const hasServiceAreas = body.serviceAreas !== undefined;
+    const hasDeliverySlots = body.deliverySlots !== undefined;
+
+    if (Object.keys(allowedFields).length === 0 && Object.keys(userUpdate).length === 0 && !hasServiceAreas && !hasDeliverySlots) {
       throw Errors.notFound('No valid fields to update');
     }
 
@@ -151,27 +158,157 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       allowedFields.isActive = true;
     }
 
-    const updated = await prisma.vendor.update({
-      where: { id },
-      data: {
-        ...allowedFields,
-        ...(Object.keys(userUpdate).length > 0 && {
-          user: {
-            update: userUpdate
+    const updated = await prisma.$transaction(async (tx) => {
+      let vendorUpdateResult;
+      if (Object.keys(allowedFields).length > 0 || Object.keys(userUpdate).length > 0) {
+        vendorUpdateResult = await tx.vendor.update({
+          where: { id },
+          data: {
+            ...allowedFields,
+            ...(Object.keys(userUpdate).length > 0 && {
+              user: {
+                update: userUpdate
+              }
+            })
+          },
+          select: {
+            id: true,
+            businessName: true,
+            slug: true,
+            isVerified: true,
+            isActive: true,
+            updatedAt: true,
+            user: {
+              select: { id: true, fullName: true, email: true },
+            },
+          },
+        });
+      } else {
+        const vResult = await tx.vendor.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            businessName: true,
+            slug: true,
+            isVerified: true,
+            isActive: true,
+            updatedAt: true,
+            user: {
+              select: { id: true, fullName: true, email: true },
+            },
+          },
+        });
+        if (!vResult) {
+          throw Errors.notFound('Vendor');
+        }
+        vendorUpdateResult = vResult;
+      }
+
+      // Sync Service Areas
+      if (hasServiceAreas && Array.isArray(body.serviceAreas)) {
+        const incomingAreas: { pincode: string; isActive?: boolean }[] = body.serviceAreas;
+        const uniquePincodes = Array.from(new Set(incomingAreas.map(sa => sa.pincode.trim()).filter(Boolean)));
+
+        // Delete existing service areas for this vendor
+        await tx.serviceArea.deleteMany({
+          where: { vendorId: id }
+        });
+
+        // Insert updated list
+        if (uniquePincodes.length > 0) {
+          await tx.serviceArea.createMany({
+            data: uniquePincodes.map(pincode => {
+              const incoming = incomingAreas.find(sa => sa.pincode.trim() === pincode);
+              return {
+                vendorId: id,
+                pincode,
+                isActive: incoming?.isActive !== false
+              };
+            })
+          });
+        }
+      }
+
+      // Sync Delivery Slots
+      if (hasDeliverySlots && Array.isArray(body.deliverySlots)) {
+        const incomingSlots: any[] = body.deliverySlots;
+
+        // Fetch current slots for this vendor
+        const currentSlots = await tx.deliverySlot.findMany({
+          where: { vendorId: id }
+        });
+
+        const incomingIds = new Set(incomingSlots.map(s => s.id).filter(Boolean));
+
+        // Handle deletions / deactivations
+        for (const current of currentSlots) {
+          if (!incomingIds.has(current.id)) {
+            // Check if slot is referenced by any orders
+            const orderCount = await tx.order.count({
+              where: { deliverySlotId: current.id }
+            });
+            if (orderCount > 0) {
+              // Soft delete
+              await tx.deliverySlot.update({
+                where: { id: current.id },
+                data: { isActive: false }
+              });
+            } else {
+              // Hard delete
+              await tx.deliverySlot.delete({
+                where: { id: current.id }
+              });
+            }
           }
-        })
-      },
-      select: {
-        id: true,
-        businessName: true,
-        slug: true,
-        isVerified: true,
-        isActive: true,
-        updatedAt: true,
-        user: {
-          select: { id: true, fullName: true, email: true },
-        },
-      },
+        }
+
+        // Handle creations & updates
+        for (const slot of incomingSlots) {
+          const slotData = {
+            dayOfWeek: Number(slot.dayOfWeek),
+            slotStart: slot.slotStart,
+            slotEnd: slot.slotEnd,
+            cutoffTime: slot.cutoffTime,
+            isActive: slot.isActive !== false,
+          };
+
+          if (slot.id && !slot.id.startsWith('temp-')) {
+            // Update existing slot
+            await tx.deliverySlot.update({
+              where: { id: slot.id },
+              data: slotData
+            });
+          } else {
+            // Create new slot
+            // Check if slot with same vendorId, dayOfWeek, and slotStart already exists to avoid unique constraint error
+            const existingSame = await tx.deliverySlot.findUnique({
+              where: {
+                vendorId_dayOfWeek_slotStart: {
+                  vendorId: id,
+                  dayOfWeek: slotData.dayOfWeek,
+                  slotStart: slotData.slotStart
+                }
+              }
+            });
+
+            if (existingSame) {
+              await tx.deliverySlot.update({
+                where: { id: existingSame.id },
+                data: slotData
+              });
+            } else {
+              await tx.deliverySlot.create({
+                data: {
+                  vendorId: id,
+                  ...slotData
+                }
+              });
+            }
+          }
+        }
+      }
+
+      return vendorUpdateResult;
     });
 
     // Promote user role to 'vendor' on approval, revert to 'customer' on revoke

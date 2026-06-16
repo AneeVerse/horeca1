@@ -90,10 +90,10 @@ interface VendorData {
     rating: number;
     isVerified: boolean;
     isActive: boolean;
-    address: string | null;
+    addressLine: string | null;
     city: string | null;
     state: string | null;
-    pincode: string | null;
+    addressPincode: string | null;
     minOrderValue: number;
     deliveryFee: number;
     freeDeliveryAbove: number | null;
@@ -234,6 +234,73 @@ export default function VendorDetailsPage() {
     const [phone, setPhone] = useState('');
     const [userGstNumber, setUserGstNumber] = useState('');
 
+    // Service Area and Delivery Slot states
+    const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([]);
+    const [deliverySlots, setDeliverySlots] = useState<DeliverySlot[]>([]);
+
+    // Service Area forms
+    const [newPincode, setNewPincode] = useState('');
+
+    // Delivery Slot forms
+    const [showSlotForm, setShowSlotForm] = useState(false);
+    const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
+    const [slotDay, setSlotDay] = useState(1);
+    const [slotStart, setSlotStart] = useState('');
+    const [slotEnd, setSlotEnd] = useState('');
+    const [slotCutoff, setSlotCutoff] = useState('');
+
+    const handleAddAreaLocal = () => {
+        const pin = newPincode.trim();
+        if (!pin) return;
+        if (pin.length < 4) {
+            toast.error('Invalid pincode');
+            return;
+        }
+        if (serviceAreas.some(sa => sa.pincode === pin)) {
+            toast.error('Pincode already exists in list');
+            return;
+        }
+        setServiceAreas(prev => [...prev, { id: `temp-${Date.now()}`, pincode: pin, isActive: true }]);
+        setNewPincode('');
+    };
+
+    const handleSaveSlotLocal = () => {
+        if (!slotStart || !slotEnd || !slotCutoff) {
+            toast.error('Please fill all time fields');
+            return;
+        }
+
+        const slotData: DeliverySlot = {
+            id: editingSlotId || `temp-${Date.now()}`,
+            dayOfWeek: slotDay,
+            slotStart,
+            slotEnd,
+            cutoffTime: slotCutoff,
+            isActive: true,
+        };
+
+        if (editingSlotId) {
+            setDeliverySlots(prev => prev.map(s => s.id === editingSlotId ? slotData : s));
+        } else {
+            const duplicate = deliverySlots.some(s => s.dayOfWeek === slotDay && s.slotStart === slotStart && s.id !== editingSlotId);
+            if (duplicate) {
+                toast.error('A slot for this day and start time already exists');
+                return;
+            }
+            setDeliverySlots(prev => [...prev, slotData]);
+        }
+        resetSlotForm();
+    };
+
+    const resetSlotForm = () => {
+        setShowSlotForm(false);
+        setEditingSlotId(null);
+        setSlotDay(1);
+        setSlotStart('');
+        setSlotEnd('');
+        setSlotCutoff('');
+    };
+
     useEffect(() => {
         if (isInitialEdit) {
             setIsEditing(true);
@@ -244,10 +311,10 @@ export default function VendorDetailsPage() {
         if (vendor) {
             setBusinessName(vendor.businessName || '');
             setDescription(vendor.description || '');
-            setAddress(vendor.address || '');
+            setAddress(vendor.addressLine || '');
             setCity(vendor.city || '');
             setStateVal(vendor.state || '');
-            setPincode(vendor.pincode || '');
+            setPincode(vendor.addressPincode || '');
             setMinOrderValue(vendor.minOrderValue != null ? String(vendor.minOrderValue) : '0');
             setDeliveryFee(vendor.deliveryFee != null ? String(vendor.deliveryFee) : '0');
             setFreeDeliveryAbove(vendor.freeDeliveryAbove != null ? String(vendor.freeDeliveryAbove) : '');
@@ -276,6 +343,8 @@ export default function VendorDetailsPage() {
             setEmail(vendor.user.email || '');
             setPhone(vendor.user.phone || '');
             setUserGstNumber(vendor.user.gstNumber || '');
+            setServiceAreas(vendor.serviceAreas || []);
+            setDeliverySlots(vendor.deliverySlots || []);
         }
     }, [vendor]);
 
@@ -288,10 +357,10 @@ export default function VendorDetailsPage() {
                 body: JSON.stringify({
                     businessName,
                     description,
-                    address,
+                    addressLine: address,
                     city,
                     state: stateVal,
-                    pincode,
+                    addressPincode: pincode,
                     minOrderValue: parseFloat(minOrderValue) || 0,
                     deliveryFee: parseFloat(deliveryFee) || 0,
                     freeDeliveryAbove: freeDeliveryAbove ? parseFloat(freeDeliveryAbove) : null,
@@ -320,6 +389,8 @@ export default function VendorDetailsPage() {
                     email,
                     phone,
                     userGstNumber,
+                    serviceAreas,
+                    deliverySlots,
                 }),
             });
             const json = await res.json();
@@ -443,11 +514,11 @@ export default function VendorDetailsPage() {
         );
     }
 
-    const fullAddress = [vendor.address, vendor.city, vendor.state, vendor.pincode]
+    const fullAddress = [vendor.addressLine, vendor.city, vendor.state, vendor.addressPincode]
         .filter(Boolean)
         .join(', ');
 
-    const sortedSlots = [...vendor.deliverySlots].sort((a, b) => {
+    const sortedSlots = [...deliverySlots].sort((a, b) => {
         const orderA = typeof a.dayOfWeek === 'number' ? a.dayOfWeek : DAY_ORDER.indexOf(a.dayOfWeek.toUpperCase()) + 1;
         const orderB = typeof b.dayOfWeek === 'number' ? b.dayOfWeek : DAY_ORDER.indexOf(b.dayOfWeek.toUpperCase()) + 1;
         return orderA - orderB;
@@ -456,7 +527,7 @@ export default function VendorDetailsPage() {
     const stats = [
         { label: 'Products Listed', value: vendor._count.products, icon: Package, color: '#299E60' },
         { label: 'Total Orders', value: vendor._count.orders, icon: ShoppingCart, color: '#F59E0B' },
-        { label: 'Coverage Areas', value: vendor.serviceAreas.length, icon: MapPinned, color: '#3B82F6' },
+        { label: 'Coverage Areas', value: serviceAreas.length, icon: MapPinned, color: '#3B82F6' },
         {
             label: 'KYC Status',
             value: vendor.isVerified ? 'VERIFIED' : 'PENDING',
@@ -938,7 +1009,7 @@ export default function VendorDetailsPage() {
                             {/* Owner Profile Panel */}
                             <div className="border-t border-[#F3F4F6] pt-6">
                                 <h3 className="text-[15px] font-black text-[#111827] mb-4">Onboarding Account User</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                                     <div>
                                         <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Full Legal Name</label>
                                         {isEditing ? (
@@ -963,6 +1034,19 @@ export default function VendorDetailsPage() {
                                             />
                                         ) : (
                                             <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] truncate">{vendor.user.email}</span>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Mobile Phone Number</label>
+                                        {isEditing ? (
+                                            <input
+                                                type="text"
+                                                value={phone}
+                                                onChange={(e) => setPhone(e.target.value)}
+                                                className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
+                                            />
+                                        ) : (
+                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">{vendor.user.phone || 'Not provided'}</span>
                                         )}
                                     </div>
                                     <div>
@@ -1468,14 +1552,95 @@ export default function VendorDetailsPage() {
                             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                                 {/* Left column: Slots */}
                                 <div className="space-y-4">
-                                    <div className="border-b border-[#F3F4F6] pb-2 mb-2">
+                                    <div className="border-b border-[#F3F4F6] pb-2 mb-2 flex items-center justify-between">
                                         <h3 className="text-[15px] font-black text-[#111827] flex items-center gap-1.5">
                                             <CalendarClock size={16} className="text-[#299E60]" />
                                             Active Schedule Delivery Slots
                                         </h3>
+                                        {isEditing && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    resetSlotForm();
+                                                    setShowSlotForm(true);
+                                                }}
+                                                className="h-[30px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold hover:bg-[#238a54] transition-colors flex items-center gap-1"
+                                            >
+                                                + Add Slot
+                                            </button>
+                                        )}
                                     </div>
 
-                                    {vendor.deliverySlots.length === 0 ? (
+                                    {isEditing && showSlotForm && (
+                                        <div className="p-4 border border-[#EEEEEE] bg-[#FAFAFA] rounded-[12px] space-y-4">
+                                            <h4 className="text-[13px] font-bold text-[#111827]">
+                                                {editingSlotId ? 'Edit Delivery Slot' : 'New Delivery Slot'}
+                                            </h4>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-[11px] font-bold text-[#6B7280] mb-1">Day of Week</label>
+                                                    <select
+                                                        value={slotDay}
+                                                        onChange={(e) => setSlotDay(Number(e.target.value))}
+                                                        className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-2 text-[13px] outline-none bg-white font-medium"
+                                                    >
+                                                        <option value={1}>Monday</option>
+                                                        <option value={2}>Tuesday</option>
+                                                        <option value={3}>Wednesday</option>
+                                                        <option value={4}>Thursday</option>
+                                                        <option value={5}>Friday</option>
+                                                        <option value={6}>Saturday</option>
+                                                        <option value={7}>Sunday</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[11px] font-bold text-[#6B7280] mb-1">Start Time</label>
+                                                    <input
+                                                        type="time"
+                                                        value={slotStart}
+                                                        onChange={(e) => setSlotStart(e.target.value)}
+                                                        className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-2 text-[13px] outline-none font-medium"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[11px] font-bold text-[#6B7280] mb-1">End Time</label>
+                                                    <input
+                                                        type="time"
+                                                        value={slotEnd}
+                                                        onChange={(e) => setSlotEnd(e.target.value)}
+                                                        className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-2 text-[13px] outline-none font-medium"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[11px] font-bold text-[#6B7280] mb-1">Cutoff Time</label>
+                                                    <input
+                                                        type="time"
+                                                        value={slotCutoff}
+                                                        onChange={(e) => setSlotCutoff(e.target.value)}
+                                                        className="w-full h-[36px] border border-[#D1D5DB] rounded-[8px] px-2 text-[13px] outline-none font-medium"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 pt-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSaveSlotLocal}
+                                                    className="h-[32px] px-4 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold hover:bg-[#238a54]"
+                                                >
+                                                    Save Slot
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={resetSlotForm}
+                                                    className="h-[32px] px-4 bg-gray-100 text-[#6B7280] rounded-[8px] text-[12px] font-bold hover:bg-gray-200"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {sortedSlots.length === 0 ? (
                                         <div className="p-8 text-center bg-[#F9FAFB] rounded-[12px] border border-dashed border-[#D1D5DB]">
                                             <CalendarClock size={32} className="text-[#AEAEAE] mx-auto mb-2" />
                                             <h4 className="text-[13px] font-bold text-[#374151]">No slots configured</h4>
@@ -1513,6 +1678,44 @@ export default function VendorDetailsPage() {
                                                         )}>
                                                             {slot.isActive ? 'Active' : 'Inactive'}
                                                         </span>
+                                                        {isEditing && (
+                                                            <div className="flex items-center gap-1 ml-1.5 border-l border-[#EEEEEE] pl-1.5">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setEditingSlotId(slot.id);
+                                                                        setSlotDay(typeof slot.dayOfWeek === 'number' ? slot.dayOfWeek : DAY_ORDER.indexOf(slot.dayOfWeek.toUpperCase()) + 1);
+                                                                        setSlotStart(slot.slotStart);
+                                                                        setSlotEnd(slot.slotEnd);
+                                                                        setSlotCutoff(slot.cutoffTime);
+                                                                        setShowSlotForm(true);
+                                                                    }}
+                                                                    className="p-1 text-[#3B82F6] hover:bg-blue-50 rounded"
+                                                                    title="Edit Slot"
+                                                                >
+                                                                    <Edit2 size={13} />
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setDeliverySlots(prev => prev.map(s => s.id === slot.id ? { ...s, isActive: !s.isActive } : s));
+                                                                    }}
+                                                                    className="px-1.5 py-0.5 text-[9px] font-bold text-gray-500 hover:bg-gray-100 rounded border border-gray-200"
+                                                                >
+                                                                    {slot.isActive ? 'Deactivate' : 'Activate'}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setDeliverySlots(prev => prev.filter(s => s.id !== slot.id));
+                                                                    }}
+                                                                    className="p-1 text-[#EF4444] hover:bg-red-50 rounded"
+                                                                    title="Delete Slot"
+                                                                >
+                                                                    <XCircle size={13} />
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}
@@ -1522,14 +1725,39 @@ export default function VendorDetailsPage() {
 
                                 {/* Right column: Coverage */}
                                 <div className="space-y-4">
-                                    <div className="border-b border-[#F3F4F6] pb-2 mb-2">
+                                    <div className="border-b border-[#F3F4F6] pb-2 mb-2 flex items-center justify-between">
                                         <h3 className="text-[15px] font-black text-[#111827] flex items-center gap-1.5">
                                             <MapPinned size={16} className="text-[#3B82F6]" />
                                             Commercial Dispatch Service Areas
                                         </h3>
+                                        {isEditing && (
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Pincode"
+                                                    value={newPincode}
+                                                    onChange={(e) => setNewPincode(e.target.value.replace(/\D/g, ''))}
+                                                    maxLength={10}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            handleAddAreaLocal();
+                                                        }
+                                                    }}
+                                                    className="w-[100px] h-[30px] border border-[#D1D5DB] rounded-[6px] px-2 text-[12px] outline-none focus:border-[#3B82F6] font-medium"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleAddAreaLocal}
+                                                    className="h-[30px] px-3 bg-[#3B82F6] text-white rounded-[6px] text-[12px] font-bold hover:bg-[#2563EB]"
+                                                >
+                                                    Add
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {vendor.serviceAreas.length === 0 ? (
+                                    {serviceAreas.length === 0 ? (
                                         <div className="p-8 text-center bg-[#F9FAFB] rounded-[12px] border border-dashed border-[#D1D5DB]">
                                             <MapPinned size={32} className="text-[#AEAEAE] mx-auto mb-2" />
                                             <h4 className="text-[13px] font-bold text-[#374151]">No coverage pincodes</h4>
@@ -1538,7 +1766,7 @@ export default function VendorDetailsPage() {
                                         <div className="bg-[#FAFAFA] p-5 rounded-[12px] border border-[#E5E7EB]/50">
                                             <p className="text-[11px] font-bold text-[#9CA3AF] uppercase mb-3.5">Eligible Delivery Pincodes</p>
                                             <div className="flex flex-wrap gap-2.5">
-                                                {vendor.serviceAreas.map((area) => (
+                                                {serviceAreas.map((area) => (
                                                     <div
                                                         key={area.id}
                                                         className={cn(
@@ -1554,6 +1782,30 @@ export default function VendorDetailsPage() {
                                                             <span className="text-[9px] uppercase font-black text-[#9CA3AF]">
                                                                 (disabled)
                                                             </span>
+                                                        )}
+                                                        {isEditing && (
+                                                            <div className="flex items-center gap-1 border-l border-current pl-1.5 ml-1">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setServiceAreas(prev => prev.map(sa => sa.id === area.id ? { ...sa, isActive: !sa.isActive } : sa));
+                                                                    }}
+                                                                    className="hover:scale-110 transition-transform text-[10px]"
+                                                                    title={area.isActive ? "Deactivate" : "Activate"}
+                                                                >
+                                                                    ●
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setServiceAreas(prev => prev.filter(sa => sa.id !== area.id));
+                                                                    }}
+                                                                    className="hover:scale-110 transition-transform font-bold text-[#EF4444]"
+                                                                    title="Delete Area"
+                                                                >
+                                                                    ×
+                                                                </button>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 ))}

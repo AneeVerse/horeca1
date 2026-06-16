@@ -4,16 +4,26 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { X, Sparkles, MapPin, Briefcase } from 'lucide-react';
+import { useAddress } from '@/context/AddressContext';
+import { cn } from '@/lib/utils';
 
 const DISMISS_KEY = 'horeca1:profile-nudge-dismissed-until';
 
 type ProfileStatus = {
   isComplete: boolean;
   hasCorePersonalization: boolean;
+  fields: {
+    fullName: boolean;
+    phone: boolean;
+    pincode: boolean;
+    businessName: boolean;
+    gstNumber: boolean;
+  };
 };
 
 export function CompleteProfileBanner() {
   const { data: session, status } = useSession();
+  const { selectedAddress, savedAddresses } = useAddress();
   const [data, setData] = useState<ProfileStatus | null>(null);
   const [hidden, setHidden] = useState(true);
 
@@ -32,13 +42,17 @@ export function CompleteProfileBanner() {
         if (cancelled || !json?.success) return;
         setData(json.data);
         // Hide banner when user has core info (name + business + pincode), even if profileCompletedAt isn't explicitly set
-        if (!json.data.isComplete && !json.data.hasCorePersonalization) setHidden(false);
+        if (!json.data.isComplete && !json.data.hasCorePersonalization) {
+          setHidden(false);
+        } else {
+          setHidden(true);
+        }
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [status]);
+  }, [status, selectedAddress, savedAddresses]);
 
   if (hidden || !data || data.isComplete || data.hasCorePersonalization) return null;
 
@@ -71,12 +85,18 @@ export function CompleteProfileBanner() {
             <p className="text-[14px] font-bold text-orange-900 leading-tight">
               Unlock your personalised feed!
             </p>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-orange-800/80">
-              <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Pincode</span>
-              <span className="text-orange-300">•</span>
-              <span className="inline-flex items-center gap-1"><Briefcase className="h-3 w-3" /> Business</span>
-              <span className="text-orange-300">•</span>
-              <span>Tailored prices</span>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] font-bold">
+              <span className={cn("inline-flex items-center gap-1 transition-colors duration-300", data.fields.pincode ? "text-emerald-700" : "text-orange-600 animate-pulse")}>
+                {data.fields.pincode ? "✓" : "○"} Pincode
+              </span>
+              <span className="text-orange-300 font-normal">•</span>
+              <span className={cn("inline-flex items-center gap-1 transition-colors duration-300", data.fields.businessName ? "text-emerald-700" : "text-orange-600 animate-pulse")}>
+                {data.fields.businessName ? "✓" : "○"} Business
+              </span>
+              <span className="text-orange-300 font-normal">•</span>
+              <span className={cn("inline-flex items-center gap-1 transition-colors duration-300", data.fields.fullName ? "text-emerald-700" : "text-orange-600 animate-pulse")}>
+                {data.fields.fullName ? "✓" : "○"} Full Name
+              </span>
             </div>
           </div>
 

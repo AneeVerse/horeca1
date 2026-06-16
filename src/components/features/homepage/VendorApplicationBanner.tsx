@@ -107,8 +107,11 @@ export function VendorApplicationBanner() {
             <button
               onClick={async () => {
                 localStorage.setItem('vendor_approved_seen', '1');
-                await updateSession();
-                router.push('/vendor/dashboard');
+                const newSession = await updateSession();
+                const activeAccountId = (newSession?.user as { activeBusinessAccountId?: string } | undefined)?.activeBusinessAccountId || (session?.user as { activeBusinessAccountId?: string } | undefined)?.activeBusinessAccountId;
+                const setupKey = activeAccountId ? `vendor_setup_completed_${activeAccountId}` : 'vendor_setup_completed';
+                const setupCompleted = localStorage.getItem(setupKey) || localStorage.getItem('vendor_setup_completed');
+                router.push(setupCompleted ? '/vendor/dashboard' : '/vendor/setup');
               }}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] font-bold bg-white text-green-700 hover:bg-green-50 transition-colors"
             >

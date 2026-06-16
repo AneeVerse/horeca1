@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import {
     Search,
     Star,
@@ -24,8 +25,22 @@ import {
     ArrowUpRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AddVendorWizard } from '@/components/features/admin/AddVendorWizard';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
+
+const AddVendorWizard = dynamic(
+    () => import('@/components/features/admin/AddVendorWizard').then((mod) => mod.AddVendorWizard),
+    {
+        loading: () => (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[9999] flex items-center justify-center">
+                <div className="bg-white rounded-[24px] p-10 flex flex-col items-center gap-3">
+                    <Loader2 className="animate-spin text-[#299E60]" size={36} />
+                    <span className="text-[13px] font-bold text-[#6B7280]">Loading wizard...</span>
+                </div>
+            </div>
+        ),
+        ssr: false,
+    }
+);
 
 interface AdminVendor {
     id: string;
@@ -76,11 +91,15 @@ export default function VendorsPage() {
             .finally(() => setLoading(false));
     }, []);
 
-    const filteredVendors = vendors.filter(vendor =>
-        vendor.businessName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        vendor.user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        vendor.user.fullName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    // Filter search query safely (handles null user fields)
+    const filteredVendors = React.useMemo(() => {
+        const query = searchQuery.toLowerCase();
+        return vendors.filter(vendor =>
+            (vendor.businessName || '').toLowerCase().includes(query) ||
+            (vendor.user?.email || '').toLowerCase().includes(query) ||
+            (vendor.user?.fullName || '').toLowerCase().includes(query)
+        );
+    }, [vendors, searchQuery]);
 
     const toggleVerified = async (vendorId: string, isVerified: boolean) => {
         try {
@@ -98,11 +117,24 @@ export default function VendorsPage() {
         }
     };
 
-    // Calculate metrics for stats cards
-    const totalVendors = vendors.length;
-    const pendingVerification = vendors.filter(v => !v.isVerified).length;
-    const totalProducts = vendors.reduce((sum, v) => sum + (v._count?.products || 0), 0);
-    const totalOrders = vendors.reduce((sum, v) => sum + (v._count?.orders || 0), 0);
+    // Calculate metrics for stats cards using useMemo to optimize re-renders
+    const { totalVendors, pendingVerification, totalProducts, totalOrders } = React.useMemo(() => {
+        const totalVendors = vendors.length;
+        const pendingVerification = vendors.filter(v => !v.isVerified).length;
+        const totalProducts = vendors.reduce((sum, v) => sum + (v._count?.products || 0), 0);
+        const totalOrders = vendors.reduce((sum, v) => sum + (v._count?.orders || 0), 0);
+        return { totalVendors, pendingVerification, totalProducts, totalOrders };
+    }, [vendors]);
+
+    // Show full-page spinner while loading to prevent layout shifts and flash of 0 stats
+    if (loading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3 bg-white rounded-[24px] border border-[#EEEEEE] shadow-sm py-24 m-8">
+                <Loader2 className="animate-spin text-[#299E60]" size={40} />
+                <span className="text-[13px] font-bold text-[#6B7280]">Loading vendors registry...</span>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8 pb-10 px-4 md:px-0">
@@ -215,12 +247,7 @@ export default function VendorsPage() {
                 </div>
             </div>
 
-            {loading ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-3 bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm">
-                    <Loader2 className="animate-spin text-[#299E60]" size={36} />
-                    <span className="text-[13px] font-bold text-[#6B7280]">Loading vendors directory...</span>
-                </div>
-            ) : filteredVendors.length === 0 ? (
+            {filteredVendors.length === 0 ? (
                 <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-24 text-center text-[#6B7280] font-medium shadow-sm">
                     <Building2 className="mx-auto text-[#D1D5DB] mb-3" size={40} />
                     {searchQuery ? (

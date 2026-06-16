@@ -245,7 +245,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           latitude: input.primaryOutlet.latitude,
           longitude: input.primaryOutlet.longitude,
           placeId: input.primaryOutlet.placeId,
-          requiresAddressUpdate: !(input.primaryOutlet.latitude && input.primaryOutlet.longitude),
+          requiresAddressUpdate: false,
         },
       });
       await tx.businessAccount.update({
