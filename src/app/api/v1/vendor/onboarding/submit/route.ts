@@ -15,8 +15,6 @@ import { emitEvent } from '@/events/emitter';
 
 const PHONE_RE = /^\d{10}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const GST_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
 const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const PINCODE_RE = /^\d{6}$/;
 
@@ -198,7 +196,7 @@ async function postHandler(req: NextRequest) {
 
           tradeName: input.tradeName,
           vendorType: input.vendorType,
-          panNumber: input.panNumber,
+          panNumber: input.panNumber || null,
           authorizedPersonName: input.authorizedPersonName,
           authorizedPersonPhone: input.authorizedPersonPhone,
           authorizedPersonEmail: input.authorizedPersonEmail || null,
