@@ -44,9 +44,10 @@ const Body = z.object({
   authorizedPersonPhone: z.string().regex(PHONE_RE, 'Invalid authorized person phone'),
   authorizedPersonEmail: z.string().email().optional().or(z.literal('')),
 
-  // Step 4 — GST & PAN
-  gstNumber: z.string().regex(GST_RE, 'Invalid GSTIN format'),
-  panNumber: z.string().regex(PAN_RE, 'Invalid PAN format'),
+  // Step 4 — GST & PAN — optional, no format check. A vendor can apply before
+  // their KYC docs are ready; admin verifies these at /admin/vendors/[id].
+  gstNumber: z.string().max(20).optional().or(z.literal('')),
+  panNumber: z.string().max(20).optional().or(z.literal('')),
 
   // Step 5 — bank details
   bankAccountName: z.string().min(2).max(100),
@@ -121,7 +122,7 @@ async function postHandler(req: NextRequest) {
           password: hashedPassword,
           fullName: input.fullName,
           businessName: input.businessName,
-          gstNumber: input.gstNumber,
+          gstNumber: input.gstNumber || null,
           pincode: input.billingAddress.pincode,
           role: 'vendor',
           hcidDisplay,
@@ -133,8 +134,8 @@ async function postHandler(req: NextRequest) {
         data: {
           legalName: input.businessName,
           displayName: input.tradeName,
-          gstin: input.gstNumber,
-          pan: input.panNumber,
+          gstin: input.gstNumber || null,
+          pan: input.panNumber || null,
           businessType: 'vendor',
           isCustomer: true,
           isVendor: true,
@@ -183,7 +184,7 @@ async function postHandler(req: NextRequest) {
           isActive: false,
           isVerified: false,
 
-          gstNumber: input.gstNumber,
+          gstNumber: input.gstNumber || null,
           addressLine: input.billingAddress.addressLine,
           city: input.billingAddress.city,
           state: input.billingAddress.state,

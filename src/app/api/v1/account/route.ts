@@ -9,7 +9,6 @@ import { withAuth } from '@/middleware/auth';
 import { prisma } from '@/lib/prisma';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import {
-  GST_RE,
   VendorDetailsSchema,
   PrimaryOutletSchema,
 } from '@/lib/validators/vendor-kyc';
