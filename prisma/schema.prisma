@@ -1841,6 +1841,16 @@ model PriceListItem {
   schemeMinQty    Int?        @map("scheme_min_qty")
   schemeFreeQty   Int?        @map("scheme_free_qty")
 
+  // V2.2 Phase 5 — pricing cell attributes
+  isLocked        Boolean   @default(false) @map("is_locked")
+  validFrom       DateTime? @map("valid_from") @db.Timestamptz
+  validTo         DateTime? @map("valid_to") @db.Timestamptz
+  note            String?   @db.Text
+  scheduledPrice  Decimal?  @map("scheduled_price") @db.Decimal(10, 2)
+  scheduledFrom   DateTime? @map("scheduled_from") @db.Timestamptz
+  scheduledTo     DateTime? @map("scheduled_to") @db.Timestamptz
+  history         Json?     @default("[]")
+
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 

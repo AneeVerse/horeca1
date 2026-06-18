@@ -20,6 +20,9 @@
 # production
 /build
 
+# locally-uploaded vendor KYC documents (served from disk; prod uses a Docker volume)
+/uploads
+
 # misc
 .DS_Store
 *.pem

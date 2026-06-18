@@ -19,6 +19,12 @@ services:
       - REDIS_URL=redis://redis:6379
     env_file:
       - ../.env.production
+    volumes:
+      # Vendor KYC documents (PAN / cheque / GST) live here, served by the app
+      # through an authenticated route. Named volume so they survive image
+      # rebuilds on deploy AND the weekly `docker system prune -af` (we never
+      # pass --volumes). The image creates /app/uploads owned by uid 1001.
+      - uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,3 +112,4 @@ volumes:
   redisdata:
   certbot-etc:
   certbot-var:
+  uploads:

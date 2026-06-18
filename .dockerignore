@@ -8,3 +8,4 @@ docs
 *.md
 local_dump.sql
 .claude
+uploads

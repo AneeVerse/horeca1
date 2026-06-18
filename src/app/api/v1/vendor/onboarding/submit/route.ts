@@ -14,7 +14,6 @@ import { uniqueHcid } from '@/lib/hcid';
 import { emitEvent } from '@/events/emitter';
 
 const PHONE_RE = /^\d{10}$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const PINCODE_RE = /^\d{6}$/;
 
