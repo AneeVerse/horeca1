@@ -57,6 +57,10 @@ export default function ProductDetailPage() {
     const router = useRouter();
     const id = params.id as string;
 
+    useEffect(() => {
+        router.replace('/');
+    }, [router]);
+
     const [apiProduct, setApiProduct] = useState<ApiProduct | null>(null);
     const [pageLoading, setPageLoading] = useState(true);
     const [loadError, setLoadError] = useState(false);

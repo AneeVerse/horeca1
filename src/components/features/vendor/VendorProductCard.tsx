@@ -143,10 +143,6 @@ export const VendorProductCard = React.memo(function VendorProductCard({
 
     const isOutOfStock = product.stock === 0 || product.isActive === false;
 
-    const productHref = isOutOfStock
-        ? '#'
-        : `/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`;
-
     // ── Renders a single bulk-tier pill (used by the desktop grid card).
     //    Directly adds the tier's minimum quantity to the cart on click. ──
     const renderTier = (tier: { price: number; minQty: number }, i: number) => {
@@ -366,7 +362,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({
     const handleShare = async (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        const shareUrl = `${window.location.origin}/product/${product.id}?v=${encodeURIComponent(product.vendorName || '')}&n=${encodeURIComponent(product.name)}&p=${product.price}&i=${encodeURIComponent(product.images[0])}&c=${encodeURIComponent(product.category)}&u=${encodeURIComponent(product.packSize || '')}`;
+        const shareUrl = `${window.location.origin}/vendor/${product.vendorId}`;
         const shareData = { title: product.name, text: `Check out ${product.name} from ${product.vendorName} on Horeca1`, url: shareUrl };
         try {
             if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
@@ -410,14 +406,6 @@ export const VendorProductCard = React.memo(function VendorProductCard({
                     isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_12px_30px_-12px_rgba(83,177,117,0.18)] hover:border-[#53B175]/30"
                 )}
             >
-                {!isOutOfStock && (
-                    <Link
-                        href={productHref}
-                        className="absolute inset-0 z-10"
-                        onClick={onCardClick}
-                        aria-label={product.displayName ?? product.name}
-                    />
-                )}
                 {/* TOP — content (left) + bulk tiers / details (middle) + image+CTA (right) */}
                 <div className="flex gap-3 sm:gap-4 md:gap-6 items-stretch">
                     {/* Left: Product Info */}
@@ -623,14 +611,6 @@ export const VendorProductCard = React.memo(function VendorProductCard({
                         isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_12px_30px_-12px_rgba(83,177,117,0.18)] hover:-translate-y-0.5 hover:border-[#53B175]/30"
                     )}
                 >
-                    {!isOutOfStock && (
-                        <Link
-                            href={productHref}
-                            className="absolute inset-0 z-10"
-                            onClick={onCardClick}
-                            aria-label={product.displayName ?? product.name}
-                        />
-                    )}
                     {/* Full-width Image Container */}
                     <div className="relative w-full aspect-square bg-gradient-to-br from-[#F7FBF8] via-white to-[#F0F7F2] overflow-hidden">
                         {/* Image wrapper centered in the top area (excluding the bottom 30px bar) */}
@@ -752,14 +732,6 @@ export const VendorProductCard = React.memo(function VendorProductCard({
                         isOutOfStock ? "opacity-75 cursor-default" : "hover:shadow-[0_18px_45px_-12px_rgba(83,177,117,0.18)] hover:-translate-y-1 hover:border-[#53B175]/30"
                     )}
                 >
-                    {!isOutOfStock && (
-                        <Link
-                            href={productHref}
-                            className="absolute inset-0 z-10"
-                            onClick={onCardClick}
-                            aria-label={product.displayName ?? product.name}
-                        />
-                    )}
                     <div className="absolute top-4 right-4 z-20">{shareButton}</div>
 
                     <div className="relative aspect-square overflow-hidden rounded-2xl bg-gradient-to-br from-[#F7FBF8] via-white to-[#F0F7F2] flex items-center justify-center">
