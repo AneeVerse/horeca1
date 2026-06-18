@@ -12,6 +12,9 @@ import { resolveVendorId } from '@/lib/resolveVendorId';
 const createSchema = z.object({
   name: z.string().min(1).max(255),
   discountPercent: z.number().min(0).max(100).default(0),
+  // Optional list-level validity window (ISO datetime strings or null).
+  validFrom: z.string().nullable().optional(),
+  validTo: z.string().nullable().optional(),
 });
 
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
@@ -43,6 +46,8 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
         vendorId,
         name: body.name,
         discountPercent: body.discountPercent,
+        validFrom: body.validFrom ? new Date(body.validFrom) : null,
+        validTo: body.validTo ? new Date(body.validTo) : null,
       },
     });
 

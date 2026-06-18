@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Tag, Plus, Loader2, Pencil, Trash2, Package, X, Grid3x3, AlertCircle, ArrowRight } from 'lucide-react';
+import { Tag, Plus, Loader2, Pencil, Trash2, Package, X, Grid3x3, AlertCircle, ArrowRight, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type AssignmentType = 'customer' | 'outlet' | 'pincode' | 'area' | 'segment' | 'brand';
@@ -51,6 +51,8 @@ interface CreateModalProps {
 function CreateModal({ onClose, onCreated }: CreateModalProps) {
   const [name, setName] = useState('');
   const [discountPercent, setDiscountPercent] = useState('0');
+  const [validFrom, setValidFrom] = useState('');
+  const [validTo, setValidTo] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -62,7 +64,12 @@ function CreateModal({ onClose, onCreated }: CreateModalProps) {
       const res = await fetch('/api/v1/vendor/price-lists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), discountPercent: parseFloat(discountPercent) || 0 }),
+        body: JSON.stringify({
+          name: name.trim(),
+          discountPercent: parseFloat(discountPercent) || 0,
+          validFrom: validFrom ? new Date(validFrom).toISOString() : null,
+          validTo: validTo ? new Date(validTo).toISOString() : null,
+        }),
       });
       const json = await res.json();
       if (json.success) {
@@ -111,6 +118,31 @@ function CreateModal({ onClose, onCreated }: CreateModalProps) {
               onChange={(e) => setDiscountPercent(e.target.value)}
               className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
             />
+          </div>
+          <div>
+            <label className="block text-[12px] font-semibold text-[#7C7C7C] mb-1">
+              Validity <span className="text-[#AEAEAE] font-normal">— optional, leave blank for always-on</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-[#AEAEAE] mb-1">Effective from</label>
+                <input
+                  type="date"
+                  value={validFrom}
+                  onChange={(e) => setValidFrom(e.target.value)}
+                  className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-[#AEAEAE] mb-1">Effective to</label>
+                <input
+                  type="date"
+                  value={validTo}
+                  onChange={(e) => setValidTo(e.target.value)}
+                  className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
+                />
+              </div>
+            </div>
           </div>
           {error && <p className="text-[12px] text-[#E74C3C]">{error}</p>}
         </div>
@@ -180,6 +212,14 @@ export default function VendorPriceListsPage() {
           <p className="text-[12px] text-[#AEAEAE]">Give specific customers, areas, or groups their own prices.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/vendor/customer-groups"
+            title="Create groups of customers to give a whole group its own prices"
+            className="flex items-center gap-2 px-4 h-[38px] rounded-[10px] bg-white border border-[#EEEEEE] text-[#7C7C7C] text-[13px] font-bold hover:border-[#299E60]/40 hover:text-[#299E60] transition-colors"
+          >
+            <Users size={15} />
+            Customer groups
+          </Link>
           <Link
             href="/vendor/price-lists/workspace"
             title="Edit prices across all your lists at once"

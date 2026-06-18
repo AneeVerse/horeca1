@@ -218,6 +218,7 @@ model Vendor {
   commissionAccruals CommissionAccrual[]
   coupons            Coupon[]
   cashbackCampaigns  CashbackCampaign[]
+  customerGroups     CustomerGroup[]
 
   // Ordering defaults applied to new products and checkout
   defaultMOQ          Int?      @map("default_moq")
@@ -1812,6 +1813,10 @@ model PriceList {
   // their own discountPercent.
   discountPercent Decimal  @default(0) @map("discount_percent") @db.Decimal(5, 2)
   isActive        Boolean  @default(true) @map("is_active")
+  // List-level validity window. When set, the resolver ignores this list
+  // outside [validFrom, validTo] and the customer falls back to base/other.
+  validFrom       DateTime? @map("valid_from") @db.Timestamptz
+  validTo         DateTime? @map("valid_to") @db.Timestamptz
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -1887,6 +1892,7 @@ enum PriceListAssignmentType {
   area
   segment
   brand
+  group
 
   @@map("price_list_assignment_type")
 }
@@ -1904,10 +1910,14 @@ model PriceListAssignment {
   businessAccountId String?                 @map("business_account_id") @db.Uuid
   outletId          String?                 @map("outlet_id") @db.Uuid
   brandId           String?                 @map("brand_id") @db.Uuid
+  groupId           String?                 @map("group_id") @db.Uuid
   pincode           String?                 @db.VarChar(10)
   area              String?                 @db.VarChar(100)
   segment           String?                 @db.VarChar(100)
   brandName         String?                 @map("brand_name") @db.VarChar(150)
+  // Audit: who wired this assignment and when (shown on the customer profile).
+  assignedById      String?                 @map("assigned_by_id") @db.Uuid
+  assignedAt        DateTime?               @map("assigned_at") @db.Timestamptz
   createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz
 
   priceList       PriceList        @relation(fields: [priceListId], references: [id], onDelete: Cascade)
@@ -1915,6 +1925,7 @@ model PriceListAssignment {
   businessAccount BusinessAccount? @relation("PriceListAssignmentBA", fields: [businessAccountId], references: [id], onDelete: Cascade)
   outlet          Outlet?          @relation("PriceListAssignmentOutlet", fields: [outletId], references: [id], onDelete: Cascade)
   brand           Brand?           @relation("PriceListAssignmentBrand", fields: [brandId], references: [id], onDelete: Cascade)
+  group           CustomerGroup?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@index([priceListId, type])
   @@index([userId])
@@ -1922,7 +1933,41 @@ model PriceListAssignment {
   @@index([outletId])
   @@index([pincode])
   @@index([brandId])
+  @@index([groupId])
   @@map("price_list_assignments")
+}
+
+// Named groups of customers a vendor can target with a price list (spec:
+// "Customer Group"). Membership is by user or business account.
+model CustomerGroup {
+  id        String   @id @default(uuid()) @db.Uuid
+  vendorId  String   @map("vendor_id") @db.Uuid
+  name      String   @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor      Vendor                @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  members     CustomerGroupMember[]
+  assignments PriceListAssignment[]
+
+  @@unique([vendorId, name])
+  @@index([vendorId])
+  @@map("customer_groups")
+}
+
+model CustomerGroupMember {
+  id                String   @id @default(uuid()) @db.Uuid
+  groupId           String   @map("group_id") @db.Uuid
+  // One of these identifies the member; resolver matches either.
+  userId            String?  @map("user_id") @db.Uuid
+  businessAccountId String?  @map("business_account_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  group CustomerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@map("customer_group_members")
 }
 
 // ═══ PROMOTIONS ═══════════════════════════════════════

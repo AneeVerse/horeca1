@@ -51,7 +51,7 @@ const STORAGE_KEYS = {
 
 export function AddressProvider({ children }: { children: React.ReactNode }) {
     const { isLoaded, google } = useGoogleMaps();
-    const { data: session, status } = useSession();
+    const { status } = useSession();
     const [selectedAddress, setSelectedAddressState] = useState<Address | null>(null);
     const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
     const [isDetectingLocation, setIsDetectingLocation] = useState(false);
@@ -120,6 +120,20 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
             } catch { /* ignore */ }
         }
     }, [status, fetchAddressesFromDB]);
+
+    // ─── Sync the selected delivery address into a cookie ────────────────
+    // The server reads `h1_addr` (a SavedAddress id) to drive location-based
+    // pricing off the chosen "Deliver to" address. Only real DB ids (UUIDs)
+    // are written; guest/local ids are ignored so they never mislead pricing.
+    useEffect(() => {
+        try {
+            const id = selectedAddress?.id;
+            const isDbId = !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+            document.cookie = isDbId
+                ? `h1_addr=${id}; path=/; max-age=31536000; SameSite=Lax`
+                : 'h1_addr=; path=/; max-age=0; SameSite=Lax';
+        } catch { /* ignore */ }
+    }, [selectedAddress]);
 
     // ─── refreshAddresses ────────────────────────────────────────────────
 

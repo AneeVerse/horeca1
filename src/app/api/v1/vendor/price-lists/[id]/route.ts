@@ -53,11 +53,12 @@ const itemSchema = z.object({
 // Server validates that the right targeting column is populated for the
 // given `type` (DB CHECK enforces this too — defence in depth).
 const assignmentSchema = z.object({
-  type: z.enum(['customer', 'outlet', 'pincode', 'area', 'segment', 'brand']),
+  type: z.enum(['customer', 'outlet', 'pincode', 'area', 'segment', 'brand', 'group']),
   userId: z.string().uuid().optional(),
   businessAccountId: z.string().uuid().optional(),
   outletId: z.string().uuid().optional(),
   brandId: z.string().uuid().optional(),
+  groupId: z.string().uuid().optional(),
   pincode: z.string().max(10).optional(),
   area: z.string().max(100).optional(),
   segment: z.string().max(100).optional(),
@@ -68,6 +69,9 @@ const patchSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   discountPercent: z.number().min(0).max(100).optional(),
   isActive: z.boolean().optional(),
+  // Optional list-level validity window (ISO datetime strings or null).
+  validFrom: z.string().nullable().optional(),
+  validTo: z.string().nullable().optional(),
   items: z.array(itemSchema).optional(),
   assignments: z.array(assignmentSchema).optional(),
 });
@@ -99,6 +103,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
             businessAccount: { select: { id: true, legalName: true, displayName: true } },
             outlet:          { select: { id: true, name: true, pincode: true, city: true } },
             brand:           { select: { id: true, name: true } },
+            group:           { select: { id: true, name: true } },
           },
         },
       },
@@ -151,7 +156,8 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
         (a.type === 'pincode'  && a.pincode) ||
         (a.type === 'area'     && a.area) ||
         (a.type === 'segment'  && a.segment) ||
-        (a.type === 'brand'    && (a.brandId || a.brandName))
+        (a.type === 'brand'    && (a.brandId || a.brandName)) ||
+        (a.type === 'group'    && a.groupId)
       );
       if (!ok) throw Errors.badRequest(`Assignment of type '${a.type}' is missing its targeting field`);
     }
@@ -171,6 +177,12 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
       const found = await prisma.brand.findMany({ where: { id: { in: brandIds } }, select: { id: true } });
       if (found.length !== brandIds.length) throw Errors.badRequest('One or more brand ids do not exist');
     }
+    // Customer groups must belong to THIS vendor (multi-tenancy).
+    const groupIds = (body.assignments ?? []).flatMap((a) => a.groupId ? [a.groupId] : []);
+    if (groupIds.length > 0) {
+      const found = await prisma.customerGroup.findMany({ where: { id: { in: groupIds }, vendorId }, select: { id: true } });
+      if (found.length !== new Set(groupIds).size) throw Errors.badRequest('One or more customer groups do not belong to this vendor');
+    }
 
     const updated = await prisma.$transaction(async (tx) => {
       const pl = await tx.priceList.update({
@@ -179,6 +191,8 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
           ...(body.name !== undefined && { name: body.name }),
           ...(body.discountPercent !== undefined && { discountPercent: body.discountPercent }),
           ...(body.isActive !== undefined && { isActive: body.isActive }),
+          ...(body.validFrom !== undefined && { validFrom: body.validFrom ? new Date(body.validFrom) : null }),
+          ...(body.validTo !== undefined && { validTo: body.validTo ? new Date(body.validTo) : null }),
         },
       });
 
@@ -241,6 +255,7 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
         // catches any inconsistent target-column shape before commit.
         await tx.priceListAssignment.deleteMany({ where: { priceListId: id } });
         if (body.assignments.length > 0) {
+          const assignedAt = new Date();
           await tx.priceListAssignment.createMany({
             data: body.assignments.map((a) => ({
               priceListId: id,
@@ -249,10 +264,14 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
               businessAccountId: a.type === 'customer' ? a.businessAccountId ?? null : null,
               outletId:          a.type === 'outlet'   ? a.outletId          ?? null : null,
               brandId:           a.type === 'brand'    ? a.brandId           ?? null : null,
+              groupId:           a.type === 'group'    ? a.groupId           ?? null : null,
               pincode:           a.type === 'pincode'  ? a.pincode           ?? null : null,
               area:              a.type === 'area'     ? a.area              ?? null : null,
               segment:           a.type === 'segment'  ? a.segment           ?? null : null,
               brandName:         a.type === 'brand'    ? a.brandName         ?? null : null,
+              // Audit who wired the assignment (shown on the customer profile).
+              assignedById: ctx.userId,
+              assignedAt,
             })),
           });
         }

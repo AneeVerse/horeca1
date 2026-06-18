@@ -66,6 +66,7 @@ export interface ResolveInput {
 export type ResolutionSource =
   | 'pricelist:outlet'
   | 'pricelist:customer'
+  | 'pricelist:group'
   | 'pricelist:segment'
   | 'pricelist:pincode'
   | 'pricelist:area'
@@ -103,7 +104,7 @@ interface ListShape {
 
 type AssignmentShape = Pick<
   PriceListAssignment,
-  'type' | 'userId' | 'businessAccountId' | 'outletId' | 'brandId' | 'pincode' | 'area' | 'segment' | 'brandName'
+  'type' | 'userId' | 'businessAccountId' | 'outletId' | 'brandId' | 'groupId' | 'pincode' | 'area' | 'segment' | 'brandName'
 > & { priceList: ListShape };
 
 interface ProductPricingInput {
@@ -120,6 +121,7 @@ function assignmentEligible(
   customer: CustomerContext,
   product: ProductPricingInput,
   customerTags: ReadonlySet<string>,
+  customerGroups: ReadonlySet<string>,
 ): boolean {
   switch (a.type) {
     case 'outlet':
@@ -129,6 +131,8 @@ function assignmentEligible(
         (!!a.userId && a.userId === customer.userId) ||
         (!!a.businessAccountId && a.businessAccountId === customer.businessAccountId)
       );
+    case 'group':
+      return !!a.groupId && customerGroups.has(a.groupId);
     case 'segment':
       return !!a.segment && customerTags.has(a.segment.toLowerCase());
     case 'pincode':
@@ -196,28 +200,41 @@ function applyListForProduct(
 const ORDERED_TYPES: Array<{ type: PriceListAssignment['type']; key: ResolutionSource }> = [
   { type: 'outlet',   key: 'pricelist:outlet' },
   { type: 'customer', key: 'pricelist:customer' },
+  { type: 'group',    key: 'pricelist:group' },
   { type: 'segment',  key: 'pricelist:segment' },
   { type: 'pincode',  key: 'pricelist:pincode' },
   { type: 'area',     key: 'pricelist:area' },
   { type: 'brand',    key: 'pricelist:brand' },
 ];
 
-// Levels 1–6 of the chain: assignment-driven price lists.
+// Levels 1–7 of the chain: assignment-driven price lists.
 function evaluateAssignmentChain(
   assignments: AssignmentShape[],
   customer: CustomerContext,
   product: ProductPricingInput,
   quantity: number,
   customerTags: ReadonlySet<string>,
+  customerGroups: ReadonlySet<string>,
 ): ResolutionResult | null {
   for (const { type, key } of ORDERED_TYPES) {
     for (const a of assignments) {
-      if (a.type !== type || !assignmentEligible(a, customer, product, customerTags)) continue;
+      if (a.type !== type || !assignmentEligible(a, customer, product, customerTags, customerGroups)) continue;
       const r = applyListForProduct(a.priceList, product.id, product.basePrice, quantity, key);
       if (r) return r;
     }
   }
   return null;
+}
+
+// List-level validity window filter (shared by both resolvers). A list with
+// null bounds is always live; otherwise `now` must be within [validFrom, validTo].
+function priceListLiveWhere(now: Date) {
+  return {
+    AND: [
+      { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+      { OR: [{ validTo: null }, { validTo: { gte: now } }] },
+    ],
+  };
 }
 
 const ITEM_SELECT = {
@@ -239,7 +256,8 @@ export async function resolveUnitPrice(
   // Single round-trip: pull product + its brand + all candidate pricing
   // sources in parallel. We over-fetch (everything the priority chain
   // might consult) so we don't pay a second roundtrip per fallthrough.
-  const [product, vendorCustomer, customerProductOverride, slabs, assignments] =
+  const now = new Date();
+  const [product, vendorCustomer, customerProductOverride, slabs, assignments, groupMemberships] =
     await Promise.all([
       db.product.findFirst({
         where: { id: input.productId, vendorId: input.vendorId },
@@ -272,18 +290,19 @@ export async function resolveUnitPrice(
         orderBy: { minQty: 'desc' },
         select: { minQty: true, maxQty: true, price: true },
       }),
-      // Every active assignment that COULD match this customer/product
-      // pair. We filter in memory — way fewer rules in play per vendor
-      // than products, and a clever OR query would be unreadable.
+      // Every active, in-window assignment that COULD match this
+      // customer/product pair. We filter in memory — way fewer rules in
+      // play per vendor than products.
       db.priceListAssignment.findMany({
         where: {
-          priceList: { vendorId: input.vendorId, isActive: true },
+          priceList: { vendorId: input.vendorId, isActive: true, ...priceListLiveWhere(now) },
           OR: [
             { type: 'outlet', outletId: input.customer.outletId ?? undefined },
             { type: 'customer', userId: input.customer.userId },
             ...(input.customer.businessAccountId
               ? [{ type: 'customer' as const, businessAccountId: input.customer.businessAccountId }]
               : []),
+            { type: 'group' },    // groups matched in memory against memberships
             { type: 'segment' },  // segments matched in memory against tags
             ...(input.customer.outletPincode
               ? [{ type: 'pincode' as const, pincode: input.customer.outletPincode }]
@@ -302,6 +321,17 @@ export async function resolveUnitPrice(
           },
         },
       }),
+      // Which of this vendor's customer-groups the buyer belongs to.
+      db.customerGroupMember.findMany({
+        where: {
+          group: { vendorId: input.vendorId },
+          OR: [
+            { userId: input.customer.userId },
+            ...(input.customer.businessAccountId ? [{ businessAccountId: input.customer.businessAccountId }] : []),
+          ],
+        },
+        select: { groupId: true },
+      }),
     ]);
 
   if (!product) {
@@ -318,15 +348,16 @@ export async function resolveUnitPrice(
   const customerTags = new Set(
     [...(input.customer.tags ?? []), ...(vendorCustomer?.tags ?? [])].map((t) => t.toLowerCase()),
   );
+  const customerGroups = new Set(groupMemberships.map((m) => m.groupId));
 
-  // ── 1–6. Assignment-driven price lists ─────────────────────────────
-  const chained = evaluateAssignmentChain(assignments, input.customer, productInput, input.quantity, customerTags);
+  // ── 1–7. Assignment-driven price lists ─────────────────────────────
+  const chained = evaluateAssignmentChain(assignments, input.customer, productInput, input.quantity, customerTags, customerGroups);
   if (chained) return chained;
 
-  // 7. Legacy VendorCustomer.priceListId
+  // 8. Legacy VendorCustomer.priceListId
   if (vendorCustomer?.priceListId) {
     const list = await db.priceList.findFirst({
-      where: { id: vendorCustomer.priceListId, vendorId: input.vendorId, isActive: true },
+      where: { id: vendorCustomer.priceListId, vendorId: input.vendorId, isActive: true, ...priceListLiveWhere(now) },
       select: {
         id: true,
         discountPercent: true,
@@ -390,16 +421,18 @@ export async function resolveCatalogPrices(
   const productIds = [...new Set(products.map((p) => p.id))];
   const vendorIds = [...new Set(products.map((p) => p.vendorId))];
 
-  const [assignments, vendorCustomers, overrides, brandMappings] = await Promise.all([
+  const now = new Date();
+  const [assignments, vendorCustomers, overrides, brandMappings, groupMemberships] = await Promise.all([
     db.priceListAssignment.findMany({
       where: {
-        priceList: { vendorId: { in: vendorIds }, isActive: true },
+        priceList: { vendorId: { in: vendorIds }, isActive: true, ...priceListLiveWhere(now) },
         OR: [
           { type: 'outlet', outletId: customer.outletId ?? undefined },
           { type: 'customer', userId: customer.userId },
           ...(customer.businessAccountId
             ? [{ type: 'customer' as const, businessAccountId: customer.businessAccountId }]
             : []),
+          { type: 'group' },
           { type: 'segment' },
           ...(customer.outletPincode
             ? [{ type: 'pincode' as const, pincode: customer.outletPincode }]
@@ -431,7 +464,18 @@ export async function resolveCatalogPrices(
       where: { distributorProductId: { in: productIds }, status: { in: ['verified', 'auto_mapped'] } },
       select: { distributorProductId: true, brandId: true },
     }),
+    db.customerGroupMember.findMany({
+      where: {
+        group: { vendorId: { in: vendorIds } },
+        OR: [
+          { userId: customer.userId },
+          ...(customer.businessAccountId ? [{ businessAccountId: customer.businessAccountId }] : []),
+        ],
+      },
+      select: { groupId: true },
+    }),
   ]);
+  const customerGroups = new Set(groupMemberships.map((m) => m.groupId));
 
   const vcByVendor = new Map(vendorCustomers.map((vc) => [vc.vendorId, vc]));
 
@@ -439,7 +483,7 @@ export async function resolveCatalogPrices(
   const legacyListIds = vendorCustomers.flatMap((vc) => (vc.priceListId ? [vc.priceListId] : []));
   const legacyLists = legacyListIds.length
     ? await db.priceList.findMany({
-        where: { id: { in: legacyListIds }, vendorId: { in: vendorIds }, isActive: true },
+        where: { id: { in: legacyListIds }, vendorId: { in: vendorIds }, isActive: true, ...priceListLiveWhere(now) },
         select: {
           id: true,
           vendorId: true,
@@ -480,13 +524,14 @@ export async function resolveCatalogPrices(
       mappedBrandIds: brandIdsByProduct.get(p.id) ?? new Set(),
     };
 
-    // 1–6. Assignment chain (scoped to this product's vendor)
+    // 1–7. Assignment chain (scoped to this product's vendor)
     let result = evaluateAssignmentChain(
       assignmentsByVendor.get(p.vendorId) ?? [],
       customer,
       productInput,
       quantity,
       customerTags,
+      customerGroups,
     );
 
     // 7. Legacy mapping

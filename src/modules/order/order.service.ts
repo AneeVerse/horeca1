@@ -9,6 +9,7 @@ import {
   findApplicableRule as findApplicableCommissionRule,
 } from '@/modules/commission/commission.service';
 import { resolveUnitPrice, type CustomerContext } from '@/modules/pricing/pricing.service';
+import { getDeliveryGeo } from '@/lib/deliveryLocation';
 import { CartService, type CartContext } from '@/modules/cart/cart.service';
 import { creditWalletService } from '@/modules/credit/creditWallet.service';
 import {
@@ -77,6 +78,9 @@ export class OrderService {
       throw Errors.badRequest('Active outlet needs its address completed before placing orders');
     }
     const deliveryAddressSnapshot: Prisma.InputJsonValue = { ...outlet };
+    // Location pricing follows the chosen "Deliver to" address (server-trusted
+    // via the address id cookie), so the order total matches the cart/storefront.
+    const deliveryGeo = await getDeliveryGeo(userId);
     const isDraft = input.saveDraft === true;
     return prisma.$transaction(async (tx) => {
       const orders: Array<{
@@ -160,9 +164,9 @@ export class OrderService {
           userId,
           businessAccountId,
           outletId,
-          outletPincode: outlet.pincode,
-          outletCity: outlet.city,
-          outletState: outlet.state,
+          outletPincode: deliveryGeo?.pincode ?? outlet.pincode,
+          outletCity: deliveryGeo?.city ?? outlet.city,
+          outletState: deliveryGeo?.state ?? outlet.state,
           tags: vendorCustomer?.tags ?? [],
         };
 

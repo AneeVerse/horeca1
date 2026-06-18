@@ -18,6 +18,7 @@
 
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { getDeliveryGeo } from '@/lib/deliveryLocation';
 import {
   resolveCatalogPrices,
   type CatalogPrice,
@@ -51,13 +52,17 @@ export async function getCatalogCustomerContext(): Promise<CustomerContext | nul
       })
     : null;
 
+  // If the buyer picked a "Deliver to" address, location pricing follows IT,
+  // not the registered outlet. Falls back to the outlet when nothing is chosen.
+  const delivery = await getDeliveryGeo(session.user.id);
+
   return {
     userId: session.user.id,
     businessAccountId: (u.activeBusinessAccountId as string) ?? null,
     outletId,
-    outletPincode: outlet?.pincode ?? null,
-    outletCity: outlet?.city ?? null,
-    outletState: outlet?.state ?? null,
+    outletPincode: delivery?.pincode ?? outlet?.pincode ?? null,
+    outletCity: delivery?.city ?? outlet?.city ?? null,
+    outletState: delivery?.state ?? outlet?.state ?? null,
     tags: [], // per-vendor CRM tags are merged inside the resolver
   };
 }

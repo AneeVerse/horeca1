@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
 import { resolveUnitPrice, type CustomerContext } from '@/modules/pricing/pricing.service';
+import { getDeliveryGeo } from '@/lib/deliveryLocation';
 
 /**
  * V2.2: cart is keyed by (userId, businessAccountId, outletId). Every method
@@ -38,13 +39,16 @@ export class CartService {
       where: { vendorId_userId: { vendorId, userId: ctx.userId } },
       select: { tags: true },
     });
+    // Location pricing follows the chosen "Deliver to" address when present,
+    // so the cart price matches what the storefront showed.
+    const delivery = await getDeliveryGeo(ctx.userId);
     return {
       userId: ctx.userId,
       businessAccountId: ctx.businessAccountId,
       outletId: ctx.outletId,
-      outletPincode: outlet?.pincode ?? null,
-      outletCity: outlet?.city ?? null,
-      outletState: outlet?.state ?? null,
+      outletPincode: delivery?.pincode ?? outlet?.pincode ?? null,
+      outletCity: delivery?.city ?? outlet?.city ?? null,
+      outletState: delivery?.state ?? outlet?.state ?? null,
       tags: vc?.tags ?? [],
     };
   }

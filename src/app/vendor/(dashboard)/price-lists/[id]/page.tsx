@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 // ── Types ─────────────────────────────────────────────────────────────
 
 type PricingType = 'fixed' | 'discount' | 'special' | 'scheme';
-type AssignmentType = 'customer' | 'outlet' | 'pincode' | 'area' | 'segment' | 'brand';
+type AssignmentType = 'customer' | 'outlet' | 'pincode' | 'area' | 'segment' | 'brand' | 'group';
 
 interface ProductSummary {
   id: string;
@@ -60,6 +60,7 @@ interface ApiAssignment {
   businessAccountId: string | null;
   outletId: string | null;
   brandId: string | null;
+  groupId: string | null;
   pincode: string | null;
   area: string | null;
   segment: string | null;
@@ -68,6 +69,9 @@ interface ApiAssignment {
   businessAccount: { id: string; legalName: string; displayName: string | null } | null;
   outlet: { id: string; name: string; pincode: string | null; city: string | null } | null;
   brand: { id: string; name: string } | null;
+  group: { id: string; name: string } | null;
+  assignedById?: string | null;
+  assignedAt?: string | null;
 }
 
 interface PriceListDetail {
@@ -75,6 +79,8 @@ interface PriceListDetail {
   name: string;
   discountPercent: number;
   isActive: boolean;
+  validFrom: string | null;
+  validTo: string | null;
   items: ApiPriceListItem[];
   customers: Array<{ id: string; user: { fullName: string; businessName: string | null } }>;
   assignments: ApiAssignment[];
@@ -86,6 +92,7 @@ interface AssignmentDraft {
   outletId?: string;
   brandId?: string;
   brandName?: string;
+  groupId?: string;
   pincode?: string;
   area?: string;
   segment?: string;
@@ -96,6 +103,7 @@ interface AssignmentDraft {
 interface VendorCustomerOption { userId: string; label: string }
 interface OutletOption { id: string; name: string; city: string | null; pincode: string | null; businessName?: string | null }
 interface BrandOption { id: string; name: string }
+interface GroupOption { id: string; name: string }
 
 // ── Component ─────────────────────────────────────────────────────────
 
@@ -111,6 +119,10 @@ export default function PriceListDetailPage() {
   const [name, setName] = useState('');
   const [discountPercent, setDiscountPercent] = useState('0');
   const [isActive, setIsActive] = useState(true);
+  // Validity window (optional). Stored as yyyy-MM-dd for the date inputs;
+  // converted to/from ISO datetime at the API boundary.
+  const [validFrom, setValidFrom] = useState('');
+  const [validTo, setValidTo] = useState('');
   const [items, setItems] = useState<ItemDraft[]>([]);
   const [assignments, setAssignments] = useState<AssignmentDraft[]>([]);
   // Bulk upload strip is tucked away by default — power feature, opt-in.
@@ -129,6 +141,7 @@ export default function PriceListDetailPage() {
   const [outletOpts, setOutletOpts] = useState<OutletOption[]>([]);
   const [brandOpts, setBrandOpts] = useState<BrandOption[]>([]);
   const [customerOpts, setCustomerOpts] = useState<VendorCustomerOption[]>([]);
+  const [groupOpts, setGroupOpts] = useState<GroupOption[]>([]);
 
   // Bulk upload state
   const bulkFileRef = useRef<HTMLInputElement>(null);
@@ -147,6 +160,8 @@ export default function PriceListDetailPage() {
       setName(pl.name);
       setDiscountPercent(String(pl.discountPercent));
       setIsActive(pl.isActive);
+      setValidFrom(isoToDateInput(pl.validFrom));
+      setValidTo(isoToDateInput(pl.validTo));
       setItems(
         pl.items.map((item) => ({
           productId: item.productId,
@@ -165,6 +180,7 @@ export default function PriceListDetailPage() {
           outletId:  a.outletId ?? undefined,
           brandId:   a.brandId ?? undefined,
           brandName: a.brandName ?? undefined,
+          groupId:   a.groupId ?? undefined,
           pincode:   a.pincode ?? undefined,
           area:      a.area ?? undefined,
           segment:   a.segment ?? undefined,
@@ -200,10 +216,17 @@ export default function PriceListDetailPage() {
           setBrandOpts(list.map((b) => ({ id: b.id, name: b.name })));
         }
       }
+      if (type === 'group' && groupOpts.length === 0) {
+        const j = await fetch('/api/v1/vendor/customer-groups').then((r) => r.json());
+        if (j.success) {
+          const list = (j.data ?? []) as Array<{ id: string; name: string }>;
+          setGroupOpts(list.map((g) => ({ id: g.id, name: g.name })));
+        }
+      }
     } catch {
       toast.error('Could not load options — check your connection and retry');
     }
-  }, [outletOpts.length, brandOpts.length, customerOpts.length]);
+  }, [outletOpts.length, brandOpts.length, customerOpts.length, groupOpts.length]);
 
   // ── Product search (debounced) ─────────────────────────────────────
   useEffect(() => {
@@ -251,7 +274,7 @@ export default function PriceListDetailPage() {
 
   // ── Assignments management ────────────────────────────────────────
   const addAssignment = () => {
-    const draft = buildAssignmentDraft(newAssignType, newAssignValue, { outletOpts, brandOpts, customerOpts });
+    const draft = buildAssignmentDraft(newAssignType, newAssignValue, { outletOpts, brandOpts, customerOpts, groupOpts });
     if (!draft) {
       toast.error('Pick or type a value for the assignment');
       return;
@@ -381,6 +404,7 @@ export default function PriceListDetailPage() {
         if (a.outletId)  out.outletId = a.outletId;
         if (a.brandId)   out.brandId = a.brandId;
         if (a.brandName) out.brandName = a.brandName;
+        if (a.groupId)   out.groupId = a.groupId;
         if (a.pincode)   out.pincode = a.pincode;
         if (a.area)      out.area = a.area;
         if (a.segment)   out.segment = a.segment;
@@ -394,6 +418,8 @@ export default function PriceListDetailPage() {
           name: name.trim(),
           discountPercent: parseFloat(discountPercent) || 0,
           isActive,
+          validFrom: dateInputToIso(validFrom),
+          validTo: dateInputToIso(validTo),
           items: itemsPayload,
           assignments: assignmentsPayload,
         }),
@@ -480,6 +506,36 @@ export default function PriceListDetailPage() {
           />
         </div>
 
+        {/* Validity window (optional) */}
+        <div className="pt-1 border-t border-[#F5F5F5]">
+          <label className="block text-[12px] font-semibold text-[#7C7C7C] mb-2 pt-3">
+            Validity <span className="text-[#AEAEAE] font-normal">(optional)</span>
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] text-[#AEAEAE] mb-1">Effective From</label>
+              <input
+                type="date"
+                value={validFrom}
+                onChange={(e) => setValidFrom(e.target.value)}
+                className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] text-[#AEAEAE] mb-1">Effective To</label>
+              <input
+                type="date"
+                value={validTo}
+                onChange={(e) => setValidTo(e.target.value)}
+                className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-[#AEAEAE] mt-1.5">
+            Outside these dates this list&apos;s prices don&apos;t apply — customers see normal pricing.
+          </p>
+        </div>
+
         <div className="flex items-center gap-6 pt-1 text-[12px] text-[#7C7C7C]">
           <div className="flex items-center gap-1.5">
             <Package size={13} />
@@ -531,6 +587,7 @@ export default function PriceListDetailPage() {
                   <option value="pincode">Pincode</option>
                   <option value="area">Area (City/State)</option>
                   <option value="segment">Customer segment (tag)</option>
+                  <option value="group">Customer group</option>
                   <option value="customer">Specific customer</option>
                   <option value="outlet">Specific outlet</option>
                   <option value="brand">Brand</option>
@@ -545,6 +602,7 @@ export default function PriceListDetailPage() {
                   outletOpts={outletOpts}
                   brandOpts={brandOpts}
                   customerOpts={customerOpts}
+                  groupOpts={groupOpts}
                 />
               </div>
             </div>
@@ -925,7 +983,7 @@ function ItemRow({
 
 // ── Assignment value picker ──────────────────────────────────────────
 function AssignmentValuePicker({
-  type, value, onChange, outletOpts, brandOpts, customerOpts,
+  type, value, onChange, outletOpts, brandOpts, customerOpts, groupOpts,
 }: {
   type: AssignmentType;
   value: string;
@@ -933,6 +991,7 @@ function AssignmentValuePicker({
   outletOpts: OutletOption[];
   brandOpts: BrandOption[];
   customerOpts: VendorCustomerOption[];
+  groupOpts: GroupOption[];
 }) {
   const base = 'w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] bg-white';
   if (type === 'pincode') {
@@ -979,10 +1038,36 @@ function AssignmentValuePicker({
       </select>
     );
   }
+  if (type === 'group') {
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={base}>
+        <option value="">— select group —</option>
+        {groupOpts.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+      </select>
+    );
+  }
   return null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
+
+// Convert a stored ISO datetime (or null) into a yyyy-MM-dd value for a
+// native <input type="date">. Returns '' when there's no date.
+function isoToDateInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
+// Convert a yyyy-MM-dd date-input value back into an ISO datetime string,
+// or null when the field is blank.
+function dateInputToIso(value: string): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
 
 const ASSIGN_STYLE: Record<AssignmentType, { bg: string; text: string }> = {
   customer: { bg: 'bg-blue-50',    text: 'text-blue-700' },
@@ -991,6 +1076,7 @@ const ASSIGN_STYLE: Record<AssignmentType, { bg: string; text: string }> = {
   area:     { bg: 'bg-purple-50',  text: 'text-purple-700' },
   segment:  { bg: 'bg-pink-50',    text: 'text-pink-700' },
   brand:    { bg: 'bg-indigo-50',  text: 'text-indigo-700' },
+  group:    { bg: 'bg-teal-50',    text: 'text-teal-700' },
 };
 
 function assignmentChipLabel(a: ApiAssignment): string {
@@ -1001,13 +1087,14 @@ function assignmentChipLabel(a: ApiAssignment): string {
     case 'area':     return a.area ?? '?';
     case 'segment':  return a.segment ?? '?';
     case 'brand':    return a.brand?.name ?? a.brandName ?? '?';
+    case 'group':    return a.group?.name ?? a.groupId ?? '?';
   }
 }
 
 function buildAssignmentDraft(
   type: AssignmentType,
   value: string,
-  opts: { outletOpts: OutletOption[]; brandOpts: BrandOption[]; customerOpts: VendorCustomerOption[] },
+  opts: { outletOpts: OutletOption[]; brandOpts: BrandOption[]; customerOpts: VendorCustomerOption[]; groupOpts: GroupOption[] },
 ): AssignmentDraft | null {
   const v = value.trim();
   if (!v) return null;
@@ -1028,6 +1115,10 @@ function buildAssignmentDraft(
     case 'customer': {
       const c = opts.customerOpts.find((x) => x.userId === v);
       return { type, userId: v, label: c?.label ?? v };
+    }
+    case 'group': {
+      const g = opts.groupOpts.find((x) => x.id === v);
+      return { type, groupId: v, label: g?.name ?? v };
     }
   }
 }

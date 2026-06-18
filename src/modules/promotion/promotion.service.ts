@@ -19,6 +19,7 @@ import { prisma } from '@/lib/prisma';
 import type { Prisma, Coupon, CashbackEntry } from '@prisma/client';
 import { Errors } from '@/middleware/errorHandler';
 import { resolveUnitPrice, type CustomerContext } from '@/modules/pricing/pricing.service';
+import { getDeliveryGeo } from '@/lib/deliveryLocation';
 
 type Db = Prisma.TransactionClient;
 
@@ -678,6 +679,9 @@ export const promotionService = {
     // cart/checkout so the preview equals the order.
     const draftsByVendor = new Map<string, CheckoutOrderDraft>();
     let taxableTotal = 0;
+    // Same delivery-location rule as cart/checkout so the cashback preview
+    // prices match the order the customer will actually place.
+    const deliveryGeo = await getDeliveryGeo(args.userId);
     for (const item of args.items) {
       const product = productById.get(item.productId);
       if (!product) continue;
@@ -685,9 +689,9 @@ export const promotionService = {
         userId: args.userId,
         businessAccountId: args.businessAccountId,
         outletId: args.outletId,
-        outletPincode: outlet?.pincode ?? null,
-        outletCity: outlet?.city ?? null,
-        outletState: outlet?.state ?? null,
+        outletPincode: deliveryGeo?.pincode ?? outlet?.pincode ?? null,
+        outletCity: deliveryGeo?.city ?? outlet?.city ?? null,
+        outletState: deliveryGeo?.state ?? outlet?.state ?? null,
         tags: tagsByVendor.get(item.vendorId) ?? [],
       };
       const resolved = await resolveUnitPrice(

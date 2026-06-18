@@ -9,6 +9,7 @@
 // here as final per-cell prices — the brief stores final prices, not formulas.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
@@ -24,6 +25,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     const params = req.nextUrl.searchParams;
     const search = params.get('search')?.trim() || undefined;
     const categoryId = params.get('categoryId') || undefined;
+    const brandId = params.get('brandId') || undefined;
+    const collectionId = params.get('collectionId') || undefined;
     const cursor = params.get('cursor') || undefined;
     const limit = Math.min(Number(params.get('limit')) || 50, 200);
 
@@ -33,11 +36,21 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       orderBy: { createdAt: 'asc' },
     });
 
-    const where = {
+    const where: Prisma.ProductWhereInput = {
       vendorId,
       isActive: true,
       ...NOT_TOMBSTONED,
       ...(categoryId ? { categoryId } : {}),
+      // Brand filter: product is mapped to this brand via a verified or
+      // auto-mapped BrandProductMapping row.
+      ...(brandId
+        ? { brandMappings: { some: { brandId, status: { in: ['verified', 'auto_mapped'] } } } }
+        : {}),
+      // Collection filter: product belongs to this collection via the
+      // CollectionProduct join.
+      ...(collectionId
+        ? { collectionProducts: { some: { collectionId } } }
+        : {}),
       ...(search
         ? { OR: [
             { name: { contains: search, mode: 'insensitive' as const } },
@@ -77,8 +90,20 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     const hasMore = products.length > limit;
     if (hasMore) products.pop();
 
+    type CellData = {
+      price: number | null;
+      isLocked: boolean;
+      validFrom: string | null;
+      validTo: string | null;
+      note: string | null;
+      scheduledPrice: number | null;
+      scheduledFrom: string | null;
+      scheduledTo: string | null;
+      history: unknown[];
+    };
+
     const rows = products.map((p) => {
-      const cells: Record<string, any> = {};
+      const cells: Record<string, CellData | null> = {};
       for (const it of p.priceListItems) {
         let price: number | null = null;
         if (it.customPrice != null) {
