@@ -1,10 +1,9 @@
 import React, { Suspense } from 'react';
 import type { Metadata } from "next";
-import { Quicksand, Poppins } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { Inter, Playfair_Display } from "next/font/google";
+import { Inter } from "next/font/google";
 import { CartProvider } from "@/context/CartContext";
 import { GoogleMapsProvider } from "@/components/providers/GoogleMapsProvider";
 import { AddressProvider } from "@/context/AddressContext";
@@ -17,28 +16,10 @@ import { ScrollRestoration } from '@/components/layout/ScrollRestoration';
 import { PostLoginAccountSelector } from '@/components/auth/PostLoginAccountSelector';
 import { OutletCompletionBanner } from '@/components/auth/OutletCompletionBanner';
 
-const quicksand = Quicksand({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-quicksand",
-});
-
-const poppins = Poppins({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-poppins",
-});
-
 const inter = Inter({
   subsets: ["latin"],
-  weight: ["200", "300", "400", "500", "600", "700", "800", "900"],
+  weight: ["200", "300", "400", "500", "600"],
   variable: "--font-inter",
-});
-
-const playfair = Playfair_Display({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800", "900"],
-  variable: "--font-playfair",
 });
 
 export const metadata: Metadata = {
@@ -57,7 +38,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${quicksand.variable} ${inter.variable} ${poppins.variable} ${playfair.variable}`}>
+    <html lang="en" className={`${inter.variable}`}>
       <body className="font-sans antialiased bg-background">
         <AuthProvider>
           <GoogleMapsProvider>

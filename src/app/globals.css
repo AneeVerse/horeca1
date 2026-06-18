@@ -11,6 +11,11 @@
   --color-text: #0f172a;
   --color-text-muted: #64748b;
   --color-border: #e2e8f0;
+
+  --font-weight-medium: 500;
+  --font-weight-semibold: 500;
+  --font-weight-bold: 500;
+  --font-weight-extrabold: 600;
 }
 
 :root {
@@ -70,9 +75,15 @@
   /* Inter reads best with slightly tighter tracking at display sizes */
   h1, h2, h3 {
     letter-spacing: -0.02em;
+    font-weight: 500;
   }
   h4, h5, h6 {
     letter-spacing: -0.01em;
+    font-weight: 500;
+  }
+
+  strong, b {
+    font-weight: 500;
   }
 
   /* Keep prices and quantities aligned in tables and slab tiers */
