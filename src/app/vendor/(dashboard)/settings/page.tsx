@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Loader2, Save, MapPin, Clock, User, Store, Plus, X, Trash2, Pencil, Users, Eye, EyeOff, FileText, CheckCircle2, AlertCircle, Settings2, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -128,9 +128,11 @@ export default function VendorSettingsPage() {
     const [returnPolicy, setReturnPolicy] = useState('');
     const [cancellationPolicy, setCancellationPolicy] = useState('');
 
-    // Documents state
+    // Documents state — direct file upload (file is sent to our droplet, not ImageKit)
     const [documents, setDocuments] = useState<VendorDocument[]>([]);
-    const [docForm, setDocForm] = useState({ type: 'fssai' as VendorDocument['type'], fileUrl: '', fileName: '' });
+    const [docType, setDocType] = useState<VendorDocument['type']>('fssai');
+    const [docFile, setDocFile] = useState<File | null>(null);
+    const docFileRef = useRef<HTMLInputElement>(null);
     const [uploadingDoc, setUploadingDoc] = useState(false);
 
     const fetchSettings = useCallback(async () => {
@@ -187,18 +189,32 @@ export default function VendorSettingsPage() {
     useEffect(() => { fetchSettings(); fetchDocuments(); }, [fetchSettings, fetchDocuments]);
 
     const handleUploadDoc = async () => {
-        if (!docForm.fileUrl || !docForm.fileName) return;
+        if (!docFile) return;
+        // Guard mirrors the server allow-list so we fail fast with a clear message.
+        const ALLOWED = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+        if (!ALLOWED.includes(docFile.type)) {
+            toast.error('Unsupported file. Use PDF, JPG, PNG or WebP.');
+            return;
+        }
+        if (docFile.size > 10 * 1024 * 1024) {
+            toast.error('File too large. Max size is 10MB.');
+            return;
+        }
         try {
             setUploadingDoc(true);
-            const res = await fetch('/api/v1/vendor/documents', {
+            const fd = new FormData();
+            fd.append('file', docFile);
+            fd.append('type', docType);
+            const res = await fetch('/api/v1/vendor/documents/upload', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(docForm),
+                body: fd,
             });
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Upload failed');
             await fetchDocuments();
-            setDocForm({ type: 'fssai', fileUrl: '', fileName: '' });
+            setDocFile(null);
+            setDocType('fssai');
+            if (docFileRef.current) docFileRef.current.value = '';
             toast.success('Document uploaded');
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Upload failed');
@@ -969,36 +985,57 @@ export default function VendorSettingsPage() {
                         </div>
                     )}
 
-                    {/* Upload form */}
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {/* Upload form — pick a file straight from the computer */}
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <select
-                            value={docForm.type}
-                            onChange={e => setDocForm(f => ({ ...f, type: e.target.value as VendorDocument['type'] }))}
+                            value={docType}
+                            onChange={e => setDocType(e.target.value as VendorDocument['type'])}
                             className="h-[44px] border border-[#EEEEEE] rounded-[10px] px-3 text-[14px] outline-none focus:border-[#299E60]/40 bg-white"
                         >
                             {Object.entries(DOC_TYPE_LABELS).map(([val, label]) => (
                                 <option key={val} value={val}>{label}</option>
                             ))}
                         </select>
-                        <input type="text" placeholder="File URL (from ImageKit)"
-                            value={docForm.fileUrl}
-                            onChange={e => setDocForm(f => ({ ...f, fileUrl: e.target.value }))}
-                            className="h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40"
+
+                        {/* Hidden native input + styled trigger so it matches the rest of the form */}
+                        <input
+                            ref={docFileRef}
+                            type="file"
+                            accept="application/pdf,image/jpeg,image/png,image/webp"
+                            onChange={e => setDocFile(e.target.files?.[0] ?? null)}
+                            className="hidden"
                         />
-                        <input type="text" placeholder="File name (e.g. fssai-cert.pdf)"
-                            value={docForm.fileName}
-                            onChange={e => setDocForm(f => ({ ...f, fileName: e.target.value }))}
-                            className="h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40"
-                        />
+                        <button
+                            type="button"
+                            onClick={() => docFileRef.current?.click()}
+                            className="h-[44px] flex items-center gap-2 border border-dashed border-[#299E60]/40 rounded-[10px] px-4 text-[14px] text-left outline-none hover:bg-[#EEF8F1]/40 transition-colors"
+                        >
+                            <FileText size={15} className="text-[#299E60] shrink-0" />
+                            <span className={cn('truncate', docFile ? 'text-[#181725] font-bold' : 'text-[#AEAEAE]')}>
+                                {docFile ? docFile.name : 'Choose file from computer…'}
+                            </span>
+                        </button>
                     </div>
-                    <button
-                        onClick={handleUploadDoc}
-                        disabled={uploadingDoc || !docForm.fileUrl || !docForm.fileName}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-[#299E60] text-white text-[13px] font-bold rounded-[10px] disabled:opacity-50 hover:bg-[#22844f] transition-colors"
-                    >
-                        {uploadingDoc ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                        Upload Document
-                    </button>
+                    <p className="text-[11px] text-[#AEAEAE]">Accepted: PDF, JPG, PNG, WebP · up to 10MB. Files are stored securely on our servers.</p>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleUploadDoc}
+                            disabled={uploadingDoc || !docFile}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-[#299E60] text-white text-[13px] font-bold rounded-[10px] disabled:opacity-50 hover:bg-[#22844f] transition-colors"
+                        >
+                            {uploadingDoc ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                            Upload Document
+                        </button>
+                        {docFile && !uploadingDoc && (
+                            <button
+                                type="button"
+                                onClick={() => { setDocFile(null); if (docFileRef.current) docFileRef.current.value = ''; }}
+                                className="flex items-center gap-1 text-[12px] font-bold text-[#AEAEAE] hover:text-[#EF4444] transition-colors"
+                            >
+                                <X size={13} /> Clear
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

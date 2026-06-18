@@ -22,12 +22,14 @@ import {
     FileText,
     AlertCircle,
     Building2,
-    ExternalLink,
     Landmark,
     FileCheck2,
     Truck,
     Edit2,
     Globe,
+    X,
+    Eye,
+    Image as ImageIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -80,6 +82,15 @@ const DOC_TYPE_LABELS: Record<string, string> = {
     fssai: 'FSSAI License', gst: 'GST Certificate', pan: 'PAN Card',
     bank_proof: 'Bank Proof', other: 'Other',
 };
+
+// Documents are served from our droplet (authenticated) — render images inline
+// and PDFs in a frame. Type is inferred from the file extension on either field.
+function docIsImage(d: { fileUrl: string; fileName: string }): boolean {
+    return /\.(jpe?g|png|webp|gif|svg)(\?|$)/i.test(d.fileUrl) || /\.(jpe?g|png|webp|gif|svg)$/i.test(d.fileName);
+}
+function docIsPdf(d: { fileUrl: string; fileName: string }): boolean {
+    return /\.pdf(\?|$)/i.test(d.fileUrl) || /\.pdf$/i.test(d.fileName);
+}
 
 interface VendorData {
     id: string;
@@ -185,6 +196,14 @@ export default function VendorDetailsPage() {
     const [togglingVerification, setTogglingVerification] = useState(false);
     const [documents, setDocuments] = useState<VendorDocument[]>([]);
     const [updatingDoc, setUpdatingDoc] = useState<string | null>(null);
+    const [reviewDoc, setReviewDoc] = useState<VendorDocument | null>(null);
+    // Blob preview: the docs are served from an authenticated route, and the app
+    // sets X-Frame-Options: DENY globally — so a PDF can't render in an <iframe>
+    // pointed at that URL. We fetch the file as a blob (cookies sent same-origin)
+    // and frame the object URL instead, which is exempt from X-Frame-Options.
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [previewError, setPreviewError] = useState(false);
 
     // Active tab
     const [activeTab, setActiveTab] = useState<'overview' | 'kyc_bank' | 'documents' | 'products' | 'delivery'>('overview');
@@ -437,6 +456,27 @@ export default function VendorDetailsPage() {
         }
     }, [vendorId, fetchVendor]);
 
+    // When the review popup opens, pull the file as a blob and frame the object
+    // URL (bypasses the global X-Frame-Options: DENY). Cleaned up on close.
+    useEffect(() => {
+        if (!reviewDoc) { setPreviewUrl(null); setPreviewError(false); setPreviewLoading(false); return; }
+        let cancelled = false;
+        let objUrl: string | null = null;
+        setPreviewUrl(null);
+        setPreviewError(false);
+        setPreviewLoading(true);
+        fetch(reviewDoc.fileUrl, { credentials: 'same-origin' })
+            .then(r => { if (!r.ok) throw new Error('fetch failed'); return r.blob(); })
+            .then(blob => {
+                if (cancelled) return;
+                objUrl = URL.createObjectURL(blob);
+                setPreviewUrl(objUrl);
+            })
+            .catch(() => { if (!cancelled) setPreviewError(true); })
+            .finally(() => { if (!cancelled) setPreviewLoading(false); });
+        return () => { cancelled = true; if (objUrl) URL.revokeObjectURL(objUrl); };
+    }, [reviewDoc]);
+
     const handleDocStatus = async (docId: string, status: 'verified' | 'rejected', adminNote?: string) => {
         setUpdatingDoc(docId);
         try {
@@ -446,6 +486,8 @@ export default function VendorDetailsPage() {
                 body: JSON.stringify({ status, adminNote }),
             });
             setDocuments(prev => prev.map(d => d.id === docId ? { ...d, status, adminNote: adminNote ?? d.adminNote } : d));
+            // Keep the open review popup in sync with the new status.
+            setReviewDoc(prev => prev && prev.id === docId ? { ...prev, status, adminNote: adminNote ?? prev.adminNote } : prev);
             toast.success(`Document marked as ${status}`);
         } catch {
             toast.error('Failed to update document');
@@ -488,6 +530,29 @@ export default function VendorDetailsPage() {
             body: JSON.stringify({ vendorId: vendor.id }),
         });
         router.push('/vendor/dashboard');
+    };
+
+    // Small clickable icon shown beside a KYC field. If the vendor uploaded a
+    // document of the matching type, clicking it opens the review popup scoped
+    // to that document. Renders nothing when no such document exists.
+    const renderDocReviewIcon = (type: string) => {
+        const doc = documents.find(d => d.type === type);
+        if (!doc) return null;
+        return (
+            <button
+                type="button"
+                onClick={() => setReviewDoc(doc)}
+                title={`Review uploaded ${DOC_TYPE_LABELS[type] ?? 'document'}`}
+                className={cn(
+                    'shrink-0 w-[38px] h-[38px] rounded-[8px] border flex items-center justify-center transition-colors',
+                    doc.status === 'verified' ? 'border-[#299E60]/30 bg-[#EEF8F1] text-[#299E60] hover:bg-[#D1FAE5]' :
+                    doc.status === 'rejected' ? 'border-[#EF4444]/30 bg-[#FDF2F2] text-[#EF4444] hover:bg-[#FCE4E4]' :
+                    'border-[#D1D5DB] bg-white text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#299E60]'
+                )}
+            >
+                <ImageIcon size={16} />
+            </button>
+        );
     };
 
     if (loading) {
@@ -1107,44 +1172,59 @@ export default function VendorDetailsPage() {
 
                                     <div>
                                         <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Corporate GSTIN</label>
-                                        {isEditing ? (
-                                            <input
-                                                type="text"
-                                                value={gstNumber}
-                                                onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
-                                                className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] font-mono"
-                                            />
-                                        ) : (
-                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] font-mono uppercase">{vendor.gstNumber || 'Not provided'}</span>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            {renderDocReviewIcon('gst')}
+                                            <div className="flex-1 min-w-0">
+                                                {isEditing ? (
+                                                    <input
+                                                        type="text"
+                                                        value={gstNumber}
+                                                        onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
+                                                        className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] font-mono"
+                                                    />
+                                                ) : (
+                                                    <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] font-mono uppercase">{vendor.gstNumber || 'Not provided'}</span>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div>
                                         <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Corporate PAN</label>
-                                        {isEditing ? (
-                                            <input
-                                                type="text"
-                                                value={panNumber}
-                                                onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
-                                                className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] font-mono"
-                                            />
-                                        ) : (
-                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] font-mono uppercase">{vendor.panNumber || 'Not provided'}</span>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            {renderDocReviewIcon('pan')}
+                                            <div className="flex-1 min-w-0">
+                                                {isEditing ? (
+                                                    <input
+                                                        type="text"
+                                                        value={panNumber}
+                                                        onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                                                        className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] font-mono"
+                                                    />
+                                                ) : (
+                                                    <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] font-mono uppercase">{vendor.panNumber || 'Not provided'}</span>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div>
                                         <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">FSSAI License No.</label>
-                                        {isEditing ? (
-                                            <input
-                                                type="text"
-                                                value={fssaiNumber}
-                                                onChange={(e) => setFssaiNumber(e.target.value)}
-                                                className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
-                                            />
-                                        ) : (
-                                            <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">{vendor.fssaiNumber || 'Not provided'}</span>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            {renderDocReviewIcon('fssai')}
+                                            <div className="flex-1 min-w-0">
+                                                {isEditing ? (
+                                                    <input
+                                                        type="text"
+                                                        value={fssaiNumber}
+                                                        onChange={(e) => setFssaiNumber(e.target.value)}
+                                                        className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60]"
+                                                    />
+                                                ) : (
+                                                    <span className="text-[13px] font-bold text-[#374151] block bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">{vendor.fssaiNumber || 'Not provided'}</span>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div>
@@ -1292,8 +1372,9 @@ export default function VendorDetailsPage() {
 
                             {/* Settlement Bank details */}
                             <div className="border-t border-[#F3F4F6] pt-6 bg-[#FAFAFA] -mx-6 md:-mx-8 px-6 md:px-8 py-6 rounded-b-[16px]">
-                                <div className="pb-2 mb-4">
+                                <div className="pb-2 mb-4 flex items-center justify-between gap-3">
                                     <h3 className="text-[15px] font-black text-[#111827]">Settlement Bank Details</h3>
+                                    {renderDocReviewIcon('bank_proof')}
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1392,24 +1473,33 @@ export default function VendorDetailsPage() {
                                     {documents.map((doc, idx) => (
                                         <div key={doc.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-[#F9FAFB]/50 transition-colors">
                                             <div className="flex items-start gap-4">
-                                                {/* Visual icon box */}
-                                                <div className="w-[44px] h-[44px] rounded-[10px] bg-[#EEF2F6] flex items-center justify-center text-[#4B5563] shrink-0 border border-[#E5E7EB]">
-                                                    <FileText size={18} />
-                                                </div>
+                                                {/* Thumbnail — image preview or file glyph; click to review in popup */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setReviewDoc(doc)}
+                                                    title="Click to review"
+                                                    className="w-[44px] h-[44px] rounded-[10px] bg-[#EEF2F6] flex items-center justify-center text-[#4B5563] shrink-0 border border-[#E5E7EB] overflow-hidden hover:ring-2 hover:ring-[#299E60]/40 transition-all"
+                                                >
+                                                    {docIsImage(doc) ? (
+                                                        // eslint-disable-next-line @next/next/no-img-element
+                                                        <img src={doc.fileUrl} alt={doc.fileName} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <FileText size={18} />
+                                                    )}
+                                                </button>
 
                                                 <div className="min-w-0">
                                                     <span className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-wider block">Record #{idx + 1}</span>
                                                     <h4 className="text-[14px] font-bold text-[#111827] mt-0.5">{DOC_TYPE_LABELS[doc.type] ?? doc.type}</h4>
                                                     <div className="flex items-center gap-2 mt-1">
-                                                        <a 
-                                                            href={doc.fileUrl} 
-                                                            target="_blank" 
-                                                            rel="noopener noreferrer"
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setReviewDoc(doc)}
                                                             className="text-[12px] text-[#299E60] font-bold hover:underline inline-flex items-center gap-1 shrink-0"
                                                         >
-                                                            <span>View Document</span>
-                                                            <ExternalLink size={12} />
-                                                        </a>
+                                                            <Eye size={12} />
+                                                            <span>Review</span>
+                                                        </button>
                                                         <span className="text-gray-300">|</span>
                                                         <span className="text-[11px] text-[#9CA3AF] font-medium">Uploaded: {new Date(doc.uploadedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                                                     </div>
@@ -1844,6 +1934,111 @@ export default function VendorDetailsPage() {
                     </div>
                 )}
             </div>
+
+            {/* ── Document Review Popup ──────────────────────────────────── */}
+            {reviewDoc && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                    onClick={() => setReviewDoc(null)}
+                >
+                    <div
+                        className="bg-white rounded-[16px] shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-[#EEEEEE]">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-9 h-9 rounded-[8px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0">
+                                    <FileCheck2 size={16} />
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="text-[14px] font-black text-[#111827] truncate">{DOC_TYPE_LABELS[reviewDoc.type] ?? reviewDoc.type}</h3>
+                                    <p className="text-[11px] text-[#9CA3AF] truncate">{reviewDoc.fileName}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <span className={cn(
+                                    'text-[10px] font-black px-2.5 py-1 rounded-full uppercase border tracking-wider',
+                                    reviewDoc.status === 'verified' ? 'bg-[#EEF8F1] border-[#299E60]/15 text-[#299E60]' :
+                                    reviewDoc.status === 'rejected' ? 'bg-[#FDF2F2] border-[#EF4444]/15 text-[#EF4444]' :
+                                    'bg-[#FFF8EB] border-[#D97706]/15 text-[#D97706]'
+                                )}>{reviewDoc.status}</span>
+                                <a
+                                    href={reviewDoc.fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Open in new tab"
+                                    className="w-8 h-8 rounded-[8px] border border-[#E5E7EB] flex items-center justify-center text-[#6B7280] hover:bg-[#F9FAFB]"
+                                >
+                                    <Eye size={14} />
+                                </a>
+                                <button
+                                    onClick={() => setReviewDoc(null)}
+                                    className="w-8 h-8 rounded-[8px] border border-[#E5E7EB] flex items-center justify-center text-[#6B7280] hover:bg-[#FDF2F2] hover:text-[#EF4444]"
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Preview body — rendered from a blob object URL (see effect above) */}
+                        <div className="flex-1 overflow-auto bg-[#F3F4F6] flex items-center justify-center p-4 min-h-[300px]">
+                            {previewLoading ? (
+                                <div className="flex flex-col items-center gap-2 text-[#9CA3AF] py-12">
+                                    <Loader2 size={28} className="animate-spin text-[#299E60]" />
+                                    <p className="text-[12px] font-bold">Loading document…</p>
+                                </div>
+                            ) : previewError || !previewUrl ? (
+                                <div className="text-center py-12">
+                                    <FileText size={40} className="text-[#9CA3AF] mx-auto mb-3" />
+                                    <p className="text-[13px] text-[#6B7280] font-bold">Couldn&apos;t load preview.</p>
+                                    <a href={reviewDoc.fileUrl} target="_blank" rel="noopener noreferrer" className="text-[12px] text-[#299E60] font-bold hover:underline mt-2 inline-block">Open in new tab</a>
+                                </div>
+                            ) : docIsImage(reviewDoc) ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={previewUrl} alt={reviewDoc.fileName} className="max-w-full max-h-[60vh] object-contain rounded-[8px] shadow-sm" />
+                            ) : docIsPdf(reviewDoc) ? (
+                                <iframe src={previewUrl} title={reviewDoc.fileName} className="w-full h-[60vh] rounded-[8px] bg-white border border-[#E5E7EB]" />
+                            ) : (
+                                <div className="text-center py-12">
+                                    <FileText size={40} className="text-[#9CA3AF] mx-auto mb-3" />
+                                    <p className="text-[13px] text-[#6B7280] font-bold">Preview not available for this file type.</p>
+                                    <a href={reviewDoc.fileUrl} target="_blank" rel="noopener noreferrer" className="text-[12px] text-[#299E60] font-bold hover:underline mt-2 inline-block">Open in new tab</a>
+                                </div>
+                            )}
+                        </div>
+
+                        {reviewDoc.adminNote && (
+                            <div className="px-5 py-2.5 bg-[#FFF8EB] border-t border-[#FDE68A]/60 text-[11px] text-[#B45309] font-medium">
+                                <strong className="font-extrabold uppercase text-[9px] mr-1">Note:</strong>{reviewDoc.adminNote}
+                            </div>
+                        )}
+
+                        {/* Footer actions — verify / reject right here in the popup */}
+                        <div className="flex items-center justify-end gap-2.5 px-5 py-4 border-t border-[#EEEEEE] bg-white">
+                            <button
+                                onClick={() => {
+                                    const note = window.prompt('Provide rejection reason (will be visible to vendor):');
+                                    if (note === null) return;
+                                    handleDocStatus(reviewDoc.id, 'rejected', note.trim() || undefined);
+                                }}
+                                disabled={updatingDoc === reviewDoc.id || reviewDoc.status === 'rejected'}
+                                className="h-[38px] px-4 bg-white border border-[#E5E7EB] hover:bg-[#FDF2F2] hover:text-[#EF4444] text-[#4B5563] text-[12px] font-bold rounded-[10px] disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+                            >
+                                <XCircle size={14} /> Reject
+                            </button>
+                            <button
+                                onClick={() => handleDocStatus(reviewDoc.id, 'verified')}
+                                disabled={updatingDoc === reviewDoc.id || reviewDoc.status === 'verified'}
+                                className="h-[38px] px-4 bg-[#299E60] hover:bg-[#238a54] text-white text-[12px] font-bold rounded-[10px] disabled:opacity-50 flex items-center gap-1.5 shadow-sm transition-colors"
+                            >
+                                {updatingDoc === reviewDoc.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                                Verify Document
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

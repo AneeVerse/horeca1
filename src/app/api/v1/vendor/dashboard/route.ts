@@ -41,6 +41,8 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       vendorWallet,
       overdueResult,
       pendingSettlement,
+      completedSettlementResult,
+      platformFeesResult,
       fastMoversRaw,
       allVendorOrders,
       creditAggregate,
@@ -148,6 +150,18 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         where: { vendorId, status: 'pending' },
       }),
 
+      // Completed settlement amount
+      prisma.vendorSettlement.aggregate({
+        _sum: { netAmount: true },
+        where: { vendorId, status: 'settled' },
+      }),
+
+      // Platform fees paid/due
+      prisma.vendorSettlement.aggregate({
+        _sum: { platformFee: true },
+        where: { vendorId },
+      }),
+
       // Fast movers — top 5 products by qty sold in delivered orders (last 30 days)
       prisma.$queryRaw<{ productId: string; productName: string; totalQty: bigint; revenue: string }[]>(
         Prisma.sql`
@@ -209,6 +223,10 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
       (inv) => inv.qtyAvailable - inv.qtyReserved <= inv.lowStockThreshold,
     ).length;
 
+    const outOfStockCount = inventoryRows.filter(
+      (inv) => inv.qtyAvailable - inv.qtyReserved <= 0,
+    ).length;
+
     const ordersByStatus: Record<string, number> = {};
     for (const group of ordersByStatusRaw) {
       ordersByStatus[group.status] = group._count.id;
@@ -265,9 +283,12 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
           pendingPayments: pendingPaymentsResult._sum.totalAmount ?? 0,
           activeProducts,
           lowStockCount,
+          outOfStockCount,
           pendingOrdersCount: pendingOrders.length,
           walletBalance: Number(vendorWallet?.balance ?? 0),
           pendingSettlement: Number(pendingSettlement._sum.netAmount ?? 0),
+          settlementCompleted: Number(completedSettlementResult._sum.netAmount ?? 0),
+          platformFees: Number(platformFeesResult._sum.platformFee ?? 0),
           overdueAmount: Number(overdueResult._sum.amount ?? 0),
           pendingWalletAmount: Number(vendorWallet?.pendingAmount ?? 0),
           upcomingDue: Number(upcomingDueAggregate._sum.creditUsed ?? 0),

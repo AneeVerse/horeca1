@@ -6,7 +6,7 @@ import { signOut, useSession } from 'next-auth/react';
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import {
   ArrowLeft, ArrowRight, Loader2, CheckCircle2, Phone, Building2, FileText, Landmark,
-  MapPin, Truck, ShieldCheck, X, Plus,
+  MapPin, Truck, ShieldCheck, X, Plus, Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
@@ -105,6 +105,8 @@ export default function VendorRegisterPage() {
   // Step 4
   const [gstNumber, setGstNumber] = useState('');
   const [panNumber, setPanNumber] = useState('');
+  const [panFile, setPanFile] = useState<File | null>(null);
+  const [gstFile, setGstFile] = useState<File | null>(null);
 
   // Step 5
   const [bankAccountName, setBankAccountName] = useState('');
@@ -112,6 +114,7 @@ export default function VendorRegisterPage() {
   const [bankIfsc, setBankIfsc] = useState('');
   const [bankName, setBankName] = useState('');
   const [bankAccountType, setBankAccountType] = useState<'savings' | 'current'>('current');
+  const [chequeFile, setChequeFile] = useState<File | null>(null);
 
   // Step 6
   const [billingAddress, setBillingAddress] = useState<Address>(blankAddress());
@@ -186,9 +189,6 @@ export default function VendorRegisterPage() {
       const x6 = V.minLen(authorizedPersonName, 'Name', 2); if (x6) e.authorizedPersonName = x6;
       const x7 = V.phone10(authorizedPersonPhone); if (x7) e.authorizedPersonPhone = x7;
       if (authorizedPersonEmail) { const x8 = V.email(authorizedPersonEmail); if (x8) e.authorizedPersonEmail = x8; }
-    } else if (s === 4) {
-      const x = V.gst(gstNumber); if (x) e.gstNumber = x;
-      const x2 = V.pan(panNumber); if (x2) e.panNumber = x2;
     } else if (s === 5) {
       const x = V.minLen(bankAccountName, 'Account holder name', 2); if (x) e.bankAccountName = x;
       if (bankAccountNumber.trim().length < 8) e.bankAccountNumber = 'Enter a valid account number';
@@ -205,7 +205,7 @@ export default function VendorRegisterPage() {
       check(pickupAddress, 'pickup');
     }
     return e;
-  }, [fullName, businessName, tradeName, email, password, authorizedPersonName, authorizedPersonPhone, authorizedPersonEmail, gstNumber, panNumber, bankAccountName, bankAccountNumber, bankIfsc, bankName, billingAddress, pickupAddress]);
+  }, [fullName, businessName, tradeName, email, password, authorizedPersonName, authorizedPersonPhone, authorizedPersonEmail, bankAccountName, bankAccountNumber, bankIfsc, bankName, billingAddress, pickupAddress]);
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
@@ -407,6 +407,43 @@ export default function VendorRegisterPage() {
   //   • Auth mode (logged in user) → POST /api/v1/account with vendorDetails
   //                                  block, switch session to the new
   //                                  business account, redirect to dashboard
+  // Staged KYC files (PAN / GST cert / cancelled cheque) are uploaded AFTER the
+  // vendor row exists. Public applicants have no session yet, so they POST to
+  // the OTP-gated onboarding endpoint with their vendorId + phone; logged-in
+  // applicants use the authenticated endpoint once their new account is active.
+  // Uploads are best-effort (allSettled) — docs are optional and can be
+  // re-uploaded later in vendor settings, so a failed file never blocks signup.
+  const stagedDocs = (): Array<{ type: string; file: File }> =>
+    ([
+      { type: 'pan', file: panFile },
+      { type: 'gst', file: gstFile },
+      { type: 'bank_proof', file: chequeFile },
+    ].filter((d) => d.file) as Array<{ type: string; file: File }>);
+
+  const uploadOnboardingDocs = async (vendorId: string) => {
+    await Promise.allSettled(
+      stagedDocs().map(({ type, file }) => {
+        const fd = new FormData();
+        fd.append('phone', phone);
+        fd.append('vendorId', vendorId);
+        fd.append('type', type);
+        fd.append('file', file);
+        return fetch('/api/v1/vendor/onboarding/documents', { method: 'POST', body: fd });
+      }),
+    );
+  };
+
+  const uploadAuthedDocs = async () => {
+    await Promise.allSettled(
+      stagedDocs().map(({ type, file }) => {
+        const fd = new FormData();
+        fd.append('type', type);
+        fd.append('file', file);
+        return fetch('/api/v1/vendor/documents/upload', { method: 'POST', body: fd });
+      }),
+    );
+  };
+
   const handleSubmit = async () => {
     setError('');
     setSubmitting(true);
@@ -463,6 +500,8 @@ export default function VendorRegisterPage() {
         try {
           await switchAccount(data.data.account.id, data.data.outlet.id);
         } catch { /* non-fatal — user can switch manually */ }
+        // New account is now active — attach any KYC files the user picked.
+        await uploadAuthedDocs();
         setSubmitted({ hcid: '' });
         // Redirect after a brief moment so the success screen is visible.
         setTimeout(() => { window.location.assign('/vendor/dashboard'); }, 1200);
@@ -505,6 +544,11 @@ export default function VendorRegisterPage() {
       if (!data.success) {
         setError(data.error?.message || data.error || 'Failed to submit application');
         return;
+      }
+      // Vendor row now exists — attach staged KYC files via the OTP-gated
+      // onboarding endpoint BEFORE we sign out (the used OTP is still valid).
+      if (data.data?.vendorId) {
+        await uploadOnboardingDocs(data.data.vendorId);
       }
       // Sign out whatever session was active before the user opened the
       // wizard — otherwise /profile and the navbar still show the OLD
@@ -817,23 +861,27 @@ export default function VendorRegisterPage() {
           {step === 4 && (
             <section>
               <h2 className="text-[22px] font-[800] text-gray-800 mb-1">GST & PAN</h2>
-              <p className="text-[13px] text-gray-500 mb-6">Required by law for B2B invoicing.</p>
+              <p className="text-[13px] text-gray-500 mb-6">Optional — add them now or leave blank and provide later.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="GSTIN" required error={fieldErrors.gstNumber}>
-                  <Input value={gstNumber} onChange={v => { const n = v.toUpperCase().slice(0, 15); setGstNumber(n); if (fieldErrors.gstNumber) setFE('gstNumber', V.gst(n)); }}
-                    onBlur={() => setFE('gstNumber', V.gst(gstNumber))}
-                    hasError={!!fieldErrors.gstNumber}
+                <Field label="GSTIN (optional)">
+                  <Input value={gstNumber} onChange={v => setGstNumber(v.toUpperCase().slice(0, 15))}
                     placeholder="22ABCDE1234F1Z5" />
                 </Field>
-                <Field label="PAN" required error={fieldErrors.panNumber}>
-                  <Input value={panNumber} onChange={v => { const n = v.toUpperCase().slice(0, 10); setPanNumber(n); if (fieldErrors.panNumber) setFE('panNumber', V.pan(n)); }}
-                    onBlur={() => setFE('panNumber', V.pan(panNumber))}
-                    hasError={!!fieldErrors.panNumber}
+                <Field label="PAN (optional)">
+                  <Input value={panNumber} onChange={v => setPanNumber(v.toUpperCase().slice(0, 10))}
                     placeholder="ABCDE1234F" />
                 </Field>
               </div>
+
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FileField label="PAN card document" hint="Scan or photo of the PAN card"
+                  value={panFile} onChange={setPanFile} />
+                <FileField label="GST certificate" hint="GST registration certificate"
+                  value={gstFile} onChange={setGstFile} />
+              </div>
+
               <p className="text-[12px] text-gray-400 mt-4">
-                Your GSTIN must match the legal name. Our team will verify these against the GST portal.
+                You can skip these for now — add or update them anytime. Our team verifies KYC during approval.
               </p>
             </section>
           )}
@@ -874,6 +922,11 @@ export default function VendorRegisterPage() {
                     <option value="savings">Savings</option>
                   </select>
                 </Field>
+              </div>
+
+              <div className="mt-6">
+                <FileField label="Cancelled cheque" hint="A cancelled cheque helps us verify your bank account faster"
+                  value={chequeFile} onChange={setChequeFile} />
               </div>
             </section>
           )}
@@ -1128,6 +1181,43 @@ function Field({
       {error && (
         <p className="text-[11px] text-red-600 font-medium ml-0.5">{error}</p>
       )}
+    </div>
+  );
+}
+
+// Direct file picker — stages a File in parent state (uploaded after the vendor
+// row is created). Accepts PDF + common image types, matching the server.
+function FileField({
+  label, hint, value, onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: File | null;
+  onChange: (f: File | null) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-[12px] font-bold text-gray-700 ml-0.5">{label}</label>
+      <input ref={ref} type="file" accept="application/pdf,image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={e => onChange(e.target.files?.[0] ?? null)} />
+      <button type="button" onClick={() => ref.current?.click()}
+        className="w-full flex items-center gap-2 px-4 py-3 bg-white border border-dashed border-[#53B175]/50 rounded-lg text-[13px] text-left hover:bg-green-50/40 transition-colors">
+        <Upload size={15} className="text-[#53B175] shrink-0" />
+        <span className={cn('truncate', value ? 'text-gray-800 font-bold' : 'text-gray-400')}>
+          {value ? value.name : 'Choose file from your computer…'}
+        </span>
+      </button>
+      {value ? (
+        <button type="button"
+          onClick={() => { onChange(null); if (ref.current) ref.current.value = ''; }}
+          className="inline-flex items-center gap-1 text-[11px] font-bold text-gray-400 hover:text-red-500 ml-0.5">
+          <X size={11} /> Remove
+        </button>
+      ) : hint ? (
+        <p className="text-[11px] text-gray-400 ml-0.5">{hint}</p>
+      ) : null}
     </div>
   );
 }
