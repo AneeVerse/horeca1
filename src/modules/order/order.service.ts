@@ -13,6 +13,7 @@ import { CartService, type CartContext } from '@/modules/cart/cart.service';
 import { creditWalletService } from '@/modules/credit/creditWallet.service';
 import {
   promotionService,
+  evaluateVendorPromo,
   type CheckoutDraftItem,
   type CouponApplication,
 } from '@/modules/promotion/promotion.service';
@@ -225,36 +226,14 @@ export class OrderService {
           throw Errors.belowMOV(vendor.businessName, Number(vendor.minOrderValue), subtotal);
         }
 
-        // 4a. Pick the best active vendor promotion (pct_discount or flat_discount).
+        // 4a. Pick the best active vendor promotion (pct_discount or flat_discount)
+        //     via the shared helper — the SAME selection the checkout preview
+        //     uses, so the previewed Store Offer equals what we deduct here.
         //     Usage is counted in PASS 2 — a non-stacking coupon (Rule 3) may
         //     suppress the promo, and a suppressed promo must not consume a use.
-        let promoDiscount = 0;
-        let appliedPromoId: string | null = null;
-        const now = new Date();
-        const activePromos = await tx.promotion.findMany({
-          where: {
-            vendorId: vo.vendorId,
-            isActive: true,
-            type: { in: ['pct_discount', 'flat_discount'] },
-            AND: [
-              { OR: [{ startDate: null }, { startDate: { lte: now } }] },
-              { OR: [{ endDate: null }, { endDate: { gte: now } }] },
-            ],
-          },
-          orderBy: { discountPct: 'desc' },
-        });
-        for (const promo of activePromos) {
-          const minVal = promo.minOrderValue ? Number(promo.minOrderValue) : 0;
-          if (subtotal < minVal) continue;
-          if (promo.usageLimit !== null && promo.usageCount >= promo.usageLimit) continue;
-          if (promo.type === 'pct_discount' && promo.discountPct) {
-            promoDiscount = Math.round(subtotal * Number(promo.discountPct) / 100 * 100) / 100;
-          } else if (promo.type === 'flat_discount' && promo.discountFlat) {
-            promoDiscount = Math.min(Number(promo.discountFlat), subtotal);
-          }
-          appliedPromoId = promo.id;
-          break;
-        }
+        const vendorPromo = await evaluateVendorPromo(tx, vo.vendorId, subtotal);
+        const promoDiscount = vendorPromo?.discount ?? 0;
+        const appliedPromoId = vendorPromo?.promotionId ?? null;
 
         prepared.push({
           vo,

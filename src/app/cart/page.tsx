@@ -14,6 +14,15 @@ interface RazorpaySuccessPayload {
     razorpay_signature: string;
 }
 
+// Shape returned by POST /api/v1/promotions/preview (no coupon code from cart).
+interface PromoPreview {
+    subtotal: number;
+    subtotalTaxable: number;
+    totalGST: number;
+    autoPromos: Array<{ vendorId: string; promotionId: string; promotionName: string; type: string; discount: number }>;
+    totalPromoDiscount: number;
+}
+
 function loadRazorpayScript(): Promise<void> {
     return new Promise((resolve, reject) => {
         if (typeof window !== 'undefined' && typeof window.Razorpay !== 'undefined') { resolve(); return; }
@@ -189,8 +198,46 @@ export default function CartPage() {
     const itemTaxable = selectedGroups.length > 0 ? selectedTaxable : totalTaxable;
     const itemGST = selectedGroups.length > 0 ? selectedGST : totalGST;
     const itemTotal = selectedGroups.length > 0 ? selectedTotal : subtotal;
-    const totalPay = itemTotal;
     const fullCartSelected = selectedGroups.length === groups.length;
+
+    // Auto-applied vendor "Store Offer" promos — previewed server-side so the
+    // customer sees the discount (and the real, re-priced totals) before
+    // checkout. Same endpoint the checkout uses; coupons stay a checkout step.
+    const selectedItemsSig = useMemo(
+        () => selectedGroups.map(g => `${g.vendorId}:${g.items.map(i => `${i.productId}x${i.quantity}`).join(',')}`).join('|'),
+        [selectedGroups],
+    );
+    const [promoPreview, setPromoPreview] = useState<PromoPreview | null>(null);
+    React.useEffect(() => {
+        if (selectedGroups.length === 0) { setPromoPreview(null); return; }
+        const items = selectedGroups.flatMap(g => g.items.map(i => ({
+            productId: i.productId, vendorId: g.vendorId, quantity: i.quantity,
+        })));
+        let cancelled = false;
+        const t = setTimeout(() => {
+            fetch('/api/v1/promotions/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items }),
+            })
+                .then(r => r.json())
+                .then(json => { if (!cancelled && json?.success) setPromoPreview(json.data as PromoPreview); })
+                .catch(() => {});
+        }, 350);
+        return () => { cancelled = true; clearTimeout(t); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedItemsSig]);
+
+    // Bill values — use the server-authoritative preview once loaded (a pricelist
+    // can re-price items vs the optimistic client cart), else the client totals.
+    const promoDiscount = promoPreview?.totalPromoDiscount ?? 0;
+    const promoLabel = promoPreview && promoPreview.autoPromos.length === 1
+        ? promoPreview.autoPromos[0].promotionName
+        : null;
+    const billTaxable = promoPreview ? promoPreview.subtotalTaxable : itemTaxable;
+    const billGST = promoPreview ? promoPreview.totalGST : itemGST;
+    const billSubtotal = promoPreview ? promoPreview.subtotal : itemTotal;
+    const totalPay = Math.max(0, billSubtotal - promoDiscount);
 
     // --- SUCCESS SCREEN ---
     if (screen === 'success') {
@@ -451,12 +498,18 @@ export default function CartPage() {
                                 <div className="px-7 py-6 space-y-4">
                                     <div className="flex justify-between items-center">
                                         <span className="text-[15px] text-[#4C4F4D] font-medium">Taxable</span>
-                                        <span className="text-[15px] font-bold text-[#181725]">₹{itemTaxable.toFixed(2)}</span>
+                                        <span className="text-[15px] font-bold text-[#181725]">₹{billTaxable.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between items-center">
                                         <span className="text-[15px] text-[#4C4F4D] font-medium">GST (incl.)</span>
-                                        <span className="text-[15px] font-bold text-[#181725]">₹{itemGST.toFixed(2)}</span>
+                                        <span className="text-[15px] font-bold text-[#181725]">₹{billGST.toFixed(2)}</span>
                                     </div>
+                                    {promoDiscount > 0 && (
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[15px] text-[#53B175] font-medium">Store Offer{promoLabel ? ` (${promoLabel})` : ''}</span>
+                                            <span className="text-[15px] font-bold text-[#53B175]">−₹{promoDiscount.toFixed(2)}</span>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="px-7 pb-6">
                                     <div className="border-t border-dashed border-[#D0D0D0] pt-5">
@@ -502,12 +555,18 @@ export default function CartPage() {
                             <div className="px-5 py-4 space-y-3">
                                 <div className="flex justify-between">
                                     <span className="text-[14px] text-gray-500 font-medium">Taxable</span>
-                                    <span className="text-[14px] font-bold text-[#181725]">₹{itemTaxable.toFixed(2)}</span>
+                                    <span className="text-[14px] font-bold text-[#181725]">₹{billTaxable.toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-[14px] text-gray-500 font-medium">GST (incl.)</span>
-                                    <span className="text-[14px] font-bold text-[#181725]">₹{itemGST.toFixed(2)}</span>
+                                    <span className="text-[14px] font-bold text-[#181725]">₹{billGST.toFixed(2)}</span>
                                 </div>
+                                {promoDiscount > 0 && (
+                                    <div className="flex justify-between">
+                                        <span className="text-[14px] text-[#53B175] font-medium">Store Offer{promoLabel ? ` (${promoLabel})` : ''}</span>
+                                        <span className="text-[14px] font-bold text-[#53B175]">−₹{promoDiscount.toFixed(2)}</span>
+                                    </div>
+                                )}
                                 <div className="border-t border-dashed border-gray-200 pt-3 flex justify-between items-baseline">
                                     <span className="text-[16px] font-bold text-[#181725]">Total</span>
                                     <span className="text-[22px] font-black text-primary">₹{totalPay.toFixed(2)}</span>
@@ -965,12 +1024,18 @@ export default function CartPage() {
                             <div className="px-7 py-5 space-y-4 border-t border-[#F0F0F0]">
                                 <div className="flex justify-between items-center">
                                     <span className="text-[15px] text-[#4C4F4D] font-medium">Taxable</span>
-                                    <span className="text-[15px] font-bold text-[#181725]">₹{itemTaxable.toFixed(2)}</span>
+                                    <span className="text-[15px] font-bold text-[#181725]">₹{billTaxable.toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="text-[15px] text-[#4C4F4D] font-medium">GST (incl.)</span>
-                                    <span className="text-[15px] font-bold text-[#181725]">₹{itemGST.toFixed(2)}</span>
+                                    <span className="text-[15px] font-bold text-[#181725]">₹{billGST.toFixed(2)}</span>
                                 </div>
+                                {promoDiscount > 0 && (
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[15px] text-[#53B175] font-medium">Store Offer{promoLabel ? ` (${promoLabel})` : ''}</span>
+                                        <span className="text-[15px] font-bold text-[#53B175]">−₹{promoDiscount.toFixed(2)}</span>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Total */}
@@ -1015,12 +1080,18 @@ export default function CartPage() {
                     <div className="px-5 pt-5 pb-2 space-y-4">
                         <div className="flex justify-between items-center">
                             <span className="text-[14px] text-[#4C4F4D] font-medium">Taxable</span>
-                            <span className="text-[14px] font-bold text-[#181725]">₹ {itemTaxable.toFixed(2)}</span>
+                            <span className="text-[14px] font-bold text-[#181725]">₹ {billTaxable.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-[14px] text-[#4C4F4D] font-medium">GST (incl.)</span>
-                            <span className="text-[14px] font-bold text-[#181725]">₹ {itemGST.toFixed(2)}</span>
+                            <span className="text-[14px] font-bold text-[#181725]">₹ {billGST.toFixed(2)}</span>
                         </div>
+                        {promoDiscount > 0 && (
+                            <div className="flex justify-between items-center">
+                                <span className="text-[14px] text-[#53B175] font-medium">Store Offer{promoLabel ? ` (${promoLabel})` : ''}</span>
+                                <span className="text-[14px] font-bold text-[#53B175]">−₹ {promoDiscount.toFixed(2)}</span>
+                            </div>
+                        )}
                     </div>
                     <div className="px-5 pb-5 pt-2">
                         <div className="border-t border-dashed border-[#D0D0D0] pt-4">

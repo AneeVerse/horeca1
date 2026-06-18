@@ -93,6 +93,20 @@ interface CustomerCreditWallet {
     currentDueDate: string | null;
 }
 
+// Shape returned by POST /api/v1/promotions/preview — auto vendor promos
+// (post-suppression effective values) + optional coupon eval.
+interface PromoPreviewResponse {
+    subtotal: number;
+    subtotalTaxable: number;
+    totalGST: number;
+    autoPromos: Array<{ vendorId: string; promotionId: string; promotionName: string; type: string; discount: number }>;
+    totalPromoDiscount: number;
+    coupon:
+        | { valid: true; code: string; name: string; estimatedDiscount: number; stacksWithCashback: boolean }
+        | { valid: false; message: string }
+        | null;
+}
+
 const PAYMENT_OPTIONS = [
   {
     id: 'online',
@@ -333,6 +347,14 @@ function CheckoutPageContent() {
     const [couponValidating, setCouponValidating] = useState(false);
     const [rewardsBalance, setRewardsBalance] = useState(0);
     const [useRewardsWallet, setUseRewardsWallet] = useState(false);
+    // Auto-applied vendor "Store Offer" promotions (Promotion model) — previewed
+    // server-side so the summary shows the discount the order will deduct. These
+    // are the EFFECTIVE values: a non-stacking coupon suppresses them server-side.
+    const [autoPromoDiscount, setAutoPromoDiscount] = useState(0);
+    const [autoPromos, setAutoPromos] = useState<PromoPreviewResponse['autoPromos']>([]);
+    // Server-authoritative subtotal from the preview — the price the order will
+    // actually use (a pricelist can differ from the optimistic client cart).
+    const [previewSubtotal, setPreviewSubtotal] = useState<number | null>(null);
     // Collapsible vendor cards — collapsed by default for compact checkout.
     const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set());
     const toggleVendorExpand = (vendorId: string) => {
@@ -514,28 +536,73 @@ function CheckoutPageContent() {
             .catch(() => {});
     }, [step, sessionStatus]);
 
+    // The items the checkout will actually order — the same source the order is
+    // placed from, so the promo/coupon preview matches the order exactly.
+    const buildItemsPayload = () =>
+        selectedGroups.flatMap(g => g.items.map((i: CartItem) => ({
+            productId: i.productId,
+            vendorId: g.vendorId,
+            quantity: i.quantity,
+        })));
+
+    // Preview auto promos (+ optional coupon) against the cart items. Returns the
+    // effective post-suppression values. Throws on transport/HTTP error.
+    const fetchPromoPreview = async (code?: string): Promise<PromoPreviewResponse> => {
+        const items = buildItemsPayload();
+        if (items.length === 0) return { subtotal: 0, subtotalTaxable: 0, totalGST: 0, autoPromos: [], totalPromoDiscount: 0, coupon: null };
+        const res = await fetch('/api/v1/promotions/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items, ...(code ? { code } : {}) }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error?.message || 'Could not load offers');
+        return json.data as PromoPreviewResponse;
+    };
+
+    // Auto-applied vendor promos — previewed on BOTH the review and payment
+    // steps and refreshed whenever the selected vendors/quantities change, so
+    // the Store Offer + payable are consistent from the first step. Coupon-aware
+    // fetches are handled separately by applyCoupon/removeCoupon.
+    const selectedItemsSig = useMemo(
+        () => selectedGroups.map(g => `${g.vendorId}:${g.items.map((i: CartItem) => `${i.productId}x${i.quantity}`).join(',')}`).join('|'),
+        [selectedGroups],
+    );
+    useEffect(() => {
+        if (sessionStatus !== 'authenticated' || draftId) return;
+        if (selectedGroups.length === 0) { setPreviewSubtotal(null); setAutoPromoDiscount(0); setAutoPromos([]); return; }
+        let cancelled = false;
+        const t = setTimeout(() => {
+            fetchPromoPreview(appliedCoupon?.code)
+                .then(data => {
+                    if (cancelled) return;
+                    setPreviewSubtotal(Number(data.subtotal) || 0);
+                    setAutoPromoDiscount(Number(data.totalPromoDiscount) || 0);
+                    setAutoPromos(data.autoPromos || []);
+                })
+                .catch(() => {});
+        }, 300);
+        return () => { cancelled = true; clearTimeout(t); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedItemsSig, sessionStatus, draftId]);
+
     const applyCoupon = async () => {
         const code = couponInput.trim().toUpperCase();
         if (!code) return;
         setCouponValidating(true);
         setCouponError(null);
         try {
-            const res = await fetch('/api/v1/promotions/validate-coupon', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code }),
-            });
-            const json = await res.json();
-            if (!res.ok) throw new Error(json?.error?.message || 'Could not validate coupon');
-            if (json.data?.valid) {
-                setAppliedCoupon({
-                    code: json.data.code,
-                    name: json.data.name,
-                    estimatedDiscount: Number(json.data.estimatedDiscount) || 0,
-                });
+            const data = await fetchPromoPreview(code);
+            // Auto promos returned alongside reflect this code's suppression.
+            setPreviewSubtotal(Number(data.subtotal) || 0);
+            setAutoPromoDiscount(Number(data.totalPromoDiscount) || 0);
+            setAutoPromos(data.autoPromos || []);
+            const c = data.coupon;
+            if (c && c.valid) {
+                setAppliedCoupon({ code: c.code, name: c.name, estimatedDiscount: Number(c.estimatedDiscount) || 0 });
             } else {
                 setAppliedCoupon(null);
-                setCouponError(json.data?.message || 'Invalid coupon code');
+                setCouponError((c && !c.valid ? c.message : null) || 'Invalid coupon code');
             }
         } catch (err) {
             setAppliedCoupon(null);
@@ -545,10 +612,30 @@ function CheckoutPageContent() {
         }
     };
 
+    // Removing a coupon restores any auto promos it had suppressed.
+    const removeCoupon = async () => {
+        setAppliedCoupon(null);
+        setCouponInput('');
+        setCouponError(null);
+        if (draftId) return;
+        try {
+            const data = await fetchPromoPreview();
+            setPreviewSubtotal(Number(data.subtotal) || 0);
+            setAutoPromoDiscount(Number(data.totalPromoDiscount) || 0);
+            setAutoPromos(data.autoPromos || []);
+        } catch { /* keep the prior estimate on failure */ }
+    };
+
     // Display estimates — the order transaction recomputes everything
-    // server-side; these only drive the summary card.
-    const couponDiscountEst = appliedCoupon ? Math.min(appliedCoupon.estimatedDiscount, selectedTotal) : 0;
-    const payableAfterCoupon = Math.max(0, selectedTotal - couponDiscountEst);
+    // server-side; these only drive the summary card. Sequence mirrors the
+    // server: subtotal → vendor promo → coupon → wallet. Use the server-priced
+    // subtotal (from the preview) once loaded so the line, discounts and total
+    // all match what the order charges; fall back to the client cart total.
+    const summarySubtotal = previewSubtotal != null ? previewSubtotal : selectedTotal;
+    const promoDiscountEst = Math.min(autoPromoDiscount, summarySubtotal);
+    const afterPromo = Math.max(0, summarySubtotal - promoDiscountEst);
+    const couponDiscountEst = appliedCoupon ? Math.min(appliedCoupon.estimatedDiscount, afterPromo) : 0;
+    const payableAfterCoupon = Math.max(0, afterPromo - couponDiscountEst);
     // Online payments keep a ₹1 floor (Razorpay can't charge ₹0) — mirrors the server rule.
     const walletUseEst = useRewardsWallet
         ? Math.min(rewardsBalance, Math.max(0, payableAfterCoupon - (selectedPayment === 'online' ? 1 : 0)))
@@ -933,11 +1020,28 @@ function CheckoutPageContent() {
 
                         {/* Total */}
                         <div className="bg-white rounded-2xl border border-gray-100 p-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-[14px] font-bold text-[#181725]">Total Payable</span>
-                                <span className="text-[18px] font-bold text-[#53B175]">₹{selectedTotal.toLocaleString('en-IN')}</span>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between text-[13px]">
+                                    <span className="text-gray-500 font-medium">Subtotal</span>
+                                    <span className="font-bold text-[#181725]">₹{summarySubtotal.toLocaleString('en-IN')}</span>
+                                </div>
+                                {promoDiscountEst > 0 && (
+                                    <div className="flex items-center justify-between text-[13px]">
+                                        <span className="text-gray-500 font-medium">
+                                            Store Offer{autoPromos.length === 1 ? ` (${autoPromos[0].promotionName})` : ''}
+                                        </span>
+                                        <span className="font-bold text-[#53B175]">−₹{promoDiscountEst.toLocaleString('en-IN')}</span>
+                                    </div>
+                                )}
+                                <div className="flex items-center justify-between border-t border-dashed border-gray-200 pt-2">
+                                    <span className="text-[14px] font-bold text-[#181725]">Total Payable</span>
+                                    <span className="text-[18px] font-bold text-[#53B175]">₹{afterPromo.toLocaleString('en-IN')}</span>
+                                </div>
                             </div>
-                            <p className="text-[11px] text-gray-400 mt-1">{selectedItemCount} items from {selectedVendorCount} vendor{selectedVendorCount !== 1 ? 's' : ''}</p>
+                            <p className="text-[11px] text-gray-400 mt-2">
+                                {selectedItemCount} items from {selectedVendorCount} vendor{selectedVendorCount !== 1 ? 's' : ''}
+                                {promoDiscountEst > 0 ? ' · store offer applied' : ''}
+                            </p>
                         </div>
 
                         {currentOutlet?.requiresAddressUpdate && (
@@ -1235,7 +1339,7 @@ function CheckoutPageContent() {
                                                 </div>
                                                 <button
                                                     type="button"
-                                                    onClick={() => { setAppliedCoupon(null); setCouponInput(''); setCouponError(null); }}
+                                                    onClick={removeCoupon}
                                                     className="text-[11px] font-bold text-red-500 hover:underline shrink-0 ml-3 cursor-pointer"
                                                 >
                                                     Remove
@@ -1293,8 +1397,16 @@ function CheckoutPageContent() {
                                 <div className="p-5 space-y-4">
                                     <div className="flex justify-between items-center text-[13px]">
                                         <span className="text-gray-500 font-medium">Subtotal</span>
-                                        <span className="font-bold text-[#181725]">₹{selectedTotal.toLocaleString('en-IN')}</span>
+                                        <span className="font-bold text-[#181725]">₹{summarySubtotal.toLocaleString('en-IN')}</span>
                                     </div>
+                                    {promoDiscountEst > 0 && (
+                                        <div className="flex justify-between items-center text-[13px]">
+                                            <span className="text-gray-500 font-medium">
+                                                Store Offer{autoPromos.length === 1 ? ` (${autoPromos[0].promotionName})` : ''}
+                                            </span>
+                                            <span className="font-bold text-[#53B175]">−₹{promoDiscountEst.toLocaleString('en-IN')}</span>
+                                        </div>
+                                    )}
                                     {couponDiscountEst > 0 && (
                                         <div className="flex justify-between items-center text-[13px]">
                                             <span className="text-gray-500 font-medium">Coupon ({appliedCoupon?.code})</span>
@@ -1313,7 +1425,7 @@ function CheckoutPageContent() {
                                     </div>
                                     <p className="text-[10px] text-gray-400 leading-normal">
                                         Checking out {selectedItemCount} items from {selectedVendorCount} vendor PO{selectedVendorCount > 1 ? 's' : ''}. Includes applicable GST and taxes.
-                                        {(couponDiscountEst > 0 || walletUseEst > 0) ? ' Discounts shown are estimates — exact amounts are confirmed at order placement.' : ''}
+                                        {(promoDiscountEst > 0 || couponDiscountEst > 0 || walletUseEst > 0) ? ' Discounts shown are estimates — exact amounts are confirmed at order placement.' : ''}
                                     </p>
                                 </div>
                             </div>

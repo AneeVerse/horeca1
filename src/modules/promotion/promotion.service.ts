@@ -40,6 +40,21 @@ export interface CheckoutOrderDraft {
   items: CheckoutDraftItem[];
 }
 
+/** A single cart line as sent by the checkout for promo/coupon preview. */
+export interface PreviewItemInput {
+  productId: string;
+  vendorId: string;
+  quantity: number;
+}
+
+/** The chosen auto vendor promotion for one vendor order. */
+export interface VendorPromoResult {
+  promotionId: string;
+  name: string;
+  type: string;
+  discount: number;
+}
+
 export interface CouponApplication {
   coupon: Pick<
     Coupon,
@@ -89,6 +104,47 @@ function allocateProportional(total: number, weights: number[]): number[] {
     }
   }
   return shares;
+}
+
+/**
+ * Pick the best active vendor `Promotion` (pct_discount or flat_discount) for a
+ * vendor order's subtotal. Pure read — never increments usage. Shared by
+ * `order.service` (pass 1), the checkout preview, and coupon preview so all
+ * three compute the auto vendor promo identically (first qualifying promo wins,
+ * highest pct first — same semantics as the original inline order.service loop).
+ */
+export async function evaluateVendorPromo(
+  db: Db,
+  vendorId: string,
+  subtotal: number,
+): Promise<VendorPromoResult | null> {
+  const now = new Date();
+  const activePromos = await db.promotion.findMany({
+    where: {
+      vendorId,
+      isActive: true,
+      type: { in: ['pct_discount', 'flat_discount'] },
+      AND: [
+        { OR: [{ startDate: null }, { startDate: { lte: now } }] },
+        { OR: [{ endDate: null }, { endDate: { gte: now } }] },
+      ],
+    },
+    orderBy: { discountPct: 'desc' },
+  });
+  for (const promo of activePromos) {
+    const minVal = promo.minOrderValue ? Number(promo.minOrderValue) : 0;
+    if (subtotal < minVal) continue;
+    if (promo.usageLimit !== null && promo.usageCount >= promo.usageLimit) continue;
+    let discount = 0;
+    if (promo.type === 'pct_discount' && promo.discountPct) {
+      discount = r2((subtotal * Number(promo.discountPct)) / 100);
+    } else if (promo.type === 'flat_discount' && promo.discountFlat) {
+      discount = Math.min(Number(promo.discountFlat), subtotal);
+    }
+    // First promo that clears min-order + usage wins (mirrors order.service).
+    return { promotionId: promo.id, name: promo.name, type: promo.type, discount: r2(discount) };
+  }
+  return null;
 }
 
 async function loadAndValidateCoupon(
@@ -559,58 +615,89 @@ export const promotionService = {
   // ── Customer-facing: preview + rewards + UPI claim ─────────────────────
 
   /**
-   * Preview a coupon against the user's server-side cart (same pricing chain
-   * as checkout). Estimate only — checkout re-validates inside the order tx.
+   * Preview the auto vendor promotions — and, when a code is supplied, the
+   * coupon — against the items the checkout is about to order. Prices are
+   * re-resolved server-side (client prices are never trusted), so the preview
+   * matches what `order.service.create` will compute. Estimate only: the order
+   * transaction re-validates everything.
+   *
+   * Driven by the client cart items rather than the server `Cart` row because
+   * the order itself is placed from client items; reading the server cart row
+   * (keyed by the JWT outlet/account) could miss a switched/merged cart and
+   * wrongly report "empty cart".
+   *
+   * Rule 3 — a coupon with `stacksWithVendorPromo = false` suppresses the auto
+   * promos at checkout, so the returned `autoPromos`/`totalPromoDiscount` are
+   * the EFFECTIVE (post-suppression) values for the current code.
    */
-  async previewCoupon(args: {
+  async previewPromotions(args: {
     userId: string;
     businessAccountId: string;
     outletId: string;
-    code: string;
-  }): Promise<
-    | { valid: true; code: string; name: string; estimatedDiscount: number; stacksWithCashback: boolean }
-    | { valid: false; message: string }
-  > {
-    const cart = await prisma.cart.findFirst({
-      where: { userId: args.userId, businessAccountId: args.businessAccountId, outletId: args.outletId },
-      include: {
-        outlet: { select: { pincode: true, city: true, state: true } },
-        items: {
-          include: {
-            product: { select: { id: true, taxPercent: true, categoryId: true, brand: true } },
-          },
-        },
-      },
-    });
-    if (!cart || cart.items.length === 0) {
-      return { valid: false, message: 'Your cart is empty' };
+    items: PreviewItemInput[];
+    code?: string | null;
+  }): Promise<{
+    subtotal: number;
+    subtotalTaxable: number;
+    totalGST: number;
+    autoPromos: Array<{ vendorId: string; promotionId: string; promotionName: string; type: string; discount: number }>;
+    totalPromoDiscount: number;
+    coupon:
+      | { valid: true; code: string; name: string; estimatedDiscount: number; stacksWithCashback: boolean }
+      | { valid: false; message: string }
+      | null;
+  }> {
+    const emptyCoupon = args.code
+      ? { valid: false as const, message: 'No items found in your cart. Please add items before applying a coupon.' }
+      : null;
+    if (!args.items || args.items.length === 0) {
+      return { subtotal: 0, subtotalTaxable: 0, totalGST: 0, autoPromos: [], totalPromoDiscount: 0, coupon: emptyCoupon };
     }
 
-    const vendorIds = Array.from(new Set(cart.items.map((i) => i.vendorId)));
+    // Outlet context drives pincode/area pricelist assignment rules.
+    const outlet = await prisma.outlet.findFirst({
+      where: { id: args.outletId, businessAccountId: args.businessAccountId },
+      select: { pincode: true, city: true, state: true },
+    });
+
+    const productIds = Array.from(new Set(args.items.map((i) => i.productId)));
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, taxPercent: true, categoryId: true, brand: true },
+    });
+    const productById = new Map(products.map((p) => [p.id, p]));
+
+    const vendorIds = Array.from(new Set(args.items.map((i) => i.vendorId)));
     const vendorCustomers = await prisma.vendorCustomer.findMany({
       where: { userId: args.userId, vendorId: { in: vendorIds } },
       select: { vendorId: true, tags: true },
     });
     const tagsByVendor = new Map(vendorCustomers.map((vc) => [vc.vendorId, vc.tags]));
 
+    // Build per-vendor drafts, re-pricing each line through the same resolver as
+    // cart/checkout so the preview equals the order.
     const draftsByVendor = new Map<string, CheckoutOrderDraft>();
-    for (const item of cart.items) {
+    let taxableTotal = 0;
+    for (const item of args.items) {
+      const product = productById.get(item.productId);
+      if (!product) continue;
       const customer: CustomerContext = {
         userId: args.userId,
         businessAccountId: args.businessAccountId,
         outletId: args.outletId,
-        outletPincode: cart.outlet?.pincode ?? null,
-        outletCity: cart.outlet?.city ?? null,
-        outletState: cart.outlet?.state ?? null,
+        outletPincode: outlet?.pincode ?? null,
+        outletCity: outlet?.city ?? null,
+        outletState: outlet?.state ?? null,
         tags: tagsByVendor.get(item.vendorId) ?? [],
       };
       const resolved = await resolveUnitPrice(
         { productId: item.productId, vendorId: item.vendorId, quantity: item.quantity, customer },
         prisma,
       );
-      const taxPercent = Number(item.product.taxPercent) || 0;
+      const taxPercent = Number(product.taxPercent) || 0;
       const grossUnit = r2(Number(resolved.unitPrice) * (1 + taxPercent / 100));
       const lineTotal = r2(grossUnit * item.quantity);
+      taxableTotal += taxPercent > 0 ? lineTotal / (1 + taxPercent / 100) : lineTotal;
 
       let draft = draftsByVendor.get(item.vendorId);
       if (!draft) {
@@ -620,29 +707,69 @@ export const promotionService = {
       draft.subtotal = r2(draft.subtotal + lineTotal);
       draft.items.push({
         productId: item.productId,
-        categoryId: item.product.categoryId,
-        brand: item.product.brand,
+        categoryId: product.categoryId,
+        brand: product.brand,
         lineTotal,
       });
     }
 
-    try {
-      const app = await loadAndValidateCoupon(prisma, {
-        code: args.code,
-        userId: args.userId,
-        drafts: Array.from(draftsByVendor.values()),
-      });
-      return {
-        valid: true,
-        code: app.coupon.code,
-        name: app.coupon.name,
-        estimatedDiscount: app.totalDiscount,
-        stacksWithCashback: app.coupon.stacksWithCashback,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Invalid coupon code';
-      return { valid: false, message };
+    const drafts = Array.from(draftsByVendor.values());
+    if (drafts.length === 0) {
+      return { subtotal: 0, subtotalTaxable: 0, totalGST: 0, autoPromos: [], totalPromoDiscount: 0, coupon: emptyCoupon };
     }
+
+    // Server-authoritative subtotal (re-priced gross). The checkout/cart show
+    // THIS as the subtotal so the displayed line, discounts, and total all sit
+    // on the same basis the order will use.
+    const subtotal = r2(drafts.reduce((a, d) => a + d.subtotal, 0));
+    const subtotalTaxable = r2(taxableTotal);
+    const totalGST = r2(subtotal - subtotalTaxable);
+
+    // Auto vendor promos — same selection as order.service. Populating each
+    // draft's promoDiscount makes the coupon's negative-total cap correct.
+    const autoPromos: Array<{ vendorId: string; promotionId: string; promotionName: string; type: string; discount: number }> = [];
+    for (const draft of drafts) {
+      const promo = await evaluateVendorPromo(prisma, draft.vendorId, draft.subtotal);
+      if (!promo) continue;
+      draft.promoDiscount = promo.discount;
+      if (promo.discount > 0) {
+        autoPromos.push({
+          vendorId: draft.vendorId,
+          promotionId: promo.promotionId,
+          promotionName: promo.name,
+          type: promo.type,
+          discount: promo.discount,
+        });
+      }
+    }
+
+    // Coupon (optional).
+    let coupon:
+      | { valid: true; code: string; name: string; estimatedDiscount: number; stacksWithCashback: boolean }
+      | { valid: false; message: string }
+      | null = null;
+    let suppressVendorPromos = false;
+    if (args.code) {
+      try {
+        const app = await loadAndValidateCoupon(prisma, { code: args.code, userId: args.userId, drafts });
+        suppressVendorPromos = app.suppressVendorPromos;
+        coupon = {
+          valid: true,
+          code: app.coupon.code,
+          name: app.coupon.name,
+          estimatedDiscount: app.totalDiscount,
+          stacksWithCashback: app.coupon.stacksWithCashback,
+        };
+      } catch (error) {
+        coupon = { valid: false, message: error instanceof Error ? error.message : 'Invalid coupon code' };
+      }
+    }
+
+    // Effective (post-suppression) auto promos for the current code.
+    const effectiveAutoPromos = suppressVendorPromos ? [] : autoPromos;
+    const totalPromoDiscount = r2(effectiveAutoPromos.reduce((a, p) => a + p.discount, 0));
+
+    return { subtotal, subtotalTaxable, totalGST, autoPromos: effectiveAutoPromos, totalPromoDiscount, coupon };
   },
 
   /** Wallet balance + cashback history for the rewards page. */
