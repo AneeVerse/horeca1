@@ -21,6 +21,8 @@ import {
     Save,
     X,
     Wallet,
+    Copy,
+    Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
@@ -419,7 +421,7 @@ export default function CustomerDetailsPage() {
                             )}
                         </div>
                         <div className="divide-y divide-[#EEEEEE]">
-                            <DetailRow label="Account ID" value={truncateId(user.id)} />
+                            <DetailRow label="Account ID" value={truncateId(user.id)} copyText={user.id} />
                             {editing ? (
                                 <>
                                     <EditRow label="Full name">
@@ -554,9 +556,12 @@ export default function CustomerDetailsPage() {
                                         <p className="text-[12px] font-[800] text-[#7C7C7C] mb-1">
                                             Vendor ID
                                         </p>
-                                        <p className="text-[14px] font-[800] text-[#181725]">
-                                            {truncateId(user.vendor.id)}
-                                        </p>
+                                        <div className="flex items-center gap-1.5">
+                                            <p className="text-[14px] font-[800] text-[#181725]">
+                                                {truncateId(user.vendor.id)}
+                                            </p>
+                                            <CopyButton text={user.vendor.id} label="Vendor ID" />
+                                        </div>
                                     </div>
                                     <div>
                                         <p className="text-[12px] font-[800] text-[#7C7C7C] mb-1">
@@ -611,9 +616,14 @@ export default function CustomerDetailsPage() {
                                 {user.creditWallets.map((w) => (
                                     <div key={w.id} className="p-6">
                                         <div className="flex items-center justify-between mb-4">
-                                            <p className="text-[14px] font-[800] text-[#181725]">
-                                                {w.vendorId ? (w.vendor?.businessName ?? 'Vendor credit line') : 'Horeca1 (platform)'}
-                                            </p>
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="text-[14px] font-[800] text-[#181725]">
+                                                    {w.vendorId ? (w.vendor?.businessName ?? 'Vendor credit line') : 'Horeca1 (platform)'}
+                                                </p>
+                                                {w.vendorId && (
+                                                    <CopyButton text={w.vendorId} label="Vendor ID" />
+                                                )}
+                                            </div>
                                             <span
                                                 className={cn(
                                                     'inline-block text-[11px] font-[800] px-2.5 py-1 rounded-md',
@@ -699,14 +709,70 @@ export default function CustomerDetailsPage() {
     );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value, copyText }: { label: string; value: string; copyText?: string }) {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        if (!copyText) return;
+        try {
+            await navigator.clipboard.writeText(copyText);
+            setCopied(true);
+            toast.success(`${label} copied to clipboard`);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            toast.error('Failed to copy to clipboard');
+        }
+    };
+
     return (
         <div className="px-6 py-4 flex items-center justify-between text-[13px]">
             <span className="font-[800] text-[#4B4B4B]">{label} :</span>
-            <span className="font-[800] text-[#181725] text-right max-w-[60%] truncate">
-                {value}
-            </span>
+            <div className="flex items-center gap-1.5 justify-end max-w-[60%]">
+                <span className="font-[800] text-[#181725] truncate">
+                    {value}
+                </span>
+                {copyText && (
+                    <button
+                        onClick={handleCopy}
+                        className="p-1 rounded hover:bg-gray-100 text-[#7C7C7C] hover:text-[#181725] transition-colors cursor-pointer shrink-0"
+                        title={`Copy ${label}`}
+                    >
+                        {copied ? (
+                            <span className="text-[10px] text-[#299E60] font-bold">Copied!</span>
+                        ) : (
+                            <Copy size={13} />
+                        )}
+                    </button>
+                )}
+            </div>
         </div>
+    );
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+    const [copied, setCopied] = useState(false);
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            toast.success(`${label} copied to clipboard`);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            toast.error('Failed to copy to clipboard');
+        }
+    };
+    return (
+        <button
+            onClick={handleCopy}
+            className="p-1 rounded hover:bg-gray-100 text-[#7C7C7C] hover:text-[#181725] transition-colors inline-flex items-center justify-center cursor-pointer shrink-0"
+            title={`Copy ${label}`}
+        >
+            {copied ? (
+                <Check size={12} className="text-[#299E60]" />
+            ) : (
+                <Copy size={12} />
+            )}
+        </button>
     );
 }
 

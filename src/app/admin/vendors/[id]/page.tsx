@@ -30,6 +30,8 @@ import {
     X,
     Eye,
     Image as ImageIcon,
+    Copy,
+    Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -915,6 +917,15 @@ export default function VendorDetailsPage() {
                                     </div>
 
                                     <div className="space-y-4">
+                                        {/* Vendor ID */}
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1.5">Vendor ID</label>
+                                            <div className="flex items-center justify-between bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6] gap-2">
+                                                <span className="text-[13px] font-bold font-mono text-[#374151] block truncate">{truncateId(vendor.id)}</span>
+                                                <CopyButton text={vendor.id} label="Vendor ID" />
+                                            </div>
+                                        </div>
+
                                         {/* Business Name */}
                                         <div>
                                             <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1.5">Commercial Business Name</label>
@@ -1075,6 +1086,13 @@ export default function VendorDetailsPage() {
                             <div className="border-t border-[#F3F4F6] pt-6">
                                 <h3 className="text-[15px] font-black text-[#111827] mb-4">Onboarding Account User</h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Owner User ID</label>
+                                        <div className="flex items-center justify-between bg-[#F9FAFB] h-[36px] px-3 rounded-[8px] border border-[#F3F4F6] gap-2">
+                                            <span className="text-[13px] font-bold font-mono text-[#374151] block truncate">{truncateId(vendor.user.id)}</span>
+                                            <CopyButton text={vendor.user.id} label="Owner User ID" />
+                                        </div>
+                                    </div>
                                     <div>
                                         <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1">Full Legal Name</label>
                                         {isEditing ? (
@@ -2040,5 +2058,37 @@ export default function VendorDetailsPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+function truncateId(id: string): string {
+    if (!id || id.length <= 12) return id;
+    return id.slice(0, 6) + '...' + id.slice(-4);
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+    const [copied, setCopied] = useState(false);
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            toast.success(`${label} copied to clipboard`);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            toast.error('Failed to copy to clipboard');
+        }
+    };
+    return (
+        <button
+            onClick={handleCopy}
+            className="p-1 rounded hover:bg-gray-100 text-[#7C7C7C] hover:text-[#181725] transition-colors inline-flex items-center justify-center cursor-pointer shrink-0"
+            title={`Copy ${label}`}
+        >
+            {copied ? (
+                <Check size={12} className="text-[#299E60]" />
+            ) : (
+                <Copy size={12} />
+            )}
+        </button>
     );
 }
