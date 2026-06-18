@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
@@ -287,9 +288,12 @@ export default function VendorsPage() {
                                 </div>
 
                                 {vendor.logoUrl ? (
-                                    <img
+                                    <Image
                                         src={vendor.logoUrl}
                                         alt={vendor.businessName}
+                                        width={80}
+                                        height={80}
+                                        sizes="80px"
                                         className="w-[80px] h-[80px] object-contain rounded-lg"
                                     />
                                 ) : (
@@ -411,7 +415,14 @@ export default function VendorsPage() {
                                         {/* Avatar Box */}
                                         <div className="w-[42px] h-[42px] rounded-[10px] bg-[#F3F4F6] overflow-hidden shrink-0 border border-[#E5E7EB] flex items-center justify-center">
                                             {vendor.logoUrl ? (
-                                                <img src={vendor.logoUrl} alt={vendor.businessName} className="w-full h-full object-cover" />
+                                                <Image
+                                                    src={vendor.logoUrl}
+                                                    alt={vendor.businessName}
+                                                    width={42}
+                                                    height={42}
+                                                    sizes="42px"
+                                                    className="w-full h-full object-cover"
+                                                />
                                             ) : (
                                                 <span className="text-[15px] font-black text-[#299E60]">
                                                     {vendor.businessName.charAt(0)}

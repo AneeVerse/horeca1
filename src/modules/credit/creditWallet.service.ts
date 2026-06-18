@@ -125,8 +125,27 @@ export class CreditWalletService {
     adminUserId = 'SYSTEM',
     remark = 'Credit assigned',
   ) {
+    // Validate + smart-resolve referenced records up front, so a wrong ID returns
+    // a clean 404 (or auto-corrects) instead of a raw FK-violation 500 from the DB.
+    const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!userExists) throw Errors.notFound('User');
+
+    let resolvedVendorId = vendorId;
+    if (vendorId) {
+      const vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, select: { id: true } });
+      if (vendor) {
+        resolvedVendorId = vendor.id;
+      } else {
+        // Common admin slip: pasting the vendor's USER id instead of the vendor
+        // record id. Recover by resolving the real vendor id from that profile.
+        const byUser = await prisma.vendor.findFirst({ where: { userId: vendorId }, select: { id: true } });
+        if (!byUser) throw Errors.notFound('Vendor');
+        resolvedVendorId = byUser.id;
+      }
+    }
+
     return prisma.$transaction(async (tx) => {
-      const existing = await tx.creditWallet.findFirst({ where: { userId, vendorId } });
+      const existing = await tx.creditWallet.findFirst({ where: { userId, vendorId: resolvedVendorId } });
       const limit = D(creditLimit);
       const ov = {
         overrideRepaymentMode: overrides.repaymentMode ?? null,
@@ -144,7 +163,7 @@ export class CreditWalletService {
       if (!existing) {
         wallet = await tx.creditWallet.create({
           data: {
-            userId, vendorId, status: 'ACTIVE',
+            userId, vendorId: resolvedVendorId, status: 'ACTIVE',
             creditLimit: limit,
             // available = limit − used (used is 0 for a fresh wallet)
             availableCredit: limit,

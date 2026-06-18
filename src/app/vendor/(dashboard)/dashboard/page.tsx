@@ -1,4 +1,5 @@
 'use client';
+'use no memo';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
@@ -1308,7 +1309,7 @@ function DownloadReportsModal({
 
             // Generate report contents based on the selected report type and date range
             let csvContent = "data:text/csv;charset=utf-8,";
-            let filename = `vendor_${reportType}_report_${range}.csv`;
+            const filename = `vendor_${reportType}_report_${range}.csv`;
 
             if (reportType === 'sales') {
                 csvContent += "Sales Operations Report\n";
