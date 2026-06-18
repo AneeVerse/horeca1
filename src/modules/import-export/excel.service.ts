@@ -16,9 +16,40 @@ import { z } from 'zod';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function cleanRow(raw: Record<string, any>): Record<string, unknown> {
   const cleaned: Record<string, unknown> = {};
+  const numericKeys = [
+    'Taxable Rate (Amt)',
+    'Tax %',
+    'Gross Rate 1Pc (visible to the Customer)',
+    'Bulk Rates 1 - Qty',
+    'Bulk Rates 1 - Gross Rate / Unit',
+    'Bulk Rates 2 - Qty',
+    'Bulk Rates 2 - Gross Rate / Unit',
+    '6pm to 9am Promo Rate - Single Unit',
+    '6pm to 9am Bulk Rates 1 - Qty',
+    '6pm to 9am Bulk Rates 1 - Unit',
+    '6pm to 9am Bulk Rates 2 - Qty',
+    '6pm to 9am Bulk Rates 2 - Gross Rate / Unit',
+    'Available Stock',
+    'sortOrder',
+  ];
+
   for (const [key, val] of Object.entries(raw)) {
     const k = key.trim();
-    cleaned[k] = typeof val === 'string' ? val.trim() : val;
+    let v = typeof val === 'string' ? val.trim() : val;
+
+    if (numericKeys.includes(k) && typeof v === 'string') {
+      const stripped = v.replace(/[₹$,%]/g, '').trim();
+      if (stripped === '') {
+        v = undefined;
+      } else {
+        const num = Number(stripped);
+        if (!isNaN(num)) {
+          v = num;
+        }
+      }
+    }
+
+    cleaned[k] = v;
     if (cleaned[k] === '') cleaned[k] = undefined;
   }
   return cleaned;

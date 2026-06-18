@@ -31,7 +31,7 @@ export interface ImportModalConfig {
   vendors?: Array<{ id: string; businessName: string }>;
 }
 
-type EditSlab = { minQty: number; grossRate: number };
+type EditSlab = { minQty: number; grossRate: number; promoGrossRate?: number | null };
 type EditRow = Partial<{
   name: string;
   sku: string;
@@ -43,12 +43,14 @@ type EditRow = Partial<{
   taxPercent: number;
   promoPrice: number;
   stock: number;
+  imageUrl: string;
+  imageName: string;
   // Bulk price tiers as GROSS rate/unit (matches the import sheet). The backend
   // converts gross → taxable using the row's tax% on commit.
   slabs: EditSlab[];
 }>;
 
-interface PreviewSlab { minQty: number; price: number; grossRate: number; promoPrice?: number | null }
+interface PreviewSlab { minQty: number; price: number; grossRate: number; promoPrice?: number | null; promoGrossRate?: number | null }
 
 interface PreviewItem {
   row: number;
@@ -64,6 +66,8 @@ interface PreviewItem {
   taxPercent: number;
   promoPrice?: number | null;
   stock?: number;
+  imageUrl?: string | null;
+  imageName?: string | null;
   bulkSlabCount: number;
   bulkSlabs?: PreviewSlab[];
   hasPromo: boolean;
@@ -186,14 +190,15 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
   // Edit one bulk-slab tier (0 or 1) for a row. Seeds from the current edit
   // or the parsed slabs, updates the tier, drops tiers that aren't fully
   // filled, and stores the result as an `slabs` edit.
-  const setSlab = useCallback((row: number, item: PreviewItem, tier: 0 | 1, field: keyof EditSlab, value: number) => {
+  const setSlab = useCallback((row: number, item: PreviewItem, tier: 0 | 1, field: keyof EditSlab, value: number | null) => {
     setEdits((prev) => {
-      const existingSlabs = prev[row]?.slabs ?? (item.bulkSlabs ?? []).map((s) => ({ minQty: s.minQty, grossRate: s.grossRate }));
+      const existingSlabs = prev[row]?.slabs ?? (item.bulkSlabs ?? []).map((s) => ({ minQty: s.minQty, grossRate: s.grossRate, promoGrossRate: s.promoGrossRate }));
       const arr: EditSlab[] = [
-        { ...(existingSlabs[0] ?? { minQty: 0, grossRate: 0 }) },
-        { ...(existingSlabs[1] ?? { minQty: 0, grossRate: 0 }) },
+        { ...(existingSlabs[0] ?? { minQty: 0, grossRate: 0, promoGrossRate: null }) },
+        { ...(existingSlabs[1] ?? { minQty: 0, grossRate: 0, promoGrossRate: null }) },
       ];
-      arr[tier][field] = value;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      arr[tier][field] = value as any;
       const cleaned = arr.filter((s) => Number(s.minQty) > 0 && Number(s.grossRate) > 0);
       const next = { ...prev };
       next[row] = { ...(next[row] ?? {}), slabs: cleaned };
@@ -463,12 +468,13 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                 {viewMode === 'list' && (
                   <div className="flex-1 bg-white rounded-[12px] border border-[#E2E2E2] overflow-hidden flex flex-col min-h-0 shadow-sm">
                     <div className="overflow-auto">
-                      <table className="text-left border-collapse text-[11.5px] text-[#181725] min-w-[1640px] [&_td]:border-r [&_td]:border-[#EFEFEF] [&_th]:border-r [&_th]:border-[#E2E2E2]">
+                      <table className="text-left border-collapse text-[11.5px] text-[#181725] min-w-[2100px] [&_td]:border-r [&_td]:border-[#EFEFEF] [&_th]:border-r [&_th]:border-[#E2E2E2]">
                         <thead className="sticky top-0 z-30">
                           <tr className="bg-[#F3F4F6] text-[10px] font-bold text-[#6B7280] uppercase tracking-wide">
                             <th className="px-2 py-2 w-[44px] text-center sticky left-0 bg-[#F3F4F6] z-40">#</th>
-                            <th className="px-2 py-2 w-[74px] text-center">Action</th>
                             <th className="px-2 py-2 w-[210px] sticky left-[44px] bg-[#F3F4F6] z-40">Product Name</th>
+                            <th className="px-2 py-2 w-[74px] text-center">Action</th>
+                            <th className="px-2 py-2 w-[180px] text-center">Image</th>
                             <th className="px-2 py-2 w-[110px]">SKU</th>
                             <th className="px-2 py-2 w-[100px]">HSN</th>
                             <th className="px-2 py-2 w-[110px]">Brand</th>
@@ -479,10 +485,13 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                             <th className="px-2 py-2 w-[92px] text-right bg-[#EEF6F1]">Gross ₹</th>
                             <th className="px-2 py-2 w-[64px] text-right bg-[#FBF7EC]">Slab1 Qty</th>
                             <th className="px-2 py-2 w-[84px] text-right bg-[#FBF7EC]">Slab1 ₹</th>
+                            <th className="px-2 py-2 w-[84px] text-right bg-[#FBF7EC]">Slab1 Promo ₹</th>
                             <th className="px-2 py-2 w-[64px] text-right bg-[#FBF7EC]">Slab2 Qty</th>
                             <th className="px-2 py-2 w-[84px] text-right bg-[#FBF7EC]">Slab2 ₹</th>
+                            <th className="px-2 py-2 w-[84px] text-right bg-[#FBF7EC]">Slab2 Promo ₹</th>
                             <th className="px-2 py-2 w-[80px] text-right">Promo ₹</th>
                             <th className="px-2 py-2 w-[68px] text-right">Stock</th>
+                            <th className="px-2 py-2 w-[150px]">Image URL</th>
                             <th className="px-2 py-2 w-[48px] text-center sticky right-0 bg-[#F3F4F6] z-40 border-r-0">Skip</th>
                           </tr>
                         </thead>
@@ -501,11 +510,13 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                             const taxVal = rowEdit.taxPercent ?? item.taxPercent;
                             const promoVal = rowEdit.promoPrice ?? (item.promoPrice ?? null);
                             const stockVal = rowEdit.stock ?? (item.stock ?? 0);
+                            const imageUrlVal = rowEdit.imageUrl !== undefined ? rowEdit.imageUrl : (item.imageUrl ?? '');
+                            const imageNameVal = rowEdit.imageName !== undefined ? rowEdit.imageName : (item.imageName ?? '');
                             const grossVal = Math.round(priceVal * (1 + taxVal / 100) * 100) / 100;
                             // Slab tiers (gross rate/unit) from edit or parsed file.
-                            const slabSrc = rowEdit.slabs ?? (item.bulkSlabs ?? []).map(s => ({ minQty: s.minQty, grossRate: s.grossRate }));
-                            const s1q = slabSrc[0]?.minQty ?? ''; const s1r = slabSrc[0]?.grossRate ?? '';
-                            const s2q = slabSrc[1]?.minQty ?? ''; const s2r = slabSrc[1]?.grossRate ?? '';
+                            const slabSrc = rowEdit.slabs ?? (item.bulkSlabs ?? []).map(s => ({ minQty: s.minQty, grossRate: s.grossRate, promoGrossRate: s.promoGrossRate }));
+                            const s1q = slabSrc[0]?.minQty ?? ''; const s1r = slabSrc[0]?.grossRate ?? ''; const s1p = slabSrc[0]?.promoGrossRate ?? '';
+                            const s2q = slabSrc[1]?.minQty ?? ''; const s2r = slabSrc[1]?.grossRate ?? ''; const s2p = slabSrc[1]?.promoGrossRate ?? '';
                             const rowBg = skipped
                               ? 'bg-[#FAFAFA]'
                               : hasLocalEdits ? 'bg-amber-50/50'
@@ -514,14 +525,46 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                             return (
                               <tr key={item.row} className={cn(rowBg, skipped && 'opacity-40', 'border-b border-[#EFEFEF] hover:bg-[#299E60]/[0.04]')}>
                                 <td className={cn('px-2 py-1 text-center font-semibold text-[#9CA3AF] sticky left-0 z-20', rowBg)}>{item.row}</td>
+                                <td className={cn('px-1 py-0.5 sticky left-[44px] z-20', rowBg)}>
+                                  <input type="text" value={nameVal} onChange={e => setEdit(item.row, 'name', e.target.value)} className={cellInput} />
+                                </td>
                                 <td className="px-2 py-1 text-center">
                                   <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide',
                                     item.action === 'create' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-700')}>
                                     {item.action === 'create' ? 'New' : 'Upd'}
                                   </span>
                                 </td>
-                                <td className={cn('px-1 py-0.5 sticky left-[44px] z-20', rowBg)}>
-                                  <input type="text" value={nameVal} onChange={e => setEdit(item.row, 'name', e.target.value)} className={cellInput} />
+                                <td className="px-1 py-0.5">
+                                  <div className="flex items-center gap-1.5 px-0.5">
+                                    <div
+                                      onClick={() => {
+                                        const url = imageUrlVal || (imageNameVal ? `/uploads/${imageNameVal}` : '');
+                                        if (url) window.open(url, '_blank');
+                                      }}
+                                      className="w-7 h-7 rounded border border-[#EEEEEE] overflow-hidden flex-shrink-0 cursor-pointer hover:opacity-85 flex items-center justify-center bg-gray-50"
+                                      title="Click to view image"
+                                    >
+                                      {imageUrlVal || imageNameVal ? (
+                                        <img
+                                          src={imageUrlVal || `/uploads/${imageNameVal}`}
+                                          alt=""
+                                          className="w-full h-full object-cover"
+                                          onError={(e) => {
+                                            (e.target as HTMLElement).style.display = 'none';
+                                          }}
+                                        />
+                                      ) : (
+                                        <span className="text-[8px] text-gray-400">None</span>
+                                      )}
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={imageNameVal}
+                                      onChange={e => setEdit(item.row, 'imageName', e.target.value)}
+                                      placeholder="Image Name"
+                                      className={cellInput}
+                                    />
+                                  </div>
                                 </td>
                                 <td className="px-1 py-0.5"><input type="text" value={skuVal} onChange={e => setEdit(item.row, 'sku', e.target.value)} className={cellInput} /></td>
                                 <td className="px-1 py-0.5"><input type="text" value={hsnVal} onChange={e => setEdit(item.row, 'hsn', e.target.value)} placeholder="—" className={cellInput} /></td>
@@ -542,10 +585,13 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                                 <td className="px-2 py-1 text-right font-bold text-[#181725] bg-[#299E60]/[0.04] tabular-nums">{inr(grossVal)}</td>
                                 <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" value={s1q} placeholder="—" onChange={e => setSlab(item.row, item, 0, 'minQty', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
                                 <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" step="0.01" value={s1r} placeholder="—" onChange={e => setSlab(item.row, item, 0, 'grossRate', parseFloat(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
+                                <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" step="0.01" value={s1p} placeholder="—" onChange={e => setSlab(item.row, item, 0, 'promoGrossRate', e.target.value === '' ? null : (parseFloat(e.target.value) || 0))} className={cn(cellInput, 'text-right')} /></td>
                                 <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" value={s2q} placeholder="—" onChange={e => setSlab(item.row, item, 1, 'minQty', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
                                 <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" step="0.01" value={s2r} placeholder="—" onChange={e => setSlab(item.row, item, 1, 'grossRate', parseFloat(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
+                                <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" step="0.01" value={s2p} placeholder="—" onChange={e => setSlab(item.row, item, 1, 'promoGrossRate', e.target.value === '' ? null : (parseFloat(e.target.value) || 0))} className={cn(cellInput, 'text-right')} /></td>
                                 <td className="px-1 py-0.5"><input type="number" step="0.01" value={promoVal ?? ''} placeholder="—" onChange={e => setEdit(item.row, 'promoPrice', e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0))} className={cn(cellInput, 'text-right')} /></td>
                                 <td className="px-1 py-0.5"><input type="number" value={stockVal} onChange={e => setEdit(item.row, 'stock', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
+                                <td className="px-1 py-0.5"><input type="text" value={imageUrlVal} onChange={e => setEdit(item.row, 'imageUrl', e.target.value)} placeholder="—" className={cellInput} /></td>
                                 <td className={cn('px-1 py-1 text-center sticky right-0 z-20 border-r-0', rowBg)}>
                                   <button onClick={() => toggleSkip(item.row)} title={skipped ? 'Include row' : 'Skip row'} className={cn('w-[22px] h-[22px] rounded flex items-center justify-center transition-colors mx-auto',
                                     skipped ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-gray-100 text-[#9CA3AF] hover:bg-rose-50 hover:text-rose-600')}>
@@ -615,6 +661,12 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                             value={edits[currentItem.row]?.promoPrice ?? (currentItem.promoPrice ?? '')}
                             onChange={e => setEdit(currentItem.row, 'promoPrice', e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0))} className={inputCls} />
                         </FieldGroup>
+                        <FieldGroup label="Image URL">
+                          <input type="text" value={edits[currentItem.row]?.imageUrl ?? (currentItem.imageUrl ?? '')} onChange={e => setEdit(currentItem.row, 'imageUrl', e.target.value)} placeholder="—" className={inputCls} />
+                        </FieldGroup>
+                        <FieldGroup label="Image Name">
+                          <input type="text" value={edits[currentItem.row]?.imageName ?? (currentItem.imageName ?? '')} onChange={e => setEdit(currentItem.row, 'imageName', e.target.value)} placeholder="—" className={inputCls} />
+                        </FieldGroup>
                       </div>
 
                       <div className="flex items-center gap-3 border-t border-[#F5F5F5] pt-6">
@@ -624,14 +676,31 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                     </div>
 
                     <div className="w-full md:w-[320px] bg-[#F8F9FB] rounded-[16px] border border-[#EEEEEE] p-6 space-y-6">
+                      {(edits[currentItem.row]?.imageUrl ?? currentItem.imageUrl) && (
+                        <div>
+                          <h5 className="text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-3">Product Image</h5>
+                          <div className="bg-white border border-[#EEEEEE] rounded-[12px] overflow-hidden flex items-center justify-center p-2 shadow-sm">
+                            <img src={edits[currentItem.row]?.imageUrl ?? currentItem.imageUrl ?? ''} alt="" className="max-h-[160px] object-contain rounded-[8px]" />
+                          </div>
+                        </div>
+                      )}
+
                       <div>
                         <h5 className="text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider mb-3">Pricing slabs</h5>
                         {currentItem.bulkSlabs && currentItem.bulkSlabs.length > 0 ? (
                           <div className="space-y-2">
                             {currentItem.bulkSlabs.map((slab, index) => (
-                              <div key={index} className="bg-white border border-[#EEEEEE] rounded-[10px] p-3 flex justify-between items-center text-[12.5px]">
-                                <span className="font-bold text-[#7C7C7C]">Qty ≥ {slab.minQty}</span>
-                                <span className="font-black text-[#181725]">{inr(slab.price)}</span>
+                              <div key={index} className="bg-white border border-[#EEEEEE] rounded-[10px] p-3 flex flex-col gap-1.5 text-[12.5px]">
+                                <div className="flex justify-between items-center w-full">
+                                  <span className="font-bold text-[#7C7C7C]">Qty ≥ {slab.minQty}</span>
+                                  <span className="font-black text-[#181725]">{inr(slab.price)}</span>
+                                </div>
+                                {slab.promoPrice && (
+                                  <div className="flex justify-between items-center w-full text-[11px] text-amber-600 font-semibold border-t border-[#F5F5F5] pt-1.5 mt-0.5">
+                                    <span>Promo Qty ≥ {slab.minQty}</span>
+                                    <span>{inr(slab.promoPrice)}</span>
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>

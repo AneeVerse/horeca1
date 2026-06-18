@@ -47,8 +47,16 @@ interface PreviewItem {
   taxPercent: number;
   promoPrice?: number | null;
   stock?: number;
+  imageUrl?: string | null;
+  imageName?: string | null;
   bulkSlabCount: number;
-  bulkSlabs: Array<{ minQty: number; price: number; grossRate: number; promoPrice?: number | null }>;
+  bulkSlabs: Array<{
+    minQty: number;
+    price: number;
+    grossRate: number;
+    promoPrice?: number | null;
+    promoGrossRate?: number | null;
+  }>;
   hasPromo: boolean;
   existing?: {
     id: string;
@@ -189,6 +197,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
           price: s.taxableRate,
           grossRate: s.grossRate,
           promoPrice: s.promoTaxableRate ?? null,
+          promoGrossRate: s.promoGrossRate ?? null,
         }));
 
         if (existing) {
@@ -207,6 +216,8 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
             taxPercent: r.taxPercent,
             promoPrice: r.promoPrice ?? null,
             stock: r.stock,
+            imageUrl: r.imageUrl ?? null,
+            imageName: r.imageName ?? null,
             bulkSlabCount: r.bulkSlabs.length,
             bulkSlabs: slabPreview,
             hasPromo: !!r.promoPrice,
@@ -236,6 +247,8 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
             taxPercent: r.taxPercent,
             promoPrice: r.promoPrice ?? null,
             stock: r.stock,
+            imageUrl: r.imageUrl ?? null,
+            imageName: r.imageName ?? null,
             bulkSlabCount: r.bulkSlabs.length,
             bulkSlabs: slabPreview,
             hasPromo: !!r.promoPrice,
@@ -294,8 +307,8 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     // Per-row inline edits made in the review table. Whitelisted at apply
     // time so a forged extra key can't reach Prisma.
     const editsStr = formData.get('edits') as string | null;
-    type EditSlab = { minQty: number; grossRate: number };
-    type EditRow = Partial<{ name: string; sku: string; hsn: string; brand: string; unit: string; category: string; basePrice: number; taxPercent: number; promoPrice: number; stock: number; slabs: EditSlab[] }>;
+    type EditSlab = { minQty: number; grossRate: number; promoGrossRate?: number | null };
+    type EditRow = Partial<{ name: string; sku: string; hsn: string; brand: string; unit: string; category: string; basePrice: number; taxPercent: number; promoPrice: number; stock: number; imageUrl: string; imageName: string; slabs: EditSlab[] }>;
     let editsMap: Record<number, EditRow> = {};
     if (editsStr) {
       try {
@@ -314,11 +327,17 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
           if (typeof v.taxPercent === 'number' && v.taxPercent >= 0 && v.taxPercent <= 100) safe.taxPercent = v.taxPercent;
           if (typeof v.promoPrice === 'number' && v.promoPrice > 0) safe.promoPrice = v.promoPrice;
           if (typeof v.stock === 'number'      && v.stock >= 0 && Number.isInteger(v.stock)) safe.stock = v.stock;
+          if (typeof v.imageUrl === 'string')  safe.imageUrl = v.imageUrl.trim();
+          if (typeof v.imageName === 'string') safe.imageName = v.imageName.trim();
           if (Array.isArray(v.slabs)) {
             safe.slabs = v.slabs
               .filter((s) => s && typeof s.minQty === 'number' && s.minQty > 0 && typeof s.grossRate === 'number' && s.grossRate > 0)
               .slice(0, 3)
-              .map((s) => ({ minQty: Math.floor(s.minQty), grossRate: s.grossRate }));
+              .map((s) => ({
+                minQty: Math.floor(s.minQty),
+                grossRate: s.grossRate,
+                promoGrossRate: typeof s.promoGrossRate === 'number' && s.promoGrossRate > 0 ? s.promoGrossRate : null,
+              }));
           }
           editsMap[n] = safe;
         }
@@ -362,6 +381,8 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
         ...(e.taxPercent !== undefined ? { taxPercent: e.taxPercent } : {}),
         ...(e.promoPrice !== undefined ? { promoPrice: e.promoPrice } : {}),
         ...(e.stock     !== undefined ? { stock: e.stock } : {}),
+        ...(e.imageUrl  !== undefined ? { imageUrl: e.imageUrl } : {}),
+        ...(e.imageName !== undefined ? { imageName: e.imageName } : {}),
       };
 
       // Edited slab tiers override the file's. Sheet uses GROSS rate/unit;
@@ -371,6 +392,10 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
           minQty: s.minQty,
           grossRate: s.grossRate,
           taxableRate: r.taxPercent > 0 ? Math.round((s.grossRate / (1 + r.taxPercent / 100)) * 100) / 100 : s.grossRate,
+          ...(s.promoGrossRate ? {
+            promoGrossRate: s.promoGrossRate,
+            promoTaxableRate: r.taxPercent > 0 ? Math.round((s.promoGrossRate / (1 + r.taxPercent / 100)) * 100) / 100 : s.promoGrossRate,
+          } : {}),
         }));
       }
 
