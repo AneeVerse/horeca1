@@ -2,7 +2,14 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Tag, Plus, Loader2, Pencil, Trash2, Users, Package, X, Grid3x3 } from 'lucide-react';
+import { Tag, Plus, Loader2, Pencil, Trash2, Package, X, Grid3x3, AlertCircle, ArrowRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+type AssignmentType = 'customer' | 'outlet' | 'pincode' | 'area' | 'segment' | 'brand';
+
+interface PriceListAssignment {
+  type: AssignmentType;
+}
 
 interface PriceList {
   id: string;
@@ -10,7 +17,28 @@ interface PriceList {
   discountPercent: number;
   isActive: boolean;
   createdAt: string;
-  _count: { items: number; customers: number };
+  assignments: PriceListAssignment[];
+  _count: { items: number; customers: number; assignments: number };
+}
+
+// Plain-language summary of who a list reaches, e.g. "5 customers · 2 areas".
+const TYPE_LABELS: Record<AssignmentType, [string, string]> = {
+  customer: ['customer', 'customers'],
+  outlet: ['outlet', 'outlets'],
+  pincode: ['pincode', 'pincodes'],
+  area: ['area', 'areas'],
+  segment: ['segment', 'segments'],
+  brand: ['brand', 'brands'],
+};
+
+function whoSummary(assignments: PriceListAssignment[]): string {
+  const counts = assignments.reduce<Record<string, number>>((acc, a) => {
+    acc[a.type] = (acc[a.type] ?? 0) + 1;
+    return acc;
+  }, {});
+  return Object.entries(counts)
+    .map(([t, n]) => `${n} ${TYPE_LABELS[t as AssignmentType][n === 1 ? 0 : 1]}`)
+    .join(' · ');
 }
 
 // ─── Create Modal ────────────────────────────────────────────────────────────
@@ -38,7 +66,7 @@ function CreateModal({ onClose, onCreated }: CreateModalProps) {
       });
       const json = await res.json();
       if (json.success) {
-        onCreated({ ...json.data, _count: { items: 0, customers: 0 } });
+        onCreated({ ...json.data, assignments: [], _count: { items: 0, customers: 0, assignments: 0 } });
         onClose();
       } else {
         setError(json.error ?? 'Failed to create');
@@ -65,14 +93,14 @@ function CreateModal({ onClose, onCreated }: CreateModalProps) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. VIP Customers, Bulk Buyers"
+              placeholder="e.g. Cafe Pricing, Bulk Buyers"
               className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
               autoFocus
             />
           </div>
           <div>
             <label className="block text-[12px] font-semibold text-[#7C7C7C] mb-1">
-              Global Discount (%) <span className="text-[#AEAEAE] font-normal">— applies to all products unless overridden</span>
+              Default price adjustment (%) <span className="text-[#AEAEAE] font-normal">— optional, you can fine-tune everything after</span>
             </label>
             <input
               type="number"
@@ -146,18 +174,19 @@ export default function VendorPriceListsPage() {
 
   return (
     <div className="space-y-5 pb-10">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-[24px] font-bold text-[#181725]">Price Lists</h1>
-          <p className="text-[12px] text-[#AEAEAE]">Give special prices to specific customers, areas, or groups</p>
+          <p className="text-[12px] text-[#AEAEAE]">Give specific customers, areas, or groups their own prices.</p>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href="/vendor/price-lists/workspace"
-            className="flex items-center gap-2 px-4 h-[38px] rounded-[10px] bg-white border border-[#299E60] text-[#299E60] text-[13px] font-bold hover:bg-[#299E60]/5 transition-colors"
+            title="Edit prices across all your lists at once"
+            className="flex items-center gap-2 px-4 h-[38px] rounded-[10px] bg-white border border-[#EEEEEE] text-[#7C7C7C] text-[13px] font-bold hover:border-[#299E60]/40 hover:text-[#299E60] transition-colors"
           >
             <Grid3x3 size={15} />
-            Open Workspace
+            Bulk pricing grid
           </Link>
           <button
             onClick={() => setShowCreate(true)}
@@ -177,7 +206,7 @@ export default function VendorPriceListsPage() {
         <div className="bg-white rounded-[14px] border border-[#EEEEEE] py-16 text-center shadow-sm">
           <Tag size={36} className="text-[#E5E7EB] mx-auto mb-3" />
           <p className="text-[14px] font-bold text-[#AEAEAE]">No price lists yet</p>
-          <p className="text-[12px] text-[#AEAEAE] mt-1">Create price lists to offer custom rates to specific customer segments</p>
+          <p className="text-[12px] text-[#AEAEAE] mt-1">A price list lets you give chosen customers their own prices. Create one to get started.</p>
           <button
             onClick={() => setShowCreate(true)}
             className="mt-4 flex items-center gap-2 mx-auto px-4 h-[36px] rounded-[10px] bg-[#299E60] text-white text-[12px] font-bold hover:bg-[#238a54] transition-colors"
@@ -189,18 +218,29 @@ export default function VendorPriceListsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {priceLists.map((pl) => (
-            <div key={pl.id} className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5 flex flex-col gap-3">
+            <div key={pl.id} className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5 flex flex-col gap-3.5">
+              {/* Title + status + actions */}
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-[15px] font-bold text-[#181725]">{pl.name}</p>
-                  <p className="text-[12px] text-[#AEAEAE]">
-                    {pl.discountPercent > 0 ? `${pl.discountPercent}% off all products` : 'Per-product pricing'}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[15px] font-bold text-[#181725] truncate">{pl.name}</p>
+                    <span className={cn(
+                      'shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide',
+                      pl.isActive ? 'bg-[#EEF8F1] text-[#299E60]' : 'bg-[#F5F5F5] text-[#AEAEAE]',
+                    )}>
+                      <span className={cn('w-1.5 h-1.5 rounded-full', pl.isActive ? 'bg-[#299E60]' : 'bg-[#AEAEAE]')} />
+                      {pl.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-[#7C7C7C] mt-0.5">
+                    {pl.discountPercent > 0 ? `-${pl.discountPercent}% base price modifier` : 'Per-product pricing'}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <a
                     href={`/vendor/price-lists/${pl.id}`}
                     className="w-7 h-7 flex items-center justify-center rounded-[6px] hover:bg-[#F5F5F5] transition-colors text-[#7C7C7C]"
+                    title="Edit"
                   >
                     <Pencil size={13} />
                   </a>
@@ -208,30 +248,38 @@ export default function VendorPriceListsPage() {
                     onClick={() => handleDelete(pl.id)}
                     disabled={deleting === pl.id}
                     className="w-7 h-7 flex items-center justify-center rounded-[6px] hover:bg-[#FFF0F0] transition-colors text-[#E74C3C] disabled:opacity-40"
+                    title="Deactivate"
                   >
                     {deleting === pl.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                   </button>
                 </div>
               </div>
 
+              {/* Who gets it */}
+              <div className="rounded-[10px] bg-[#F8FAFC] border border-[#F0F0F0] px-3 py-2.5">
+                <p className="text-[10px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1">Who gets it</p>
+                {pl._count.assignments === 0 ? (
+                  <p className="text-[12px] font-semibold text-[#D97706] flex items-center gap-1.5">
+                    <AlertCircle size={12} /> Not assigned to anyone yet
+                  </p>
+                ) : (
+                  <p className="text-[12px] font-semibold text-[#181725]">{whoSummary(pl.assignments)}</p>
+                )}
+              </div>
+
+              {/* Footer */}
               <div className="flex items-center gap-4 text-[12px] text-[#7C7C7C]">
                 <div className="flex items-center gap-1">
                   <Package size={12} />
-                  <span>{pl._count.items} products</span>
+                  <span>{pl._count.items} special price{pl._count.items !== 1 ? 's' : ''}</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Users size={12} />
-                  <span>{pl._count.customers} customers</span>
-                </div>
+                <a
+                  href={`/vendor/price-lists/${pl.id}`}
+                  className="ml-auto text-[#299E60] font-bold hover:underline flex items-center gap-1"
+                >
+                  Edit <ArrowRight size={12} />
+                </a>
               </div>
-
-              {pl.discountPercent > 0 && (
-                <div className="bg-[#EEF8F1] rounded-[8px] px-3 py-2">
-                  <p className="text-[11px] font-bold text-[#299E60]">
-                    {pl.discountPercent}% discount applied to all base prices
-                  </p>
-                </div>
-              )}
             </div>
           ))}
         </div>

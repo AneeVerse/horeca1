@@ -56,7 +56,20 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         basePrice: true, taxPercent: true,
         priceListItems: {
           where: { priceList: { vendorId, isActive: true } },
-          select: { priceListId: true, customPrice: true, pricingType: true, discountPercent: true },
+          select: {
+            priceListId: true,
+            customPrice: true,
+            pricingType: true,
+            discountPercent: true,
+            isLocked: true,
+            validFrom: true,
+            validTo: true,
+            note: true,
+            scheduledPrice: true,
+            scheduledFrom: true,
+            scheduledTo: true,
+            history: true,
+          },
         },
       },
     });
@@ -65,15 +78,35 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     if (hasMore) products.pop();
 
     const rows = products.map((p) => {
-      // Map each list → the explicit override price (customPrice or computed
-      // from a per-item discountPercent), or null when no item exists.
-      const cells: Record<string, number | null> = {};
+      const cells: Record<string, any> = {};
       for (const it of p.priceListItems) {
-        if (it.customPrice != null) cells[it.priceListId] = Number(it.customPrice);
-        else if (it.discountPercent != null) {
-          cells[it.priceListId] = Math.round(Number(p.basePrice) * (1 - Number(it.discountPercent) / 100) * 100) / 100;
-        } else cells[it.priceListId] = null;
+        let price: number | null = null;
+        if (it.customPrice != null) {
+          price = Number(it.customPrice);
+        } else if (it.discountPercent != null) {
+          price = Math.round(Number(p.basePrice) * (1 - Number(it.discountPercent) / 100) * 100) / 100;
+        }
+
+        cells[it.priceListId] = {
+          price,
+          isLocked: it.isLocked,
+          validFrom: it.validFrom ? it.validFrom.toISOString() : null,
+          validTo: it.validTo ? it.validTo.toISOString() : null,
+          note: it.note,
+          scheduledPrice: it.scheduledPrice != null ? Number(it.scheduledPrice) : null,
+          scheduledFrom: it.scheduledFrom ? it.scheduledFrom.toISOString() : null,
+          scheduledTo: it.scheduledTo ? it.scheduledTo.toISOString() : null,
+          history: Array.isArray(it.history) ? it.history : [],
+        };
       }
+
+      // Populate empty fallback cells for missing price lists
+      for (const pl of priceLists) {
+        if (!cells[pl.id]) {
+          cells[pl.id] = null;
+        }
+      }
+
       return {
         id: p.id,
         name: p.name,
@@ -103,8 +136,14 @@ const patchSchema = z.object({
   cells: z.array(z.object({
     priceListId: z.string().uuid(),
     productId: z.string().uuid(),
-    // null clears the override (cell reverts to the list/base fallback).
-    customPrice: z.number().positive().nullable(),
+    customPrice: z.number().nonnegative().nullable().optional(),
+    isLocked: z.boolean().optional(),
+    validFrom: z.string().nullable().optional(),
+    validTo: z.string().nullable().optional(),
+    note: z.string().nullable().optional(),
+    scheduledPrice: z.number().nonnegative().nullable().optional(),
+    scheduledFrom: z.string().nullable().optional(),
+    scheduledTo: z.string().nullable().optional(),
   })).min(1).max(2000),
 });
 
@@ -125,18 +164,89 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     const okList = new Set(validLists.map((l) => l.id));
     const okProduct = new Set(validProducts.map((p) => p.id));
 
+    // Fetch existing items to compare values for recording price changes history
+    const existingItems = await prisma.priceListItem.findMany({
+      where: {
+        priceListId: { in: listIds },
+        productId: { in: productIds },
+      },
+      select: {
+        priceListId: true,
+        productId: true,
+        customPrice: true,
+        history: true,
+      },
+    });
+
     let upserted = 0, cleared = 0, skipped = 0;
     await prisma.$transaction(async (tx) => {
       for (const c of cells) {
         if (!okList.has(c.priceListId) || !okProduct.has(c.productId)) { skipped++; continue; }
-        if (c.customPrice == null) {
+
+        // If everything is blank / reset, delete the row.
+        const shouldDelete = c.customPrice === null &&
+                             !c.isLocked &&
+                             !c.validFrom && !c.validTo &&
+                             !c.note &&
+                             c.scheduledPrice === null;
+
+        if (shouldDelete) {
           const res = await tx.priceListItem.deleteMany({ where: { priceListId: c.priceListId, productId: c.productId } });
           cleared += res.count;
         } else {
+          const existing = existingItems.find(item => item.priceListId === c.priceListId && item.productId === c.productId);
+          let history = existing?.history && Array.isArray(existing.history) ? [...existing.history] : [];
+          
+          const oldPrice = existing?.customPrice != null ? Number(existing.customPrice) : null;
+          const newPrice = c.customPrice !== undefined ? c.customPrice : oldPrice;
+
+          if (oldPrice !== newPrice) {
+            history.unshift({
+              date: new Date().toISOString(),
+              action: oldPrice === null ? 'Price created' : 'Price updated',
+              oldPrice,
+              newPrice,
+              user: 'Vendor (Self)',
+            });
+          }
+
+          if (history.length > 50) {
+            history = history.slice(0, 50);
+          }
+
+          const parsedValidFrom = c.validFrom ? new Date(c.validFrom) : null;
+          const parsedValidTo = c.validTo ? new Date(c.validTo) : null;
+          const parsedScheduledFrom = c.scheduledFrom ? new Date(c.scheduledFrom) : null;
+          const parsedScheduledTo = c.scheduledTo ? new Date(c.scheduledTo) : null;
+
           await tx.priceListItem.upsert({
             where: { priceListId_productId: { priceListId: c.priceListId, productId: c.productId } },
-            create: { priceListId: c.priceListId, productId: c.productId, customPrice: c.customPrice, pricingType: 'fixed' },
-            update: { customPrice: c.customPrice, pricingType: 'fixed', discountPercent: null },
+            create: {
+              priceListId: c.priceListId,
+              productId: c.productId,
+              customPrice: c.customPrice ?? null,
+              pricingType: 'fixed',
+              isLocked: c.isLocked ?? false,
+              validFrom: parsedValidFrom,
+              validTo: parsedValidTo,
+              note: c.note ?? null,
+              scheduledPrice: c.scheduledPrice ?? null,
+              scheduledFrom: parsedScheduledFrom,
+              scheduledTo: parsedScheduledTo,
+              history: history,
+            },
+            update: {
+              ...(c.customPrice !== undefined && { customPrice: c.customPrice }),
+              pricingType: 'fixed',
+              ...(c.isLocked !== undefined && { isLocked: c.isLocked }),
+              ...(c.validFrom !== undefined && { validFrom: parsedValidFrom }),
+              ...(c.validTo !== undefined && { validTo: parsedValidTo }),
+              ...(c.note !== undefined && { note: c.note }),
+              ...(c.scheduledPrice !== undefined && { scheduledPrice: c.scheduledPrice }),
+              ...(c.scheduledFrom !== undefined && { scheduledFrom: parsedScheduledFrom }),
+              ...(c.scheduledTo !== undefined && { scheduledTo: parsedScheduledTo }),
+              history: history,
+            },
           });
           upserted++;
         }
@@ -148,3 +258,4 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     return errorResponse(error);
   }
 });
+

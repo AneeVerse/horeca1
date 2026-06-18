@@ -12,7 +12,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Save, Loader2, Search, Plus, Trash2, Tag, Users, Package,
-  Upload, AlertCircle, X, MapPin, Sparkles,
+  Upload, AlertCircle, X, MapPin, Sparkles, Download
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
@@ -110,8 +110,11 @@ export default function PriceListDetailPage() {
   // Edit state
   const [name, setName] = useState('');
   const [discountPercent, setDiscountPercent] = useState('0');
+  const [isActive, setIsActive] = useState(true);
   const [items, setItems] = useState<ItemDraft[]>([]);
   const [assignments, setAssignments] = useState<AssignmentDraft[]>([]);
+  // Bulk upload strip is tucked away by default — power feature, opt-in.
+  const [showBulk, setShowBulk] = useState(false);
 
   // Product search
   const [productSearch, setProductSearch] = useState('');
@@ -143,6 +146,7 @@ export default function PriceListDetailPage() {
       setPriceList(pl);
       setName(pl.name);
       setDiscountPercent(String(pl.discountPercent));
+      setIsActive(pl.isActive);
       setItems(
         pl.items.map((item) => ({
           productId: item.productId,
@@ -291,14 +295,16 @@ export default function PriceListDetailPage() {
       const rows = raw.map((r) => {
         const lower: Record<string, unknown> = {};
         for (const k of Object.keys(r)) lower[k.toLowerCase().trim()] = r[k];
-        const type = String(lower['type'] ?? lower['pricingtype'] ?? lower['pricing_type'] ?? 'fixed').toLowerCase();
+        const typeRaw = String(lower['type'] ?? lower['pricingtype'] ?? lower['pricing_type'] ?? 'fixed').toLowerCase();
+        const type = typeRaw === 'adjustment' ? 'discount' : typeRaw;
         return {
           sku: lower['sku'] != null ? String(lower['sku']) : undefined,
           customPrice: lower['price'] != null ? Number(lower['price']) :
                         lower['customprice'] != null ? Number(lower['customprice']) :
                         lower['custom_price'] != null ? Number(lower['custom_price']) : undefined,
           pricingType: (['fixed', 'discount', 'special', 'scheme'].includes(type) ? type : 'fixed') as PricingType,
-          discountPercent: lower['discount'] != null ? Number(lower['discount']) :
+          discountPercent: lower['adjustment'] != null ? Number(lower['adjustment']) :
+                            lower['discount'] != null ? Number(lower['discount']) :
                             lower['discountpercent'] != null ? Number(lower['discountpercent']) : undefined,
           schemeMinQty: lower['schememinqty'] != null ? Number(lower['schememinqty']) :
                          lower['minqty'] != null ? Number(lower['minqty']) : undefined,
@@ -325,6 +331,25 @@ export default function PriceListDetailPage() {
       setBulkUploading(false);
       if (bulkFileRef.current) bulkFileRef.current.value = '';
     }
+  };
+
+  const downloadTemplate = () => {
+    let csvContent = 'data:text/csv;charset=utf-8,';
+    csvContent += 'sku,type,price,adjustment,minQty,freeQty\n';
+    
+    items.forEach(item => {
+      const type = item.pricingType === 'discount' ? 'adjustment' : item.pricingType;
+      csvContent += `"${item.product.sku || ''}","${type}","${item.customPrice || ''}","${item.discountPercent || ''}","${item.schemeMinQty || ''}","${item.schemeFreeQty || ''}"\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Pricelist_Template_${name.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Pricelist template downloaded');
   };
 
   // ── Save ───────────────────────────────────────────────────────────
@@ -368,6 +393,7 @@ export default function PriceListDetailPage() {
         body: JSON.stringify({
           name: name.trim(),
           discountPercent: parseFloat(discountPercent) || 0,
+          isActive,
           items: itemsPayload,
           assignments: assignmentsPayload,
         }),
@@ -412,45 +438,46 @@ export default function PriceListDetailPage() {
             <ArrowLeft size={15} />
           </button>
           <div>
-            <h1 className="text-[22px] font-bold text-[#181725]">{priceList.name}</h1>
-            <p className="text-[12px] text-[#AEAEAE]">Set special prices, then choose which customers get them</p>
+            <h1 className="text-[22px] font-bold text-[#181725]">{name || priceList.name}</h1>
+            <p className="text-[12px] text-[#AEAEAE]">Two steps: choose <strong className="font-bold text-[#7C7C7C]">who</strong> gets this list, then <strong className="font-bold text-[#7C7C7C]">what</strong> they pay.</p>
           </div>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-5 h-[38px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-colors disabled:opacity-50"
-        >
-          {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-          Save Changes
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsActive((v) => !v)}
+            title="Toggle whether this list is live for customers"
+            className={cn(
+              'flex items-center gap-1.5 px-3 h-[38px] rounded-[10px] text-[12.5px] font-bold border transition-colors',
+              isActive
+                ? 'bg-[#EEF8F1] border-[#299E60]/30 text-[#299E60]'
+                : 'bg-[#F5F5F5] border-[#E5E7EB] text-[#7C7C7C]',
+            )}
+          >
+            <span className={cn('w-2 h-2 rounded-full', isActive ? 'bg-[#299E60]' : 'bg-[#AEAEAE]')} />
+            {isActive ? 'Active' : 'Inactive'}
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-5 h-[38px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-colors disabled:opacity-50"
+          >
+            {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+            Save Changes
+          </button>
+        </div>
       </div>
 
-      {/* Basic settings */}
+      {/* List name + quick stats */}
       <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5 space-y-4">
-        <h2 className="text-[14px] font-bold text-[#181725]">Price List Settings</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-[12px] font-semibold text-[#7C7C7C] mb-1">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
-            />
-          </div>
-          <div>
-            <label className="block text-[12px] font-semibold text-[#7C7C7C] mb-1">
-              Global Discount (%)
-              <span className="ml-1 text-[#AEAEAE] font-normal">— applies to every product, unless you set a specific price for it below</span>
-            </label>
-            <input
-              type="number" min="0" max="100" step="0.5"
-              value={discountPercent}
-              onChange={(e) => setDiscountPercent(e.target.value)}
-              className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
-            />
-          </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-[#7C7C7C] mb-1">List name</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Cafe Pricing, Bulk Buyers"
+            className="w-full h-[40px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] outline-none focus:border-[#299E60]/50 bg-white"
+          />
         </div>
 
         <div className="flex items-center gap-6 pt-1 text-[12px] text-[#7C7C7C]">
@@ -473,7 +500,7 @@ export default function PriceListDetailPage() {
       <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-[#F5F5F5] flex items-center justify-between">
           <div>
-            <h2 className="text-[14px] font-bold text-[#181725]">Who gets these prices</h2>
+            <h2 className="text-[14px] font-bold text-[#181725]"><span className="text-[#299E60]">①</span> Who gets this list</h2>
             <p className="text-[12px] text-[#AEAEAE]">Add a rule and the prices apply automatically — to a customer, an outlet, a pincode, an area, a customer group, or a brand&apos;s products.</p>
           </div>
           {!addingAssign && (
@@ -570,57 +597,124 @@ export default function PriceListDetailPage() {
         )}
       </div>
 
-      {/* ── Bulk upload strip ──────────────────────────────────────── */}
-      <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-[14px] font-bold text-[#181725]">Bulk Upload</h2>
-            <p className="text-[12px] text-[#AEAEAE]">
-              Upload a CSV/XLSX with columns: <code className="bg-[#F5F5F5] px-1 rounded">sku</code>,
-              <code className="bg-[#F5F5F5] px-1 rounded mx-1">type</code> (fixed/discount/special/scheme),
-              <code className="bg-[#F5F5F5] px-1 rounded">price</code>,
-              <code className="bg-[#F5F5F5] px-1 rounded mx-1">discount</code>,
-              <code className="bg-[#F5F5F5] px-1 rounded">minQty</code>,
-              <code className="bg-[#F5F5F5] px-1 rounded ml-1">freeQty</code>
-            </p>
-          </div>
-          <label className="flex items-center gap-2 px-4 h-[38px] rounded-[10px] border border-[#EEEEEE] hover:border-[#299E60]/40 cursor-pointer text-[12.5px] font-bold text-[#181725] transition-colors">
-            {bulkUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-            {bulkUploading ? 'Uploading…' : 'Choose file'}
-            <input
-              ref={bulkFileRef}
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              className="hidden"
-              disabled={bulkUploading}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleBulkFile(f);
-              }}
-            />
-          </label>
+      {/* ── ② What they pay ────────────────────────────────────────── */}
+      <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#F5F5F5]">
+          <h2 className="text-[14px] font-bold text-[#181725]"><span className="text-[#299E60]">②</span> What they pay</h2>
+          <p className="text-[12px] text-[#AEAEAE]">Pick a default for the whole list, then set special prices for individual products if you need to.</p>
         </div>
-        {bulkResult && (
-          <div className="mt-3 text-[12.5px] text-[#181725]">
-            Uploaded <strong>{bulkResult.upserted}</strong> rows.
-            {bulkResult.errors.length > 0 && (
-              <details className="mt-2">
-                <summary className="cursor-pointer text-[#E74C3C] font-bold">{bulkResult.errors.length} error{bulkResult.errors.length !== 1 ? 's' : ''} — click to view</summary>
-                <ul className="mt-1.5 text-[11.5px] text-[#7C7C7C] max-h-[160px] overflow-y-auto pl-4 list-disc">
-                  {bulkResult.errors.map((e, i) => <li key={i}>Row {e.row}: {e.message}</li>)}
-                </ul>
-              </details>
+
+        {/* Default pricing choice */}
+        <div className="px-5 py-4 border-b border-[#F5F5F5]">
+          <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-2">Default for every product</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={() => setDiscountPercent('0')}
+              className={cn(
+                'rounded-[12px] border p-3.5 text-left transition-colors',
+                Number(discountPercent) > 0 ? 'border-[#EEEEEE] hover:border-[#D1D5DB]' : 'border-[#299E60] bg-[#EEF8F1]',
+              )}
+            >
+              <div className="text-[13px] font-bold text-[#181725]">Same as base price</div>
+              <div className="text-[11px] text-[#AEAEAE] mt-0.5">Normal catalog price — unless overridden below.</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => { if (!(Number(discountPercent) > 0)) setDiscountPercent('5'); }}
+              className={cn(
+                'rounded-[12px] border p-3.5 text-left transition-colors',
+                Number(discountPercent) > 0 ? 'border-[#299E60] bg-[#EEF8F1]' : 'border-[#EEEEEE] hover:border-[#D1D5DB]',
+              )}
+            >
+              <div className="text-[13px] font-bold text-[#181725]">% adjustment on everything</div>
+              <div className="text-[11px] text-[#AEAEAE] mt-0.5">A flat price adjustment applied to every product.</div>
+            </button>
+          </div>
+          {Number(discountPercent) > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-[#7C7C7C]">
+              <input
+                type="number" min="0" max="100" step="0.5"
+                value={discountPercent}
+                onChange={(e) => setDiscountPercent(e.target.value)}
+                className="w-[90px] h-[38px] px-3 rounded-[10px] border border-[#EEEEEE] text-[13px] text-right outline-none focus:border-[#299E60]/50 bg-white"
+              />
+              <span>% off the base price.</span>
+              <span className="ml-auto text-[11px] text-[#AEAEAE]">
+                Example: ₹100 → <strong className="text-[#299E60]">₹{(100 * (1 - (Number(discountPercent) || 0) / 100)).toFixed(0)}</strong>
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Special prices header + bulk toggle */}
+        <div className="px-5 py-4 border-b border-[#F5F5F5] flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[13px] font-bold text-[#181725]">Special prices</h3>
+            <p className="text-[12px] text-[#AEAEAE]">Override the default for specific products. Anything not listed uses the default above.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowBulk((v) => !v)}
+            className="flex items-center gap-1.5 px-3 h-[34px] rounded-[10px] border border-[#EEEEEE] hover:border-[#299E60]/40 text-[12px] font-bold text-[#7C7C7C] transition-colors shrink-0"
+          >
+            <Upload size={13} /> Import from spreadsheet
+          </button>
+        </div>
+
+        {/* Bulk upload (opt-in) */}
+        {showBulk && (
+          <div className="px-5 py-4 border-b border-[#F5F5F5] bg-[#F8FAFC]">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-[12px] text-[#7C7C7C]">
+              CSV/XLSX columns: <code className="bg-white border border-[#EEEEEE] px-1 rounded">sku</code>,
+              <code className="bg-white border border-[#EEEEEE] px-1 rounded mx-1">type</code> (fixed/adjustment/special/scheme),
+              <code className="bg-white border border-[#EEEEEE] px-1 rounded">price</code>,
+              <code className="bg-white border border-[#EEEEEE] px-1 rounded mx-1">adjustment</code>,
+              <code className="bg-white border border-[#EEEEEE] px-1 rounded">minQty</code>,
+              <code className="bg-white border border-[#EEEEEE] px-1 rounded ml-1">freeQty</code>
+              </p>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={downloadTemplate}
+                  className="flex items-center gap-2 px-4 h-[38px] rounded-[10px] border border-[#EEEEEE] bg-white hover:border-[#299E60]/40 text-[12.5px] font-bold text-[#181725] transition-colors"
+                >
+                  <Download size={13} />
+                  Download Template
+                </button>
+                <label className="flex items-center gap-2 px-4 h-[38px] rounded-[10px] border border-[#EEEEEE] bg-white hover:border-[#299E60]/40 cursor-pointer text-[12.5px] font-bold text-[#181725] transition-colors">
+                  {bulkUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                  {bulkUploading ? 'Uploading…' : 'Choose file'}
+                  <input
+                    ref={bulkFileRef}
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    className="hidden"
+                    disabled={bulkUploading}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleBulkFile(f);
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+            {bulkResult && (
+              <div className="mt-3 text-[12.5px] text-[#181725]">
+                Uploaded <strong>{bulkResult.upserted}</strong> rows.
+                {bulkResult.errors.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-[#E74C3C] font-bold">{bulkResult.errors.length} error{bulkResult.errors.length !== 1 ? 's' : ''} — click to view</summary>
+                    <ul className="mt-1.5 text-[11.5px] text-[#7C7C7C] max-h-[160px] overflow-y-auto pl-4 list-disc">
+                      {bulkResult.errors.map((e, i) => <li key={i}>Row {e.row}: {e.message}</li>)}
+                    </ul>
+                  </details>
+                )}
+              </div>
             )}
           </div>
         )}
-      </div>
-
-      {/* ── Items ──────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#F5F5F5] flex items-center justify-between">
-          <h2 className="text-[14px] font-bold text-[#181725]">Product prices</h2>
-          <p className="text-[12px] text-[#AEAEAE]">Set a special price for specific products. Anything not listed here just gets the global discount.</p>
-        </div>
 
         {/* Add product */}
         <div className="px-5 py-4 border-b border-[#F5F5F5] relative">
@@ -665,7 +759,7 @@ export default function PriceListDetailPage() {
             <p className="text-[13px] font-bold text-[#AEAEAE]">No items yet</p>
             <p className="text-[12px] text-[#AEAEAE] mt-1">
               {Number(discountPercent) > 0
-                ? `All products get ${discountPercent}% off (global discount)`
+                ? `All products get -${discountPercent}% default adjustment`
                 : 'Search above to add per-product pricing'}
             </p>
           </div>
@@ -711,7 +805,16 @@ function ItemRow({
   onUpdate: (patch: Partial<ItemDraft>) => void;
   onRemove: () => void;
 }) {
-  const base = item.product.basePrice;
+  const base = Number(item.product.basePrice);
+  // Live "they pay" preview from the chosen pricing type.
+  const cp = parseFloat(item.customPrice);
+  const dp = parseFloat(item.discountPercent);
+  let effective: number | null = null;
+  if (item.pricingType === 'fixed' || item.pricingType === 'special' || item.pricingType === 'scheme') {
+    effective = isNaN(cp) ? null : cp;
+  } else if (item.pricingType === 'discount') {
+    effective = isNaN(dp) ? null : Math.round(base * (1 - dp / 100) * 100) / 100;
+  }
   return (
     <div className="px-5 py-4 hover:bg-[#FAFAFA] transition-colors">
       <div className="flex items-start gap-4">
@@ -719,8 +822,21 @@ function ItemRow({
           <p className="text-[13px] font-semibold text-[#181725] truncate">{item.product.name}</p>
           <p className="text-[11px] text-[#AEAEAE]">
             {item.product.sku ? <span className="font-mono">{item.product.sku} · </span> : null}
-            {item.product.packSize ?? item.product.unit ?? ''} · Base ₹{Number(base).toFixed(2)}
+            {item.product.packSize ?? item.product.unit ?? ''} · Base ₹{base.toFixed(2)}
           </p>
+          {effective != null && (
+            <p className="text-[11px] mt-1">
+              <span className="text-[#AEAEAE]">They pay </span>
+              <span className="font-bold text-[#299E60]">₹{effective.toFixed(2)}</span>
+              {item.pricingType === 'discount' && <span className="text-[#AEAEAE]"> (-{item.discountPercent || 0}% base)</span>}
+              {item.pricingType === 'scheme' && item.schemeMinQty && (
+                <span className="text-[#AEAEAE]"> at {item.schemeMinQty}+ pcs{item.schemeFreeQty ? `, +${item.schemeFreeQty} free` : ''}</span>
+              )}
+              {effective < base && item.pricingType !== 'discount' && (
+                <span className="text-[#AEAEAE] line-through ml-1.5">₹{base.toFixed(2)}</span>
+              )}
+            </p>
+          )}
         </div>
 
         <div className="flex items-start gap-3">
@@ -733,7 +849,7 @@ function ItemRow({
               className="h-[32px] px-2 rounded-[8px] border border-[#EEEEEE] text-[12px] bg-white"
             >
               <option value="fixed">Fixed</option>
-              <option value="discount">Discount %</option>
+              <option value="discount">Adjustment %</option>
               <option value="special">Special</option>
               <option value="scheme">Scheme</option>
             </select>
@@ -753,7 +869,7 @@ function ItemRow({
           )}
           {item.pricingType === 'discount' && (
             <div>
-              <label className="block text-[10.5px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1">Discount (%)</label>
+              <label className="block text-[10.5px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1">Adjustment (%)</label>
               <input
                 type="number" min="0" max="100" step="0.1"
                 value={item.discountPercent}

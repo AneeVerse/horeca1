@@ -27,6 +27,16 @@ const itemSchema = z.object({
   discountPercent: z.number().min(0).max(100).optional(),
   schemeMinQty: z.number().int().min(1).optional(),
   schemeFreeQty: z.number().int().min(0).optional(),
+  // Phase-5 cell attributes. Optional — when omitted on update we PRESERVE
+  // whatever the Workspace grid set, so the two surfaces no longer wipe each
+  // other. When present, the editor's advanced row drawer controls them.
+  isLocked: z.boolean().optional(),
+  validFrom: z.string().nullable().optional(),
+  validTo: z.string().nullable().optional(),
+  note: z.string().max(2000).nullable().optional(),
+  scheduledPrice: z.number().min(0).nullable().optional(),
+  scheduledFrom: z.string().nullable().optional(),
+  scheduledTo: z.string().nullable().optional(),
 }).refine(
   (i) => !!(i.productId || i.sku),
   { message: 'Each item needs productId or sku' },
@@ -173,13 +183,24 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
       });
 
       if (body.items !== undefined) {
-        // Replace all items atomically. createMany is faster than per-row
-        // upserts and the (priceListId, productId) unique constraint stops
-        // duplicates from sneaking in.
-        await tx.priceListItem.deleteMany({ where: { priceListId: id } });
-        if (resolvedItems.length > 0) {
-          await tx.priceListItem.createMany({
-            data: resolvedItems.map((item) => ({
+        // Non-destructive sync. The OLD code did deleteMany + createMany,
+        // which wiped the Phase-5 cell attributes (lock / validity /
+        // scheduled / note / history) that the Bulk Grid sets — so saving
+        // here silently destroyed that data. We now:
+        //   1. delete only items the vendor removed from the list,
+        //   2. upsert the rest, writing pricing fields every time but only
+        //      touching an advanced field when the payload explicitly
+        //      carries it (otherwise the grid's value is preserved).
+        const keepIds = resolvedItems.map((i) => i.productId!);
+        await tx.priceListItem.deleteMany({
+          where: { priceListId: id, productId: { notIn: keepIds.length > 0 ? keepIds : ['00000000-0000-0000-0000-000000000000'] } },
+        });
+
+        const toDate = (v: string | null | undefined) => (v ? new Date(v) : null);
+        for (const item of resolvedItems) {
+          await tx.priceListItem.upsert({
+            where: { priceListId_productId: { priceListId: id, productId: item.productId! } },
+            create: {
               priceListId: id,
               productId: item.productId!,
               customPrice: item.customPrice ?? null,
@@ -187,7 +208,30 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
               discountPercent: item.discountPercent ?? null,
               schemeMinQty: item.schemeMinQty ?? null,
               schemeFreeQty: item.schemeFreeQty ?? null,
-            })),
+              isLocked: item.isLocked ?? false,
+              validFrom: toDate(item.validFrom),
+              validTo: toDate(item.validTo),
+              note: item.note ?? null,
+              scheduledPrice: item.scheduledPrice ?? null,
+              scheduledFrom: toDate(item.scheduledFrom),
+              scheduledTo: toDate(item.scheduledTo),
+            },
+            update: {
+              customPrice: item.customPrice ?? null,
+              pricingType: item.pricingType,
+              discountPercent: item.discountPercent ?? null,
+              schemeMinQty: item.schemeMinQty ?? null,
+              schemeFreeQty: item.schemeFreeQty ?? null,
+              // Advanced fields: only overwrite when explicitly provided so a
+              // lock/schedule/note set in the Bulk Grid survives a save here.
+              ...(item.isLocked !== undefined && { isLocked: item.isLocked }),
+              ...(item.validFrom !== undefined && { validFrom: toDate(item.validFrom) }),
+              ...(item.validTo !== undefined && { validTo: toDate(item.validTo) }),
+              ...(item.note !== undefined && { note: item.note }),
+              ...(item.scheduledPrice !== undefined && { scheduledPrice: item.scheduledPrice }),
+              ...(item.scheduledFrom !== undefined && { scheduledFrom: toDate(item.scheduledFrom) }),
+              ...(item.scheduledTo !== undefined && { scheduledTo: toDate(item.scheduledTo) }),
+            },
           });
         }
       }

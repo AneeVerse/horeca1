@@ -21,9 +21,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     const priceLists = await prisma.priceList.findMany({
       where: { vendorId, isActive: true },
       include: {
-        // V2.2 Phase 4 — include assignment count so the UI can show
-        // each list with its blast radius ("Targets 3 outlets, 2 pincodes")
-        // without a follow-up request per list.
+        assignments: true,
         _count: { select: { items: true, customers: true, assignments: true } },
       },
       orderBy: { createdAt: 'desc' },
