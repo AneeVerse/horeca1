@@ -12,6 +12,7 @@ import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { withRateLimit } from '@/middleware/withRateLimit';
 import { uniqueHcid } from '@/lib/hcid';
 import { emitEvent } from '@/events/emitter';
+import { GST_RE, PAN_RE } from '@/lib/validators/vendor-kyc';
 
 const PHONE_RE = /^\d{10}$/;
 const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
@@ -41,10 +42,9 @@ const Body = z.object({
   authorizedPersonPhone: z.string().regex(PHONE_RE, 'Invalid authorized person phone'),
   authorizedPersonEmail: z.string().email().optional().or(z.literal('')),
 
-  // Step 4 — GST & PAN — optional, no format check. A vendor can apply before
-  // their KYC docs are ready; admin verifies these at /admin/vendors/[id].
-  gstNumber: z.string().max(20).optional().or(z.literal('')),
-  panNumber: z.string().max(20).optional().or(z.literal('')),
+  // Step 4 — GST & PAN — optional, validates format if provided.
+  gstNumber: z.string().regex(GST_RE, 'Invalid GSTIN format').optional().or(z.literal('')),
+  panNumber: z.string().regex(PAN_RE, 'Invalid PAN format').optional().or(z.literal('')),
 
   // Step 5 — bank details
   bankAccountName: z.string().min(2).max(100),

@@ -11,6 +11,7 @@ import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
+import { GST_RE } from '@/lib/validators/vendor-kyc';
 
 // Validation schema for profile updates — whitelist of allowed fields
 const updateSettingsSchema = z.object({
@@ -25,7 +26,7 @@ const updateSettingsSchema = z.object({
   city: z.string().max(100).optional(),
   state: z.string().max(100).optional(),
   addressPincode: z.string().regex(/^\d{6}$/, 'Invalid pincode').optional().or(z.literal('')),
-  gstNumber: z.string().max(20).optional().or(z.literal('')),
+  gstNumber: z.string().regex(GST_RE, 'Invalid GSTIN format').optional().or(z.literal('')),
   defaultMOQ: z.number().int().min(1).optional(),
   defaultTaxPercent: z.number().min(0).max(100).optional(),
   deliveryFee: z.number().min(0).optional(),

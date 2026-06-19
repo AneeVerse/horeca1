@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
+import { FORM, FormField as Field, FormInput, inputClass, selectClass } from '@/components/ui/form';
 
 const STEP_TITLES = [
   { id: 1, label: 'Verify Mobile', icon: Phone },
@@ -189,6 +190,13 @@ export default function VendorRegisterPage() {
       const x6 = V.minLen(authorizedPersonName, 'Name', 2); if (x6) e.authorizedPersonName = x6;
       const x7 = V.phone10(authorizedPersonPhone); if (x7) e.authorizedPersonPhone = x7;
       if (authorizedPersonEmail) { const x8 = V.email(authorizedPersonEmail); if (x8) e.authorizedPersonEmail = x8; }
+    } else if (s === 4) {
+      if (gstNumber.trim()) {
+        const x = V.gst(gstNumber); if (x) e.gstNumber = x;
+      }
+      if (panNumber.trim()) {
+        const x = V.pan(panNumber); if (x) e.panNumber = x;
+      }
     } else if (s === 5) {
       const x = V.minLen(bankAccountName, 'Account holder name', 2); if (x) e.bankAccountName = x;
       if (bankAccountNumber.trim().length < 8) e.bankAccountNumber = 'Enter a valid account number';
@@ -573,7 +581,7 @@ export default function VendorRegisterPage() {
   if (sessionStatus === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 size={28} className="animate-spin text-[#53B175]" />
+        <Loader2 size={28} className="animate-spin text-[#299E60]" />
       </div>
     );
   }
@@ -584,7 +592,7 @@ export default function VendorRegisterPage() {
       <div className="min-h-screen flex items-center justify-center px-6 py-12">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
           <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle2 size={48} className="text-[#53B175]" />
+            <CheckCircle2 size={48} className="text-[#299E60]" />
           </div>
           <h1 className="text-[24px] font-[800] text-gray-800 mb-3">Application Submitted</h1>
           <p className="text-[14px] text-gray-500 mb-6 leading-relaxed">
@@ -607,7 +615,7 @@ export default function VendorRegisterPage() {
             <>
               <button
                 onClick={() => router.push(`/login?phone=${encodeURIComponent(phone)}`)}
-                className="w-full bg-[#53B175] hover:bg-[#48a068] text-white font-bold py-3 rounded-lg transition-colors"
+                className={cn(FORM.primaryBtn, 'w-full py-3')}
               >
                 Continue to log in
               </button>
@@ -630,7 +638,7 @@ export default function VendorRegisterPage() {
   return (
     <div className="flex flex-col">
       {/* Header — strong, branded onboarding banner */}
-      <div className="bg-gradient-to-r from-[#53B175] to-[#48a068] px-4 md:px-10 py-5 md:py-7 shrink-0">
+      <div className="bg-gradient-to-r from-[#53B175] to-[#299E60] px-4 md:px-10 py-5 md:py-7 shrink-0">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
           <div>
             <p className="text-[11px] md:text-[12px] font-bold uppercase tracking-[0.18em] text-white/70 mb-1">
@@ -657,10 +665,10 @@ export default function VendorRegisterPage() {
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[12px] font-bold text-gray-600">Step {step} of 7</span>
-            <span className="text-[12px] font-bold text-[#53B175]">{Math.round(progress)}% complete</span>
+            <span className="text-[12px] font-bold text-[#299E60]">{Math.round(progress)}% complete</span>
           </div>
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-[#53B175] transition-all duration-300" style={{ width: `${progress + (100 / 7)}%` }} />
+            <div className="h-full bg-[#299E60] transition-all duration-300" style={{ width: `${progress + (100 / 7)}%` }} />
           </div>
           <div className="mt-3 hidden md:flex items-center justify-between">
             {STEP_TITLES.map((s) => {
@@ -671,13 +679,13 @@ export default function VendorRegisterPage() {
                 <div key={s.id} className="flex flex-col items-center text-center flex-1">
                   <div className={cn(
                     'w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold transition-colors',
-                    done ? 'bg-[#53B175] text-white' :
-                    active ? 'bg-[#53B175]/10 text-[#53B175] ring-2 ring-[#53B175]' :
+                    done ? 'bg-[#299E60] text-white' :
+                    active ? 'bg-[#299E60]/10 text-[#299E60] ring-2 ring-[#299E60]' :
                     'bg-gray-100 text-gray-400',
                   )}>
                     {done ? <CheckCircle2 size={16} /> : <Icon size={14} />}
                   </div>
-                  <span className={cn('mt-1.5 text-[10px]', active ? 'text-[#53B175] font-bold' : 'text-gray-400')}>{s.label}</span>
+                  <span className={cn('mt-1.5 text-[10px]', active ? 'text-[#299E60] font-bold' : 'text-gray-400')}>{s.label}</span>
                 </div>
               );
             })}
@@ -718,13 +726,13 @@ export default function VendorRegisterPage() {
                       setError('');
                     }}
                     placeholder="10 digit mobile number"
-                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#53B175]" />
+                    className={inputClass(false, 'pl-12')} />
                 </div>
               </Field>
 
               {!otpSent ? (
                 <button onClick={handleSendOtp} disabled={otpLoading || !PHONE_RE.test(phone)}
-                  className="mt-4 bg-[#53B175] hover:bg-[#48a068] text-white font-bold py-3 px-6 rounded-lg disabled:opacity-50 flex items-center gap-2">
+                  className={cn(FORM.primaryBtn, 'mt-4 py-3 px-6')}>
                   {otpLoading && <Loader2 size={16} className="animate-spin" />} Send OTP
                 </button>
               ) : (
@@ -738,8 +746,8 @@ export default function VendorRegisterPage() {
                           disabled={otpLoading || phoneVerified}
                           className={cn(
                             'w-[56px] h-[56px] text-center text-[22px] font-[800] border-2 rounded-xl outline-none transition-all',
-                            d ? 'border-[#53B175] bg-green-50 text-[#53B175]' : 'border-gray-200 bg-white',
-                            'focus:border-[#53B175]',
+                            d ? 'border-[#299E60] bg-green-50 text-[#299E60]' : 'border-gray-200 bg-white',
+                            'focus:border-[#299E60] focus:ring-4 focus:ring-[#299E60]/10',
                           )}
                         />
                       ))}
@@ -747,11 +755,11 @@ export default function VendorRegisterPage() {
                   </Field>
                   <div className="mt-3 flex items-center gap-4 text-[13px]">
                     {phoneVerified ? (
-                      <span className="text-[#53B175] font-bold flex items-center gap-1"><CheckCircle2 size={14} /> Verified</span>
+                      <span className="text-[#299E60] font-bold flex items-center gap-1"><CheckCircle2 size={14} /> Verified</span>
                     ) : resendTimer > 0 ? (
                       <span className="text-gray-400">Resend OTP in <strong>{resendTimer}s</strong></span>
                     ) : (
-                      <button onClick={handleSendOtp} disabled={otpLoading} className="text-[#53B175] font-bold hover:underline">Resend OTP</button>
+                      <button onClick={handleSendOtp} disabled={otpLoading} className="text-[#299E60] font-bold hover:underline">Resend OTP</button>
                     )}
                     {/* Always available — user may circle back from a later step
                         to fix the phone. Resets step-1 state only; everything
@@ -782,7 +790,7 @@ export default function VendorRegisterPage() {
                     className={cn(
                       'text-left p-4 border-2 rounded-xl transition-all',
                       vendorType === t.id
-                        ? 'border-[#53B175] bg-green-50/50 ring-1 ring-[#53B175]'
+                        ? 'border-[#299E60] bg-[#ECFDF5] ring-1 ring-[#299E60]'
                         : 'border-gray-200 bg-white hover:border-gray-300',
                     )}>
                     <div className="font-bold text-[15px] text-gray-800 mb-0.5">{t.label}</div>
@@ -799,19 +807,19 @@ export default function VendorRegisterPage() {
               <p className="text-[13px] text-gray-500 mb-6">Tell us about your business and the person we&apos;ll be in touch with.</p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="Your full name" required error={fieldErrors.fullName}>
+                <Field label="Owner Full Name" required error={fieldErrors.fullName}>
                   <Input value={fullName} onChange={v => { setFullName(v); if (fieldErrors.fullName) setFE('fullName', V.minLen(v, 'Full name', 2)); }}
                     onBlur={() => setFE('fullName', V.minLen(fullName, 'Full name', 2))}
                     hasError={!!fieldErrors.fullName}
                     placeholder="John Doe" />
                 </Field>
-                <Field label="Business (legal) name" required error={fieldErrors.businessName}>
+                <Field label="Legal Business Name" required error={fieldErrors.businessName}>
                   <Input value={businessName} onChange={v => { setBusinessName(v); if (fieldErrors.businessName) setFE('businessName', V.minLen(v, 'Business name', 2)); }}
                     onBlur={() => setFE('businessName', V.minLen(businessName, 'Business name', 2))}
                     hasError={!!fieldErrors.businessName}
                     placeholder="Acme Foods Pvt Ltd" />
                 </Field>
-                <Field label="Trade name (storefront)" required className="md:col-span-2" error={fieldErrors.tradeName}>
+                <Field label="Trade Name / Display Name" required className="md:col-span-2" error={fieldErrors.tradeName}>
                   <Input value={tradeName} onChange={v => { setTradeName(v); if (fieldErrors.tradeName) setFE('tradeName', V.minLen(v, 'Trade name', 2)); }}
                     onBlur={() => setFE('tradeName', V.minLen(tradeName, 'Trade name', 2))}
                     hasError={!!fieldErrors.tradeName}
@@ -863,12 +871,30 @@ export default function VendorRegisterPage() {
               <h2 className="text-[22px] font-[800] text-gray-800 mb-1">GST & PAN</h2>
               <p className="text-[13px] text-gray-500 mb-6">Optional — add them now or leave blank and provide later.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="GSTIN (optional)">
-                  <Input value={gstNumber} onChange={v => setGstNumber(v.toUpperCase().slice(0, 15))}
+                <Field label="GSTIN (optional)" error={fieldErrors.gstNumber}>
+                  <Input value={gstNumber}
+                    onChange={v => {
+                      const val = v.toUpperCase().slice(0, 15);
+                      setGstNumber(val);
+                      if (fieldErrors.gstNumber) {
+                        setFE('gstNumber', val.trim() ? V.gst(val) : '');
+                      }
+                    }}
+                    onBlur={() => setFE('gstNumber', gstNumber.trim() ? V.gst(gstNumber) : '')}
+                    hasError={!!fieldErrors.gstNumber}
                     placeholder="22ABCDE1234F1Z5" />
                 </Field>
-                <Field label="PAN (optional)">
-                  <Input value={panNumber} onChange={v => setPanNumber(v.toUpperCase().slice(0, 10))}
+                <Field label="PAN (optional)" error={fieldErrors.panNumber}>
+                  <Input value={panNumber}
+                    onChange={v => {
+                      const val = v.toUpperCase().slice(0, 10);
+                      setPanNumber(val);
+                      if (fieldErrors.panNumber) {
+                        setFE('panNumber', val.trim() ? V.pan(val) : '');
+                      }
+                    }}
+                    onBlur={() => setFE('panNumber', panNumber.trim() ? V.pan(panNumber) : '')}
+                    hasError={!!fieldErrors.panNumber}
                     placeholder="ABCDE1234F" />
                 </Field>
               </div>
@@ -917,7 +943,7 @@ export default function VendorRegisterPage() {
                 </Field>
                 <Field label="Account type" required>
                   <select value={bankAccountType} onChange={e => setBankAccountType(e.target.value as 'savings' | 'current')}
-                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#53B175]">
+                    className={selectClass()}>
                     <option value="current">Current</option>
                     <option value="savings">Savings</option>
                   </select>
@@ -963,7 +989,7 @@ export default function VendorRegisterPage() {
                     }}
                     className="mb-2"
                   />
-                  <Field label="Address line" required error={fieldErrors.billingAddressLine}>
+                  <Field label="Address Line" required error={fieldErrors.billingAddressLine}>
                     <Input value={billingAddress.addressLine}
                       onChange={v => { setBillingAddress({ ...billingAddress, addressLine: v }); if (fieldErrors.billingAddressLine) setFE('billingAddressLine', v.trim().length < 5 ? 'Enter the full address' : ''); }}
                       onBlur={() => setFE('billingAddressLine', billingAddress.addressLine.trim().length < 5 ? 'Enter the full address' : '')}
@@ -999,7 +1025,7 @@ export default function VendorRegisterPage() {
                   <h3 className="font-bold text-[15px] text-gray-800">Pickup / Warehouse Address</h3>
                   <label className="flex items-center gap-2 text-[12px] text-gray-600 cursor-pointer">
                     <input type="checkbox" checked={pickupSameAsBilling} onChange={e => setPickupSameAsBilling(e.target.checked)}
-                      className="accent-[#53B175]" />
+                      className="accent-[#299E60]" />
                     Same as billing
                   </label>
                 </div>
@@ -1030,7 +1056,7 @@ export default function VendorRegisterPage() {
                       className="mb-2"
                     />
                   )}
-                  <Field label="Address line" required error={!pickupSameAsBilling ? fieldErrors.pickupAddressLine : undefined}>
+                  <Field label="Address Line" required error={!pickupSameAsBilling ? fieldErrors.pickupAddressLine : undefined}>
                     <Input value={pickupAddress.addressLine} disabled={pickupSameAsBilling}
                       onChange={v => { setPickupAddress({ ...pickupAddress, addressLine: v }); if (fieldErrors.pickupAddressLine) setFE('pickupAddressLine', v.trim().length < 5 ? 'Enter the full address' : ''); }}
                       onBlur={() => setFE('pickupAddressLine', pickupAddress.addressLine.trim().length < 5 ? 'Enter the full address' : '')}
@@ -1074,17 +1100,17 @@ export default function VendorRegisterPage() {
                     onChange={e => setPincodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPincode(); } }}
                     placeholder="Add 6-digit pincode"
-                    className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#53B175]" />
-                  <button onClick={addPincode} className="px-4 py-3 bg-[#53B175] text-white rounded-lg font-bold flex items-center gap-1">
+                    className="flex-1 px-4 py-3 bg-[#FAFAFA] focus:bg-white border border-[#EEEEEE] rounded-[10px] text-[13px] outline-none focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10 transition-all" />
+                  <button onClick={addPincode} className="px-4 py-3 bg-[#299E60] hover:bg-[#238a54] text-white rounded-[10px] font-bold flex items-center gap-1 transition-colors">
                     <Plus size={16} /> Add
                   </button>
                 </div>
                 {pincodes.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {pincodes.map(p => (
-                      <span key={p} className="inline-flex items-center gap-1.5 bg-green-50 text-[#53B175] px-3 py-1.5 rounded-full text-[13px] font-bold">
+                      <span key={p} className="inline-flex items-center gap-1.5 bg-[#ECFDF5] text-[#299E60] px-3 py-1.5 rounded-full text-[13px] font-bold">
                         {p}
-                        <button onClick={() => removePincode(p)} className="hover:bg-[#53B175]/10 rounded-full p-0.5">
+                        <button onClick={() => removePincode(p)} className="hover:bg-[#299E60]/10 rounded-full p-0.5">
                           <X size={12} />
                         </button>
                       </span>
@@ -1105,10 +1131,10 @@ export default function VendorRegisterPage() {
                       <button key={o.id} onClick={() => setDeliveryCapability(o.id)}
                         className={cn(
                           'p-3 border-2 rounded-lg text-left transition-all',
-                          deliveryCapability === o.id ? 'border-[#53B175] bg-green-50/50' : 'border-gray-200 hover:border-gray-300',
+                          deliveryCapability === o.id ? 'border-[#299E60] bg-[#ECFDF5]' : 'border-gray-200 hover:border-gray-300',
                         )}>
                         <div className="flex items-center gap-1.5 mb-0.5">
-                          <Truck size={14} className="text-[#53B175]" />
+                          <Truck size={14} className="text-[#299E60]" />
                           <span className="font-bold text-[13px] text-gray-800">{o.label}</span>
                         </div>
                         <div className="text-[11px] text-gray-500">{o.desc}</div>
@@ -1150,7 +1176,7 @@ export default function VendorRegisterPage() {
             <span className="text-[12px] text-gray-400">Verify your number to continue</span>
           ) : (
             <button onClick={handleNext} disabled={submitting}
-              className="px-6 py-3 bg-[#53B175] hover:bg-[#48a068] text-white font-bold rounded-lg flex items-center gap-2 shadow-md shadow-green-100 disabled:opacity-60">
+              className={cn(FORM.primaryBtn, 'px-6 py-3')}>
               {submitting && <Loader2 size={16} className="animate-spin" />}
               {step === 7 ? 'Submit Application' : 'Continue'}
               {!submitting && step < 7 && <ArrowRight size={16} />}
@@ -1163,27 +1189,7 @@ export default function VendorRegisterPage() {
 }
 
 // ─── Tiny UI helpers ──────────────────────────────────────────────────────
-function Field({
-  label, required, children, className, error,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-  className?: string;
-  error?: string;
-}) {
-  return (
-    <div className={cn('space-y-1.5', className)}>
-      <label className="block text-[12px] font-bold text-gray-700 ml-0.5">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
-      {children}
-      {error && (
-        <p className="text-[11px] text-red-600 font-medium ml-0.5">{error}</p>
-      )}
-    </div>
-  );
-}
+// Field comes from the shared form module (imported as `Field`).
 
 // Direct file picker — stages a File in parent state (uploaded after the vendor
 // row is created). Accepts PDF + common image types, matching the server.
@@ -1203,8 +1209,8 @@ function FileField({
         className="hidden"
         onChange={e => onChange(e.target.files?.[0] ?? null)} />
       <button type="button" onClick={() => ref.current?.click()}
-        className="w-full flex items-center gap-2 px-4 py-3 bg-white border border-dashed border-[#53B175]/50 rounded-lg text-[13px] text-left hover:bg-green-50/40 transition-colors">
-        <Upload size={15} className="text-[#53B175] shrink-0" />
+        className="w-full flex items-center gap-2 px-4 py-3 bg-[#FAFAFA] border border-dashed border-[#299E60]/40 rounded-[10px] text-[13px] text-left hover:bg-[#ECFDF5]/60 transition-colors">
+        <Upload size={15} className="text-[#299E60] shrink-0" />
         <span className={cn('truncate', value ? 'text-gray-800 font-bold' : 'text-gray-400')}>
           {value ? value.name : 'Choose file from your computer…'}
         </span>
@@ -1234,15 +1240,9 @@ function Input({
   hasError?: boolean;
 }) {
   return (
-    <input type={type} value={value} disabled={disabled}
-      onChange={e => onChange(e.target.value)}
-      onBlur={onBlur}
-      placeholder={placeholder}
-      className={cn(
-        'w-full px-4 py-3 bg-white border rounded-lg text-[14px] outline-none transition-colors',
-        hasError ? 'border-red-400 focus:border-red-500' : 'border-gray-200 focus:border-[#53B175]',
-        disabled && 'bg-gray-50 text-gray-500',
-      )}
+    <FormInput
+      value={value} onChange={onChange} hasError={hasError}
+      type={type} placeholder={placeholder} disabled={disabled} onBlur={onBlur}
     />
   );
 }

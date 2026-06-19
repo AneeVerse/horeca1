@@ -25,6 +25,8 @@ import {
   type VendorType, type DeliveryCapability,
 } from '@/lib/validators/vendor-kyc';
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
+import { cn } from '@/lib/utils';
+import { FORM, FormField as Field, FormInput, SectionLabel, selectClass, textareaClass } from '@/components/ui/form';
 
 interface Props {
   onClose: () => void;
@@ -252,26 +254,26 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
     <div className="fixed inset-0 z-[15000] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white rounded-[20px] w-full max-w-[820px] shadow-2xl flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#F0F0F0] shrink-0">
+        <div className="flex items-center justify-between px-7 py-5 border-b border-[#EEEEEE] shrink-0 bg-[#FAFAFA] rounded-t-[20px]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#ECFDF5] rounded-[10px] flex items-center justify-center">
-              <UserPlus size={18} className="text-[#299E60]" />
+            <div className="w-10 h-10 bg-gradient-to-br from-[#53B175] to-[#299E60] rounded-[10px] flex items-center justify-center shadow-md shadow-green-100">
+              <UserPlus size={18} className="text-white" />
             </div>
             <div>
-              <h3 className="text-[16px] font-bold text-[#181725]">Add Vendor</h3>
-              <p className="text-[11px] text-[#AEAEAE] font-medium">
+              <h3 className="text-[17px] font-[800] text-[#181725] tracking-tight">Add Vendor</h3>
+              <p className="text-[11px] text-gray-400 font-bold mt-0.5 uppercase tracking-wide">
                 Step {step} of 3 — {STEP_LABELS[step - 1]}
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-[8px] hover:bg-gray-100">
-            <X size={16} className="text-[#7C7C7C]" />
+          <button onClick={onClose} className="p-1.5 rounded-[8px] hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
+            <X size={16} />
           </button>
         </div>
 
         {/* Step indicator */}
-        <div className="px-6 pt-4 shrink-0">
-          <div className="flex items-center">
+        <div className="px-7 pt-5 pb-3.5 shrink-0 bg-[#FAFAFA]/50 border-b border-[#EEEEEE]">
+          <div className="flex items-center justify-between max-w-[650px] mx-auto">
             {([1, 2, 3] as const).map((s, i) => (
               <Step key={s} num={s} label={STEP_LABELS[s - 1]} current={step} showConnector={i < 2} />
             ))}
@@ -350,7 +352,7 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
                     hasError={!!fieldErrors.businessName} placeholder="Daily Fresh Foods Pvt Ltd"
                   />
                 </Field>
-                <Field label="Trade Name / Display Name" error={fieldErrors.tradeName}>
+                <Field label="Trade Name / Display Name (optional)" error={fieldErrors.tradeName}>
                   <Input
                     name="vendor-trade-name" value={tradeName}
                     onChange={(v) => { setTradeName(v); setFieldErrors(prev => ({ ...prev, tradeName: '' })); }}
@@ -365,17 +367,13 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
                     setVendorType(e.target.value as VendorType);
                     setFieldErrors(prev => ({ ...prev, vendorType: '' }));
                   }}
-                  className={`w-full h-[42px] border rounded-[10px] px-3 text-[13px] outline-none bg-[#FAFAFA] focus:bg-white transition-all ${
-                    fieldErrors.vendorType
-                      ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/10'
-                      : 'border-[#EEEEEE] focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10'
-                  }`}
+                  className={selectClass(!!fieldErrors.vendorType)}
                 >
                   <option value="">Select vendor type…</option>
                   {VENDOR_TYPES.map((t) => <option key={t} value={t}>{VENDOR_TYPE_LABEL[t]}</option>)}
                 </select>
               </Field>
-              <Field label="GSTIN (15-character)" hint="Optional, e.g. for unregistered small vendors" error={fieldErrors.gstin}>
+              <Field label="GSTIN (optional)" hint="Optional, e.g. for unregistered small vendors" error={fieldErrors.gstin}>
                 <Input
                   name="vendor-gstin" value={gstin}
                   onChange={(v) => {
@@ -391,9 +389,9 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
 
           {/* Step 2 — KYC + Bank */}
           {step === 2 && (
-            <div className="space-y-4">
+            <div className="space-y-4 min-h-[480px]">
               <SectionLabel>Identity</SectionLabel>
-              <Field label="PAN" required error={fieldErrors.panNumber}>
+              <Field label="PAN (optional)" error={fieldErrors.panNumber}>
                 <Input
                   name="vendor-pan" value={panNumber}
                   onChange={(v) => {
@@ -532,7 +530,7 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
 
           {/* Step 3 — Address & Operations */}
           {step === 3 && (
-            <div className="space-y-4">
+            <div className="space-y-4 min-h-[480px]">
               <SectionLabel><MapPin size={12} className="inline mr-1" />Pickup / Warehouse Outlet</SectionLabel>
               <Field label="Outlet name" required hint="e.g. 'Mumbai Warehouse', 'Main Store'" error={fieldErrors.outletName}>
                 <Input
@@ -680,7 +678,7 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Brief description of the vendor…"
                   rows={2}
-                  className="w-full border border-[#EEEEEE] rounded-[10px] px-3 py-2 text-[13px] outline-none focus:border-[#299E60]/40 bg-[#FAFAFA] focus:bg-white transition-all resize-none"
+                  className={textareaClass()}
                 />
               </Field>
             </div>
@@ -707,7 +705,7 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
           {step < 3 ? (
             <button
               onClick={handleNext}
-              className="h-[42px] px-6 bg-[#299E60] hover:bg-[#238a54] text-white rounded-[10px] text-[13px] font-bold flex items-center gap-2 transition-colors shadow-sm active:scale-98"
+              className={cn(FORM.primaryBtn, 'h-[42px] px-6 text-[13px]')}
             >
               Next <ChevronRight size={15} />
             </button>
@@ -715,7 +713,7 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="h-[42px] px-6 bg-[#299E60] hover:bg-[#238a54] disabled:bg-gray-300 text-white rounded-[10px] text-[13px] font-bold flex items-center gap-2 transition-colors shadow-sm active:scale-98"
+              className={cn(FORM.primaryBtn, 'h-[42px] px-6 text-[13px]')}
             >
               {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
               {submitting ? 'Creating vendor…' : 'Create Vendor'}
@@ -729,24 +727,29 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
 
 // ── Step indicator ──────────────────────────────────────────────────────
 function Step({ num, label, current, showConnector }: { num: 1 | 2 | 3; label: string; current: number; showConnector: boolean }) {
+  const isActive = num === current;
+  const isCompleted = num < current;
   return (
     <>
-      <div
-        className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold transition-all shrink-0 ${
-          num < current ? 'bg-[#299E60] text-white' :
-          num === current ? 'bg-[#299E60] text-white ring-4 ring-[#299E60]/20' :
-                            'bg-[#F0F0F0] text-[#AEAEAE]'
-        }`}
-      >
-        {num < current ? <Check size={14} /> : num}
+      <div className="flex items-center gap-2">
+        <div
+          className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold transition-all duration-300 shrink-0 ${
+            isCompleted ? 'bg-gradient-to-r from-[#53B175] to-[#299E60] text-white shadow-md shadow-green-100' :
+            isActive    ? 'bg-gradient-to-r from-[#53B175] to-[#299E60] text-white ring-4 ring-[#299E60]/10 shadow-md shadow-green-100' :
+                          'bg-[#FAFAFA] border border-[#EEEEEE] text-gray-400'
+          }`}
+        >
+          {isCompleted ? <Check size={12} className="stroke-[3]" /> : num}
+        </div>
+        <span className={`text-[11.5px] font-extrabold transition-colors duration-300 ${
+          isActive || isCompleted ? 'text-gray-800' : 'text-gray-400'
+        }`}>
+          {label}
+        </span>
       </div>
       {showConnector && (
-        <div className="flex-1 flex items-center gap-1 mx-2">
-          <div className={`flex-1 h-[2px] rounded transition-colors ${num < current ? 'bg-[#299E60]' : 'bg-[#F0F0F0]'}`} />
-          <span className={`text-[10px] font-bold whitespace-nowrap ${num < current ? 'text-[#299E60]' : 'text-[#AEAEAE]'}`}>
-            {label}
-          </span>
-          <div className={`flex-1 h-[2px] rounded transition-colors ${num < current ? 'bg-[#299E60]' : 'bg-[#F0F0F0]'}`} />
+        <div className="flex-1 mx-3 flex items-center">
+          <div className={`w-full h-[2px] rounded transition-colors duration-300 ${isCompleted ? 'bg-[#299E60]' : 'bg-[#EEEEEE]'}`} />
         </div>
       )}
     </>
@@ -801,6 +804,7 @@ function AddressFields({
       <AddressAutocomplete
         label="Search from maps"
         placeholder="Type location, e.g. Vashi Rockville Diner..."
+        initialValue={value.addressLine}
         hint="Selecting a place from maps auto-fills address details below."
         onPick={handlePick}
         className="mb-2"
@@ -844,25 +848,10 @@ function AddressFields({
 }
 
 // ── Primitives ──────────────────────────────────────────────────────────
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">{children}</p>;
-}
-
-function Field({
-  label, required, hint, children, error,
-}: { label: string; required?: boolean; hint?: string; children: React.ReactNode; error?: string }) {
-  return (
-    <div>
-      <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
-        {label} {required && <span className="text-red-400 normal-case">*</span>}
-        {hint && <span className="ml-1 text-[10px] text-[#AEAEAE] normal-case font-normal">— {hint}</span>}
-      </label>
-      {children}
-      {error && <p className="text-[11px] text-red-600 font-medium mt-1 normal-case">{error}</p>}
-    </div>
-  );
-}
-
+// Field + SectionLabel come from the shared form module (imported above).
+// Local Input is a thin wrapper that keeps autoComplete defaulting to 'off'
+// (admin creates vendors on the vendor's behalf — browser autofill would
+// otherwise pollute the fields).
 function Input({
   value, onChange, type = 'text', placeholder, name, inputMode, autoComplete, hasError, disabled,
 }: {
@@ -877,14 +866,10 @@ function Input({
   disabled?: boolean;
 }) {
   return (
-    <input
-      type={type} value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      name={name}
-      autoComplete={autoComplete ?? 'off'}
-      inputMode={inputMode}
-      className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10 bg-[#FAFAFA] focus:bg-white transition-all"
+    <FormInput
+      value={value} onChange={onChange} hasError={hasError}
+      type={type} placeholder={placeholder} name={name}
+      inputMode={inputMode} autoComplete={autoComplete ?? 'off'} disabled={disabled}
     />
   );
 }

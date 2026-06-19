@@ -14,6 +14,8 @@ import { useState } from 'react';
 import { X, Store, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
+import { cn } from '@/lib/utils';
+import { FORM, TextField, FormField, FormTextarea } from '@/components/ui/form';
 
 interface BecomeVendorModalProps {
   isOpen: boolean;
@@ -87,30 +89,30 @@ export function BecomeVendorModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[14000] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-[520px] max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 z-[14000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+      <div className="bg-white rounded-[20px] w-full max-w-[520px] max-h-[90vh] flex flex-col overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.08)] border border-gray-100 animate-in zoom-in-95 duration-150">
         {/* Header with brand-style icon */}
-        <div className="p-5 border-b border-gray-100 flex items-start gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center shrink-0">
-            <Store size={20} className="text-white" />
+        <div className="p-6 border-b border-gray-100 flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#53B175] to-[#299E60] flex items-center justify-center shrink-0 shadow-lg shadow-emerald-100">
+            <Store size={22} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-[16px] font-bold text-[#181725] flex items-center gap-1.5">
+            <h3 className="text-[17px] font-[800] text-[#181725] flex items-center gap-1.5 leading-snug">
               Become a vendor
               <Sparkles size={14} className="text-amber-500" />
             </h3>
-            <p className="text-[12px] text-gray-500 mt-0.5">
+            <p className="text-[12px] text-gray-400 mt-0.5 leading-normal">
               Start selling to other Horeca1 customers using your existing account.
             </p>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-            <X size={16} />
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+            <X size={16} className="text-gray-400 hover:text-gray-700" />
           </button>
         </div>
 
-        <div className="p-5 overflow-y-auto flex-1 space-y-3">
+        <div className="p-6 overflow-y-auto flex-1 space-y-4">
           <Field
-            label="Business name"
+            label="Legal Business Name"
             required
             value={businessName}
             onChange={setBusinessName}
@@ -125,7 +127,7 @@ export function BecomeVendorModal({
           />
           <div className="grid grid-cols-2 gap-3">
             <Field
-              label="GST number (optional)"
+              label="GSTIN (optional)"
               value={gstNumber}
               onChange={setGstNumber}
               placeholder="22AAAAA0000A1Z5"
@@ -140,39 +142,39 @@ export function BecomeVendorModal({
           </div>
 
           {/* What happens next */}
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 mt-2">
-            <p className="text-[12px] font-bold text-emerald-900 mb-1">What happens after you submit</p>
-            <ol className="text-[11.5px] text-emerald-900/80 space-y-1 list-decimal list-inside">
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 mt-2">
+            <p className="text-[12px] font-bold text-emerald-950 mb-1.5">What happens after you submit</p>
+            <ol className="text-[11.5px] text-emerald-900/80 space-y-1.5 list-decimal list-inside">
               <li>You stay logged in to the same account.</li>
               <li>Admin reviews your application (usually within 24 hours).</li>
-              <li>Once approved, the <strong>Vendor</strong> portal becomes available in the navbar.</li>
+              <li>Once approved, the <strong className="text-emerald-950">Vendor</strong> portal becomes available in the navbar.</li>
               <li>You can keep buying as a customer the whole time.</li>
             </ol>
           </div>
 
           {error && (
-            <p className="text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-lg p-2.5">{error}</p>
+            <p className="text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-lg p-2.5 leading-normal">{error}</p>
           )}
         </div>
 
-        <div className="p-4 border-t border-gray-100 flex items-center justify-end gap-2">
+        <div className="p-5 border-t border-gray-100 flex items-center justify-end gap-3 bg-gray-50/50">
           <button
             onClick={onClose}
             disabled={submitting}
-            className="px-4 py-2 text-[13px] font-semibold text-[#666] hover:bg-gray-50 rounded-xl"
+            className="px-5 py-2.5 text-[13px] font-bold text-gray-500 hover:bg-gray-100/80 rounded-xl transition-all duration-200"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={submitting || !businessName.trim()}
-            className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-500 text-white text-[13px] font-bold rounded-xl hover:shadow-md disabled:opacity-50 flex items-center gap-2"
+            className={cn(FORM.primaryBtn, 'px-6 py-2.5 text-[13px] shadow-emerald-100')}
           >
             {submitting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
             {submitting ? 'Submitting…' : 'Submit application'}
           </button>
-        </div>
       </div>
+    </div>
     </div>
   );
 }
@@ -186,30 +188,14 @@ function Field({ label, value, onChange, placeholder, required, multiline, input
   multiline?: boolean;
   inputMode?: 'text' | 'numeric' | 'tel' | 'email';
 }) {
-  const cls = 'w-full px-3 py-2 text-[13px] border border-gray-200 rounded-xl outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all placeholder:text-gray-400 text-gray-700';
+  if (multiline) {
+    return (
+      <FormField label={label} required={required}>
+        <FormTextarea value={value} onChange={onChange} placeholder={placeholder} rows={2} />
+      </FormField>
+    );
+  }
   return (
-    <label className="block">
-      <span className="text-[11.5px] font-semibold text-[#181725] mb-1 block">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-      </span>
-      {multiline ? (
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          rows={2}
-          className={cls}
-        />
-      ) : (
-        <input
-          type="text"
-          inputMode={inputMode}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className={cls}
-        />
-      )}
-    </label>
+    <TextField label={label} required={required} value={value} onChange={onChange} placeholder={placeholder} inputMode={inputMode} />
   );
 }
