@@ -12,11 +12,20 @@
  * Reuses the existing `useGooglePlacesAutocomplete` hook so it inherits the
  * same debouncing, session-token cost optimization, and India-restricted
  * filtering used elsewhere in the app.
+ *
+ * The results list is rendered through a PORTAL pinned to the viewport. Inside
+ * a modal the scrollable body has `overflow:auto`, which used to clip an
+ * absolutely-positioned dropdown — so admins typed an address and saw nothing.
+ * Portalling to <body> with fixed positioning (and a z-index above every modal)
+ * makes the suggestions reliable in every form.
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MapPin, Search, Loader2 } from 'lucide-react';
 import { useGooglePlacesAutocomplete, type PlaceDetails } from '@/hooks/useGooglePlacesAutocomplete';
+import { LABEL_CLASS, inputClass } from '@/components/ui/form';
+import { cn } from '@/lib/utils';
 
 export interface AddressPickPayload {
   fullAddress: string;
@@ -55,20 +64,54 @@ export function AddressAutocomplete({
   const [query, setQuery] = useState(initialValue);
   const [open, setOpen] = useState(false);
   const [pickingId, setPickingId] = useState<string | null>(null);
+  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   const { predictions, isSearching, getPlaceDetails, clearPredictions } =
     useGooglePlacesAutocomplete(query, { businessMode });
 
-  // Close dropdown on outside click
+  // Sync with initialValue if it changes from the parent
   useEffect(() => {
+    setQuery(initialValue);
+  }, [initialValue]);
+
+  const showDropdown = open && predictions.length > 0;
+
+  // Position the portalled list directly under the input. Recompute on scroll
+  // (capture:true catches scrolling inside a modal body) and on resize so the
+  // list tracks the input even while the user scrolls the form.
+  useEffect(() => {
+    if (!showDropdown) return;
+    const update = () => {
+      const el = inputRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setRect({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [showDropdown, predictions.length]);
+
+  // Close on outside click — the portalled list lives outside wrapRef, so it
+  // must be treated as "inside" or clicking a suggestion would close the list
+  // before the pick fires.
+  useEffect(() => {
+    if (!open) return;
     function onDown(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t)) return;
+      if (listRef.current?.contains(t)) return;
+      setOpen(false);
     }
-    if (open) {
-      document.addEventListener('mousedown', onDown);
-      return () => document.removeEventListener('mousedown', onDown);
-    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
   const handlePick = async (placeId: string, mainText: string) => {
@@ -96,18 +139,19 @@ export function AddressAutocomplete({
   };
 
   return (
-    <div ref={wrapRef} className={`relative ${className}`}>
+    <div ref={wrapRef} className={cn('relative', className)}>
       <label className="block">
-        <span className="text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wider">{label}</span>
-        <div className="relative mt-1">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE]" />
+        {label && <span className={LABEL_CLASS}>{label}</span>}
+        <div className="relative group">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE] group-focus-within:text-[#299E60] transition-colors z-10" />
           <input
+            ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)}
             placeholder={placeholder}
-            className="w-full pl-9 pr-9 py-2 text-[13px] border border-[#EEEEEE] rounded-xl outline-none focus:border-[#299E60]/50 text-gray-700 placeholder:text-gray-400"
+            className={inputClass(false, 'pl-10 pr-10')}
           />
           {isSearching && (
             <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] animate-spin" />
@@ -116,8 +160,12 @@ export function AddressAutocomplete({
       </label>
       {hint && <p className="mt-1 text-[11px] text-[#AEAEAE]">{hint}</p>}
 
-      {open && predictions.length > 0 && (
-        <ul className="absolute z-[10020] mt-1 w-full max-h-[260px] overflow-y-auto bg-white border border-[#EEEEEE] rounded-xl shadow-lg">
+      {showDropdown && rect && typeof document !== 'undefined' && createPortal(
+        <ul
+          ref={listRef}
+          style={{ position: 'fixed', top: rect.top, left: rect.left, width: rect.width }}
+          className="z-[20000] max-h-[260px] overflow-y-auto bg-white border border-[#EEEEEE] rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.12)] animate-in fade-in slide-in-from-top-1 duration-150"
+        >
           {predictions.map((p) => {
             const isPicking = pickingId === p.placeId;
             return (
@@ -126,7 +174,7 @@ export function AddressAutocomplete({
                   type="button"
                   onClick={() => handlePick(p.placeId, p.mainText)}
                   disabled={isPicking}
-                  className="w-full text-left px-3 py-2.5 hover:bg-[#F8F8F8] flex items-start gap-2 disabled:opacity-50"
+                  className="w-full text-left px-4 py-3 hover:bg-[#ECFDF5]/50 flex items-start gap-2.5 disabled:opacity-50 transition-colors border-b border-[#F9F9F9] last:border-b-0"
                 >
                   <MapPin size={14} className="text-[#299E60] mt-0.5 shrink-0" />
                   <span className="min-w-0 flex-1">
@@ -138,7 +186,8 @@ export function AddressAutocomplete({
               </li>
             );
           })}
-        </ul>
+        </ul>,
+        document.body
       )}
     </div>
   );

@@ -40,7 +40,7 @@ export const VendorDetailsSchema = z.object({
   vendorType: z.enum(VENDOR_TYPES),
   // PAN is optional with no format check — vendors can be onboarded before KYC
   // docs are in hand; admin verifies later at /admin/vendors/[id].
-  panNumber: z.string().max(20).optional().or(z.literal('')),
+  panNumber: z.string().regex(PAN_RE, 'Invalid PAN format').optional().or(z.literal('')),
   authorizedPersonName: z.string().min(2).max(255),
   authorizedPersonPhone: z.string().regex(PHONE_RE, 'Invalid authorized person phone'),
   authorizedPersonEmail: z.string().email().optional().or(z.literal('')),
@@ -65,6 +65,8 @@ export const PrimaryOutletSchema = z.object({
   city: z.string().optional(),
   state: z.string().optional(),
   pincode: z.string().optional(),
+  flatInfo: z.string().optional(),
+  landmark: z.string().optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   placeId: z.string().optional(),
