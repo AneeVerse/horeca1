@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { signOut, useSession } from 'next-auth/react';
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import {
@@ -24,7 +25,11 @@ import {
   derivedFullName,
   derivedAuthorizedPersonName,
   resolveVendorTypeSlug,
+  type VendorProfileInput,
 } from '@/lib/validators/vendor-profile';
+import { ExistingPhoneModal } from '@/components/auth/ExistingPhoneModal';
+import { accountLabelFromCheck } from '@/lib/auth/phoneCheckLabels';
+import type { PhoneCheckResult } from '@/lib/auth/checkPhoneLookup';
 
 const STEP_TITLES = [
   { id: 1, label: 'Verify Mobile', icon: Phone },
@@ -134,6 +139,37 @@ export default function VendorRegisterPage() {
   const [udyamNumber, setUdyamNumber] = useState('');
   const [cinNumber, setCinNumber] = useState('');
 
+  const [existingPhoneModal, setExistingPhoneModal] = useState<{
+    phone: string;
+    hcidDisplay?: string;
+    accountLabel: string;
+    suggestedAction: 'login_to_link' | 'login_only';
+  } | null>(null);
+
+  const getMergedVendorProfile = useCallback((): VendorProfileInput => ({
+    ...vendorProfile,
+    fullName: fullName || derivedFullName(vendorProfile),
+    email,
+    password,
+    phone,
+    mobilePhone: phone,
+    authorizedPersonPhone: vendorProfile.authorizedPersonPhone || authorizedPersonPhone || phone,
+    authorizedPersonEmail: vendorProfile.authorizedPersonEmail || authorizedPersonEmail,
+    authorizedPersonName: vendorProfile.authorizedPersonName || authorizedPersonName,
+    legalName: derivedLegalName(vendorProfile) || businessName,
+    businessName: derivedLegalName(vendorProfile) || businessName,
+    tradeName: derivedTradeName(vendorProfile) || tradeName,
+    displayName: derivedTradeName(vendorProfile) || tradeName,
+  }), [
+    vendorProfile, fullName, email, password, phone, authorizedPersonPhone,
+    authorizedPersonEmail, authorizedPersonName, businessName, tradeName,
+  ]);
+
+  const getEffectivePickup = useCallback(
+    (): Address => (pickupSameAsBilling ? billingAddress : pickupAddress),
+    [pickupSameAsBilling, billingAddress, pickupAddress],
+  );
+
   // ─── Auth-mode seeding ──────────────────────────────────────────────────
   // When the user is already logged in we fetch their existing phone +
   // fullName from /api/v1/auth/me (the session payload doesn't carry phone),
@@ -186,14 +222,10 @@ export default function VendorRegisterPage() {
   const validateAllForStep = useCallback((s: number): Record<string, string> => {
     const e: Record<string, string> = {};
     if (s === 3) {
-      const x = V.minLen(fullName, 'Full name', 2); if (x) e.fullName = x;
-      const x2 = V.minLen(businessName, 'Business name', 2); if (x2) e.businessName = x2;
-      const x3 = V.minLen(tradeName, 'Trade name', 2); if (x3) e.tradeName = x3;
-      if (email) { const x4 = V.email(email); if (x4) e.email = x4; }
-      if (password) { const x5 = V.password(password); if (x5) e.password = x5; }
-      const x6 = V.minLen(authorizedPersonName, 'Name', 2); if (x6) e.authorizedPersonName = x6;
-      const x7 = V.phone10(authorizedPersonPhone); if (x7) e.authorizedPersonPhone = x7;
-      if (authorizedPersonEmail) { const x8 = V.email(authorizedPersonEmail); if (x8) e.authorizedPersonEmail = x8; }
+      const merged = getMergedVendorProfile();
+      const v = validateVendorProfile(merged, 'selfRegister', 'contact');
+      Object.assign(e, v.errors);
+      if (isAuthMode && e.password) delete e.password;
     } else if (s === 4) {
       if (gstNumber.trim()) {
         const x = V.gst(gstNumber); if (x) e.gstNumber = x;
@@ -207,6 +239,7 @@ export default function VendorRegisterPage() {
       const x3 = V.ifsc(bankIfsc); if (x3) e.bankIfsc = x3;
       const x4 = V.minLen(bankName, 'Bank name', 2); if (x4) e.bankName = x4;
     } else if (s === 6) {
+      const effectivePickup = pickupSameAsBilling ? billingAddress : pickupAddress;
       const check = (a: Address, prefix: string) => {
         if (a.addressLine.trim().length < 5) e[`${prefix}AddressLine`] = 'Enter the full address';
         if (!a.city.trim()) e[`${prefix}City`] = 'City is required';
@@ -214,10 +247,14 @@ export default function VendorRegisterPage() {
         const p = V.pincode(a.pincode); if (p) e[`${prefix}Pincode`] = p;
       };
       check(billingAddress, 'billing');
-      check(pickupAddress, 'pickup');
+      check(effectivePickup, 'pickup');
     }
     return e;
-  }, [fullName, businessName, tradeName, email, password, authorizedPersonName, authorizedPersonPhone, authorizedPersonEmail, bankAccountName, bankAccountNumber, bankIfsc, bankName, billingAddress, pickupAddress]);
+  }, [
+    getMergedVendorProfile, isAuthMode, gstNumber, panNumber,
+    bankAccountName, bankAccountNumber, bankIfsc, bankName,
+    billingAddress, pickupAddress, pickupSameAsBilling,
+  ]);
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
@@ -229,31 +266,32 @@ export default function VendorRegisterPage() {
     }, 1000);
   }, []);
 
+  const openExistingPhoneModal = (phoneDigits: string, data: PhoneCheckResult) => {
+    setExistingPhoneModal({
+      phone: phoneDigits,
+      hcidDisplay: data.hcidDisplay,
+      accountLabel: accountLabelFromCheck(data),
+      suggestedAction: data.suggestedAction === 'login_only' ? 'login_only' : 'login_to_link',
+    });
+  };
+
   // ─── Step 1: Phone OTP ─────────────────────────────────────────────────
   const handleSendOtp = async () => {
     setError('');
     if (!PHONE_RE.test(phone)) { setError('Enter a valid 10-digit mobile number'); return; }
     setOtpLoading(true);
     try {
-      // Pre-check: refuse if this phone already belongs to ANY user account.
-      // Vendors must be brand-new accounts; existing customers should use the
-      // "Become Vendor" flow on their account instead.
-      const checkRes = await fetch('/api/v1/auth/check-vendor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      });
-      const checkData = await checkRes.json();
-      if (checkData.success && checkData.data?.exists) {
-        const t = checkData.data.accountType as string;
-        const msg =
-          t === 'vendor'         ? 'This number is already an active vendor. Please log in.'
-          : t === 'vendor_pending' ? 'This number has a vendor application pending review. Please log in to check the status.'
-          : t === 'admin'        ? 'This number belongs to an admin account. Please log in instead.'
-          : t === 'brand'        ? 'This number belongs to a brand account. Please log in instead.'
-          :                        'This number already has an account. Please log in — you can apply to become a vendor from your profile.';
-        setError(msg);
-        return;
+      if (!isAuthMode) {
+        const checkRes = await fetch('/api/v1/auth/check-phone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, intent: 'vendor' }),
+        });
+        const checkData = await checkRes.json();
+        if (checkData.success && checkData.data?.exists) {
+          openExistingPhoneModal(phone, checkData.data as PhoneCheckResult);
+          return;
+        }
       }
 
       const res = await fetch('/api/v1/auth/otp/send', {
@@ -379,10 +417,10 @@ export default function VendorRegisterPage() {
   // calls — it re-runs the validators for the active step, flushes any
   // missed errors into fieldErrors, and returns a single banner-level
   // message when the step can't advance.
-  const validateStep = (s: number): string | null => {
+  const validateStepAt = useCallback((s: number): string | null => {
     if (s === 1) return phoneVerified ? null : 'Please verify your mobile number first';
     if (s === 2) {
-      const v = validateVendorProfile(vendorProfile, 'selfRegister', 'identity');
+      const v = validateVendorProfile(getMergedVendorProfile(), 'selfRegister', 'identity');
       if (!v.success) {
         setFieldErrors(v.errors);
         return v.message ?? 'Please fix the highlighted fields before continuing';
@@ -390,16 +428,11 @@ export default function VendorRegisterPage() {
       return null;
     }
     if (s === 3) {
-      const merged = {
-        ...vendorProfile,
-        fullName: fullName || derivedFullName(vendorProfile),
-        email,
-        password,
-        authorizedPersonPhone: vendorProfile.authorizedPersonPhone || phone,
-      };
-      const v = validateVendorProfile(merged, 'selfRegister', 'contact');
-      if (!v.success) {
-        setFieldErrors(v.errors);
+      const v = validateVendorProfile(getMergedVendorProfile(), 'selfRegister', 'contact');
+      const errors = { ...v.errors };
+      if (isAuthMode) delete errors.password;
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors);
         return v.message ?? 'Please fix the highlighted fields before continuing';
       }
       return null;
@@ -415,7 +448,20 @@ export default function VendorRegisterPage() {
       return 'Please fix the highlighted fields before continuing';
     }
     return null;
-  };
+  }, [
+    phoneVerified, getMergedVendorProfile, isAuthMode, validateAllForStep,
+    pincodes.length, deliveryCapability,
+  ]);
+
+  const validateStepsRange = useCallback((from: number, to: number): { ok: true } | { ok: false; step: number; message: string } => {
+    for (let s = from; s <= to; s++) {
+      const err = validateStepAt(s);
+      if (err) return { ok: false, step: s, message: err };
+    }
+    return { ok: true };
+  }, [validateStepAt]);
+
+  const validateStep = (s: number): string | null => validateStepAt(s);
 
   const handleNext = () => {
     const err = validateStep(step);
@@ -480,7 +526,15 @@ export default function VendorRegisterPage() {
 
   const handleSubmit = async () => {
     setError('');
+    const range = validateStepsRange(2, 7);
+    if (!range.ok) {
+      setStep(range.step);
+      setError(range.message);
+      return;
+    }
+
     setSubmitting(true);
+    const effectivePickup = getEffectivePickup();
     try {
       if (isAuthMode) {
         // ── AUTH MODE: add a vendor under existing HCID ───────────────────
@@ -497,10 +551,10 @@ export default function VendorRegisterPage() {
           isBrand: false,
           primaryOutlet: {
             name: derivedTradeName(vendorProfile) || tradeName.trim() || businessName.trim(),
-            addressLine: pickupAddress.addressLine,
-            city: pickupAddress.city,
-            state: pickupAddress.state,
-            pincode: pickupAddress.pincode,
+            addressLine: effectivePickup.addressLine,
+            city: effectivePickup.city,
+            state: effectivePickup.state,
+            pincode: effectivePickup.pincode,
           },
           vendorDetails: {
             vendorType: typeSlug,
@@ -589,7 +643,7 @@ export default function VendorRegisterPage() {
         bankName: bankName.trim(),
         bankAccountType,
         billingAddress,
-        pickupAddress,
+        pickupAddress: effectivePickup,
         serviceablePincodes: pincodes,
         deliveryCapability,
         udyamNumber: udyamNumber.trim(),
@@ -756,6 +810,14 @@ export default function VendorRegisterPage() {
 
           {step === 1 && (
             <section>
+              {!isAuthMode && (
+                <Link
+                  href="/register"
+                  className="inline-flex items-center gap-1.5 text-[12px] font-bold text-gray-400 hover:text-[#299E60] transition-colors mb-4"
+                >
+                  <ArrowLeft size={14} /> Choose a different signup type
+                </Link>
+              )}
               <h2 className="text-[22px] font-[800] text-gray-800 mb-1">Verify your mobile number</h2>
               <p className="text-[13px] text-gray-500 mb-6">We&apos;ll send a 4-digit OTP to confirm.</p>
 
@@ -1197,6 +1259,25 @@ export default function VendorRegisterPage() {
           )}
         </div>
       </footer>
+
+      <ExistingPhoneModal
+        isOpen={!!existingPhoneModal}
+        phone={existingPhoneModal?.phone ?? ''}
+        hcidDisplay={existingPhoneModal?.hcidDisplay}
+        accountLabel={existingPhoneModal?.accountLabel ?? 'Customer'}
+        intent="vendor"
+        redirectTo="/vendor/register"
+        suggestedAction={existingPhoneModal?.suggestedAction ?? 'login_to_link'}
+        onClose={() => setExistingPhoneModal(null)}
+        onUseDifferentNumber={() => {
+          setExistingPhoneModal(null);
+          setPhone('');
+          setOtpSent(false);
+          setPhoneVerified(false);
+          setOtpDigits(['', '', '', '']);
+          setError('');
+        }}
+      />
     </div>
   );
 }

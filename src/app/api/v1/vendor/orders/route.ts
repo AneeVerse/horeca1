@@ -30,10 +30,10 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     if (dateTo) createdAtFilter.lte = new Date(dateTo + 'T23:59:59Z');
     const hasDateFilter = dateFrom || dateTo;
 
-    // Build where clause
+    // Build where clause — customer drafts are private until submitted
     const where: Record<string, unknown> = {
       vendorId,
-      ...(status && { status }),
+      ...(status && status !== 'draft' ? { status } : { status: { not: 'draft' } }),
       ...(search && {
         OR: [
           { orderNumber: { contains: search, mode: 'insensitive' } },

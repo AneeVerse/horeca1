@@ -214,7 +214,12 @@ export function validateVendorProfile(
       if (!authName || authName.length < 2) errors.authorizedPersonName = 'Authorized person name is required';
       if (!authPhone || authPhone.length !== 10) errors.authorizedPersonPhone = 'Enter a valid 10-digit mobile number';
       if (email && !EMAIL_RE.test(email)) errors.email = 'Enter a valid email address';
-      if (password && password.length < 6) errors.password = 'Password must be at least 6 characters';
+      if (context === 'selfRegister' && (step === 'contact' || step === 'full' || !step)) {
+        if (!password) errors.password = 'Password is required';
+        else if (password.length < 6) errors.password = 'Password must be at least 6 characters';
+      } else if (password && password.length < 6) {
+        errors.password = 'Password must be at least 6 characters';
+      }
     }
     if (context === 'adminCreate' && checkContact) {
       if (!trim(data.email) || !EMAIL_RE.test(trim(data.email))) errors.email = 'Enter a valid owner email';

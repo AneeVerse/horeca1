@@ -17,6 +17,9 @@ import {
   validateFieldBlur,
 } from '@/lib/validators/brand-profile';
 import { buildBrandProfile } from '@/lib/brandProfileMapper';
+import { ExistingPhoneModal } from '@/components/auth/ExistingPhoneModal';
+import { accountLabelFromCheck } from '@/lib/auth/phoneCheckLabels';
+import type { PhoneCheckResult } from '@/lib/auth/checkPhoneLookup';
 
 const STEP_TITLES = [
   { id: 1, label: 'Verify Mobile', icon: Phone },
@@ -50,6 +53,13 @@ export default function BrandRegisterPage() {
   const [password, setPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  const [existingPhoneModal, setExistingPhoneModal] = useState<{
+    phone: string;
+    hcidDisplay?: string;
+    accountLabel: string;
+    suggestedAction: 'login_to_link' | 'login_only';
+  } | null>(null);
+
   const startResendTimer = useCallback(() => {
     setResendTimer(RESEND_COOLDOWN);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -75,6 +85,23 @@ export default function BrandRegisterPage() {
     setOtpLoading(true);
     setError('');
     try {
+      const checkRes = await fetch('/api/v1/auth/check-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: digits, intent: 'brand' }),
+      });
+      const checkData = await checkRes.json();
+      if (checkData.success && checkData.data?.exists) {
+        const data = checkData.data as PhoneCheckResult;
+        setExistingPhoneModal({
+          phone: digits,
+          hcidDisplay: data.hcidDisplay,
+          accountLabel: accountLabelFromCheck(data),
+          suggestedAction: data.suggestedAction === 'login_only' ? 'login_only' : 'login_to_link',
+        });
+        return;
+      }
+
       const res = await fetch('/api/v1/auth/otp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -204,7 +231,7 @@ export default function BrandRegisterPage() {
     <div className="min-h-screen bg-[#FAFAFA]">
       <div className="max-w-[720px] mx-auto px-4 py-8">
         <div className="flex items-center gap-3 mb-8">
-          <Link href="/" className="p-2 rounded-lg hover:bg-white text-gray-400 hover:text-gray-700 transition-colors">
+          <Link href="/register" className="p-2 rounded-lg hover:bg-white text-gray-400 hover:text-gray-700 transition-colors">
             <ArrowLeft size={20} />
           </Link>
           <div>
@@ -330,6 +357,25 @@ export default function BrandRegisterPage() {
           )}
         </div>
       </div>
+
+      <ExistingPhoneModal
+        isOpen={!!existingPhoneModal}
+        phone={existingPhoneModal?.phone ?? ''}
+        hcidDisplay={existingPhoneModal?.hcidDisplay}
+        accountLabel={existingPhoneModal?.accountLabel ?? 'Customer'}
+        intent="brand"
+        redirectTo="/brand/register"
+        suggestedAction={existingPhoneModal?.suggestedAction ?? 'login_to_link'}
+        onClose={() => setExistingPhoneModal(null)}
+        onUseDifferentNumber={() => {
+          setExistingPhoneModal(null);
+          setPhone('');
+          setOtpSent(false);
+          setPhoneVerified(false);
+          setOtpDigits(['', '', '', '']);
+          setError('');
+        }}
+      />
     </div>
   );
 }

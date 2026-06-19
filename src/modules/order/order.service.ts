@@ -351,6 +351,7 @@ export class OrderService {
         if (!isDraft && isCreditPayment(input.paymentMethod) && totalAmount > 0) {
           const creditVendorId = (input.paymentMethod === 'h1_wallet' || input.paymentMethod === 'wallet') ? null : vo.vendorId;
           await creditWalletService.debitWallet(userId, creditVendorId, totalAmount, order.id, tx);
+          await tx.order.update({ where: { id: order.id }, data: { paymentStatus: 'paid' } });
         }
 
         if (couponShare > 0) redemptionRows.push({ orderId: order.id, amount: couponShare });
@@ -613,12 +614,21 @@ export class OrderService {
       await this.inventoryService.reserveStock(items, tx);
 
       // Submitting a credit draft debits the wallet now (validates limit + mode).
-      if (isCreditPayment(effectivePaymentMethod)) {
+      const creditPaid =
+        isCreditPayment(effectivePaymentMethod) && Number(order.totalAmount) > 0;
+      if (creditPaid) {
         const creditVendorId = (effectivePaymentMethod === 'h1_wallet' || effectivePaymentMethod === 'wallet') ? null : order.vendorId;
         await creditWalletService.debitWallet(ctx.userId, creditVendorId, Number(order.totalAmount), order.id, tx);
       }
 
-      const updated = await tx.order.update({ where: { id: orderId }, data: { status: 'pending', paymentMethod: effectivePaymentMethod } });
+      const updated = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          status: 'pending',
+          paymentMethod: effectivePaymentMethod,
+          ...(creditPaid ? { paymentStatus: 'paid' } : {}),
+        },
+      });
 
       // Promo Engine Phase 1 — drafts skip cashback at save time; evaluate it
       // now that the order is real. (Drafts can't carry coupons, but compute
@@ -698,7 +708,7 @@ export class OrderService {
 
   /** Ops: split selected quantities off a pending order into a new sibling PO (same vendor/outlet/customer). */
   async splitOrder(orderId: string, vendorId: string, lines: Array<{ itemId: string; quantity: number }>) {
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const order = await tx.order.findFirst({ where: { id: orderId, vendorId, status: 'pending' }, include: { items: true } });
       if (!order) throw Errors.badRequest('Order not found or not splittable (only pending orders).');
       if (!lines.length) throw Errors.badRequest('Specify at least one line to split off.');
@@ -740,7 +750,8 @@ export class OrderService {
           orderNumber, userId: order.userId, vendorId, businessAccountId: order.businessAccountId,
           outletId: order.outletId, deliveryAddressSnapshot: order.deliveryAddressSnapshot as Prisma.InputJsonValue,
           status: 'pending', subtotal: childSubtotal, totalAmount: childSubtotal,
-          paymentMethod: order.paymentMethod, deliverySlotId: order.deliverySlotId, salespersonId: order.salespersonId,
+          paymentMethod: order.paymentMethod, paymentStatus: order.paymentStatus,
+          deliverySlotId: order.deliverySlotId, salespersonId: order.salespersonId,
           notes: order.notes, items: { create: childItems },
         },
       });
@@ -756,8 +767,29 @@ export class OrderService {
         data: { subtotal: parentSubtotal, totalAmount: Math.max(0, parentSubtotal - Number(order.promoDiscount) - Number(order.couponDiscount) - Number(order.walletApplied)) },
       });
       // Reservation total is unchanged — the same units now span two orders.
-      return { parentId: orderId, childId: child.id, childOrderNumber: child.orderNumber };
+      return {
+        parentId: orderId,
+        childId: child.id,
+        childOrderNumber: child.orderNumber,
+        userId: order.userId,
+        vendorId,
+        totalAmount: childSubtotal,
+        items: childItems.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+      };
     }, { isolationLevel: 'Serializable' });
+
+    setImmediate(() => {
+      emitEvent('OrderCreated', {
+        orderId: result.childId,
+        orderNumber: result.childOrderNumber,
+        userId: result.userId,
+        vendorId: result.vendorId,
+        totalAmount: result.totalAmount,
+        items: result.items,
+      });
+    });
+
+    return { parentId: result.parentId, childId: result.childId, childOrderNumber: result.childOrderNumber };
   }
 
   /** Ops: reassign a pending order to a different vendor. Remaps each line to the new vendor's product with the same master SKU, re-prices, and moves reservations. */
@@ -804,6 +836,21 @@ export class OrderService {
       await this.inventoryService.releaseStock(releaseOld, tx);
       await this.inventoryService.reserveStock(reserveNew, tx);
 
+      const totalAmount = Math.max(0, subtotal - Number(order.promoDiscount) - Number(order.couponDiscount) - Number(order.walletApplied));
+
+      // Per-vendor credit debits are tied to the original vendor — move the ledger
+      // when ops reroute the PO (platform H1 wallet is vendor-agnostic, so skip).
+      const isVendorCredit =
+        isCreditPayment(order.paymentMethod)
+        && order.paymentMethod !== 'h1_wallet'
+        && order.paymentMethod !== 'wallet';
+      if (isVendorCredit) {
+        await creditWalletService.reverseOrderDebit(orderId, order.userId, fromVendorId, tx);
+        if (totalAmount > 0) {
+          await creditWalletService.debitWallet(order.userId, newVendorId, totalAmount, orderId, tx);
+        }
+      }
+
       // Delivery slot belonged to the old vendor — clear it; the new vendor's slot is re-picked later.
       return tx.order.update({
         where: { id: orderId },
@@ -812,7 +859,7 @@ export class OrderService {
           salespersonId: vc?.salespersonId ?? null,
           deliverySlotId: null,
           subtotal,
-          totalAmount: Math.max(0, subtotal - Number(order.promoDiscount) - Number(order.couponDiscount) - Number(order.walletApplied)),
+          totalAmount,
         },
       });
     }, { isolationLevel: 'Serializable' });

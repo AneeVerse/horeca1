@@ -1,14 +1,18 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { signIn, useSession } from 'next-auth/react';
 import {
-  Store, Loader2, ArrowLeft, ArrowRight, Check,
+  Loader2, ArrowLeft, Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FORM } from '@/components/ui/form';
+import { RegisterRolePicker } from '@/components/auth/RegisterRolePicker';
+import { ExistingPhoneModal } from '@/components/auth/ExistingPhoneModal';
+import { accountLabelFromCheck } from '@/lib/auth/phoneCheckLabels';
+import type { PhoneCheckResult } from '@/lib/auth/checkPhoneLookup';
 import {
   CustomerProfileForm,
   type CustomerProfileValues,
@@ -27,8 +31,20 @@ type Step = 'form' | 'otp' | 'success';
 
 export default function RegisterPageInner() {
   const params = useSearchParams();
+  const router = useRouter();
   const redirectTo = params?.get('redirect') || null;
+  const role = params?.get('role');
   const { status: sessionStatus } = useSession();
+
+  useEffect(() => {
+    if (role === 'vendor') {
+      const qs = redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : '';
+      router.replace(`/vendor/register${qs}`);
+    } else if (role === 'brand') {
+      const qs = redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : '';
+      router.replace(`/brand/register${qs}`);
+    }
+  }, [role, redirectTo, router]);
 
   useEffect(() => {
     if (sessionStatus !== 'authenticated') return;
@@ -42,6 +58,13 @@ export default function RegisterPageInner() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const [existingPhoneModal, setExistingPhoneModal] = useState<{
+    phone: string;
+    hcidDisplay?: string;
+    accountLabel: string;
+    suggestedAction: 'login_to_link' | 'login_only';
+  } | null>(null);
 
   const setFE = useCallback((key: string, msg: string) => {
     setFieldErrors(prev => {
@@ -98,6 +121,23 @@ export default function RegisterPageInner() {
     const phone = (profile.phone ?? profile.mobilePhone ?? '').replace(/\D/g, '').slice(-10);
     setIsLoading(true);
     try {
+      const checkRes = await fetch('/api/v1/auth/check-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, intent: 'customer' }),
+      });
+      const checkData = await checkRes.json();
+      if (checkData.success && checkData.data?.exists) {
+        const data = checkData.data as PhoneCheckResult;
+        setExistingPhoneModal({
+          phone,
+          hcidDisplay: data.hcidDisplay,
+          accountLabel: accountLabelFromCheck(data),
+          suggestedAction: 'login_only',
+        });
+        return;
+      }
+
       const res = await fetch('/api/v1/auth/otp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -187,6 +227,20 @@ export default function RegisterPageInner() {
     if (digit && next.every(d => d)) handleVerifyOtp(next.join(''));
   };
 
+  const registerOptionsHref = `/register${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ''}`;
+
+  if (!role || (role !== 'customer' && role !== 'vendor' && role !== 'brand')) {
+    return <RegisterRolePicker redirectTo={redirectTo} />;
+  }
+
+  if (role === 'vendor' || role === 'brand') {
+    return (
+      <div className="flex items-center justify-center px-4 py-12 min-h-[calc(100vh-180px)]">
+        <Loader2 size={28} className="animate-spin text-[#299E60]" />
+      </div>
+    );
+  }
+
   if (step === 'success') {
     return (
       <CenteredCard>
@@ -255,6 +309,12 @@ export default function RegisterPageInner() {
     <div className="flex items-start justify-center px-4 py-5 min-h-[calc(100vh-150px)]">
       <div className="w-full max-w-[1080px] rounded-[20px] bg-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-[#EEEEEE]">
         <div className="px-5 sm:px-7 pt-6 sm:pt-7 pb-5 border-b border-[#F5F5F5]">
+          <Link
+            href={registerOptionsHref}
+            className="inline-flex items-center gap-1.5 text-[12px] font-bold text-gray-400 hover:text-[#299E60] transition-colors mb-4"
+          >
+            <ArrowLeft size={14} /> All signup options
+          </Link>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-[#299E60] mb-1">Customer signup</p>
@@ -274,8 +334,6 @@ export default function RegisterPageInner() {
         </div>
 
         <div className="p-5 sm:p-7">
-          <VendorOnboardBanner className="mb-5" />
-
           {apiError && <ErrorBanner>{apiError}</ErrorBanner>}
 
           <CustomerProfileForm
@@ -294,38 +352,31 @@ export default function RegisterPageInner() {
             onTogglePassword={() => setShowPassword(v => !v)}
           />
 
-          <div className="mt-6 space-y-3">
+          <div className="mt-6">
             <button onClick={handleSendOtp} disabled={isLoading} className={cn(FORM.primaryBtn, 'w-full h-[46px]')}>
               {isLoading && <Loader2 size={18} className="animate-spin" />}
               Send OTP
             </button>
-            <VendorOnboardBanner />
           </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-function VendorOnboardBanner({ className }: { className?: string }) {
-  return (
-    <Link href="/vendor/register"
-      className={cn(
-        'group flex items-center gap-3 rounded-[14px] border border-[#EEEEEE] bg-[#FAFAFA] px-4 py-3.5',
-        'hover:border-[#299E60]/30 hover:bg-[#F7FBF8] transition-all duration-200',
-        className,
-      )}>
-      <div className="w-10 h-10 rounded-xl bg-white border border-[#EEEEEE] flex items-center justify-center shrink-0 shadow-sm group-hover:border-[#299E60]/20 transition-colors">
-        <Store size={16} className="text-[#299E60]" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-bold text-[13px] text-[#181725] leading-tight">Onboard as a Vendor</p>
-        <p className="text-[11.5px] text-gray-500 mt-0.5">Sell on Horeca1 — full KYC wizard, about 5 minutes</p>
-      </div>
-      <span className="hidden sm:flex items-center gap-1 text-[12px] font-bold text-[#299E60] shrink-0 group-hover:gap-1.5 transition-all">
-        Start <ArrowRight size={14} />
-      </span>
-    </Link>
+      <ExistingPhoneModal
+        isOpen={!!existingPhoneModal}
+        phone={existingPhoneModal?.phone ?? ''}
+        hcidDisplay={existingPhoneModal?.hcidDisplay}
+        accountLabel={existingPhoneModal?.accountLabel ?? 'Customer'}
+        intent="customer"
+        redirectTo={redirectTo || '/'}
+        suggestedAction={existingPhoneModal?.suggestedAction ?? 'login_only'}
+        onClose={() => setExistingPhoneModal(null)}
+        onUseDifferentNumber={() => {
+          setExistingPhoneModal(null);
+          patchProfile({ phone: '', mobilePhone: '' });
+          setApiError('');
+        }}
+      />
+    </div>
   );
 }
 
