@@ -1,14 +1,11 @@
 /**
  * PATCH /api/v1/admin/products/bulk-update
  * ────────────────────────────────────────
- * Generic programmatic bulk update for products catalog (admin version).
- * Allows bulk updating any whitelisted fields across a filtered selection.
+ * Admin version of the bulk product update — same engine as the vendor route
+ * (shared schemas + math in bulk-update.shared) but cross-vendor: the filter
+ * additionally accepts a vendorId scope (or null for catalog-level products).
  *
- * Body shape:
- *   {
- *     filter: { productIds?, categoryId?, brand?, isActive?, vendorId? }, // at least 1
- *     set: { ...whitelisted fields... }                                   // at least 1
- *   }
+ * Query: ?mode=preview → dry-run, returns { matched, sample } without writing.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,62 +15,22 @@ import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
 import { assertLeafCategory } from '@/modules/catalog/catalog.service';
+import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
+import {
+  filterSchemaBase, setSchemaBase,
+  applyAdjustment, applyOfferPrice, round, buildPreviewSample,
+} from '@/modules/catalog/bulk-update.shared';
 
 // ── Schemas ─────────────────────────────────────────────────────────────
 
-const filterSchema = z.object({
-  productIds: z.array(z.string().uuid()).min(1).max(500).optional(),
-  categoryId: z.string().uuid().optional(),
-  brand: z.string().min(1).max(150).optional(),
-  isActive: z.boolean().optional(),
-  vendorId: z.string().uuid().nullable().optional(), // UUID of the vendor, or null for catalog
-}).refine(
-  (f) => !!(f.productIds || f.categoryId || f.brand || typeof f.isActive === 'boolean' || f.vendorId !== undefined),
-  { message: 'Provide at least one filter criterion (productIds | categoryId | brand | isActive | vendorId)' },
-);
+const filterSchema = filterSchemaBase
+  .extend({ vendorId: z.string().uuid().nullable().optional() }) // null = catalog products
+  .refine(
+    (f) => !!(f.productIds || f.categoryId || f.brand || typeof f.isActive === 'boolean' || f.vendorId !== undefined),
+    { message: 'Provide at least one filter criterion (productIds | categoryId | brand | isActive | vendorId)' },
+  );
 
-const priceAdjustSchema = z.object({
-  type: z.enum(['percent', 'fixed', 'set']), // percent = delta %, fixed = ₹ delta, set = absolute
-  value: z.number(),
-  roundTo: z.number().int().min(0).max(2).default(2).optional(),
-});
-type PriceAdjust = z.infer<typeof priceAdjustSchema>;
-
-const setSchema = z.object({
-  isActive:        z.boolean().optional(),
-  minOrderQty:     z.number().int().min(1).max(10000).optional(),
-  taxPercent:      z.number().min(0).max(100).optional(),
-  creditEligible:  z.boolean().optional(),
-  isFeatured:      z.boolean().optional(),
-  // B-1: enum value must match Prisma VegType ('nonveg', not 'non_veg').
-  vegNonVeg:       z.enum(['veg', 'nonveg', 'egg']).nullable().optional(),
-  storageType:     z.string().max(50).nullable().optional(),
-  shelfLifeDays:   z.number().int().min(0).max(3650).nullable().optional(),
-  description:     z.string().max(2000).nullable().optional(),
-  brand:           z.string().max(150).optional(),
-  countryOfOrigin: z.string().max(100).optional(),
-  // P0-6: "update ANY field" — identity/catalog fields now bulk-editable.
-  // (Typically used with a productIds filter; DB unique constraints still apply.)
-  name:            z.string().min(1).max(255).optional(),
-  sku:             z.string().max(100).nullable().optional(),
-  hsn:             z.string().max(50).nullable().optional(),
-  unit:            z.string().max(50).nullable().optional(),
-  packSize:        z.string().max(100).nullable().optional(),
-  barcode:         z.string().max(100).nullable().optional(),
-  fssaiRef:        z.string().max(50).nullable().optional(),
-  imageUrl:        z.string().url().nullable().optional(),
-  tags:            z.array(z.string()).optional(),
-  aliasNames:      z.array(z.string()).optional(),
-  images:          z.array(z.string().url()).optional(),
-  // Replaces the category set; each must be a leaf (level-2) sub-category.
-  categoryIds:     z.array(z.string().uuid()).min(1).max(5).optional(),
-
-  // Price adjustments
-  basePrice:       priceAdjustSchema.optional(),
-  originalPrice:   priceAdjustSchema.optional(),
-  applyToSlabs:    z.boolean().default(false).optional(),
-  clearPromo:      z.boolean().optional(),
-}).refine(
+const setSchema = setSchemaBase.refine(
   (s) => Object.keys(s).length > 0,
   { message: 'Provide at least one field in set' },
 );
@@ -83,21 +40,11 @@ const bodySchema = z.object({
   set: setSchema,
 });
 
-function round(n: number, places = 2): number {
-  return Math.round(n * 10 ** places) / 10 ** places;
-}
-
-function applyAdjustment(current: number, adj: PriceAdjust): number {
-  const places = adj.roundTo ?? 2;
-  if (adj.type === 'set') return Math.max(0.01, round(adj.value, places));
-  if (adj.type === 'percent') return Math.max(0.01, round(current + current * (adj.value / 100), places));
-  return Math.max(0.01, round(current + adj.value, places));
-}
-
 export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
     requirePermission(ctx, 'products.edit');
     const body = bodySchema.parse(await req.json());
+    const isPreview = new URL(req.url).searchParams.get('mode') === 'preview';
 
     // Build the WHERE clause.
     const where: Record<string, unknown> = {};
@@ -105,17 +52,32 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     if (body.filter.categoryId) where.categoryId = body.filter.categoryId;
     if (body.filter.brand) where.brand = body.filter.brand;
     if (typeof body.filter.isActive === 'boolean') where.isActive = body.filter.isActive;
-    if (body.filter.vendorId !== undefined) {
-      where.vendorId = body.filter.vendorId; // can be null for catalog
-    }
+    if (body.filter.vendorId !== undefined) where.vendorId = body.filter.vendorId; // can be null
 
-    const needsRowFetch = body.set.basePrice || body.set.originalPrice || body.set.applyToSlabs;
-
-    // Category set replacement must obey the leaf rule (Req 5). Validate once up front.
+    const offer = body.set.offer;
     const newCategoryIds = body.set.categoryIds;
     if (newCategoryIds) await assertLeafCategory(newCategoryIds);
 
     const matchedCount = await prisma.product.count({ where });
+
+    // ── Preview (dry-run) ───────────────────────────────────────────────
+    if (isPreview) {
+      const sampleRows = await prisma.product.findMany({
+        where,
+        take: 8,
+        orderBy: { name: 'asc' },
+        select: {
+          id: true, name: true, basePrice: true, originalPrice: true, taxPercent: true,
+          promoPrice: true, promoStartTime: true, promoEndTime: true,
+          isActive: true, creditEligible: true, isFeatured: true, minOrderQty: true,
+        },
+      });
+      return NextResponse.json({
+        success: true,
+        data: { matched: matchedCount, sample: buildPreviewSample(sampleRows, body.set) },
+      });
+    }
+
     if (matchedCount === 0) {
       return NextResponse.json({ success: true, data: { matched: 0, updated: 0 } });
     }
@@ -149,8 +111,25 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       direct.promoStartTime = null;
       direct.promoEndTime = null;
     }
-    // categoryIds replacement also syncs the denormalized primary Product.categoryId.
     if (newCategoryIds) direct.categoryId = newCategoryIds[0];
+
+    // Offer (deal price + daily window).
+    if (offer) {
+      if (offer.startTime !== undefined) direct.promoStartTime = offer.startTime;
+      if (offer.endTime !== undefined) direct.promoEndTime = offer.endTime;
+      if (offer.mode === 'clear') {
+        direct.promoPrice = null;
+        direct.promoStartTime = null;
+        direct.promoEndTime = null;
+      } else if (offer.mode === 'setPrice') {
+        direct.promoPrice = round(offer.value ?? 0);
+      }
+    }
+
+    const offerSlabPercent = !!(offer?.applyToSlabs && offer.mode === 'percentOff');
+    const needSlabFetch = (body.set.applyToSlabs && body.set.basePrice) || offerSlabPercent;
+    const needsRowFetch =
+      body.set.basePrice || body.set.originalPrice || needSlabFetch || offer?.mode === 'percentOff';
 
     let updatedCount = 0;
 
@@ -174,7 +153,15 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
         updatedCount = Math.max(updatedCount, matched.length);
       }
 
-      // 2. Price adjustments
+      // 1c. Constant slab promo writes (setPrice / clear).
+      if (offer?.applyToSlabs && (offer.mode === 'setPrice' || offer.mode === 'clear')) {
+        await tx.priceSlab.updateMany({
+          where: { product: where },
+          data: { promoPrice: offer.mode === 'clear' ? null : round(offer.value ?? 0) },
+        });
+      }
+
+      // 2. Per-row adjustments (price, MRP, percentOff offer + its slabs).
       if (needsRowFetch) {
         const products = await tx.product.findMany({
           where,
@@ -182,7 +169,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
             id: true,
             basePrice: true,
             originalPrice: true,
-            ...(body.set.applyToSlabs ? { priceSlabs: { select: { id: true, price: true } } } : {}),
+            ...(needSlabFetch ? { priceSlabs: { select: { id: true, price: true } } } : {}),
           },
         });
         for (const p of products) {
@@ -194,21 +181,41 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
             const current = p.originalPrice ? Number(p.originalPrice) : Number(p.basePrice);
             update.originalPrice = applyAdjustment(current, body.set.originalPrice);
           }
+          if (offer?.mode === 'percentOff') {
+            update.promoPrice = applyOfferPrice(Number(p.basePrice), offer.value ?? 0);
+          }
           if (Object.keys(update).length > 0) {
             await tx.product.update({ where: { id: p.id }, data: update });
           }
-          // Slab adjustments
-          if (body.set.applyToSlabs && body.set.basePrice && 'priceSlabs' in p && Array.isArray(p.priceSlabs)) {
+          if ('priceSlabs' in p && Array.isArray(p.priceSlabs)) {
             for (const slab of p.priceSlabs) {
-              await tx.priceSlab.update({
-                where: { id: slab.id },
-                data: { price: applyAdjustment(Number(slab.price), body.set.basePrice) },
-              });
+              const slabData: Record<string, unknown> = {};
+              if (body.set.applyToSlabs && body.set.basePrice) {
+                slabData.price = applyAdjustment(Number(slab.price), body.set.basePrice);
+              }
+              if (offerSlabPercent) {
+                slabData.promoPrice = applyOfferPrice(Number(slab.price), offer!.value ?? 0);
+              }
+              if (Object.keys(slabData).length > 0) {
+                await tx.priceSlab.update({ where: { id: slab.id }, data: slabData });
+              }
             }
           }
         }
         updatedCount = Math.max(updatedCount, products.length);
       }
+    });
+
+    void logAction(ctx, req, {
+      action: AUDIT_ACTIONS.productBulkUpdate,
+      entity: 'product',
+      metadata: {
+        scope: 'admin',
+        vendorId: body.filter.vendorId ?? null,
+        matched: matchedCount,
+        updated: updatedCount,
+        setKeys: Object.keys(body.set),
+      },
     });
 
     return NextResponse.json({ success: true, data: { matched: matchedCount, updated: updatedCount } });
