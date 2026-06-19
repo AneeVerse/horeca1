@@ -2,6 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
+import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import {
   ArrowLeft, ArrowRight, Loader2, CheckCircle2, Phone, Building2, Sparkles,
 } from 'lucide-react';
@@ -16,7 +18,7 @@ import {
   validateBrandProfile,
   validateFieldBlur,
 } from '@/lib/validators/brand-profile';
-import { buildBrandProfile } from '@/lib/brandProfileMapper';
+import { buildBrandProfile, buildAddBusinessPayload } from '@/lib/brandProfileMapper';
 import { ExistingPhoneModal } from '@/components/auth/ExistingPhoneModal';
 import { accountLabelFromCheck } from '@/lib/auth/phoneCheckLabels';
 import type { PhoneCheckResult } from '@/lib/auth/checkPhoneLookup';
@@ -30,6 +32,10 @@ const PHONE_RE = /^\d{10}$/;
 const RESEND_COOLDOWN = 60;
 
 export default function BrandRegisterPage() {
+  const { status: sessionStatus } = useSession();
+  const isAuthMode = sessionStatus === 'authenticated';
+  const { switchAccount, refresh: refreshAccounts } = useBusinessAccountSwitcher();
+
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -60,6 +66,32 @@ export default function BrandRegisterPage() {
     suggestedAction: 'login_to_link' | 'login_only';
   } | null>(null);
 
+  const authSeedDone = useRef(false);
+  useEffect(() => {
+    if (!isAuthMode || authSeedDone.current) return;
+    authSeedDone.current = true;
+    setPhoneVerified(true);
+    setOtpSent(true);
+    setStep(2);
+    fetch('/api/v1/auth/me').then(r => r.json()).then(j => {
+      if (!j.success) return;
+      const me = j.data ?? {};
+      const mePhone = me.phone ? String(me.phone).replace(/\D/g, '').slice(-10) : '';
+      if (mePhone) {
+        setPhone(mePhone);
+        setProfile(prev => ({ ...prev, phone: mePhone, mobilePhone: mePhone }));
+      }
+      if (me.email) setProfile(prev => ({ ...prev, email: prev.email || String(me.email) }));
+      if (me.fullName) {
+        setProfile(prev => ({
+          ...prev,
+          firstName: prev.firstName || String(me.fullName).split(' ')[0] || '',
+          lastName: prev.lastName || String(me.fullName).split(' ').slice(1).join(' ') || '',
+        }));
+      }
+    }).catch(() => { /* prefill is optional */ });
+  }, [isAuthMode]);
+
   const startResendTimer = useCallback(() => {
     setResendTimer(RESEND_COOLDOWN);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -85,21 +117,23 @@ export default function BrandRegisterPage() {
     setOtpLoading(true);
     setError('');
     try {
-      const checkRes = await fetch('/api/v1/auth/check-phone', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: digits, intent: 'brand' }),
-      });
-      const checkData = await checkRes.json();
-      if (checkData.success && checkData.data?.exists) {
-        const data = checkData.data as PhoneCheckResult;
-        setExistingPhoneModal({
-          phone: digits,
-          hcidDisplay: data.hcidDisplay,
-          accountLabel: accountLabelFromCheck(data),
-          suggestedAction: data.suggestedAction === 'login_only' ? 'login_only' : 'login_to_link',
+      if (!isAuthMode) {
+        const checkRes = await fetch('/api/v1/auth/check-phone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: digits, intent: 'brand' }),
         });
-        return;
+        const checkData = await checkRes.json();
+        if (checkData.success && checkData.data?.exists) {
+          const data = checkData.data as PhoneCheckResult;
+          setExistingPhoneModal({
+            phone: digits,
+            hcidDisplay: data.hcidDisplay,
+            accountLabel: accountLabelFromCheck(data),
+            suggestedAction: data.suggestedAction === 'login_only' ? 'login_only' : 'login_to_link',
+          });
+          return;
+        }
       }
 
       const res = await fetch('/api/v1/auth/otp/send', {
@@ -170,7 +204,11 @@ export default function BrandRegisterPage() {
   };
 
   const handleSubmit = async () => {
-    const validation = validateBrandProfile({ ...profile, password }, 'publicRegister');
+    const validationContext = isAuthMode ? 'addBusiness' : 'publicRegister';
+    const validation = validateBrandProfile(
+      isAuthMode ? profile : { ...profile, password },
+      validationContext,
+    );
     if (!validation.success) {
       setFieldErrors(validation.errors);
       setError(validation.message ?? 'Please fix the highlighted fields');
@@ -181,14 +219,41 @@ export default function BrandRegisterPage() {
     setError('');
     setFieldErrors({});
 
-    const phoneDigits = phone.replace(/\D/g, '').slice(-10);
-    const payload = {
-      ...buildBrandProfile({ ...profile, password }),
-      phone: phoneDigits,
-      password: password || undefined,
-    };
-
     try {
+      if (isAuthMode) {
+        const res = await fetch('/api/v1/account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildAddBusinessPayload(profile)),
+        });
+        const json = await res.json();
+        if (!json.success) {
+          setError(json.error?.message ?? 'Could not create brand business.');
+          setSubmitting(false);
+          return;
+        }
+        await refreshAccounts();
+        await switchAccount(json.data.account.id, json.data.outlet.id);
+        let hcidDisplay = '—';
+        try {
+          const meRes = await fetch('/api/v1/auth/me');
+          const meJson = await meRes.json();
+          if (meJson.success && meJson.data?.hcidDisplay) {
+            hcidDisplay = String(meJson.data.hcidDisplay);
+          }
+        } catch { /* optional */ }
+        setSubmitted({ hcid: hcidDisplay });
+        setSubmitting(false);
+        return;
+      }
+
+      const phoneDigits = phone.replace(/\D/g, '').slice(-10);
+      const payload = {
+        ...buildBrandProfile({ ...profile, password }),
+        phone: phoneDigits,
+        password: password || undefined,
+      };
+
       const res = await fetch('/api/v1/brand/onboarding/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -206,6 +271,14 @@ export default function BrandRegisterPage() {
       setSubmitting(false);
     }
   };
+
+  if (sessionStatus === 'loading') {
+    return (
+      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center">
+        <Loader2 size={28} className="animate-spin text-[#299E60]" />
+      </div>
+    );
+  }
 
   if (submitted) {
     return (
@@ -236,15 +309,19 @@ export default function BrandRegisterPage() {
           </Link>
           <div>
             <h1 className="text-[22px] font-[800] text-[#181725] flex items-center gap-2">
-              Brand Registration
+              {isAuthMode ? 'Add Brand Business' : 'Brand Registration'}
               <Sparkles size={18} className="text-amber-500" />
             </h1>
-            <p className="text-[13px] text-gray-500">Register your brand on the HoReCa1 marketplace</p>
+            <p className="text-[13px] text-gray-500">
+              {isAuthMode
+                ? 'Register a new brand business under your existing HCID'
+                : 'Register your brand on the HoReCa1 marketplace'}
+            </p>
           </div>
         </div>
 
         <div className="flex gap-2 mb-6">
-          {STEP_TITLES.map(s => (
+          {STEP_TITLES.filter(s => !isAuthMode || s.id !== 1).map(s => (
             <div key={s.id}
               className={cn(
                 'flex-1 flex items-center gap-2 px-4 py-3 rounded-xl border text-[12px] font-bold transition-colors',
@@ -264,7 +341,7 @@ export default function BrandRegisterPage() {
             </div>
           )}
 
-          {step === 1 && (
+          {step === 1 && !isAuthMode && (
             <div className="space-y-5">
               <p className="text-[14px] text-gray-600">Verify your mobile number to start brand onboarding.</p>
               <div>
@@ -331,25 +408,27 @@ export default function BrandRegisterPage() {
                   contact: true,
                   identity: true,
                   market: true,
-                  auth: true,
+                  auth: !isAuthMode,
                   tax: true,
                   address: true,
                   marketing: true,
                 }}
-                showPassword
+                showPassword={!isAuthMode}
                 password={password}
                 onPasswordChange={setPassword}
               />
 
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setStep(1)}
-                  className="h-[48px] px-5 rounded-xl border border-[#EEEEEE] text-[13px] font-bold text-gray-500 hover:bg-gray-50">
-                  Back
-                </button>
+                {!isAuthMode && (
+                  <button type="button" onClick={() => setStep(1)}
+                    className="h-[48px] px-5 rounded-xl border border-[#EEEEEE] text-[13px] font-bold text-gray-500 hover:bg-gray-50">
+                    Back
+                  </button>
+                )}
                 <button type="button" onClick={handleSubmit} disabled={submitting}
                   className={cn(FORM.primaryBtn, 'flex-1 h-[48px] text-[14px]')}>
                   {submitting ? <Loader2 size={18} className="animate-spin" /> : null}
-                  {submitting ? 'Submitting…' : 'Submit Application'}
+                  {submitting ? 'Submitting…' : isAuthMode ? 'Create Brand Business' : 'Submit Application'}
                   {!submitting && <ArrowRight size={16} className="ml-1" />}
                 </button>
               </div>

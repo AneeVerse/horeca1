@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, Building2, Loader2, Sparkles, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
+import { X, Building2, Loader2, Sparkles, AlertCircle, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { useAddress } from '@/context/AddressContext';
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import { toast } from 'sonner';
@@ -51,6 +51,7 @@ export function CreateBusinessAccountModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [brandSubmitted, setBrandSubmitted] = useState(false);
 
   const setFE = (key: string, msg: string) => setFieldErrors(prev => {
     if (!msg && !prev[key]) return prev;
@@ -59,6 +60,15 @@ export function CreateBusinessAccountModal({
     if (msg) next[key] = msg; else delete next[key];
     return next;
   });
+
+  useEffect(() => {
+    if (!isOpen) {
+      setBrandSubmitted(false);
+      setError(null);
+      setFieldErrors({});
+      setSubmitting(false);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!/^\d{6}$/.test(profile.pincode ?? profile.billingPincode ?? '')) return;
@@ -112,14 +122,14 @@ export function CreateBusinessAccountModal({
           return;
         }
 
-        toast.success('Brand account created successfully!');
+        toast.success('Brand application submitted for review.');
         const newAccount = json.data.account;
         const newOutlet = json.data.outlet;
         await refreshAccounts();
         await switchAccount(newAccount.id, newOutlet.id);
         onCreated?.();
-        onClose();
-        window.location.assign('/brand/portal/dashboard');
+        setBrandSubmitted(true);
+        setSubmitting(false);
       } catch {
         setError('Network error — please try again.');
         setSubmitting(false);
@@ -238,6 +248,33 @@ export function CreateBusinessAccountModal({
   };
 
   if (!isOpen) return null;
+
+  if (brandSubmitted) {
+    return (
+      <div className="fixed inset-0 z-[14000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+        <div className="bg-white rounded-[24px] border border-[#EEEEEE] p-8 max-w-md w-full text-center shadow-[0_20px_50px_rgba(0,0,0,0.08)] animate-in zoom-in-95 duration-150">
+          <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+            <CheckCircle2 size={32} className="text-[#299E60]" />
+          </div>
+          <h3 className="text-[22px] font-[800] text-[#181725] mb-2">Application Submitted</h3>
+          <p className="text-[14px] text-gray-500 mb-6">
+            Your brand onboarding request has been received. Our team will review your profile and contact you shortly.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setBrandSubmitted(false);
+              onClose();
+              router.push('/');
+            }}
+            className={cn(FORM.primaryBtn, 'inline-flex px-6 py-3 text-[13px]')}
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[14000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-150">

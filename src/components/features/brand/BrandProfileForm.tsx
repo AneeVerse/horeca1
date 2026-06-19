@@ -4,7 +4,7 @@
  * Shared brand profile form — identity, market, contact, tax/location, marketing.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Building2, User, MapPin, Globe, Target, ChevronDown, ChevronUp, Check, ShieldCheck, Eye, EyeOff,
 } from 'lucide-react';
@@ -83,17 +83,24 @@ function SectionHeader({
 }
 
 function CollapsibleSection({
-  id, title, icon, defaultOpen, children, spanClass,
+  id, title, icon, defaultOpen, forceOpen, children, spanClass,
 }: {
   id: string;
   title: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   defaultOpen?: boolean;
+  /** Opens the section when validation fails (e.g. required location fields empty). */
+  forceOpen?: boolean;
   children: React.ReactNode;
   spanClass?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const Icon = icon;
+
+  useEffect(() => {
+    if (forceOpen) setOpen(true);
+  }, [forceOpen]);
+
   return (
     <div className={cn(spanClass ?? 'sm:col-span-2', 'border border-[#EEEEEE] rounded-[12px] bg-[#FAFAFA]/30 overflow-hidden')}>
       <button type="button" onClick={() => setOpen(!open)}
@@ -188,6 +195,8 @@ export function BrandProfileForm({
     set({ targetSegments: next });
   };
 
+  const locationFieldErrors = !!(errors.outletName || errors.addressLine || errors.pincode);
+
   const addressContent = (
     <div className="space-y-4">
       <AddressAutocomplete
@@ -197,16 +206,16 @@ export function BrandProfileForm({
         hint="Selecting a place auto-fills city, state, and pincode."
         onPick={handleAddressPick}
       />
-      <TextField label="Primary Outlet / HQ name" value={value.outletName ?? ''}
+      <TextField label="Primary Outlet / HQ name" required value={value.outletName ?? ''}
         error={errors.outletName}
         onChange={v => set({ outletName: v })}
         placeholder="e.g. Mumbai HQ" />
-      <TextField label="Address Line" value={value.addressLine ?? value.billingAddressLine ?? ''}
+      <TextField label="Address Line" required value={value.addressLine ?? value.billingAddressLine ?? ''}
         error={errors.addressLine}
         onChange={v => set({ addressLine: v, billingAddressLine: v })}
         placeholder="Building, street, area" />
       <div className={GRID}>
-        <TextField label="Pincode" value={value.pincode ?? value.billingPincode ?? ''} maxLength={6}
+        <TextField label="Pincode" required value={value.pincode ?? value.billingPincode ?? ''} maxLength={6}
           error={errors.pincode} placeholder="6-digit PIN" inputMode="numeric"
           onChange={v => {
             const n = v.replace(/\D/g, '').slice(0, 6);
@@ -413,8 +422,10 @@ export function BrandProfileForm({
 
         {visibleSections.address && (
           visibleSections.tax ? (
-            <CollapsibleSection id="brand-address" title="Location (optional)" icon={MapPin}
-              defaultOpen={!!errors.addressLine || !!errors.pincode} spanClass={SPAN_FULL}>
+            <CollapsibleSection id="brand-address" title="Location" icon={MapPin}
+              defaultOpen={locationFieldErrors}
+              forceOpen={locationFieldErrors}
+              spanClass={SPAN_FULL}>
               {addressContent}
             </CollapsibleSection>
           ) : (
