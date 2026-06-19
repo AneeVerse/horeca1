@@ -292,6 +292,8 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
             businessAccountId: account.id,
             name: body.displayName || body.legalName,
             slug: slugify(body.displayName || body.legalName, ctx.userId),
+            approvalStatus: 'pending',
+            isActive: false,
             description: body.description ?? null,
             website: body.website ?? null,
             tagline: body.tagline ?? null,

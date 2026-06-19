@@ -710,7 +710,9 @@ export class BrandService {
 
     const updated = await prisma.brand.update({
       where: { id: brandId },
-      data: { approvalStatus: action },
+      data: action === 'approved'
+        ? { approvalStatus: action, isActive: true }
+        : { approvalStatus: action },
     });
 
     if (action === 'approved') {
