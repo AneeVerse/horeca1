@@ -5,12 +5,23 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { signIn, useSession } from 'next-auth/react';
 import {
-  User, Store, Mail, Lock, Eye, EyeOff, Loader2, ArrowLeft, ArrowRight,
+  Store, Loader2, ArrowLeft, ArrowRight, Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { FORM } from '@/components/ui/form';
+import {
+  CustomerProfileForm,
+  type CustomerProfileValues,
+} from '@/components/features/customer/CustomerProfileForm';
+import { EMPTY_CUSTOMER_PROFILE } from '@/components/features/customer/customerProfileDefaults';
+import {
+  validateCustomerProfile,
+  validateFieldBlur,
+  derivedFullName,
+  derivedLegalName,
+} from '@/lib/validators/customer-profile';
 
 const RESEND_COOLDOWN = 60;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Step = 'form' | 'otp' | 'success';
 
@@ -19,9 +30,6 @@ export default function RegisterPageInner() {
   const redirectTo = params?.get('redirect') || null;
   const { status: sessionStatus } = useSession();
 
-  // Already-logged-in users shouldn't see the register form. Everyone
-  // lands on the storefront — account/outlet selection happens there,
-  // and the navbar Dashboard shortcut covers portal users.
   useEffect(() => {
     if (sessionStatus !== 'authenticated') return;
     window.location.href = redirectTo || '/';
@@ -30,13 +38,30 @@ export default function RegisterPageInner() {
   const [step, setStep] = useState<Step>('form');
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
-
-  const [fullName, setFullName] = useState('');
-  const [businessName, setBusinessName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [profile, setProfile] = useState<CustomerProfileValues>({ ...EMPTY_CUSTOMER_PROFILE });
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const setFE = useCallback((key: string, msg: string) => {
+    setFieldErrors(prev => {
+      if (!msg && !prev[key]) return prev;
+      if (msg && prev[key] === msg) return prev;
+      const next = { ...prev };
+      if (msg) next[key] = msg; else delete next[key];
+      return next;
+    });
+  }, []);
+
+  const handleFieldBlur = useCallback((field: string, value: string) => {
+    const msg = validateFieldBlur(field, value);
+    setFE(field, msg);
+  }, [setFE]);
+
+  const patchProfile = useCallback((patch: Partial<CustomerProfileValues>) => {
+    setProfile(prev => ({ ...prev, ...patch }));
+    setApiError('');
+  }, []);
 
   const [otp, setOtp] = useState<string[]>(['', '', '', '']);
   const otpRefs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)];
@@ -56,18 +81,21 @@ export default function RegisterPageInner() {
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
-  // Hard-navigate so SSR sees the new session cookie.
   const goPostLogin = useCallback(() => {
     window.location.href = redirectTo || '/';
   }, [redirectTo]);
 
   const handleSendOtp = async () => {
     setApiError('');
-    if (!/^\d{10}$/.test(phone)) { setApiError('Enter a valid 10-digit mobile number'); return; }
-    if (!fullName.trim()) { setApiError('Full name is required'); return; }
-    if (email.trim() && !EMAIL_RE.test(email.trim())) { setApiError('Enter a valid email address'); return; }
-    if (password && password.length < 6) { setApiError('Password must be at least 6 characters'); return; }
+    const validation = validateCustomerProfile({ ...profile, password }, 'selfRegister');
+    if (!validation.success) {
+      setFieldErrors(validation.errors);
+      setApiError(validation.message ?? 'Please fix the highlighted fields');
+      return;
+    }
+    setFieldErrors({});
 
+    const phone = (profile.phone ?? profile.mobilePhone ?? '').replace(/\D/g, '').slice(-10);
     setIsLoading(true);
     try {
       const res = await fetch('/api/v1/auth/otp/send', {
@@ -88,17 +116,44 @@ export default function RegisterPageInner() {
     if (code.length !== 4 || isLoading) return;
     setIsLoading(true);
     setApiError('');
+    const phone = (profile.phone ?? profile.mobilePhone ?? '').replace(/\D/g, '').slice(-10);
+    const fullName = derivedFullName(profile);
+    const businessName = derivedLegalName(profile);
+
     try {
       const result = await signIn('otp', {
         phone,
         code,
-        fullName: fullName.trim(),
-        businessName: businessName.trim(),
-        email: email.trim(),
+        fullName,
+        businessName,
+        email: profile.email?.trim() ?? '',
         password,
         role: 'customer',
         isRegister: 'true',
         redirect: false,
+        salutation: profile.salutation ?? '',
+        firstName: profile.firstName ?? '',
+        lastName: profile.lastName ?? '',
+        designation: profile.designation ?? '',
+        displayName: profile.displayName ?? '',
+        tradeName: profile.displayName ?? '',
+        businessType: profile.businessType ?? '',
+        subType: profile.subType ?? '',
+        cuisine: profile.cuisine ?? '',
+        gstNumber: (profile.gstin ?? '').toUpperCase().trim(),
+        panNumber: (profile.pan ?? '').toUpperCase().trim(),
+        fssaiNumber: profile.fssaiNumber ?? '',
+        gstTreatment: profile.gstTreatment ?? '',
+        placeOfSupply: profile.placeOfSupply ?? '',
+        addressLine: profile.addressLine ?? profile.billingAddressLine ?? '',
+        flatInfo: profile.flatInfo ?? '',
+        city: profile.city ?? profile.billingCity ?? '',
+        state: profile.state ?? profile.billingState ?? '',
+        pincode: profile.pincode ?? profile.billingPincode ?? '',
+        outletName: profile.outletName ?? '',
+        latitude: profile.latitude != null ? String(profile.latitude) : '',
+        longitude: profile.longitude != null ? String(profile.longitude) : '',
+        placeId: profile.placeId ?? '',
       });
       if (result?.error) {
         setApiError('Invalid or expired OTP. Please try again.');
@@ -134,186 +189,160 @@ export default function RegisterPageInner() {
 
   if (step === 'success') {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6 py-12">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
+      <CenteredCard>
+        <div className="p-8 text-center">
           <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-[#53B175]">
-              <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/>
-            </svg>
+            <Check size={42} className="text-[#299E60]" strokeWidth={2.5} />
           </div>
-          <h1 className="text-[24px] font-[800] text-gray-800 mb-3">Welcome to Horeca1!</h1>
-          <p className="text-[14px] text-gray-500">Signing you in...</p>
+          <h1 className="text-[24px] font-[800] text-gray-800 mb-2">Welcome to Horeca1!</h1>
+          <p className="text-[14px] text-gray-500 flex items-center justify-center gap-2">
+            <Loader2 size={15} className="animate-spin" /> Signing you in…
+          </p>
         </div>
-      </div>
+      </CenteredCard>
+    );
+  }
+
+  if (step === 'otp') {
+    const phone = (profile.phone ?? profile.mobilePhone ?? '').replace(/\D/g, '').slice(-10);
+    return (
+      <CenteredCard>
+        <div className="p-6 sm:p-8">
+          <button onClick={() => { setStep('form'); setOtp(['', '', '', '']); setApiError(''); }}
+            className="flex items-center gap-1.5 text-[12px] font-bold text-gray-400 hover:text-[#299E60] transition-colors mb-5 -ml-1">
+            <ArrowLeft size={14} /> Back
+          </button>
+          <h1 className="text-[22px] font-[800] text-gray-800 mb-1 leading-tight">Enter verification code</h1>
+          <p className="text-[13px] text-gray-400 mb-6">
+            We sent a 4-digit code to <span className="font-bold text-gray-700">+91 {phone.slice(0, 5)} {phone.slice(5)}</span>
+          </p>
+          {apiError && <ErrorBanner>{apiError}</ErrorBanner>}
+          <div className="flex gap-3 justify-center my-6">
+            {otp.map((digit, i) => (
+              <input key={i} ref={otpRefs[i]} type="text" inputMode="numeric" maxLength={4}
+                value={digit} onChange={e => handleOtpInput(i, e.target.value)}
+                onKeyDown={e => { if (e.key === 'Backspace' && !otp[i] && i > 0) otpRefs[i - 1].current?.focus(); }}
+                disabled={isLoading}
+                className={cn(
+                  'w-[58px] h-[58px] text-center text-[22px] font-[800] border-2 rounded-2xl outline-none transition-all',
+                  digit ? 'border-[#299E60] bg-green-50/40 text-[#299E60] ring-2 ring-[#299E60]/10' : 'border-gray-200 bg-[#FAFAFA] focus:bg-white',
+                  'focus:border-[#299E60] focus:ring-4 focus:ring-[#299E60]/10',
+                  isLoading && 'opacity-60 cursor-not-allowed',
+                )}
+              />
+            ))}
+          </div>
+          <button onClick={() => handleVerifyOtp(otp.join(''))} disabled={isLoading || otp.join('').length !== 4}
+            className={cn(FORM.primaryBtn, 'w-full py-3.5')}>
+            {isLoading && <Loader2 size={18} className="animate-spin" />}
+            Verify &amp; Create Account
+          </button>
+          <div className="text-center mt-5">
+            {resendTimer > 0 ? (
+              <p className="text-[13px] text-gray-400">Resend code in <span className="font-bold text-gray-600">{resendTimer}s</span></p>
+            ) : (
+              <button onClick={handleSendOtp} disabled={isLoading} className="text-[13px] text-[#299E60] font-bold hover:underline disabled:opacity-50">
+                Resend Code
+              </button>
+            )}
+          </div>
+        </div>
+      </CenteredCard>
     );
   }
 
   return (
-    <div className="flex flex-col">
-      <main className="flex items-center justify-center px-4 py-8 md:py-10">
-        <div className="w-full max-w-[480px] bg-white md:rounded-2xl md:shadow-xl md:p-8 p-2">
-          {step === 'otp' ? (
-            <>
-              <button onClick={() => { setStep('form'); setOtp(['', '', '', '']); setApiError(''); }}
-                className="flex items-center gap-2 text-[13px] text-gray-400 hover:text-gray-600 mb-4 -ml-1">
-                <ArrowLeft size={15} /> Back
-              </button>
-              <h1 className="text-[22px] font-bold text-gray-800 mb-1">Enter OTP</h1>
-              <p className="text-[13px] text-gray-400 mb-6">
-                Code sent to <span className="font-bold text-gray-700">+91 {phone.slice(0, 5)} {phone.slice(5)}</span>
-              </p>
-
-              {apiError && (
-                <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-[13px] text-red-600 font-medium">
-                  {apiError}
-                </div>
-              )}
-
-              <div className="flex gap-3 justify-center my-6">
-                {otp.map((digit, i) => (
-                  <input key={i} ref={otpRefs[i]} type="text" inputMode="numeric" maxLength={4}
-                    value={digit} onChange={e => handleOtpInput(i, e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Backspace' && !otp[i] && i > 0) otpRefs[i - 1].current?.focus(); }}
-                    disabled={isLoading}
-                    className={cn(
-                      'w-[60px] h-[60px] text-center text-[24px] font-[800] border-2 rounded-xl outline-none transition-all',
-                      digit ? 'border-[#53B175] bg-green-50 text-[#53B175]' : 'border-gray-200 bg-white',
-                      'focus:border-[#53B175]',
-                      isLoading && 'opacity-60 cursor-not-allowed',
-                    )}
-                  />
-                ))}
-              </div>
-
-              <button onClick={() => handleVerifyOtp(otp.join(''))} disabled={isLoading || otp.join('').length !== 4}
-                className="w-full bg-[#53B175] hover:bg-[#48a068] text-white font-bold py-3 rounded-lg shadow-md shadow-green-100 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                {isLoading && <Loader2 size={18} className="animate-spin" />}
-                Create Account
-              </button>
-
-              <div className="text-center mt-5">
-                {resendTimer > 0 ? (
-                  <p className="text-[13px] text-gray-400">Resend OTP in <span className="font-bold text-gray-600">{resendTimer}s</span></p>
-                ) : (
-                  <button onClick={handleSendOtp} disabled={isLoading} className="text-[13px] text-[#53B175] font-bold hover:underline disabled:opacity-50">
-                    Resend OTP
-                  </button>
-                )}
-              </div>
-            </>
-          ) : (
-            <>
-              <h1 className="text-[24px] font-[800] text-gray-800 mb-2">Create your Account</h1>
-              <p className="text-[13px] text-gray-500 mb-6">Sign up to start ordering for your business.</p>
-
-              {apiError && (
-                <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-[13px] text-red-600 font-medium">
-                  {apiError}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Field label="Full name" required>
-                  <IconInput icon={User} value={fullName} onChange={setFullName} placeholder="Enter your name" />
-                </Field>
-                <Field label="Business name">
-                  <IconInput icon={Store} value={businessName} onChange={setBusinessName} placeholder="Restaurant / hotel / cafe" />
-                </Field>
-                <Field label="Email (optional)" className="md:col-span-2">
-                  <IconInput icon={Mail} type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
-                </Field>
-                <Field label="Phone number" required className="md:col-span-2">
-                  <div className="relative flex items-center">
-                    <span className="absolute left-4 text-[13px] font-bold text-gray-500 select-none z-10">+91</span>
-                    <input type="tel" inputMode="numeric" maxLength={10}
-                      value={phone}
-                      onChange={e => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 10)); setApiError(''); }}
-                      onKeyDown={e => e.key === 'Enter' && handleSendOtp()}
-                      placeholder="10 digit mobile number"
-                      className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#53B175]" />
-                  </div>
-                </Field>
-                <Field label="Password (optional — skip OTP next time)" className="md:col-span-2">
-                  <div className="relative">
-                    <Lock size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#53B175]" />
-                    <input type={showPassword ? 'text' : 'password'} value={password}
-                      onChange={e => { setPassword(e.target.value); setApiError(''); }}
-                      placeholder="At least 6 characters" autoComplete="new-password"
-                      className="w-full pl-11 pr-11 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#53B175]" />
-                    <button type="button" onClick={() => setShowPassword(v => !v)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                </Field>
-              </div>
-
-              <button onClick={handleSendOtp} disabled={isLoading}
-                className="w-full bg-[#53B175] hover:bg-[#48a068] text-white font-bold py-3.5 rounded-lg shadow-md shadow-green-100 mt-6 active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2">
-                {isLoading && <Loader2 size={18} className="animate-spin" />}
-                Send OTP
-              </button>
-
-              {/* Vendor onboarding CTA */}
-              <Link
-                href="/vendor/register"
-                className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-[#53B175]/30 bg-green-50/40 p-4 hover:bg-green-50 transition-colors">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-[#53B175]/10 flex items-center justify-center shrink-0">
-                    <Store size={16} className="text-[#53B175]" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-bold text-[13px] text-gray-800">Onboard as a Vendor</p>
-                    <p className="text-[11px] text-gray-500 truncate">Sell on Horeca1 — full KYC wizard, ~5 min</p>
-                  </div>
-                </div>
-                <ArrowRight size={16} className="text-[#53B175] shrink-0" />
+    <div className="flex items-start justify-center px-4 py-5 min-h-[calc(100vh-150px)]">
+      <div className="w-full max-w-[1080px] rounded-[20px] bg-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-[#EEEEEE]">
+        <div className="px-5 sm:px-7 pt-6 sm:pt-7 pb-5 border-b border-[#F5F5F5]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[#299E60] mb-1">Customer signup</p>
+              <h1 className="text-[clamp(1.25rem,2vw+0.5rem,1.5rem)] font-[800] text-[#181725] leading-tight">
+                Create your account
+              </h1>
+              <p className="text-[13px] text-gray-500 mt-1">Sign up to start ordering for your business.</p>
+            </div>
+            <p className="text-[13px] text-gray-500 lg:text-right shrink-0">
+              Already have an account?{' '}
+              <Link href={`/login${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ''}`}
+                className="text-[#299E60] font-[800] hover:underline">
+                Login
               </Link>
-
-              <div className="mt-6 pt-5 border-t border-gray-100 text-center">
-                <p className="text-[13px] text-gray-500">
-                  Already have an account?{' '}
-                  <Link
-                    href={`/login${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ''}`}
-                    className="text-[#53B175] font-[800] hover:underline"
-                  >
-                    Login
-                  </Link>
-                </p>
-              </div>
-            </>
-          )}
+            </p>
+          </div>
         </div>
-      </main>
+
+        <div className="p-5 sm:p-7">
+          <VendorOnboardBanner className="mb-5" />
+
+          {apiError && <ErrorBanner>{apiError}</ErrorBanner>}
+
+          <CustomerProfileForm
+            value={profile}
+            onChange={patchProfile}
+            errors={fieldErrors}
+            onFieldBlur={handleFieldBlur}
+            layout="wide"
+            visibleSections={{ contact: true, business: true, auth: true, tax: true, address: true }}
+            collapsedSections={['tax', 'address']}
+            showPassword
+            password={password}
+            onPasswordChange={setPassword}
+            showPasswordToggle
+            passwordVisible={showPassword}
+            onTogglePassword={() => setShowPassword(v => !v)}
+          />
+
+          <div className="mt-6 space-y-3">
+            <button onClick={handleSendOtp} disabled={isLoading} className={cn(FORM.primaryBtn, 'w-full h-[46px]')}>
+              {isLoading && <Loader2 size={18} className="animate-spin" />}
+              Send OTP
+            </button>
+            <VendorOnboardBanner />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function Field({ label, required, children, className }: { label: string; required?: boolean; children: React.ReactNode; className?: string }) {
+function VendorOnboardBanner({ className }: { className?: string }) {
   return (
-    <div className={cn('space-y-1', className)}>
-      <label className="block text-[12px] font-bold text-gray-700 ml-0.5">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
+    <Link href="/vendor/register"
+      className={cn(
+        'group flex items-center gap-3 rounded-[14px] border border-[#EEEEEE] bg-[#FAFAFA] px-4 py-3.5',
+        'hover:border-[#299E60]/30 hover:bg-[#F7FBF8] transition-all duration-200',
+        className,
+      )}>
+      <div className="w-10 h-10 rounded-xl bg-white border border-[#EEEEEE] flex items-center justify-center shrink-0 shadow-sm group-hover:border-[#299E60]/20 transition-colors">
+        <Store size={16} className="text-[#299E60]" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-bold text-[13px] text-[#181725] leading-tight">Onboard as a Vendor</p>
+        <p className="text-[11.5px] text-gray-500 mt-0.5">Sell on Horeca1 — full KYC wizard, about 5 minutes</p>
+      </div>
+      <span className="hidden sm:flex items-center gap-1 text-[12px] font-bold text-[#299E60] shrink-0 group-hover:gap-1.5 transition-all">
+        Start <ArrowRight size={14} />
+      </span>
+    </Link>
+  );
+}
+
+function CenteredCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-center px-4 py-12 min-h-[calc(100vh-180px)]">
+      <div className="w-full max-w-[460px] bg-white rounded-[20px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-[#EEEEEE] overflow-hidden">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ErrorBanner({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-[13px] text-red-600 font-medium">
       {children}
-    </div>
-  );
-}
-
-function IconInput({
-  icon: Icon, value, onChange, type = 'text', placeholder,
-}: {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  placeholder?: string;
-}) {
-  return (
-    <div className="relative">
-      <Icon size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#53B175]" />
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-lg text-[14px] outline-none focus:border-[#53B175] transition-colors" />
     </div>
   );
 }
