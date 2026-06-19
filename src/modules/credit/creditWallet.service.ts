@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
 import { NotificationService } from '@/modules/notification/notification.service';
+import { SMS_TEMPLATES } from '@/lib/providers/smsTemplates';
 
 const notifications = new NotificationService();
 
@@ -511,9 +512,19 @@ export class CreditWalletService {
       const body = `Your Horeca1 credit payment of ₹${amount} ${phrase}. Pay now from your wallet: /wallet`;
       for (const channel of ['in_app', 'sms', 'whatsapp'] as const) {
         await notifications.send({
-          userId: w.userId, type: 'credit', channel,
-          title: 'Credit repayment reminder', body,
-          referenceId: w.id, referenceType: 'credit_wallet',
+          userId: w.userId,
+          type: 'credit',
+          channel,
+          title: 'Credit repayment reminder',
+          body,
+          ...(channel === 'sms'
+            ? {
+                smsTemplateId: SMS_TEMPLATES.generalPurpose,
+                smsVariables: { content: body },
+              }
+            : {}),
+          referenceId: w.id,
+          referenceType: 'credit_wallet',
         }).catch(() => {});
       }
       sent++;

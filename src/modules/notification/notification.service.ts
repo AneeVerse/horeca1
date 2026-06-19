@@ -18,6 +18,8 @@ interface SendNotificationInput {
   body: string;
   referenceId?: string;
   referenceType?: string;
+  smsTemplateId?: string;
+  smsVariables?: Record<string, string>;
 }
 
 export class NotificationService {

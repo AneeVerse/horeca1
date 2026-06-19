@@ -8,7 +8,10 @@ import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { resolveVendorId } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
-import { sendSms } from '@/lib/providers/sms';
+import { NotificationService } from '@/modules/notification/notification.service';
+import { SMS_TEMPLATES } from '@/lib/providers/smsTemplates';
+
+const notifications = new NotificationService();
 
 const remindSchema = z.object({
   customerId: z.string().uuid().optional(),
@@ -26,7 +29,6 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       throw Errors.badRequest('Either customerId or userId is required.');
     }
 
-    // Resolve the active CreditWallet for this customer under this vendor
     const wallet = await prisma.creditWallet.findFirst({
       where: {
         vendorId,
@@ -57,7 +59,6 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       throw Errors.badRequest('This customer does not have a registered phone number to receive SMS reminders.');
     }
 
-    // Fetch vendor business name
     const vendor = await prisma.vendor.findFirst({
       where: { id: vendorId },
       select: { businessName: true },
@@ -67,56 +68,20 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     const baseUrl = process.env.AUTH_URL || 'http://localhost:3000';
     const paymentLink = `${baseUrl}/wallet`;
 
-    // Format payment reminder message
     const formattedOutstanding = `₹${outstanding.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
-    const messageBody = `Dear ${wallet.user.fullName}, your outstanding payment of ${formattedOutstanding} for ${vendorName} is due. Please clear it immediately at: ${paymentLink}`;
+    const messageBody = `your outstanding payment of ${formattedOutstanding} for ${vendorName} is due. Please clear it immediately at: ${paymentLink}`;
 
-    let smsSuccess = false;
-    try {
-      await sendSms({
-        to: wallet.user.phone,
-        body: messageBody,
-        channel: 'sms',
-        variables: {
-          name: wallet.user.fullName,
-          amount: formattedOutstanding,
-          vendor: vendorName,
-          link: paymentLink,
-        },
-      });
-      smsSuccess = true;
-    } catch (smsError) {
-      // Log failed notification
-      await prisma.notification.create({
-        data: {
-          userId: targetUserId,
-          type: 'payment_reminder',
-          channel: 'sms',
-          title: 'Payment Reminder Failed',
-          body: messageBody,
-          referenceId: wallet.id,
-          referenceType: 'credit_wallet',
-          status: 'failed',
-        },
-      });
-      throw smsError;
-    }
-
-    if (smsSuccess) {
-      // Log successful notification
-      await prisma.notification.create({
-        data: {
-          userId: targetUserId,
-          type: 'payment_reminder',
-          channel: 'sms',
-          title: 'Payment Reminder Sent',
-          body: messageBody,
-          referenceId: wallet.id,
-          referenceType: 'credit_wallet',
-          status: 'sent',
-        },
-      });
-    }
+    await notifications.send({
+      userId: targetUserId,
+      type: 'payment_reminder',
+      channel: 'sms',
+      title: 'Payment Reminder',
+      body: messageBody,
+      smsTemplateId: SMS_TEMPLATES.generalPurpose,
+      smsVariables: { content: messageBody },
+      referenceId: wallet.id,
+      referenceType: 'credit_wallet',
+    });
 
     return NextResponse.json({
       success: true,

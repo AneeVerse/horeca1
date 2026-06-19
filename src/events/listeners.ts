@@ -2,6 +2,8 @@ import { eventBus } from './emitter';
 import { NotificationService } from '@/modules/notification/notification.service';
 import { prisma } from '@/lib/prisma';
 import { creditWalletService } from '@/modules/credit/creditWallet.service';
+import { orderService } from '@/modules/order/order.service';
+import { SMS_TEMPLATES } from '@/lib/providers/smsTemplates';
 
 const notifications = new NotificationService();
 
@@ -29,6 +31,10 @@ export function registerEventListeners(): void {
       });
       const vendorUserId = vendor?.userId ?? payload.vendorId;
 
+      const { otp } = await orderService.issueDeliveryOtp(payload.orderId, payload.vendorId, {
+        emitEvent: false,
+      });
+
       await Promise.all([
         notifications.send({
           userId: vendorUserId,
@@ -49,11 +55,33 @@ export function registerEventListeners(): void {
           referenceType: 'order',
         }),
         notifications.send({
+          userId: vendorUserId,
+          type: 'order',
+          channel: 'sms',
+          title: 'New Order Received',
+          body: `New order ${payload.orderNumber} from Horeca1.`,
+          smsTemplateId: SMS_TEMPLATES.orderConfirmVendor,
+          smsVariables: { number: payload.orderNumber },
+          referenceId: payload.orderId,
+          referenceType: 'order',
+        }),
+        notifications.send({
           userId: payload.userId,
           type: 'order',
           channel: 'email',
           title: `Order ${payload.orderNumber} placed`,
           body: `Thank you for your order. Total: ₹${payload.totalAmount.toLocaleString('en-IN')}. We'll notify you once the vendor confirms.`,
+          referenceId: payload.orderId,
+          referenceType: 'order',
+        }),
+        notifications.send({
+          userId: payload.userId,
+          type: 'order',
+          channel: 'sms',
+          title: 'Order Confirmation',
+          body: `Order ${payload.orderNumber} confirmed. OTP: ${otp}`,
+          smsTemplateId: SMS_TEMPLATES.orderConfirmCustomer,
+          smsVariables: { var1: payload.orderNumber, var2: otp },
           referenceId: payload.orderId,
           referenceType: 'order',
         }),
@@ -211,6 +239,8 @@ export function registerEventListeners(): void {
           channel: 'sms',
           title: 'Delivery code',
           body,
+          smsTemplateId: SMS_TEMPLATES.orderConfirmCustomer,
+          smsVariables: { var1: payload.orderNumber, var2: payload.otp },
           referenceId: payload.orderId,
           referenceType: 'order',
         }),

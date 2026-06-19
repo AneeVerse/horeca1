@@ -871,24 +871,29 @@ export class OrderService {
    * code over SMS/email/in-app and reads it to the agent, who enters it on the
    * delivered transition (proofType='otp') to confirm handover.
    *
-   * Scoped to the order's vendor. Allowed only while the order is in flight
-   * (confirmed / processing / shipped) — never for delivered/cancelled/pending.
-   * The OTP is NOT returned to the caller; only the customer receives it.
+   * Scoped to the order's vendor. Allowed while the order is open
+   * (pending through shipped) — never for delivered/cancelled/returned.
+   * The OTP is NOT returned to the caller when emitEvent is true; only the
+   * customer receives it via the OrderDeliveryOtp listener.
    */
-  async generateDeliveryOtp(orderId: string, vendorId: string) {
+  async issueDeliveryOtp(
+    orderId: string,
+    vendorId: string,
+    options: { emitEvent?: boolean } = {},
+  ): Promise<{ otp: string; orderNumber: string; userId: string; expiresAt: Date }> {
+    const { emitEvent: shouldEmit = false } = options;
+
     const order = await prisma.order.findFirst({
       where: { id: orderId, vendorId },
       select: { id: true, userId: true, orderNumber: true, status: true },
     });
     if (!order) throw Errors.notFound('Order');
 
-    const allowed = ['confirmed', 'processing', 'ready_for_dispatch', 'shipped'];
-    if (!allowed.includes(order.status as string)) {
-      throw Errors.badRequest(`A delivery OTP can only be generated for an in-progress order (current status: ${order.status}).`);
+    const blocked = ['delivered', 'returned', 'cancelled'];
+    if (blocked.includes(order.status as string)) {
+      throw Errors.badRequest(`A delivery OTP cannot be issued for a closed order (current status: ${order.status}).`);
     }
 
-    // 4-digit code, zero-padded. Expires in 48h — comfortably covers same-day
-    // and next-day delivery windows.
     const otp = String(Math.floor(1000 + Math.random() * 9000));
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
@@ -897,15 +902,34 @@ export class OrderService {
       data: { deliveryOtp: otp, deliveryOtpExpiresAt: expiresAt, deliveryOtpVerifiedAt: null },
     });
 
-    emitEvent('OrderDeliveryOtp', {
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      userId: order.userId,
-      vendorId,
-      otp,
-    });
+    if (shouldEmit) {
+      emitEvent('OrderDeliveryOtp', {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        userId: order.userId,
+        vendorId,
+        otp,
+      });
+    }
 
-    return { sent: true, expiresAt };
+    return { otp, orderNumber: order.orderNumber, userId: order.userId, expiresAt };
+  }
+
+  /** Vendor-triggered resend — requires in-flight status (not pending). */
+  async generateDeliveryOtp(orderId: string, vendorId: string) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, vendorId },
+      select: { status: true },
+    });
+    if (!order) throw Errors.notFound('Order');
+
+    const allowed = ['confirmed', 'processing', 'ready_for_dispatch', 'shipped'];
+    if (!allowed.includes(order.status as string)) {
+      throw Errors.badRequest(`A delivery OTP can only be generated for an in-progress order (current status: ${order.status}).`);
+    }
+
+    const result = await this.issueDeliveryOtp(orderId, vendorId, { emitEvent: true });
+    return { sent: true, expiresAt: result.expiresAt };
   }
 
   /**
@@ -1248,3 +1272,5 @@ export class OrderService {
     });
   }
 }
+
+export const orderService = new OrderService();

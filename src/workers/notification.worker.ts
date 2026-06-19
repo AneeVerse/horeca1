@@ -18,10 +18,12 @@ interface NotificationJobData {
   body: string;
   referenceId?: string;
   referenceType?: string;
+  smsTemplateId?: string;
+  smsVariables?: Record<string, string>;
 }
 
 async function processNotification(job: Job<NotificationJobData>) {
-  const { notificationId, channel, title, body, userId } = job.data;
+  const { notificationId, channel, title, body, userId, smsTemplateId, smsVariables } = job.data;
 
   if (channel === 'in_app') {
     await prisma.notification.update({ where: { id: notificationId }, data: { status: 'sent' } });
@@ -40,7 +42,13 @@ async function processNotification(job: Job<NotificationJobData>) {
       await sendEmail({ to: user.email, subject: title, text: body, name: user.fullName ?? undefined });
     } else if (channel === 'sms' || channel === 'whatsapp') {
       if (!user.phone) throw new Error('User has no phone number');
-      await sendSms({ to: user.phone, body: `${title}\n\n${body}`, channel });
+      await sendSms({
+        to: user.phone,
+        body: smsTemplateId ? body : `${title}\n\n${body}`,
+        templateId: smsTemplateId,
+        variables: smsVariables,
+        channel,
+      });
     } else if (channel === 'push') {
       await sendPushToUser(userId, title, body);
     }

@@ -5,23 +5,26 @@ interface SendSmsInput {
   to: string;
   body?: string;
   variables?: Record<string, string>;
+  templateId?: string;
   channel: 'sms' | 'whatsapp';
 }
 
 export async function sendSms(input: SendSmsInput): Promise<void> {
   const authKey = process.env.MSG91_AUTH_KEY;
-  const senderId = process.env.MSG91_SENDER_ID || 'HORECA';
+  const senderId = process.env.MSG91_SENDER_ID || 'HCXGBL';
   // MSG91_WHATSAPP_NUMBER: your WhatsApp Business number registered in MSG91 (e.g. "919876543210")
   // MSG91_WHATSAPP_TEMPLATE_ID: approved Meta template ID from MSG91 dashboard
   const templateId = input.channel === 'whatsapp'
     ? process.env.MSG91_WHATSAPP_TEMPLATE_ID
-    : (process.env.MSG91_SMS_TEMPLATE_ID || process.env.MSG91_TEMPLATE_ID);
+    : (input.templateId || process.env.MSG91_SMS_TEMPLATE_ID || process.env.MSG91_TEMPLATE_ID);
   const whatsappNumber = process.env.MSG91_WHATSAPP_NUMBER;
 
   const normalized = normalizePhone(input.to);
 
   if (!authKey || !templateId || (input.channel === 'whatsapp' && !whatsappNumber)) {
-    console.warn(`[${input.channel}:dev] ${normalized} | ${input.body?.slice(0, 120) || JSON.stringify(input.variables)}…`);
+    console.warn(
+      `[${input.channel}:dev] ${normalized} | template=${templateId ?? 'none'} | ${input.body?.slice(0, 120) || JSON.stringify(input.variables)}…`,
+    );
     return;
   }
 
