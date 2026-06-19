@@ -59,6 +59,9 @@ export function Navbar() {
     const { data: session, status: sessionStatus } = useSession();
     const isLoggedIn = sessionStatus === 'authenticated';
     const userRole = (session?.user as { role?: string })?.role;
+    const activeAccountType = (session?.user as {
+        activeBusinessAccountType?: { isVendor: boolean; isBrand: boolean };
+    } | undefined)?.activeBusinessAccountType;
 
     const [isScrolled, setIsScrolled] = React.useState(false);
 
@@ -104,11 +107,11 @@ export function Navbar() {
 
     if (isAdminPage || isVendorDashboard || isBrandPortal || isShipmentPage || isAccountPage) return null;
 
-    // Build iconized nav items — prepend dashboard shortcut for vendor/admin
+    // Build iconized nav items — prepend dashboard shortcut based on active business account
     const desktopNavItems = [
-        ...(isLoggedIn && userRole === 'vendor' ? [{ name: 'Dashboard', href: '/vendor/dashboard', Icon: LayoutDashboard }] : []),
+        ...(isLoggedIn && activeAccountType?.isVendor ? [{ name: 'Dashboard', href: '/vendor/dashboard', Icon: LayoutDashboard }] : []),
         ...(isLoggedIn && userRole === 'admin' ? [{ name: 'Dashboard', href: '/admin/dashboard', Icon: LayoutDashboard }] : []),
-        ...(isLoggedIn && userRole === 'brand' ? [{ name: 'Brand Portal', href: '/brand/portal', Icon: LayoutDashboard }] : []),
+        ...(isLoggedIn && activeAccountType?.isBrand ? [{ name: 'Brand Portal', href: '/brand/portal', Icon: LayoutDashboard }] : []),
         ...DESKTOP_NAV,
         ...(isLoggedIn ? [{ name: 'Rewards', href: '/rewards', Icon: Gift }] : []),
     ];

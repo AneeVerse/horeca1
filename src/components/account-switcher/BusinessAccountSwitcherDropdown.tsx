@@ -9,6 +9,7 @@ import {
 import { useSession } from 'next-auth/react';
 import { useBusinessAccountSwitcher, type AccountSummary } from '@/hooks/useBusinessAccountSwitcher';
 import { CreateBusinessAccountModal } from '@/components/auth/CreateBusinessAccountModal';
+import { ACCOUNT_SWITCHER_OPEN_EVENT } from '@/lib/accountSwitcherEvents';
 
 type AccountKind = 'customer' | 'vendor' | 'brand';
 
@@ -76,6 +77,15 @@ export function BusinessAccountSwitcherDropdown() {
       return () => document.removeEventListener('mousedown', onMouseDown);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    function onOpenRequest() {
+      setIsOpen(true);
+      setShowOutletPicker(false);
+    }
+    window.addEventListener(ACCOUNT_SWITCHER_OPEN_EVENT, onOpenRequest);
+    return () => window.removeEventListener(ACCOUNT_SWITCHER_OPEN_EVENT, onOpenRequest);
+  }, []);
 
   // Empty-accounts fallback — this is the path for super admins who have
   // role='admin' but no BusinessAccountMember rows of their own. The bare

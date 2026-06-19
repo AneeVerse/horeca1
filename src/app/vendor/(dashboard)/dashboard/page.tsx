@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
+import { openAccountSwitcher } from '@/lib/accountSwitcherEvents';
 import { toast } from 'sonner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -2792,9 +2793,13 @@ function FinancialDetailDrawer({
 export default function VendorDashboardPage() {
     const { data: session } = useSession();
     const { currentOutlet } = useBusinessAccountSwitcher();
+    const activeAccountType = (session?.user as {
+        activeBusinessAccountType?: { isVendor: boolean; isBrand: boolean };
+    } | undefined)?.activeBusinessAccountType;
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isNetworkError, setIsNetworkError] = useState(false);
     const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
     const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
     const todayStartIST = new Date(nowIST);
@@ -2871,17 +2876,23 @@ export default function VendorDashboardPage() {
     const fetchDashboard = useCallback((silent = false) => {
         if (!silent) setLoading(true);
         setError(null);
+        setIsNetworkError(false);
         fetch('/api/v1/vendor/dashboard')
-            .then(res => res.json())
-            .then(json => {
+            .then(res => res.json().then(json => ({ res, json })))
+            .then(({ res, json }) => {
                 if (json.success) {
                     setData(json.data);
                     setLastRefresh(new Date());
                 } else {
-                    setError(json.error?.message || 'Failed to load dashboard data');
+                    const message = json.error?.message || 'Failed to load dashboard data';
+                    setError(message);
+                    setIsNetworkError(res.status >= 500);
                 }
             })
-            .catch(() => setError('Failed to load dashboard data'))
+            .catch(() => {
+                setError('Failed to load dashboard data');
+                setIsNetworkError(true);
+            })
             .finally(() => { if (!silent) setLoading(false); });
     }, []);
 
@@ -2970,6 +2981,8 @@ export default function VendorDashboardPage() {
         });
     }, []);
 
+    const isWrongAccountError = error?.toLowerCase().includes('no vendor profile linked') ?? false;
+
     return (
         <div className="space-y-6 pb-12 px-2 sm:px-0">
             <SetupBanner />
@@ -3012,17 +3025,52 @@ export default function VendorDashboardPage() {
                 </div>
             ) : error ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4 bg-white rounded-2xl border border-gray-100">
-                    <AlertTriangle size={36} className="text-rose-500" />
-                    <div className="text-center">
-                        <p className="text-[15px] text-gray-900 font-black">Connection Offline</p>
-                        <p className="text-[13px] text-gray-400 font-medium mt-0.5">{error}</p>
+                    {isWrongAccountError ? (
+                        <ShieldAlert size={36} className="text-amber-500" />
+                    ) : (
+                        <AlertTriangle size={36} className="text-rose-500" />
+                    )}
+                    <div className="text-center max-w-md px-4">
+                        <p className="text-[15px] text-gray-900 font-black">
+                            {isWrongAccountError
+                                ? 'Wrong Business Account'
+                                : isNetworkError
+                                    ? 'Connection Offline'
+                                    : 'Unable to Load Dashboard'}
+                        </p>
+                        <p className="text-[13px] text-gray-400 font-medium mt-0.5">
+                            {isWrongAccountError
+                                ? 'The selected business account does not have a vendor profile. Switch to a vendor account to view this dashboard.'
+                                : error}
+                        </p>
                     </div>
-                    <button
-                        onClick={() => fetchDashboard()}
-                        className="h-10 px-6 bg-emerald-600 text-white rounded-xl text-[13px] font-bold hover:bg-emerald-700 transition-colors shadow-md"
-                    >
-                        Re-connect Server
-                    </button>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        {isWrongAccountError ? (
+                            <>
+                                <button
+                                    onClick={() => openAccountSwitcher()}
+                                    className="h-10 px-6 bg-emerald-600 text-white rounded-xl text-[13px] font-bold hover:bg-emerald-700 transition-colors shadow-md"
+                                >
+                                    Switch Business Account
+                                </button>
+                                {activeAccountType?.isBrand && (
+                                    <Link
+                                        href="/brand/portal"
+                                        className="h-10 px-6 bg-[#53B175] text-white rounded-xl text-[13px] font-bold hover:bg-[#3d9e41] transition-colors shadow-md flex items-center justify-center"
+                                    >
+                                        Go to Brand Portal
+                                    </Link>
+                                )}
+                            </>
+                        ) : (
+                            <button
+                                onClick={() => fetchDashboard()}
+                                className="h-10 px-6 bg-emerald-600 text-white rounded-xl text-[13px] font-bold hover:bg-emerald-700 transition-colors shadow-md"
+                            >
+                                {isNetworkError ? 'Re-connect Server' : 'Try Again'}
+                            </button>
+                        )}
+                    </div>
                 </div>
             ) : data && (
                 <>

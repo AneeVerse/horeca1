@@ -102,6 +102,12 @@ export default function VendorLayout({
     const [checkingApplication, setCheckingApplication] = useState(true);
 
     const userRole = (session?.user as { role?: string } | undefined)?.role;
+    const activeAccountType = (session?.user as {
+        activeBusinessAccountType?: { isCustomer: boolean; isVendor: boolean; isBrand: boolean };
+    } | undefined)?.activeBusinessAccountType;
+    const isActiveVendor = activeAccountType?.isVendor === true;
+    const isActiveBrand = activeAccountType?.isBrand === true;
+    const isAdmin = userRole === 'admin';
 
     // Filter sidebar links by the user's permission set.
     // Empty array means no restrictions yet (owner/legacy) — show all.
@@ -136,15 +142,15 @@ export default function VendorLayout({
         }
     }, [status, sessionRole]);
 
-    // Check application status for vendor roles
+    // Check application status when the active business account is a vendor
     React.useEffect(() => {
         if (status !== 'authenticated') return;
-        if (userRole === 'admin') {
+        if (isAdmin) {
             setCheckingApplication(false);
             setIsApplicationPending(false);
             return;
         }
-        if (userRole !== 'vendor') {
+        if (!isActiveVendor) {
             setCheckingApplication(false);
             return;
         }
@@ -173,7 +179,7 @@ export default function VendorLayout({
         return () => {
             isMounted = false;
         };
-    }, [status, userRole]);
+    }, [status, isAdmin, isActiveVendor]);
 
     // Refresh permissions automatically so role/outlet changes by an admin
     // propagate to the browser without requiring logout/login.
@@ -196,7 +202,7 @@ export default function VendorLayout({
     };
 
     // Show loading while checking auth or application status
-    if (status === 'loading' || (status === 'authenticated' && userRole === 'vendor' && checkingApplication)) {
+    if (status === 'loading' || (status === 'authenticated' && isActiveVendor && !isAdmin && checkingApplication)) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-[#F8F9FB]">
                 <Loader2 className="animate-spin text-[#299E60]" size={40} />
@@ -204,19 +210,73 @@ export default function VendorLayout({
         );
     }
 
-    // Block non-vendor and non-admin users
-    if (status === 'unauthenticated' || (userRole !== 'vendor' && userRole !== 'admin')) {
+    // Block unauthenticated users
+    if (status === 'unauthenticated') {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-[#F8F9FB] gap-4">
                 <ShieldAlert size={48} className="text-[#E74C3C]" />
                 <h1 className="text-[24px] font-bold text-[#181725]">Access Denied</h1>
-                <p className="text-[14px] text-[#7C7C7C]">You need vendor privileges to access this area.</p>
+                <p className="text-[14px] text-[#7C7C7C]">You need to sign in to access the vendor portal.</p>
                 <button
-                    onClick={() => router.push('/')}
+                    onClick={() => router.push('/login')}
                     className="mt-4 px-6 py-3 bg-[#299E60] text-white rounded-[10px] font-bold hover:bg-[#238a54] transition-colors"
                 >
-                    Go to Homepage
+                    Sign In
                 </button>
+            </div>
+        );
+    }
+
+    // Active business account must be a vendor (admins bypass via impersonation)
+    if (!isAdmin && !isActiveVendor) {
+        return (
+            <div className="flex flex-col min-h-screen bg-[#F8F9FB]">
+                <header className="h-[80px] bg-white border-b border-[#EEEEEE] flex items-center px-8 shrink-0 justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-[42px] h-[42px] shrink-0">
+                            <img src="/images/admin/Ellipse 2.svg" alt="" className="w-full h-full object-contain" />
+                        </div>
+                        <div>
+                            <h1 className="text-[22px] font-extrabold leading-tight">
+                                <span className="text-[#E74C3C]">Horeca</span><span className="text-[#299E60]">1</span>
+                            </h1>
+                            <p className="text-[10px] text-[#AEAEAE] font-semibold uppercase tracking-[0.15em] -mt-0.5">Vendor Panel</p>
+                        </div>
+                    </div>
+                    <BusinessAccountSwitcherDropdown />
+                </header>
+
+                <div className="flex-1 flex items-center justify-center p-6">
+                    <div className="bg-white border border-[#EEEEEE] rounded-[24px] p-10 max-w-[500px] w-full text-center shadow-[0_8px_30px_rgb(0,0,0,0.02)]">
+                        <div className="w-[80px] h-[80px] bg-[#FFF5E6] rounded-full flex items-center justify-center mx-auto mb-6 text-[#F39C12]">
+                            <ShieldAlert size={40} className="stroke-[2.5]" />
+                        </div>
+
+                        <h2 className="text-[24px] font-bold text-[#181725] mb-3">Switch to a Vendor Account</h2>
+                        <p className="text-[14px] text-[#7C7C7C] leading-relaxed mb-8">
+                            Your currently selected business account is not a vendor profile.
+                            Use the account switcher above to select a vendor account, or go to the correct portal.
+                        </p>
+
+                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                            {isActiveBrand && (
+                                <Link
+                                    href="/brand/portal"
+                                    className="px-6 py-3 bg-[#53B175] hover:bg-[#3d9e41] text-white font-bold text-[14px] rounded-[12px] transition-all flex items-center justify-center gap-2"
+                                >
+                                    Go to Brand Portal
+                                </Link>
+                            )}
+                            <button
+                                onClick={() => router.push('/')}
+                                className="px-6 py-3 bg-white hover:bg-[#F8F9FB] text-[#181725] font-bold text-[14px] border border-[#EEEEEE] rounded-[12px] transition-all flex items-center justify-center gap-2"
+                            >
+                                <Home size={18} />
+                                Go to Homepage
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         );
     }
