@@ -106,7 +106,7 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
       if (!vendorType) errors.vendorType = 'Select a vendor type';
       if (gstin.trim() && !GST_RE.test(gstin.trim())) errors.gstin = 'Format: 22ABCDE1234F1Z5';
     } else if (s === 2) {
-      if (!PAN_RE.test(panNumber.trim())) errors.panNumber = 'Format: ABCDE1234F';
+      if (panNumber.trim() && !PAN_RE.test(panNumber.trim())) errors.panNumber = 'Format: ABCDE1234F';
       if (authorizedPersonName.trim().length < 2) errors.authorizedPersonName = 'Authorized person name is required (min 2 chars)';
       if (!PHONE_RE.test(authorizedPersonPhone)) errors.authorizedPersonPhone = 'Authorized phone must be exactly 10 digits';
       if (authorizedPersonEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authorizedPersonEmail.trim())) {

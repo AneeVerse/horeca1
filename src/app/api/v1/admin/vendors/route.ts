@@ -202,6 +202,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           hcidDisplay,
           businessName: input.businessName,
           gstNumber: input.gstin || null,
+          pincode: vd.billingAddress.pincode,
         },
       });
 

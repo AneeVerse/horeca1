@@ -247,6 +247,19 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       allowedFields.password = await bcrypt.hash(body.password, 10);
     }
 
+    const cp = body.companyProfile;
+    if (cp) {
+      if (cp.gstin !== undefined && allowedFields.gstNumber === undefined) {
+        allowedFields.gstNumber = cp.gstin?.trim() || null;
+      }
+      if (cp.billingPincode !== undefined && allowedFields.pincode === undefined) {
+        allowedFields.pincode = cp.billingPincode?.trim() || null;
+      }
+      if (cp.legalName !== undefined && allowedFields.businessName === undefined) {
+        allowedFields.businessName = cp.legalName?.trim() || null;
+      }
+    }
+
     const hasBizAccountUpdates = !!(body.companyProfile || body.outlets || body.vendorMapping);
     if (Object.keys(allowedFields).length === 0 && !hasBizAccountUpdates) {
       throw Errors.badRequest('No valid fields to update');

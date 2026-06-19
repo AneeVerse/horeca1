@@ -250,13 +250,14 @@ export const POST = withRateLimit(adminOnly(async (req: NextRequest, ctx) => {
     requirePermission(ctx, 'users.create');
     const body = await req.json();
 
+    const cp = body.companyProfile;
     const fullName = String(body.fullName ?? '').trim();
     const phone = normalizePhone(body.phone) ?? '';
     const rawEmail = String(body.email ?? '').trim().toLowerCase();
     const email = rawEmail && EMAIL_RE.test(rawEmail) ? rawEmail : null;
-    const businessName = String(body.businessName ?? '').trim() || null;
-    const gstNumber = String(body.gstNumber ?? '').trim() || null;
-    const pincode = String(body.pincode ?? '').trim() || null;
+    const businessName = String(body.businessName ?? (cp?.companyName ?? cp?.legalName ?? '')).trim() || null;
+    const gstNumber = String(body.gstNumber ?? (cp?.gstin ?? '')).trim() || null;
+    const pincode = String(body.pincode ?? (cp?.billingPincode ?? '')).trim() || null;
     const password = String(body.password ?? '');
     const role: Role = body.role === 'vendor' ? 'vendor' : 'customer';
 
@@ -327,7 +328,6 @@ export const POST = withRateLimit(adminOnly(async (req: NextRequest, ctx) => {
     // Optional full Zoho-style profile sent by the new customer/vendor form.
     // Persist the BusinessAccount fields + contact persons in one go so the
     // create path collects exactly what the edit form shows.
-    const cp = body.companyProfile;
     if (cp && typeof cp === 'object') {
       const data: Prisma.BusinessAccountUpdateInput = {};
       const setStr = (k: keyof Prisma.BusinessAccountUpdateInput, v: unknown) => {
