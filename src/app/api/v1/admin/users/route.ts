@@ -12,6 +12,7 @@ import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
 import { withRateLimit } from '@/middleware/withRateLimit';
 import { provisionDefaultAccount } from '@/lib/provisionAccount';
+import { companyProfileToBusinessAccountUpdate, contactPersonsFromCompanyProfile } from '@/lib/customerProfileMapper';
 import { uniqueHcid } from '@/lib/hcid';
 import { normalizePhone, phoneLookupVariants } from '@/lib/phone';
 import type { Role, CreditStatus, Prisma } from '@prisma/client';
@@ -329,44 +330,15 @@ export const POST = withRateLimit(adminOnly(async (req: NextRequest, ctx) => {
     // Persist the BusinessAccount fields + contact persons in one go so the
     // create path collects exactly what the edit form shows.
     if (cp && typeof cp === 'object') {
-      const data: Prisma.BusinessAccountUpdateInput = {};
-      const setStr = (k: keyof Prisma.BusinessAccountUpdateInput, v: unknown) => {
-        if (typeof v === 'string') (data as Record<string, unknown>)[k] = v.trim() || null;
-      };
-      setStr('legalName', cp.legalName); setStr('displayName', cp.displayName); setStr('companyName', cp.companyName);
-      setStr('customerType', cp.customerType); setStr('salutation', cp.salutation);
-      setStr('firstName', cp.firstName); setStr('lastName', cp.lastName);
-      setStr('customerLanguage', cp.customerLanguage); setStr('taxPreference', cp.taxPreference);
-      setStr('gstTreatment', cp.gstTreatment); setStr('placeOfSupply', cp.placeOfSupply);
-      setStr('currency', cp.currency); setStr('paymentTerms', cp.paymentTerms);
-      setStr('pan', cp.pan); setStr('fssaiNumber', cp.fssaiNumber); setStr('gstin', cp.gstin);
-      setStr('billingAddressLine', cp.billingAddressLine); setStr('billingCity', cp.billingCity);
-      setStr('billingState', cp.billingState); setStr('billingPincode', cp.billingPincode);
-      setStr('businessType', cp.businessType); setStr('workPhone', cp.workPhone);
-      setStr('mobilePhone', cp.mobilePhone); setStr('remarks', cp.remarks);
-      if (typeof cp.enablePortal === 'boolean') data.enablePortal = cp.enablePortal;
-      if (cp.creditLimit !== undefined && cp.creditLimit !== '' && cp.creditLimit !== null) data.creditLimit = Number(cp.creditLimit);
-      if (cp.customFields && typeof cp.customFields === 'object') data.customFields = cp.customFields;
+      const data = companyProfileToBusinessAccountUpdate(cp as Record<string, unknown>);
+      const contactRows = contactPersonsFromCompanyProfile(cp as Record<string, unknown>, provision.businessAccountId);
 
       await prisma.$transaction(async (tx) => {
         if (Object.keys(data).length > 0) {
           await tx.businessAccount.update({ where: { id: provision.businessAccountId }, data });
         }
-        if (Array.isArray(cp.contactPersons)) {
-          const rows = cp.contactPersons
-            .filter((c: Record<string, unknown>) => c && (c.firstName || c.lastName || c.email || c.workPhone || c.mobile))
-            .map((c: Record<string, unknown>) => ({
-              businessAccountId: provision.businessAccountId,
-              salutation: (c.salutation as string) || null,
-              firstName: (c.firstName as string) || null,
-              lastName: (c.lastName as string) || null,
-              email: (c.email as string) || null,
-              workPhone: (c.workPhone as string) || null,
-              mobile: (c.mobile as string) || null,
-              designation: (c.designation as string) || null,
-              isPrimary: !!c.isPrimary,
-            }));
-          if (rows.length > 0) await tx.contactPerson.createMany({ data: rows });
+        if (contactRows.length > 0) {
+          await tx.contactPerson.createMany({ data: contactRows });
         }
       });
     }

@@ -40,6 +40,29 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: {},
         role: {},
         isRegister: {},
+        gstNumber: {},
+        panNumber: {},
+        fssaiNumber: {},
+        tradeName: {},
+        displayName: {},
+        addressLine: {},
+        flatInfo: {},
+        city: {},
+        state: {},
+        pincode: {},
+        salutation: {},
+        firstName: {},
+        lastName: {},
+        designation: {},
+        businessType: {},
+        subType: {},
+        cuisine: {},
+        gstTreatment: {},
+        placeOfSupply: {},
+        outletName: {},
+        latitude: {},
+        longitude: {},
+        placeId: {},
       },
       async authorize(credentials) {
         const phoneRaw = String(credentials?.phone ?? '').replace(/\D/g, '');
@@ -82,6 +105,35 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const email = rawEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : null;
           const role = credentials?.role === 'vendor' ? 'vendor' : 'customer';
 
+          const str = (k: keyof typeof credentials) => {
+            const v = credentials?.[k];
+            return v != null && String(v).trim() ? String(v).trim() : null;
+          };
+          const gstNumber = credentials?.gstNumber ? String(credentials.gstNumber).toUpperCase().trim() : null;
+          const panNumber = credentials?.panNumber ? String(credentials.panNumber).toUpperCase().trim() : null;
+          const fssaiNumber = str('fssaiNumber');
+          const tradeName = str('tradeName') ?? str('displayName');
+          const addressLine = str('addressLine');
+          const flatInfo = str('flatInfo');
+          const city = str('city');
+          const state = str('state');
+          const pincode = str('pincode');
+          const salutation = str('salutation');
+          const firstName = str('firstName');
+          const lastName = str('lastName');
+          const designation = str('designation');
+          const businessType = str('businessType');
+          const subType = str('subType');
+          const cuisine = str('cuisine');
+          const gstTreatment = str('gstTreatment');
+          const placeOfSupply = str('placeOfSupply');
+          const outletName = str('outletName');
+          const latRaw = str('latitude');
+          const lngRaw = str('longitude');
+          const latitude = latRaw ? Number(latRaw) : null;
+          const longitude = lngRaw ? Number(lngRaw) : null;
+          const placeId = str('placeId');
+
           const emailTaken = email
             ? !!(await prisma.user.findUnique({ where: { email }, select: { id: true } }))
             : false;
@@ -101,6 +153,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               role,
               isActive: true,
               hcidDisplay,
+              gstNumber,
+              pincode,
             },
             select: { id: true, email: true, fullName: true, role: true, image: true, isActive: true },
           });
@@ -111,6 +165,29 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             kind: role === 'vendor' ? 'vendor' : 'customer',
             businessName,
             fullName,
+            gstNumber,
+            gstin: gstNumber ?? undefined,
+            displayName: tradeName ?? undefined,
+            pan: panNumber ?? undefined,
+            fssaiNumber: fssaiNumber ?? undefined,
+            addressLine: (flatInfo && addressLine ? `${flatInfo}, ${addressLine}` : addressLine) ?? undefined,
+            flatInfo: flatInfo ?? undefined,
+            city: city ?? undefined,
+            state: state ?? undefined,
+            pincode: pincode ?? undefined,
+            salutation: salutation ?? undefined,
+            firstName: firstName ?? undefined,
+            lastName: lastName ?? undefined,
+            designation: designation ?? undefined,
+            businessType: businessType ?? undefined,
+            subType: subType ?? undefined,
+            cuisine: cuisine ?? undefined,
+            gstTreatment: gstTreatment ?? undefined,
+            placeOfSupply: placeOfSupply ?? undefined,
+            outletName: outletName ?? undefined,
+            latitude: Number.isFinite(latitude) ? latitude : undefined,
+            longitude: Number.isFinite(longitude) ? longitude : undefined,
+            placeId: placeId ?? undefined,
           });
 
           if (role === 'vendor') {

@@ -11,6 +11,8 @@ import { errorResponse, Errors } from '@/middleware/errorHandler';
 import {
   VendorDetailsSchema,
   PrimaryOutletSchema,
+  GST_RE,
+  PAN_RE,
 } from '@/lib/validators/vendor-kyc';
 
 export const GET = withAuth(async (_req: NextRequest, ctx) => {
@@ -51,14 +53,23 @@ export const GET = withAuth(async (_req: NextRequest, ctx) => {
 const CreateBody = z.object({
   legalName: z.string().min(2).max(255),
   displayName: z.string().max(255).optional(),
-  gstin: z.string().max(20).optional().or(z.literal('')),
-  pan: z.string().max(20).optional(),
+  gstin: z.string().regex(GST_RE, 'Invalid GSTIN format').optional().or(z.literal('')),
+  pan: z.string().regex(PAN_RE, 'Invalid PAN format').optional().or(z.literal('')),
   fssaiNumber: z.string().max(50).optional().or(z.literal('')),
+  gstTreatment: z.string().max(40).optional(),
+  placeOfSupply: z.string().max(100).optional(),
   billingAddressLine: z.string().optional(),
   billingCity: z.string().optional(),
   billingState: z.string().optional(),
   billingPincode: z.string().optional(),
   businessType: z.string().max(50).optional(),
+  subType: z.string().max(80).optional(),
+  cuisine: z.string().max(120).optional(),
+  salutation: z.string().max(20).optional(),
+  firstName: z.string().max(120).optional(),
+  lastName: z.string().max(120).optional(),
+  designation: z.string().max(120).optional(),
+  workPhone: z.string().max(20).optional(),
   isCustomer: z.boolean().optional().default(true),
   isVendor: z.boolean().optional().default(false),
   isBrand: z.boolean().optional().default(false),
@@ -110,18 +121,33 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      const billingLine = body.billingAddressLine || body.primaryOutlet.addressLine;
+      const billingCity = body.billingCity || body.primaryOutlet.city;
+      const billingState = body.billingState || body.primaryOutlet.state;
+      const billingPincode = body.billingPincode || body.primaryOutlet.pincode;
+
       const account = await tx.businessAccount.create({
         data: {
           legalName: body.legalName,
           displayName: body.displayName,
-          gstin: body.gstin,
-          pan: body.pan,
-          fssaiNumber: body.fssaiNumber,
-          billingAddressLine: body.billingAddressLine,
-          billingCity: body.billingCity,
-          billingState: body.billingState,
-          billingPincode: body.billingPincode,
-          businessType: body.businessType,
+          companyName: body.legalName,
+          gstin: body.gstin || null,
+          pan: body.pan || null,
+          fssaiNumber: body.fssaiNumber || null,
+          gstTreatment: body.gstTreatment || null,
+          placeOfSupply: body.placeOfSupply || null,
+          billingAddressLine: billingLine || null,
+          billingCity: billingCity || null,
+          billingState: billingState || null,
+          billingPincode: billingPincode || null,
+          businessType: body.businessType || null,
+          subType: body.subType || null,
+          cuisine: body.cuisine || null,
+          salutation: body.salutation || null,
+          firstName: body.firstName || null,
+          lastName: body.lastName || null,
+          designation: body.designation || null,
+          workPhone: body.workPhone || null,
           isCustomer: body.isCustomer,
           isVendor: body.isVendor,
           isBrand: body.isBrand,
@@ -132,6 +158,8 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
           businessAccountId: account.id,
           name: body.primaryOutlet.name,
           addressLine: body.primaryOutlet.addressLine,
+          flatInfo: body.primaryOutlet.flatInfo ?? null,
+          landmark: body.primaryOutlet.landmark ?? null,
           city: body.primaryOutlet.city,
           state: body.primaryOutlet.state,
           pincode: body.primaryOutlet.pincode,

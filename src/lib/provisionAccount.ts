@@ -2,37 +2,28 @@
  * provisionDefaultAccount — give a freshly-registered User a BusinessAccount,
  * an empty primary Outlet (requiresAddressUpdate=true until they fill it in),
  * a BusinessAccountMember, and a UserRole (Owner / Vendor Admin / Brand Admin).
- *
- * Used by:
- *  - src/auth.ts OTP auto-registration on first phone OTP
- *  - src/modules/auth/auth.service.ts signup (email+password)
- *  - any future signup paths
- *
- * Idempotent: if the user already has a primary BusinessAccountMember the
- * existing one is returned unchanged. Safe to call on every login if needed.
  */
 
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { mapToBusinessAccount, mapToPrimaryOutlet } from '@/lib/customerProfileMapper';
+import type { CustomerProfileInput } from '@/lib/validators/customer-profile';
 
 export type AccountKind = 'customer' | 'vendor' | 'brand';
 
-interface ProvisionInput {
+interface ProvisionInput extends Omit<CustomerProfileInput, 'fullName' | 'businessName' | 'gstNumber'> {
   userId: string;
   kind: AccountKind;
+  /** Legacy alias for legalName */
   businessName?: string | null;
   fullName?: string | null;
   gstNumber?: string | null;
-  // P0-4: real business type (Restaurant/Hotel/Caterer/…) when the signup
-  // flow collects it. Falls back to the kind default only when unset, so we
-  // stop blindly stamping every customer as 'customer'.
-  businessType?: string | null;
 }
 
 interface ProvisionResult {
   businessAccountId: string;
   outletId: string;
-  created: boolean;       // true if a new account was created, false if user already had one
+  created: boolean;
   ownerRoleId: string;
 }
 
@@ -42,13 +33,31 @@ const KIND_TO_FLAGS: Record<AccountKind, { isCustomer: boolean; isVendor: boolea
   brand:    { isCustomer: false, isVendor: false, isBrand: true,  templateName: 'Brand Admin',  templateScope: 'brand',   businessType: 'brand' },
 };
 
+function toProfileInput(input: ProvisionInput): CustomerProfileInput {
+  return {
+    ...input,
+    legalName: input.legalName ?? input.businessName ?? undefined,
+    companyName: input.companyName ?? input.businessName ?? undefined,
+    fullName: input.fullName ?? undefined,
+    gstin: input.gstin ?? input.gstNumber ?? undefined,
+    displayName: input.displayName ?? undefined,
+    pan: input.pan ?? undefined,
+    fssaiNumber: input.fssaiNumber ?? undefined,
+    addressLine: input.addressLine ?? undefined,
+    city: input.city ?? undefined,
+    state: input.state ?? undefined,
+    pincode: input.pincode ?? undefined,
+  };
+}
+
 export async function provisionDefaultAccount(
   input: ProvisionInput,
-  client?: Pick<PrismaClient, 'businessAccountMember' | 'businessAccount' | 'outlet' | 'userRole' | 'accountRole'>,
+  client?: Pick<PrismaClient, 'user' | 'businessAccountMember' | 'businessAccount' | 'outlet' | 'userRole' | 'accountRole'>,
 ): Promise<ProvisionResult> {
   const db = client ?? prisma;
+  const profile = toProfileInput(input);
+  const flags = KIND_TO_FLAGS[input.kind];
 
-  // Idempotent: if user already has a primary membership, return it.
   const existing = await db.businessAccountMember.findFirst({
     where: { userId: input.userId, isPrimary: true },
     select: {
@@ -57,8 +66,6 @@ export async function provisionDefaultAccount(
     },
   });
   if (existing && existing.businessAccount.primaryOutletId) {
-    // Make sure the Owner role assignment exists too.
-    const flags = KIND_TO_FLAGS[input.kind];
     const template = await db.accountRole.findFirst({
       where: { businessAccountId: null, isTemplate: true, name: flags.templateName, scope: flags.templateScope },
       select: { id: true },
@@ -82,10 +89,11 @@ export async function provisionDefaultAccount(
     };
   }
 
-  const flags = KIND_TO_FLAGS[input.kind];
-  const legalName = input.businessName?.trim() || input.fullName?.trim() || 'My Business';
+  const user = await db.user.findUnique({
+    where: { id: input.userId },
+    select: { phone: true },
+  });
 
-  // Lookup the seeded role template up-front so we fail fast if backfill never ran.
   const template = await db.accountRole.findFirst({
     where: { businessAccountId: null, isTemplate: true, name: flags.templateName, scope: flags.templateScope },
     select: { id: true },
@@ -94,27 +102,35 @@ export async function provisionDefaultAccount(
     throw new Error(`Missing seeded ${flags.templateScope}/${flags.templateName} role template. Run prisma/migrations/20260520_hcid_architecture_step_a/data_migrate.ts.`);
   }
 
+  const baData = mapToBusinessAccount(profile, { kindDefaultBusinessType: flags.businessType });
+  const outletData = mapToPrimaryOutlet(profile);
+
   const account = await db.businessAccount.create({
     data: {
-      legalName,
-      displayName: input.businessName?.trim() ?? null,
-      gstin: input.gstNumber?.trim() ?? null,
-      businessType: input.businessType?.trim() || flags.businessType,
+      ...(baData as Prisma.BusinessAccountCreateInput),
       isCustomer: flags.isCustomer,
       isVendor: flags.isVendor,
       isBrand: flags.isBrand,
       status: 'active',
+      mobilePhone: (baData as { mobilePhone?: string | null }).mobilePhone ?? user?.phone ?? null,
+      workPhone: (baData as { workPhone?: string | null }).workPhone ?? user?.phone ?? null,
     },
   });
 
   const outlet = await db.outlet.create({
     data: {
       businessAccountId: account.id,
-      name: input.businessName?.trim() || 'Primary Outlet',
-      addressLine: 'Address pending — complete in account settings',
-      latitude: null,
-      longitude: null,
-      requiresAddressUpdate: true,
+      name: outletData.name,
+      addressLine: outletData.addressLine,
+      flatInfo: outletData.flatInfo,
+      landmark: outletData.landmark,
+      city: outletData.city,
+      state: outletData.state,
+      pincode: outletData.pincode,
+      latitude: outletData.latitude,
+      longitude: outletData.longitude,
+      placeId: outletData.placeId,
+      requiresAddressUpdate: outletData.requiresAddressUpdate,
     },
   });
 
