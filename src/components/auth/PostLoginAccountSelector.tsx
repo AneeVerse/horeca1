@@ -146,7 +146,7 @@ export function PostLoginAccountSelector() {
                 </p>
               </div>
             </div>
-            {!mandatoryPick && (
+            {!mandatoryPick && activeOutletId && (
               <button
                 onClick={handleDismiss}
                 className="p-1 rounded hover:bg-gray-100"
@@ -196,7 +196,7 @@ export function PostLoginAccountSelector() {
             <p className="text-[11px] text-[#AEAEAE] flex items-center gap-1">
               <ShieldCheck size={11} /> Delivery and inventory are scoped to your outlet.
             </p>
-            {!mandatoryPick && (
+            {!mandatoryPick && activeOutletId && (
               <button
                 onClick={handleDismiss}
                 className="px-3 py-1.5 text-[12px] font-semibold text-[#666] hover:bg-[#F5F5F5] rounded-lg"

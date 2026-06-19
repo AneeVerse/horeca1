@@ -20,7 +20,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     // explicit permission the cart POST requires; plain customers are free.
     if (ctx.role !== 'customer' && ctx.role !== 'admin') requirePermission(ctx, 'storefront.order');
 
-    const cartCtx = resolveCartContext(ctx);
+    const cartCtx = await resolveCartContext(ctx);
     const segments = new URL(req.url).pathname.split('/').filter(Boolean);
     // .../orders/<id>/reorder → id is second-to-last
     const orderId = segments[segments.length - 2];

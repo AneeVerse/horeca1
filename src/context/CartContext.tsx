@@ -193,8 +193,12 @@ function saveLocalCart(cart: CartItemWithId[]) {
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
-    const { status: sessionStatus } = useSession();
+    const { data: session, status: sessionStatus } = useSession();
     const isLoggedIn = sessionStatus === 'authenticated';
+    const sessionUser = (session?.user ?? {}) as Record<string, unknown>;
+    const hasActiveOutlet =
+        !!(sessionUser.activeBusinessAccountId as string | undefined) &&
+        !!(sessionUser.activeOutletId as string | undefined);
     const [cart, setCart] = useState<CartItemWithId[]>([]);
     const [isInitialized, setIsInitialized] = useState(false);
 
@@ -229,8 +233,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                     const items = fromApiCart(apiData as { vendorGroups: unknown[]; total: number });
                     setCart(items);
                 })
-                .catch(() => {
-                    // Fallback to localStorage if API fails
+                .catch((err: unknown) => {
+                    const msg = err instanceof Error ? err.message : '';
+                    const noDelivery =
+                        isLoggedIn &&
+                        (msg.toLowerCase().includes('delivery address') ||
+                            msg.toLowerCase().includes('no active outlet'));
+                    if (noDelivery) {
+                        setCart([]);
+                        return;
+                    }
                     setCart(loadLocalCart());
                 })
                 .finally(() => setIsInitialized(true));
@@ -239,7 +251,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             setIsInitialized(true);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sessionStatus]);
+    }, [sessionStatus, hasActiveOutlet]);
 
     // Persist to localStorage only for guest users
     useEffect(() => {

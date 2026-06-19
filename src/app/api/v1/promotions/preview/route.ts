@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { withAuth } from '@/middleware/auth';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { resolveStorefrontContext } from '@/lib/resolveStorefrontContext';
 import { promotionService } from '@/modules/promotion/promotion.service';
 
 const previewSchema = z.object({
@@ -37,15 +38,13 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
       );
     }
 
-    if (!ctx.activeBusinessAccountId || !ctx.activeOutletId) {
-      throw Errors.badRequest('No active outlet selected');
-    }
+    const storefrontCtx = await resolveStorefrontContext(ctx);
 
     const body = previewSchema.parse(await req.json());
     const result = await promotionService.previewPromotions({
       userId: ctx.userId,
-      businessAccountId: ctx.activeBusinessAccountId,
-      outletId: ctx.activeOutletId,
+      businessAccountId: storefrontCtx.businessAccountId,
+      outletId: storefrontCtx.outletId,
       items: body.items,
       code: body.code ?? null,
     });

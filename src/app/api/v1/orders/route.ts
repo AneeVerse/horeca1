@@ -14,6 +14,7 @@
 // SUPPORTS: ?status=pending&vendorId=xxx&cursor=xxx&limit=20
 
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveStorefrontContext } from '@/lib/resolveStorefrontContext';
 import { OrderService } from '@/modules/order/order.service';
 import { createOrderSchema, listOrdersSchema } from '@/modules/order/order.validator';
 import { withAuth } from '@/middleware/auth';
@@ -54,13 +55,8 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     const body = await req.json();
     const input = createOrderSchema.parse(body);
 
-    if (!ctx.activeBusinessAccountId || !ctx.activeOutletId) {
-      throw Errors.badRequest('No active outlet selected. Pick an outlet before placing orders.');
-    }
-    const result = await orderService.create(
-      { userId: ctx.userId, businessAccountId: ctx.activeBusinessAccountId, outletId: ctx.activeOutletId },
-      input,
-    );
+    const storefrontCtx = await resolveStorefrontContext(ctx);
+    const result = await orderService.create(storefrontCtx, input);
     return NextResponse.json({ success: true, data: result }, { status: 201 });
   } catch (error) {
     return errorResponse(error);

@@ -13,7 +13,7 @@ const cartService = new CartService();
 
 export const PATCH = withAuth(async (req: NextRequest, ctx) => {
   try {
-    const cartCtx = resolveCartContext(ctx);
+    const cartCtx = await resolveCartContext(ctx);
     const url = new URL(req.url);
     const segments = url.pathname.split('/');
     const itemId = segments[segments.length - 1];
@@ -30,7 +30,7 @@ export const PATCH = withAuth(async (req: NextRequest, ctx) => {
 
 export const DELETE = withAuth(async (req: NextRequest, ctx) => {
   try {
-    const cartCtx = resolveCartContext(ctx);
+    const cartCtx = await resolveCartContext(ctx);
     const url = new URL(req.url);
     const segments = url.pathname.split('/');
     const itemId = segments[segments.length - 1];

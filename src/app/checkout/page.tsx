@@ -10,6 +10,7 @@ import { useSession } from 'next-auth/react';
 import { dal } from '@/lib/dal';
 import { DeliverySlotPicker } from '@/components/features/checkout/DeliverySlotPicker';
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
+import { useAddress } from '@/context/AddressContext';
 import type { VendorCartGroup, CartItem, VendorProduct } from '@/types';
 import { useSearchParams } from 'next/navigation';
 
@@ -319,7 +320,17 @@ function DeliveringToRow() {
 function CheckoutPageContent() {
     const { groups, clearCart, removeFromCart } = useCart();
     const { status: sessionStatus } = useSession();
-    const { currentOutlet, activeBusinessAccountId } = useBusinessAccountSwitcher();
+    const { currentOutlet, activeBusinessAccountId, activeOutletId } = useBusinessAccountSwitcher();
+    const { selectedAddress } = useAddress();
+    // Outlet on JWT is optional — saved "Deliver to" address is enough (server resolves at order time).
+    const hasDeliverableAddress = Boolean(
+        activeOutletId ||
+        (selectedAddress?.pincode && /^\d{6}$/.test(selectedAddress.pincode)) ||
+        (selectedAddress?.fullAddress && selectedAddress.fullAddress.trim().length > 5),
+    );
+    const needsDeliveryAddress = !hasDeliverableAddress;
+    const checkoutBlocked =
+        needsDeliveryAddress || (!!currentOutlet && currentOutlet.requiresAddressUpdate);
     const [step, setStep] = useState<CheckoutStep>('review');
     const [selectedPayment, setSelectedPayment] = useState('');
     const [orderSnapshot, setOrderSnapshot] = useState<{ groups: VendorCartGroup[], total: number, count: number } | null>(null);
@@ -669,6 +680,10 @@ function CheckoutPageContent() {
             setOrderError('Select at least one vendor PO to place.');
             return;
         }
+        if (needsDeliveryAddress) {
+            setOrderError('Select a delivery address before placing orders. Use Deliver to in the navbar.');
+            return;
+        }
         // V2.2: an outlet without an address cannot receive deliveries. Block the
         // order here as well, even though the button is disabled below — defence
         // in depth in case state changes between render and click.
@@ -783,6 +798,10 @@ function CheckoutPageContent() {
     // charging / clearing the cart. Submitted later from My Orders.
     const handleSaveDraft = async () => {
         if (selectedGroups.length === 0) { setOrderError('Select at least one vendor PO to save.'); return; }
+        if (needsDeliveryAddress) {
+            setOrderError('Select a delivery address before saving a draft. Use Deliver to in the navbar.');
+            return;
+        }
         setIsPlacingOrder(true);
         setOrderError(null);
         try {
@@ -1044,6 +1063,15 @@ function CheckoutPageContent() {
                             </p>
                         </div>
 
+                        {needsDeliveryAddress && (
+                            <div className="text-[13px] text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3 font-medium flex items-start gap-2">
+                                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                    Select a delivery address before placing orders. Use <strong>Deliver to</strong> in the navbar to pick where your order should go.
+                                </div>
+                            </div>
+                        )}
+
                         {currentOutlet?.requiresAddressUpdate && (
                             <div className="text-[13px] text-orange-700 bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 font-medium flex items-start gap-2">
                                 <AlertCircle size={16} className="shrink-0 mt-0.5" />
@@ -1061,9 +1089,9 @@ function CheckoutPageContent() {
                         )}
                         <button
                             onClick={() => setStep('payment')}
-                            disabled={selectedVendorCount === 0 || currentOutlet?.requiresAddressUpdate}
+                            disabled={selectedVendorCount === 0 || checkoutBlocked}
                             className={`w-full py-3.5 text-[14px] font-bold rounded-xl shadow-lg transition-all ${
-                                selectedVendorCount === 0 || currentOutlet?.requiresAddressUpdate
+                                selectedVendorCount === 0 || checkoutBlocked
                                     ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
                                     : 'bg-[#53B175] text-white shadow-green-200/50 hover:bg-[#48a068] active:scale-[0.99]'
                             }`}
@@ -1074,7 +1102,7 @@ function CheckoutPageContent() {
                             <>
                                 <button
                                     onClick={handleSaveDraft}
-                                    disabled={selectedVendorCount === 0 || isPlacingOrder}
+                                    disabled={selectedVendorCount === 0 || isPlacingOrder || checkoutBlocked}
                                     className="w-full mt-2 py-2.5 text-[13px] font-bold rounded-xl border border-gray-200 text-gray-500 hover:border-[#53B175] hover:text-[#53B175] hover:bg-[#53B175]/5 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                                 >
                                     <FileText size={14} />
@@ -1431,6 +1459,14 @@ function CheckoutPageContent() {
                             </div>
 
                             {/* Errors */}
+                            {needsDeliveryAddress && (
+                                <div className="text-[12px] text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3 font-semibold text-left flex items-start gap-2">
+                                    <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                                    <span>
+                                        No delivery address selected. Use <strong>Deliver to</strong> in the navbar.
+                                    </span>
+                                </div>
+                            )}
                             {orderError && (
                                 <div className="text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3 font-semibold text-left">
                                     {orderError}
@@ -1441,12 +1477,14 @@ function CheckoutPageContent() {
                             <button
                                 onClick={handlePlaceOrder}
                                 disabled={
+                                    checkoutBlocked ||
                                     !selectedPayment || 
                                     isPlacingOrder || 
                                     (selectedPayment === 'credit' && (!creditWalletsLoaded || !creditAllSelectionsValid)) ||
                                     (selectedPayment === 'wallet' && (!creditWalletsLoaded || !walletEligibility.ok))
                                 }
                                 className={`w-full py-4 text-[15px] font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${
+                                    !checkoutBlocked &&
                                     selectedPayment && 
                                     !isPlacingOrder && 
                                     !(selectedPayment === 'credit' && (!creditWalletsLoaded || !creditAllSelectionsValid)) &&

@@ -25,7 +25,7 @@ const mergeSchema = z.object({
 
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
-    const cartCtx = resolveCartContext(ctx);
+    const cartCtx = await resolveCartContext(ctx);
     const body = await req.json();
     const { items } = mergeSchema.parse(body);
 

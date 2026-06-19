@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
@@ -44,6 +44,7 @@ export function useBusinessAccountSwitcher() {
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState(false);
+  const legacyProvisionAttempted = useRef(false);
 
   const userId = session?.user?.id ?? null;
   const u = (session?.user ?? {}) as Record<string, unknown>;
@@ -71,7 +72,8 @@ export function useBusinessAccountSwitcher() {
 
   const switchAccount = useCallback(
     async (businessAccountId: string, outletId?: string) => {
-      if (switching || businessAccountId === activeBusinessAccountId) return;
+      if (switching) return;
+      if (businessAccountId === activeBusinessAccountId && !outletId) return;
       setSwitching(true);
       try {
         const res = await fetch('/api/v1/auth/switch-business-account', {
@@ -80,10 +82,8 @@ export function useBusinessAccountSwitcher() {
           body: JSON.stringify({ businessAccountId, outletId }),
         });
         if (!res.ok) { setSwitching(false); return; }
-        // Clear cart cache (a new cart is loaded for the new (account, outlet))
         clearCart();
         clearWishlist();
-        // Trigger jwt callback with target ids; session refreshes in place.
         await update({ activeBusinessAccountId: businessAccountId, activeOutletId: outletId ?? undefined });
       } finally {
         setSwitching(false);
@@ -111,6 +111,47 @@ export function useBusinessAccountSwitcher() {
     },
     [switching, activeOutletId, clearCart, update],
   );
+
+  // Bootstrap session when JWT is missing account/outlet but memberships exist.
+  useEffect(() => {
+    if (!userId || loading || switching || accounts.length === 0) return;
+
+    const primary = accounts.find((a) => a.isPrimary) ?? accounts[0];
+    const defaultOutletId =
+      primary.primaryOutletId ?? primary.outlets[0]?.id ?? null;
+
+    if (!activeBusinessAccountId) {
+      void switchAccount(primary.id, defaultOutletId ?? undefined);
+      return;
+    }
+    if (!activeOutletId && currentAccount) {
+      const outletId =
+        currentAccount.primaryOutletId ?? currentAccount.outlets[0]?.id ?? null;
+      if (outletId) void switchOutlet(outletId);
+    }
+  }, [
+    userId,
+    loading,
+    switching,
+    accounts,
+    activeBusinessAccountId,
+    activeOutletId,
+    currentAccount,
+    switchAccount,
+    switchOutlet,
+  ]);
+
+  // Legacy sessions: refresh JWT so server can provision BusinessAccount if missing.
+  useEffect(() => {
+    if (!userId || loading || legacyProvisionAttempted.current) return;
+    if (!activeBusinessAccountId && accounts.length === 0) {
+      legacyProvisionAttempted.current = true;
+      void (async () => {
+        await update({});
+        await fetchAccounts();
+      })();
+    }
+  }, [userId, loading, activeBusinessAccountId, accounts.length, update, fetchAccounts]);
 
   const handleSignOut = useCallback(async () => {
     clearCart();

@@ -640,9 +640,9 @@ export default function ApprovalsPage() {
                                                     className="flex items-center gap-1 h-[34px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold">
                                                     <X size={14} /> Reject
                                                 </button>
-                                                <Link href={`/admin/brands/${brand.id}`}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[8px] text-[12px] font-bold hover:bg-[#EDE9FE] hover:border-[#7C3AED]/40 hover:text-[#7C3AED] transition-colors">
-                                                    <Pencil size={13} /> View
+                                                <Link href={`/admin/brands/${brand.id}?edit=true&from=approvals`}
+                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[8px] text-[12px] font-bold hover:bg-[#EEF8F1] hover:border-[#299E60]/40 hover:text-[#299E60] transition-colors">
+                                                    <Pencil size={13} /> Edit
                                                 </Link>
                                             </div>
                                         </td>

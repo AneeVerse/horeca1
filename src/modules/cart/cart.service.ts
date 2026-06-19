@@ -232,21 +232,6 @@ export class CartService {
 }
 
 /**
- * Resolve a CartContext from an AuthContext. Fails fast if the user does not
- * have an active business account + outlet on the session (legacy users
- * mid-migration should be redirected to the onboarding-outlet step).
+ * @deprecated Use `resolveStorefrontContext` from `@/lib/resolveStorefrontContext`.
  */
-export function resolveCartContext(ctx: {
-  userId: string;
-  activeBusinessAccountId: string | null;
-  activeOutletId: string | null;
-}): CartContext {
-  if (!ctx.activeBusinessAccountId || !ctx.activeOutletId) {
-    throw Errors.badRequest('No active outlet selected. Pick an outlet before working with the cart.');
-  }
-  return {
-    userId: ctx.userId,
-    businessAccountId: ctx.activeBusinessAccountId,
-    outletId: ctx.activeOutletId,
-  };
-}
+export { resolveStorefrontContext as resolveCartContext } from '@/lib/resolveStorefrontContext';

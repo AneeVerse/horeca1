@@ -48,7 +48,25 @@ export const GET = adminOnly(async (req: NextRequest, _ctx: AuthContext) => {
     const brand = await prisma.brand.findUnique({
       where: { id },
       include: {
-        user: { select: { id: true, fullName: true, email: true } },
+        user: { select: { id: true, fullName: true, email: true, phone: true, gstNumber: true } },
+        businessAccount: {
+          select: {
+            legalName: true,
+            displayName: true,
+            gstin: true,
+            billingAddressLine: true,
+            billingCity: true,
+            billingState: true,
+            billingPincode: true,
+            businessType: true,
+            subType: true,
+            businessSize: true,
+            mobilePhone: true,
+            workPhone: true,
+            designation: true,
+            remarks: true,
+          },
+        },
         _count: { select: { masterProducts: { where: { isActive: true } }, productMappings: true } },
       },
     });

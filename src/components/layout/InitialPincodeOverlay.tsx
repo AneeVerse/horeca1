@@ -6,6 +6,9 @@ import { useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import { useAddress } from '@/context/AddressContext';
 import { useGooglePlacesAutocomplete } from '@/hooks/useGooglePlacesAutocomplete';
+import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
+import { syncAddressToOutlet, prepareAccountForOutletSync } from '@/lib/syncAddressToOutlet';
+import { toast } from 'sonner';
 
 interface InitialPincodeOverlayProps {
     onComplete: (pincode?: string) => void;
@@ -33,6 +36,7 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
     const [serviceabilityError, setServiceabilityError] = useState('');
 
     const { addAddress, setSelectedAddress, detectCurrentLocation, isDetectingLocation } = useAddress();
+    const { currentAccount, accounts, switchAccount, switchOutlet, refresh: refreshAccounts } = useBusinessAccountSwitcher();
     const { predictions, isSearching, getPlaceDetails, clearPredictions } =
         useGooglePlacesAutocomplete(businessQuery, { businessMode: true, countryCode: 'in' });
 
@@ -72,6 +76,39 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
     }, [sessionStatus, activeOutletId]);
 
     if (!isMounted || !isVisible) return null;
+
+    const syncOutletIfLoggedIn = async (addr: {
+        fullAddress: string;
+        businessName?: string;
+        label?: string;
+        flatInfo?: string;
+        landmark?: string;
+        city?: string;
+        state?: string;
+        pincode?: string;
+        latitude: number;
+        longitude: number;
+        placeId?: string;
+    }) => {
+        if (sessionStatus !== 'authenticated') return;
+        try {
+            const accountId = await prepareAccountForOutletSync(
+                accounts,
+                currentAccount,
+                switchAccount,
+            );
+            if (!accountId) return;
+            await syncAddressToOutlet({
+                accountId,
+                addr,
+                switchOutlet,
+                refreshAccounts,
+            });
+        } catch (err) {
+            console.error('Error syncing address to outlet:', err);
+            toast.error(err instanceof Error ? err.message : 'Failed to sync delivery outlet');
+        }
+    };
 
     const handleSkip = () => {
         localStorage.setItem('pincode_interacted', 'true');
@@ -124,7 +161,10 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
                 placeId: details.placeId,
                 isDefault: true,
             });
-            if (saved) setSelectedAddress(saved);
+            if (saved) {
+                setSelectedAddress(saved);
+                await syncOutletIfLoggedIn(saved);
+            }
 
             if (!data.serviceable && !data.vendor_count) {
                 setServiceabilityError(`We're not in ${details.city || 'your area'} yet, but your address is saved for when we expand!`);
@@ -151,6 +191,7 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
                 localStorage.setItem('pincode_interacted', 'true');
                 localStorage.setItem('user_pincode', detected.pincode);
             }
+            await syncOutletIfLoggedIn(detected);
             setIsVisible(false);
             onComplete(detected.pincode);
         }

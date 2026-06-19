@@ -16,7 +16,7 @@ const cartService = new CartService();
 
 export const GET = withAuth(async (_req, ctx) => {
   try {
-    const cartCtx = resolveCartContext(ctx);
+    const cartCtx = await resolveCartContext(ctx);
     const cart = await cartService.getCart(cartCtx);
     return NextResponse.json({ success: true, data: cart });
   } catch (error) {
@@ -29,7 +29,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     // Vendor/brand team members need explicit storefront.order permission to buy.
     // Customers and admin users are unrestricted.
     if (ctx.role !== 'customer' && ctx.role !== 'admin') requirePermission(ctx, 'storefront.order');
-    const cartCtx = resolveCartContext(ctx);
+    const cartCtx = await resolveCartContext(ctx);
     const body = await req.json();
     const { productId, vendorId, quantity } = addToCartSchema.parse(body);
 
@@ -42,7 +42,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
 
 export const DELETE = withAuth(async (_req, ctx) => {
   try {
-    const cartCtx = resolveCartContext(ctx);
+    const cartCtx = await resolveCartContext(ctx);
     await cartService.clearCart(cartCtx);
     return NextResponse.json({ success: true, message: 'Cart cleared' });
   } catch (error) {

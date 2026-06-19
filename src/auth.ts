@@ -298,7 +298,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // loadActiveContext is wrapped so a transient DB error here doesn't
         // poison the rest of the token (role still gets set above).
         try {
-          const active = await loadActiveContext(token.id as string, null, null);
+          const active = await loadOrProvisionActiveContext(
+            token.id as string,
+            (token.role as string) ?? 'customer',
+            null,
+            null,
+          );
           applyActiveContext(token, active);
           // Multi-account users must pick an active business on every fresh login.
           const totalAccounts = (token.totalAccountCount as number | undefined) ?? 0;
@@ -340,8 +345,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const isStale = await redis.get(staleKey);
           if (isStale) {
             await redis.del(staleKey);
-            const active = await loadActiveContext(
+            const active = await loadOrProvisionActiveContext(
               token.id as string,
+              (token.role as string) ?? 'customer',
               (token.activeBusinessAccountId as string | null) ?? null,
               (token.activeOutletId as string | null) ?? null,
             );
@@ -372,7 +378,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const targetOutletId = u.activeOutletId ?? (token.activeOutletId as string | undefined) ?? null;
 
         try {
-          const active = await loadActiveContext(token.id as string, targetAccountId, targetOutletId);
+          const active = await loadOrProvisionActiveContext(
+            token.id as string,
+            (token.role as string) ?? 'customer',
+            targetAccountId,
+            targetOutletId,
+          );
           applyActiveContext(token, active);
         } catch (err) {
           console.error('[auth.jwt] loadActiveContext failed on update:', err);
@@ -484,6 +495,38 @@ async function applyAdminPermissions(token: Record<string, unknown>): Promise<vo
     console.error('[auth.jwt] applyAdminPermissions failed:', err);
     // Keep existing token.permissions unchanged on failure.
   }
+}
+
+/** Load session context; auto-provision a default BusinessAccount for legacy customers. */
+async function loadOrProvisionActiveContext(
+  userId: string,
+  role: string,
+  targetAccountId: string | null,
+  targetOutletId: string | null,
+): Promise<ActiveContext | null> {
+  let active = await loadActiveContext(userId, targetAccountId, targetOutletId);
+  if (!active && (role === 'customer' || role === 'admin')) {
+    try {
+      const legacyUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { fullName: true, businessName: true, pincode: true, gstNumber: true },
+      });
+      if (legacyUser) {
+        await provisionDefaultAccount({
+          userId,
+          kind: 'customer',
+          fullName: legacyUser.fullName,
+          businessName: legacyUser.businessName,
+          pincode: legacyUser.pincode ?? undefined,
+          gstin: legacyUser.gstNumber ?? undefined,
+        });
+        active = await loadActiveContext(userId, targetAccountId, targetOutletId);
+      }
+    } catch (provisionErr) {
+      console.error('[auth] legacy customer provision failed:', provisionErr);
+    }
+  }
+  return active;
 }
 
 function applyActiveContext(token: Record<string, unknown>, active: ActiveContext | null) {

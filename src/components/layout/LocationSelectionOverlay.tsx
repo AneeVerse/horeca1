@@ -14,6 +14,7 @@ import { EditAddressOverlay } from './EditAddressOverlay';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useSession } from 'next-auth/react';
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
+import { syncAddressToOutlet, prepareAccountForOutletSync } from '@/lib/syncAddressToOutlet';
 import { toast } from 'sonner';
 
 interface LocationSelectionOverlayProps {
@@ -43,7 +44,7 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
     } = useAddress();
 
     const { status } = useSession();
-    const { currentAccount, switchOutlet, refresh: refreshAccounts } = useBusinessAccountSwitcher();
+    const { currentAccount, accounts, switchAccount, switchOutlet, refresh: refreshAccounts } = useBusinessAccountSwitcher();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [isAddNewOpen, setIsAddNewOpen] = useState(false);
@@ -59,72 +60,24 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
     const handleSelectAddressAndSyncOutlet = async (addr: Address) => {
         setSelectedAddress(addr);
 
-        if (status === 'authenticated' && currentAccount) {
+        if (status === 'authenticated') {
             try {
-                // Fetch full outlets from database to match against the address
-                const res = await fetch(`/api/v1/account/${currentAccount.id}/outlets`);
-                if (!res.ok) throw new Error('Failed to fetch account outlets');
-                const json = await res.json();
-                const dbOutlets = (json.data || []) as Array<{
-                    id: string;
-                    placeId: string | null;
-                    latitude: number | null;
-                    longitude: number | null;
-                    pincode: string | null;
-                    addressLine: string;
-                }>;
-
-                // Match by placeId, close coordinates, or exact address + pincode
-                let matchingOutlet = dbOutlets.find(o => o.placeId && o.placeId === addr.placeId);
-                if (!matchingOutlet && addr.latitude && addr.longitude) {
-                    matchingOutlet = dbOutlets.find(o => 
-                        o.latitude && o.longitude &&
-                        Math.abs(o.latitude - addr.latitude) < 0.0001 &&
-                        Math.abs(o.longitude - addr.longitude) < 0.0001
-                    );
+                const accountId = await prepareAccountForOutletSync(
+                    accounts,
+                    currentAccount,
+                    switchAccount,
+                );
+                if (!accountId) {
+                    toast.error('No business account found. Complete your profile or log in again.');
+                    onClose();
+                    return;
                 }
-                if (!matchingOutlet) {
-                    matchingOutlet = dbOutlets.find(o =>
-                        o.addressLine === addr.fullAddress &&
-                        o.pincode === addr.pincode
-                    );
-                }
-
-                let targetOutletId = matchingOutlet?.id;
-
-                if (!targetOutletId) {
-                    // Create a new outlet for the address
-                    const createRes = await fetch(`/api/v1/account/${currentAccount.id}/outlets`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            name: addr.businessName || addr.label || 'Branch Outlet',
-                            addressLine: addr.fullAddress,
-                            flatInfo: addr.flatInfo || null,
-                            landmark: addr.landmark || null,
-                            city: addr.city || null,
-                            state: addr.state || null,
-                            pincode: addr.pincode || null,
-                            latitude: addr.latitude,
-                            longitude: addr.longitude,
-                            placeId: addr.placeId || null,
-                        }),
-                    });
-
-                    if (!createRes.ok) {
-                        const errText = await createRes.text();
-                        console.error('Failed to create outlet:', errText);
-                        throw new Error('Failed to create outlet for address');
-                    }
-
-                    const createJson = await createRes.json();
-                    targetOutletId = createJson.data.id;
-                }
-
-                if (targetOutletId) {
-                    await switchOutlet(targetOutletId);
-                    await refreshAccounts();
-                }
+                await syncAddressToOutlet({
+                    accountId,
+                    addr,
+                    switchOutlet,
+                    refreshAccounts,
+                });
             } catch (err) {
                 console.error('Error syncing address to outlet:', err);
                 const msg = err instanceof Error ? err.message : 'Failed to sync outlet address';
