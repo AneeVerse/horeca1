@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
+import { clearForcePickerCookie, clearDismissFlag } from '@/lib/postLoginPicker';
 
 /**
  * V2.2 — Multi-account + multi-outlet switcher hook.
@@ -114,6 +115,8 @@ export function useBusinessAccountSwitcher() {
   const handleSignOut = useCallback(async () => {
     clearCart();
     clearWishlist();
+    clearForcePickerCookie();
+    clearDismissFlag();
     try {
       localStorage.removeItem('horeca_order_lists_all');
       localStorage.removeItem('horeca_orders');

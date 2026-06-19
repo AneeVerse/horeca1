@@ -1,15 +1,12 @@
 'use client';
 
 /**
- * Shown ONCE per login when a user has more than one BusinessAccount.
- * Lets them pick which account to activate before they land on the home page.
- * If they have exactly one account, this component renders nothing.
+ * Shown after every fresh login when a user must pick a BusinessAccount
+ * (2+ accounts) or an outlet (1 account, multiple outlets).
  *
- * Wired in via src/components/auth/AuthGuards.tsx (or the root layout), which
- * mounts it on the first navigation after a successful sign-in.
- *
- * Honors the per-tab "dismissed" flag so navigating to another page within the
- * same session doesn't re-prompt.
+ * Wired in via the root layout. Honors a short-lived force-pick cookie set on
+ * sign-in so the dismiss flag in sessionStorage cannot bypass account selection
+ * across logout/login in the same tab.
  *
  * V2 — adds an outlet-selection step for accounts with multiple outlets.
  */
@@ -17,9 +14,13 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useBusinessAccountSwitcher, type AccountSummary } from '@/hooks/useBusinessAccountSwitcher';
+import {
+  DISMISS_KEY,
+  readForcePickerCookie,
+  completePostLoginPicker,
+  clearForcePickerCookie,
+} from '@/lib/postLoginPicker';
 import { ShieldCheck, Store, Sparkles, User, MapPin, Loader2, X, ChevronLeft, Check } from 'lucide-react';
-
-const DISMISS_KEY = 'horeca_post_login_selector_dismissed';
 
 type Kind = 'customer' | 'vendor' | 'brand';
 const STYLE: Record<Kind, { label: string; color: string; bg: string; icon: typeof Store }> = {
@@ -40,8 +41,8 @@ export function PostLoginAccountSelector() {
   const [open, setOpen] = useState(false);
   const [pickingId, setPickingId] = useState<string | null>(null);
   const [outletStep, setOutletStep] = useState<AccountSummary | null>(null);
+  const [mandatoryPick, setMandatoryPick] = useState(false);
 
-  // Per-outlet scoped users only see their assigned outlets.
   const u = (session?.user ?? {}) as Record<string, unknown>;
   const accessibleOutletIds = Array.isArray(u.accessibleOutletIds) ? (u.accessibleOutletIds as string[]) : [];
 
@@ -53,13 +54,25 @@ export function PostLoginAccountSelector() {
   useEffect(() => {
     if (status !== 'authenticated') return;
     if (accounts.length === 0) return;
+
+    const forcePick = readForcePickerCookie() || u.forceAccountPicker === true;
+    const totalCount = (u.totalAccountCount as number | undefined) ?? accounts.length;
+    const mustPick = forcePick && totalCount > 1;
+    Promise.resolve().then(() => setMandatoryPick(mustPick));
+
     let dismissed = false;
-    try { dismissed = sessionStorage.getItem(DISMISS_KEY) === '1'; } catch { /* ignore */ }
-    if (dismissed) return;
+    if (!mustPick) {
+      try { dismissed = sessionStorage.getItem(DISMISS_KEY) === '1'; } catch { /* ignore */ }
+      if (dismissed) return;
+    }
+
     const visibleOutlets = filterOutlets(accounts[0]);
-    // 1 account, 0-1 accessible outlets → nothing to pick (loadActiveContext already set the right one)
-    if (accounts.length === 1 && visibleOutlets.length <= 1) return;
-    // 1 account, multiple accessible outlets → jump straight to outlet step
+    // 1 account, 0-1 accessible outlets → nothing to pick
+    if (accounts.length === 1 && visibleOutlets.length <= 1) {
+      if (forcePick) completePostLoginPicker();
+      return;
+    }
+    // 1 account, multiple accessible outlets → outlet step
     if (accounts.length === 1 && visibleOutlets.length > 1) {
       Promise.resolve().then(() => {
         setOutletStep(accounts[0]);
@@ -67,31 +80,40 @@ export function PostLoginAccountSelector() {
       });
       return;
     }
-    // 2+ accounts → show account picker
+    // 2+ accounts → account picker
     Promise.resolve().then(() => setOpen(true));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, accounts, session?.user?.id, accessibleOutletIds.join(',')]);
 
   if (!open) return null;
 
+  const finishPicker = () => {
+    setOpen(false);
+    setOutletStep(null);
+    setPickingId(null);
+    completePostLoginPicker();
+  };
+
   const handlePick = async (a: AccountSummary) => {
     setPickingId(a.id);
-    try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ }
+    if (!mandatoryPick) {
+      try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ }
+    }
     if (a.id !== currentAccount?.id) {
       await switchAccount(a.id);
     }
     if (filterOutlets(a).length > 1) {
-      // Move to outlet selection step instead of closing
       setOutletStep(a);
       setPickingId(null);
     } else {
-      setOpen(false);
-      setPickingId(null);
+      finishPicker();
     }
   };
 
   const handleDismiss = () => {
+    if (mandatoryPick) return;
     try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ }
+    clearForcePickerCookie();
     setOpen(false);
     setOutletStep(null);
   };
@@ -103,13 +125,15 @@ export function PostLoginAccountSelector() {
         <div className="bg-white rounded-2xl w-full max-w-[480px] max-h-[90vh] flex flex-col">
           <div className="p-5 border-b border-[#F0F0F0] flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setOutletStep(null)}
-                className="p-1 rounded hover:bg-gray-100"
-                aria-label="Back to account selection"
-              >
-                <ChevronLeft size={16} />
-              </button>
+              {!mandatoryPick && (
+                <button
+                  onClick={() => setOutletStep(null)}
+                  className="p-1 rounded hover:bg-gray-100"
+                  aria-label="Back to account selection"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+              )}
               <div>
                 <h2 className="text-[16px] font-bold text-[#181725]">Select your outlet</h2>
                 <p className="text-[12px] text-[#666] mt-0.5">
@@ -117,13 +141,15 @@ export function PostLoginAccountSelector() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={handleDismiss}
-              className="p-1 rounded hover:bg-gray-100"
-              aria-label="Close"
-            >
-              <X size={16} />
-            </button>
+            {!mandatoryPick && (
+              <button
+                onClick={handleDismiss}
+                className="p-1 rounded hover:bg-gray-100"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
 
           <ul className="p-2 overflow-y-auto flex-1">
@@ -136,9 +162,7 @@ export function PostLoginAccountSelector() {
                     onClick={async () => {
                       setPickingId(o.id);
                       await switchOutlet(o.id);
-                      setOpen(false);
-                      setOutletStep(null);
-                      setPickingId(null);
+                      finishPicker();
                     }}
                     disabled={switching || isPicking}
                     className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-[#F8F8F8] transition-colors text-left disabled:opacity-60"
@@ -167,12 +191,14 @@ export function PostLoginAccountSelector() {
             <p className="text-[11px] text-[#AEAEAE] flex items-center gap-1">
               <ShieldCheck size={11} /> Delivery and inventory are scoped to your outlet.
             </p>
-            <button
-              onClick={handleDismiss}
-              className="px-3 py-1.5 text-[12px] font-semibold text-[#666] hover:bg-[#F5F5F5] rounded-lg"
-            >
-              Skip
-            </button>
+            {!mandatoryPick && (
+              <button
+                onClick={handleDismiss}
+                className="px-3 py-1.5 text-[12px] font-semibold text-[#666] hover:bg-[#F5F5F5] rounded-lg"
+              >
+                Skip
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -187,16 +213,20 @@ export function PostLoginAccountSelector() {
           <div>
             <h2 className="text-[16px] font-bold text-[#181725]">Welcome back</h2>
             <p className="text-[12px] text-[#666] mt-0.5">
-              You belong to {accounts.length} business accounts. Pick one to continue.
+              {mandatoryPick
+                ? 'Select a business account to continue.'
+                : `You belong to ${accounts.length} business accounts. Pick one to continue.`}
             </p>
           </div>
-          <button
-            onClick={handleDismiss}
-            className="p-1 rounded hover:bg-gray-100"
-            aria-label="Continue with current account"
-          >
-            <X size={16} />
-          </button>
+          {!mandatoryPick && (
+            <button
+              onClick={handleDismiss}
+              className="p-1 rounded hover:bg-gray-100"
+              aria-label="Continue with current account"
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
 
         <ul className="p-2 overflow-y-auto flex-1">
@@ -258,12 +288,14 @@ export function PostLoginAccountSelector() {
           <p className="text-[11px] text-[#AEAEAE] flex items-center gap-1">
             <ShieldCheck size={11} /> Permissions update automatically when you switch.
           </p>
-          <button
-            onClick={handleDismiss}
-            className="px-3 py-1.5 text-[12px] font-semibold text-[#666] hover:bg-[#F5F5F5] rounded-lg"
-          >
-            Skip
-          </button>
+          {!mandatoryPick && (
+            <button
+              onClick={handleDismiss}
+              className="px-3 py-1.5 text-[12px] font-semibold text-[#666] hover:bg-[#F5F5F5] rounded-lg"
+            >
+              Skip
+            </button>
+          )}
         </div>
       </div>
     </div>

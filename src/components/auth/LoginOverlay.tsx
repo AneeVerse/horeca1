@@ -5,6 +5,7 @@ import { X, AtSign, Mail, Loader2, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { signIn } from 'next-auth/react';
+import { markFreshLoginPendingPicker } from '@/lib/postLoginPicker';
 
 interface LoginOverlayProps {
   isOpen: boolean;
@@ -138,6 +139,7 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
         setOtp(['', '', '', '']);
         setTimeout(() => otpRefs[0].current?.focus(), 50);
       } else {
+        markFreshLoginPendingPicker();
         router.refresh();
         onLoginSuccess();
       }

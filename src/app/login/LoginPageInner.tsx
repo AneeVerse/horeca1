@@ -8,6 +8,11 @@ import {
   AtSign, Mail, Lock, Eye, EyeOff, Loader2, ArrowLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  prepareFreshLoginNavigation,
+  readForcePickerCookie,
+  setPendingRedirect,
+} from '@/lib/postLoginPicker';
 
 const RESEND_COOLDOWN = 60;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -32,14 +37,14 @@ export default function LoginPageInner() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
 
-  // If the user is already logged in, bounce them off the login page.
-  // Without this, navigating to /login while authenticated leaves you
-  // staring at a login form even though the navbar shows you're signed in.
-  // Everyone lands on the STOREFRONT: the post-login selector handles
-  // account → outlet there, and vendor/admin/brand users have a Dashboard
-  // shortcut in the navbar when they want their portal.
+  // Defer deep-link redirect until the post-login account picker completes.
   useEffect(() => {
     if (sessionStatus !== 'authenticated') return;
+    if (readForcePickerCookie()) {
+      setPendingRedirect(redirectTo);
+      window.location.href = '/';
+      return;
+    }
     window.location.href = redirectTo || '/';
   }, [sessionStatus, redirectTo]);
 
@@ -73,12 +78,10 @@ export default function LoginPageInner() {
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
   // Hard-navigate so the new session cookie is picked up by SSR.
-  // router.replace + setTimeout(reload) was racing — half the time we'd
-  // land back on /login. ALWAYS land on the storefront: multi-account
-  // users get the account → outlet selector there, and the navbar
-  // Dashboard shortcut covers vendor/admin/brand users.
-  const goPostLogin = useCallback(async () => {
-    window.location.href = redirectTo || '/';
+  // Multi-account users land on / and must pick via PostLoginAccountSelector
+  // before any redirect param is honored.
+  const goPostLogin = useCallback(() => {
+    prepareFreshLoginNavigation(redirectTo);
   }, [redirectTo]);
 
   const handleSendOtp = async () => {
