@@ -358,7 +358,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // after admin approval, etc). The role refresh below MUST run independently of
       // loadActiveContext so a transient failure on one side never returns a stale role.
       if (trigger === 'update' && token.id) {
-        const u = (updatePayload ?? {}) as { activeBusinessAccountId?: string; activeOutletId?: string };
+        const u = (updatePayload ?? {}) as {
+          activeBusinessAccountId?: string;
+          activeOutletId?: string;
+          accountPickerCompleted?: boolean;
+        };
+
+        if (u.accountPickerCompleted === true) {
+          delete token.forceAccountPicker;
+        }
+
         const targetAccountId = u.activeBusinessAccountId ?? (token.activeBusinessAccountId as string | undefined) ?? null;
         const targetOutletId = u.activeOutletId ?? (token.activeOutletId as string | undefined) ?? null;
 

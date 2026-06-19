@@ -11,15 +11,16 @@ import { errorResponse } from '@/middleware/errorHandler';
 // GET — pending counts for vendors, products, and categories
 export const GET = adminOnly(async (_req, _ctx) => {
   try {
-    const [pendingVendors, pendingProducts, pendingCategories] = await Promise.all([
+    const [pendingVendors, pendingProducts, pendingCategories, pendingBrands] = await Promise.all([
       prisma.vendor.count({ where: { isVerified: false } }),
       prisma.product.count({ where: { approvalStatus: 'pending' } }),
       prisma.category.count({ where: { approvalStatus: 'pending' } }),
+      prisma.brand.count({ where: { approvalStatus: 'pending' } }),
     ]);
 
     return NextResponse.json({
       success: true,
-      data: { pendingVendors, pendingProducts, pendingCategories },
+      data: { pendingVendors, pendingProducts, pendingCategories, pendingBrands },
     });
   } catch (error) {
     return errorResponse(error);

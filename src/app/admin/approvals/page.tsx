@@ -13,6 +13,7 @@ import {
     Tag,
     MessageSquare,
     Pencil,
+    Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -65,7 +66,17 @@ interface PendingCategory {
     _count?: { products: number };
 }
 
-type SectionTab = 'Vendors' | 'Products' | 'Categories';
+interface PendingBrand {
+    id: string;
+    name: string;
+    slug: string;
+    logoUrl: string | null;
+    approvalStatus: string;
+    createdAt: string;
+    user: { id: string; fullName: string; email: string };
+}
+
+type SectionTab = 'Vendors' | 'Products' | 'Categories' | 'Brands';
 
 function getInitials(name: string): string {
     return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
@@ -96,32 +107,37 @@ export default function ApprovalsPage() {
     // Category state
     const [pendingCategories, setPendingCategories] = useState<PendingCategory[]>([]);
 
+    // Brand state
+    const [pendingBrands, setPendingBrands] = useState<PendingBrand[]>([]);
+
     // Rejection modal
-    const [rejectTarget, setRejectTarget] = useState<{ type: 'product' | 'category'; id: string; name: string } | null>(null);
+    const [rejectTarget, setRejectTarget] = useState<{ type: 'product' | 'category' | 'brand'; id: string; name: string } | null>(null);
     const [rejectNote, setRejectNote] = useState('');
 
     // Summary counts
-    const [summary, setSummary] = useState({ pendingVendors: 0, pendingProducts: 0, pendingCategories: 0 });
+    const [summary, setSummary] = useState({ pendingVendors: 0, pendingProducts: 0, pendingCategories: 0, pendingBrands: 0 });
 
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [pendingVRes, approvedVRes, productsRes, categoriesRes, summaryRes] = await Promise.all([
+            const [pendingVRes, approvedVRes, productsRes, categoriesRes, brandsRes, summaryRes] = await Promise.all([
                 fetch('/api/v1/admin/vendors?verified=false&limit=50'),
                 fetch('/api/v1/admin/vendors?verified=true&limit=50'),
                 fetch('/api/v1/admin/products?approvalStatus=pending&limit=50'),
                 fetch('/api/v1/admin/categories?approvalStatus=pending'),
+                fetch('/api/v1/admin/brands?status=pending'),
                 fetch('/api/v1/admin/approvals/summary'),
             ]);
 
-            const [pv, av, pr, cat, sum] = await Promise.all([
-                pendingVRes.json(), approvedVRes.json(), productsRes.json(), categoriesRes.json(), summaryRes.json(),
+            const [pv, av, pr, cat, br, sum] = await Promise.all([
+                pendingVRes.json(), approvedVRes.json(), productsRes.json(), categoriesRes.json(), brandsRes.json(), summaryRes.json(),
             ]);
 
             if (pv.success) setPendingVendors(pv.data.vendors);
             if (av.success) setApprovedVendors(av.data.vendors);
             if (pr.success) setPendingProducts(pr.data.products || []);
             if (cat.success) setPendingCategories(cat.data || []);
+            if (br.success) setPendingBrands(br.data || []);
             if (sum.success) setSummary(sum.data);
         } catch (err) {
             console.error('Failed to fetch approvals:', err);
@@ -233,6 +249,41 @@ export default function ApprovalsPage() {
         finally { setActionLoading(null); setRejectTarget(null); setRejectNote(''); }
     };
 
+    // ── Brand Actions ──
+    const handleApproveBrand = async (brand: PendingBrand) => {
+        setActionLoading(brand.id);
+        try {
+            const res = await fetch(`/api/v1/admin/brands/${brand.id}/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'approved' }),
+            });
+            if ((await res.json()).success || res.ok) {
+                setPendingBrands(prev => prev.filter(b => b.id !== brand.id));
+                setSummary(prev => ({ ...prev, pendingBrands: prev.pendingBrands - 1 }));
+                toast.success(`${brand.name} approved`);
+            }
+        } catch (err) { console.error(err); }
+        finally { setActionLoading(null); }
+    };
+
+    const handleRejectBrand = async (id: string, note: string) => {
+        setActionLoading(id);
+        try {
+            const res = await fetch(`/api/v1/admin/brands/${id}/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'rejected', reviewNote: note }),
+            });
+            if ((await res.json()).success || res.ok) {
+                setPendingBrands(prev => prev.filter(b => b.id !== id));
+                setSummary(prev => ({ ...prev, pendingBrands: prev.pendingBrands - 1 }));
+                toast.success('Brand rejected');
+            }
+        } catch (err) { console.error(err); }
+        finally { setActionLoading(null); setRejectTarget(null); setRejectNote(''); }
+    };
+
     // ── Filter logic ──
     const q = searchQuery.toLowerCase();
     const allVendors = [...pendingVendors, ...approvedVendors];
@@ -243,8 +294,14 @@ export default function ApprovalsPage() {
     };
     const filteredProducts = q ? pendingProducts.filter(p => p.name.toLowerCase().includes(q) || p.vendor.businessName.toLowerCase().includes(q)) : pendingProducts;
     const filteredCategories = q ? pendingCategories.filter(c => c.name.toLowerCase().includes(q)) : pendingCategories;
+    const filteredBrands = q
+        ? pendingBrands.filter(b =>
+            b.name.toLowerCase().includes(q) ||
+            b.user.fullName.toLowerCase().includes(q) ||
+            b.user.email.toLowerCase().includes(q))
+        : pendingBrands;
 
-    const totalPending = summary.pendingVendors + summary.pendingProducts + summary.pendingCategories;
+    const totalPending = summary.pendingVendors + summary.pendingProducts + summary.pendingCategories + summary.pendingBrands;
 
     if (loading) {
         return (
@@ -263,11 +320,12 @@ export default function ApprovalsPage() {
             </div>
 
             {/* Stats Row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
                 {[
                     { label: 'Pending Vendors', value: summary.pendingVendors, icon: Store, color: '#F59E0B', bg: '#FFF7E6' },
                     { label: 'Pending Products', value: summary.pendingProducts, icon: Package, color: '#3B82F6', bg: '#EFF6FF' },
                     { label: 'Pending Categories', value: summary.pendingCategories, icon: Tag, color: '#8B5CF6', bg: '#F3F0FF' },
+                    { label: 'Pending Brands', value: summary.pendingBrands, icon: Sparkles, color: '#7C3AED', bg: '#EDE9FE' },
                     { label: 'Total Pending', value: totalPending, icon: Clock, color: '#E74C3C', bg: '#FEF2F2' },
                 ].map((stat, idx) => (
                     <div key={idx} className="bg-white p-5 rounded-[16px] border border-[#EEEEEE] shadow-sm flex items-center gap-4">
@@ -288,6 +346,7 @@ export default function ApprovalsPage() {
                     { key: 'Vendors' as SectionTab, icon: Store, count: summary.pendingVendors },
                     { key: 'Products' as SectionTab, icon: Package, count: summary.pendingProducts },
                     { key: 'Categories' as SectionTab, icon: Tag, count: summary.pendingCategories },
+                    { key: 'Brands' as SectionTab, icon: Sparkles, count: summary.pendingBrands },
                 ]).map(({ key, icon: Icon, count }) => (
                     <button
                         key={key}
@@ -538,12 +597,75 @@ export default function ApprovalsPage() {
                     </div>
                 )}
 
+                {/* ── BRANDS TABLE ── */}
+                {sectionTab === 'Brands' && (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="bg-[#F8F9FB]">
+                                    <th className="px-6 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase">Brand</th>
+                                    <th className="px-6 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase">Owner</th>
+                                    <th className="px-6 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase">Email</th>
+                                    <th className="px-6 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase">Submitted</th>
+                                    <th className="px-6 py-4 text-[12px] font-bold text-[#7C7C7C] uppercase">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#F5F5F5]">
+                                {filteredBrands.map(brand => (
+                                    <tr key={brand.id} className="hover:bg-[#FAFAFA] transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                {brand.logoUrl ? (
+                                                    <img src={brand.logoUrl} alt="" className="w-9 h-9 rounded-full object-cover border" />
+                                                ) : (
+                                                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold bg-[#EDE9FE] text-[#7C3AED]">
+                                                        {getInitials(brand.name)}
+                                                    </div>
+                                                )}
+                                                <Link href={`/admin/brands/${brand.id}`} className="text-[14px] font-bold text-[#181725] hover:text-[#7C3AED]">
+                                                    {brand.name}
+                                                </Link>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-[13px] font-semibold text-[#181725]">{brand.user.fullName}</td>
+                                        <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{brand.user.email}</td>
+                                        <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{formatDate(brand.createdAt)}</td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-2">
+                                                <button onClick={() => handleApproveBrand(brand)} disabled={actionLoading === brand.id}
+                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
+                                                    {actionLoading === brand.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve
+                                                </button>
+                                                <button onClick={() => setRejectTarget({ type: 'brand', id: brand.id, name: brand.name })}
+                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold">
+                                                    <X size={14} /> Reject
+                                                </button>
+                                                <Link href={`/admin/brands/${brand.id}`}
+                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[8px] text-[12px] font-bold hover:bg-[#EDE9FE] hover:border-[#7C3AED]/40 hover:text-[#7C3AED] transition-colors">
+                                                    <Pencil size={13} /> View
+                                                </Link>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {filteredBrands.length === 0 && (
+                                    <tr><td colSpan={5} className="py-16 text-center">
+                                        <Sparkles size={36} className="mx-auto text-[#EEEEEE] mb-2" />
+                                        <p className="text-[#AEAEAE] font-bold text-[14px]">No pending brands</p>
+                                    </td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
                 {/* Footer */}
                 <div className="p-6 bg-[#FDFDFD] border-t border-[#EEEEEE]">
                     <p className="text-[12px] text-[#AEAEAE] font-bold uppercase tracking-wider">
                         {sectionTab === 'Vendors' && `${getDisplayVendors().length} vendor${getDisplayVendors().length !== 1 ? 's' : ''}`}
                         {sectionTab === 'Products' && `${filteredProducts.length} pending product${filteredProducts.length !== 1 ? 's' : ''}`}
                         {sectionTab === 'Categories' && `${filteredCategories.length} pending categor${filteredCategories.length !== 1 ? 'ies' : 'y'}`}
+                        {sectionTab === 'Brands' && `${filteredBrands.length} pending brand${filteredBrands.length !== 1 ? 's' : ''}`}
                     </p>
                 </div>
             </div>
@@ -572,7 +694,8 @@ export default function ApprovalsPage() {
                                 onClick={() => {
                                     if (!rejectNote.trim()) { toast.error('Please provide a reason'); return; }
                                     if (rejectTarget.type === 'product') handleRejectProduct(rejectTarget.id, rejectNote);
-                                    else handleRejectCategory(rejectTarget.id, rejectNote);
+                                    else if (rejectTarget.type === 'category') handleRejectCategory(rejectTarget.id, rejectNote);
+                                    else handleRejectBrand(rejectTarget.id, rejectNote);
                                 }}
                                 disabled={!rejectNote.trim() || !!actionLoading}
                                 className="h-[40px] px-5 bg-[#E74C3C] text-white rounded-[10px] text-[13px] font-bold disabled:opacity-50 flex items-center gap-1.5">

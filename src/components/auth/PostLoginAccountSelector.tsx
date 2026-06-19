@@ -36,7 +36,7 @@ function classify(a: AccountSummary): Kind {
 }
 
 export function PostLoginAccountSelector() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const { accounts, currentAccount, switchAccount, switchOutlet, activeOutletId, switching } = useBusinessAccountSwitcher();
   const [open, setOpen] = useState(false);
   const [pickingId, setPickingId] = useState<string | null>(null);
@@ -55,9 +55,10 @@ export function PostLoginAccountSelector() {
     if (status !== 'authenticated') return;
     if (accounts.length === 0) return;
 
-    const forcePick = readForcePickerCookie() || u.forceAccountPicker === true;
+    const hasForceCookie = readForcePickerCookie();
+    const forcePick = hasForceCookie || u.forceAccountPicker === true;
     const totalCount = (u.totalAccountCount as number | undefined) ?? accounts.length;
-    const mustPick = forcePick && totalCount > 1;
+    const mustPick = hasForceCookie && totalCount > 1;
     Promise.resolve().then(() => setMandatoryPick(mustPick));
 
     let dismissed = false;
@@ -69,7 +70,9 @@ export function PostLoginAccountSelector() {
     const visibleOutlets = filterOutlets(accounts[0]);
     // 1 account, 0-1 accessible outlets → nothing to pick
     if (accounts.length === 1 && visibleOutlets.length <= 1) {
-      if (forcePick) completePostLoginPicker();
+      if (forcePick) {
+        void update({ accountPickerCompleted: true }).then(() => completePostLoginPicker());
+      }
       return;
     }
     // 1 account, multiple accessible outlets → outlet step
@@ -87,10 +90,11 @@ export function PostLoginAccountSelector() {
 
   if (!open) return null;
 
-  const finishPicker = () => {
+  const finishPicker = async () => {
     setOpen(false);
     setOutletStep(null);
     setPickingId(null);
+    await update({ accountPickerCompleted: true });
     completePostLoginPicker();
   };
 
@@ -106,14 +110,15 @@ export function PostLoginAccountSelector() {
       setOutletStep(a);
       setPickingId(null);
     } else {
-      finishPicker();
+      await finishPicker();
     }
   };
 
-  const handleDismiss = () => {
+  const handleDismiss = async () => {
     if (mandatoryPick) return;
     try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ }
     clearForcePickerCookie();
+    await update({ accountPickerCompleted: true });
     setOpen(false);
     setOutletStep(null);
   };
@@ -162,7 +167,7 @@ export function PostLoginAccountSelector() {
                     onClick={async () => {
                       setPickingId(o.id);
                       await switchOutlet(o.id);
-                      finishPicker();
+                      await finishPicker();
                     }}
                     disabled={switching || isPicking}
                     className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-[#F8F8F8] transition-colors text-left disabled:opacity-60"

@@ -95,8 +95,8 @@ export default function AdminLayout({
                 .then((r) => (r.ok ? r.json() : null))
                 .then((j) => {
                     if (cancelled || !j?.success) return;
-                    const { pendingVendors = 0, pendingProducts = 0, pendingCategories = 0 } = j.data ?? {};
-                    Promise.resolve().then(() => setPendingApprovals(pendingVendors + pendingProducts + pendingCategories));
+                    const { pendingVendors = 0, pendingProducts = 0, pendingCategories = 0, pendingBrands = 0 } = j.data ?? {};
+                    Promise.resolve().then(() => setPendingApprovals(pendingVendors + pendingProducts + pendingCategories + pendingBrands));
                 })
                 .catch(() => {});
         };

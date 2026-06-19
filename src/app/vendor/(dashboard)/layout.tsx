@@ -56,7 +56,6 @@ import {
 import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
 import { VendorOutletStrip } from '@/components/vendor/VendorOutletStrip';
-import { PostLoginAccountSelector } from '@/components/auth/PostLoginAccountSelector';
 import type { PermissionKey } from '@/lib/permissions/registry';
 
 interface VendorSidebarLink {
@@ -518,8 +517,6 @@ export default function VendorLayout({
                 </main>
             </div>
 
-            {/* Post-login account selector — shows once when user has multiple BusinessAccounts */}
-            <PostLoginAccountSelector />
         </div>
     );
 }
