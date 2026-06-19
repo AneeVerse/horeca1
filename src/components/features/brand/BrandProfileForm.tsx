@@ -6,7 +6,7 @@
 
 import React, { useState } from 'react';
 import {
-  Building2, User, MapPin, Globe, Target, ChevronDown, ChevronUp, Check, ShieldCheck,
+  Building2, User, MapPin, Globe, Target, ChevronDown, ChevronUp, Check, ShieldCheck, Eye, EyeOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddressAutocomplete, type AddressPickPayload } from '@/components/ui/AddressAutocomplete';
@@ -383,11 +383,21 @@ export function BrandProfileForm({
         {visibleSections.auth && showPassword && onPasswordChange && (
           <>
             <SectionHeader icon={User} spanClass={SPAN_FULL}>Owner Account</SectionHeader>
-            <TextField label="Password" required value={password}
-              error={errors.password}
-              onChange={onPasswordChange}
-              type={passwordVisible ? 'text' : 'password'}
-              placeholder="Min 6 characters" />
+            <FormField label="Password" required error={errors.password}>
+              <FormInput
+                value={password}
+                onChange={onPasswordChange}
+                type={passwordVisible ? 'text' : 'password'}
+                placeholder="Min 6 characters"
+                hasError={!!errors.password}
+                rightSlot={showPasswordToggle && onTogglePassword ? (
+                  <button type="button" onClick={onTogglePassword} tabIndex={-1}
+                    className="text-gray-400 hover:text-gray-600">
+                    {passwordVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                ) : undefined}
+              />
+            </FormField>
           </>
         )}
 

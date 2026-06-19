@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { X, Loader2, Eye, EyeOff } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { FORM, TextField } from '@/components/ui/form';
