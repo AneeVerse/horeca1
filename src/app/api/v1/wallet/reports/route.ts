@@ -1,4 +1,4 @@
-// GET /api/v1/wallet/reports?type=overdue|utilization|interest|audit|all — admin only.
+// GET /api/v1/wallet/reports?type=overdue|utilization|interest|audit|statement|all — admin only.
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
@@ -57,6 +57,47 @@ export const GET = adminOnly(async (req: NextRequest) => {
         date: p.appliedDate,
         outstandingBaseAmount: Number(p.wallet.overdueBaseAmount ?? p.wallet.outstandingAmount),
       }));
+    }
+
+    if (want('statement')) {
+      // Bank-statement style ledger: every money movement on every credit wallet,
+      // newest first, with its running available-credit balance. Debit = money the
+      // customer drew/owes (spend + interest/late fee); Credit = money applied back
+      // (repayment + cancellation reversal); CREDIT_ASSIGN is an informational
+      // limit setup, not a debit/credit against outstanding.
+      const isDebit = (t: string) => t === 'ORDER_DEBIT' || t === 'PENALTY';
+      const isCredit = (t: string) => t === 'REPAYMENT' || t === 'REVERSAL';
+      const rows = await prisma.creditWalletTxn.findMany({
+        include: {
+          wallet: {
+            include: {
+              user: { select: { fullName: true, phone: true } },
+              vendor: { select: { businessName: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 2000,
+      });
+      data.statement = rows.map((t) => {
+        const debit = isDebit(t.type);
+        const credit = isCredit(t.type);
+        return {
+          id: t.id,
+          customer: t.wallet.user.fullName,
+          phone: t.wallet.user.phone,
+          wallet: t.wallet.vendor?.businessName ?? 'H1 Wallet',
+          type: t.type,
+          direction: debit ? 'debit' : credit ? 'credit' : 'info',
+          amount: Number(t.amount),
+          debit: debit ? Number(t.amount) : null,
+          credit: credit ? Number(t.amount) : null,
+          balanceAfter: Number(t.balanceAfterTxn),
+          note: t.note,
+          referenceId: t.referenceId,
+          timestamp: t.createdAt,
+        };
+      });
     }
 
     if (want('audit')) {

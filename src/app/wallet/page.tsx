@@ -21,6 +21,11 @@ interface CreditWallet {
 
 // Access Razorpay via a local cast (avoids re-declaring the global Window type,
 // which is already augmented in cart/checkout pages).
+interface RazorpayHandlerResponse {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
 type RazorpayCtor = new (options: Record<string, unknown>) => { open: () => void };
 const getRazorpayCtor = (): RazorpayCtor | undefined =>
   (window as unknown as { Razorpay?: RazorpayCtor }).Razorpay;
@@ -76,9 +81,27 @@ export default function WalletPage() {
         amount, currency,
         name: 'Horeca1',
         description: 'Credit wallet repayment',
-        handler: () => {
-          toast.success('Payment received — your wallet will update shortly');
-          setTimeout(load, 2500); // webhook applies it server-side
+        // Verify synchronously the instant Razorpay confirms payment — this is
+        // what actually applies the repayment to the wallet. The webhook is only
+        // a server-side backup and does NOT fire in test mode / on localhost.
+        handler: async (resp: RazorpayHandlerResponse) => {
+          try {
+            const v = await fetch('/api/v1/wallet/verify-repayment', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: resp.razorpay_order_id,
+                razorpay_payment_id: resp.razorpay_payment_id,
+                razorpay_signature: resp.razorpay_signature,
+              }),
+            });
+            const vj = await v.json();
+            if (!v.ok || !vj.success) throw new Error(vj.error?.message || 'Could not verify payment');
+            toast.success('Payment received — your wallet is updated');
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Payment verification failed — contact support if charged');
+          } finally {
+            load();
+          }
         },
         modal: { ondismiss: () => setPayingId(null) },
         theme: { color: '#299e60' },

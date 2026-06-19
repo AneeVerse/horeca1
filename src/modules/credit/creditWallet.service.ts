@@ -1,4 +1,5 @@
 import { Prisma, CreditRepaymentMode, BillingModelType, CreditWalletStatus } from '@prisma/client';
+import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
 import { NotificationService } from '@/modules/notification/notification.service';
@@ -348,6 +349,51 @@ export class CreditWalletService {
       });
       return updated;
     });
+  }
+
+  /**
+   * Synchronous, client-driven repayment verification — the PRIMARY path,
+   * mirroring `payments/verify`. The Razorpay checkout `handler` posts the
+   * order/payment/signature triplet the moment payment succeeds; we verify the
+   * HMAC (order_id|payment_id with RAZORPAY_KEY_SECRET — the checkout signature,
+   * NOT the webhook secret), confirm the pending repayment belongs to this user,
+   * then apply it. The webhook is only a server-to-server backup; relying on it
+   * alone meant a captured payment never reached the wallet in test mode / on
+   * localhost, where Razorpay can't call back. Idempotent: `applyRepayment`
+   * dedupes on razorpayPaymentId (unique index), so verify + webhook can't
+   * double-apply.
+   */
+  async verifyRepayment(userId: string, razorpayOrderId: string, razorpayPaymentId: string, razorpaySignature: string) {
+    const expected = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
+      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+      .digest('hex');
+    const sigBuf = Buffer.from(razorpaySignature, 'utf8');
+    const expBuf = Buffer.from(expected, 'utf8');
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      throw Errors.unauthorized('Invalid payment signature');
+    }
+
+    const repayment = await prisma.creditWalletRepayment.findFirst({
+      where: { razorpayOrderId },
+      include: { wallet: { select: { userId: true } } },
+    });
+    if (!repayment) throw Errors.notFound('Repayment');
+    if (repayment.wallet.userId !== userId) throw Errors.forbidden('Not your repayment');
+
+    const updated = await this.applyRepayment(
+      repayment.walletId,
+      Number(repayment.amount),
+      'RAZORPAY',
+      razorpayOrderId,
+      razorpayPaymentId,
+    );
+    return {
+      success: true,
+      walletId: repayment.walletId,
+      outstanding: updated ? num(updated.outstandingAmount) : null,
+      availableCredit: updated ? num(updated.availableCredit) : null,
+    };
   }
 
   // ── Daily accruals (interest + penalty + blacklist) ─────────────────────────

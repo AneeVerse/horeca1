@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Search, Loader2, ShieldAlert, Save, RefreshCw, ChevronDown, X } from 'lucide-react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { Search, Loader2, ShieldAlert, Save, RefreshCw, ChevronDown, X, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -63,6 +63,22 @@ interface AuditRow {
     timestamp: string;
 }
 
+interface StatementRow {
+    id: string;
+    customer: string;
+    phone: string | null;
+    wallet: string;
+    type: string;
+    direction: 'debit' | 'credit' | 'info';
+    amount: number;
+    debit: number | null;
+    credit: number | null;
+    balanceAfter: number;
+    note: string | null;
+    referenceId: string | null;
+    timestamp: string;
+}
+
 interface ReportsData {
     overdue?: OverdueRow[];
     utilization?: UtilizationStats;
@@ -86,7 +102,7 @@ interface GlobalConfig {
     unlockCreditAmount: string | number;
 }
 
-type TabKey = 'lines' | 'reports' | 'config';
+type TabKey = 'lines' | 'reports' | 'statement' | 'config';
 
 const STATUS_STYLE: Record<WalletStatus, string> = {
     ACTIVE: 'bg-[#EEF8F1] text-[#299E60]',
@@ -98,6 +114,48 @@ const inputCls = 'w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 te
 
 const fmtMoney = (v: string | number) => `₹ ${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const fmtDate = (v: string | null) => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const fmtDateTime = (v: string | null) => v ? new Date(v).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
+// Human labels for the raw ledger txn types.
+const TXN_LABEL: Record<string, string> = {
+    CREDIT_ASSIGN: 'Credit assigned',
+    ORDER_DEBIT: 'Order — spent on credit',
+    REPAYMENT: 'Repayment received',
+    PENALTY: 'Interest / late fee',
+    REVERSAL: 'Reversal — order cancelled',
+};
+
+// Client-side CSV export. Prepends a BOM so Excel reads ₹/UTF-8 correctly, and
+// quotes any field containing a comma/quote/newline.
+function downloadCsv(filename: string, headers: string[], rows: (string | number | null)[][]) {
+    const esc = (v: string | number | null) => {
+        const s = v === null || v === undefined ? '' : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const csv = [headers, ...rows].map((r) => r.map(esc).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function DownloadBtn({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            className="inline-flex items-center gap-2 h-[40px] px-4 rounded-[10px] bg-[#EEF8F1] text-[#299E60] text-[13px] font-bold hover:bg-[#299E60] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+        >
+            <Download size={15} /> Download CSV
+        </button>
+    );
+}
 
 // ─── Searchable entity picker (dropdown + paste) ─────────────────────────────
 // Lets admins pick a customer/vendor from a live search dropdown OR paste a raw
@@ -248,6 +306,7 @@ export default function AdminCreditPage() {
                 {([
                     { key: 'lines', label: 'Credit Lines' },
                     { key: 'reports', label: 'Reports' },
+                    { key: 'statement', label: 'Statement' },
                     { key: 'config', label: 'Global Config' },
                 ] as { key: TabKey; label: string }[]).map((t) => (
                     <button
@@ -265,6 +324,7 @@ export default function AdminCreditPage() {
 
             {tab === 'lines' && <CreditLinesSection />}
             {tab === 'reports' && <ReportsSection />}
+            {tab === 'statement' && <StatementSection />}
             {tab === 'config' && <GlobalConfigSection />}
         </div>
     );
@@ -744,7 +804,20 @@ function ReportsSection() {
 
             {/* Audit log */}
             <div className="bg-white p-6 md:p-10 rounded-[12px] border border-[#DCDCDC] shadow-sm">
-                <h3 className="text-[18px] font-bold text-[#000000] mb-6">Audit Log</h3>
+                <div className="flex items-center justify-between gap-4 mb-6">
+                    <h3 className="text-[18px] font-bold text-[#000000]">Audit Log</h3>
+                    <DownloadBtn
+                        disabled={audit.length === 0}
+                        onClick={() => downloadCsv(
+                            `credit-audit-log-${new Date().toISOString().slice(0, 10)}.csv`,
+                            ['Timestamp', 'Customer', 'Action', 'By', 'Previous', 'New', 'Remarks'],
+                            audit.map((r) => [
+                                fmtDateTime(r.timestamp), r.customer, r.action.replace(/_/g, ' '),
+                                r.performedBy, r.previousValue ?? '', r.newValue ?? '', r.remarks ?? '',
+                            ]),
+                        )}
+                    />
+                </div>
                 <div className="overflow-x-auto">
                     <table className="w-full border-separate border-spacing-0">
                         <thead>
@@ -765,7 +838,7 @@ function ReportsSection() {
                                     <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-semibold">{r.performedBy}</td>
                                     <td className="py-5 px-6 text-center text-[13px] text-[#7C7C7C] font-medium">{r.previousValue ?? '—'} → {r.newValue ?? '—'}</td>
                                     <td className="py-5 px-6 text-center text-[13px] text-[#7C7C7C] font-medium">{r.remarks ?? '—'}</td>
-                                    <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-semibold">{fmtDate(r.timestamp)}</td>
+                                    <td className="py-5 px-6 text-center text-[14px] text-[#181725] font-semibold">{fmtDateTime(r.timestamp)}</td>
                                 </tr>
                             )) : (
                                 <tr><td colSpan={6} className="py-12 text-center text-[14px] text-[#7C7C7C] font-medium">No audit entries.</td></tr>
@@ -773,6 +846,157 @@ function ReportsSection() {
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Section B2: Transaction Statement (bank-statement style ledger) ─────────
+
+const DIR_STYLE: Record<StatementRow['direction'], string> = {
+    debit: 'bg-[#FFF0F0] text-[#E74C3C]',
+    credit: 'bg-[#EEF8F1] text-[#299E60]',
+    info: 'bg-[#F0F4FF] text-[#3B5BDB]',
+};
+
+function StatementSection() {
+    const [rows, setRows] = useState<StatementRow[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [dir, setDir] = useState<'' | 'debit' | 'credit'>('');
+
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/v1/wallet/reports?type=statement')
+            .then((res) => res.json())
+            .then((json) => { if (!cancelled && json.success) setRows(json.data.statement ?? []); })
+            .catch(console.error)
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, []);
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        return rows.filter((r) => {
+            if (dir && r.direction !== dir) return false;
+            if (!q) return true;
+            return (
+                r.customer?.toLowerCase().includes(q) ||
+                (r.phone ?? '').toLowerCase().includes(q) ||
+                r.wallet.toLowerCase().includes(q) ||
+                (r.note ?? '').toLowerCase().includes(q)
+            );
+        });
+    }, [rows, search, dir]);
+
+    // Totals across the filtered view — the "in / out" summary of the statement.
+    const totals = useMemo(() => filtered.reduce(
+        (acc, r) => {
+            if (r.debit != null) acc.debit += r.debit;
+            if (r.credit != null) acc.credit += r.credit;
+            return acc;
+        },
+        { debit: 0, credit: 0 },
+    ), [filtered]);
+
+    const exportCsv = () => downloadCsv(
+        `credit-statement-${new Date().toISOString().slice(0, 10)}.csv`,
+        ['Date', 'Customer', 'Phone', 'Wallet', 'Description', 'Type', 'Debit (₹)', 'Credit (₹)', 'Balance (₹)', 'Reference'],
+        filtered.map((r) => [
+            fmtDateTime(r.timestamp),
+            r.customer,
+            r.phone ?? '',
+            r.wallet,
+            r.note ?? TXN_LABEL[r.type] ?? r.type,
+            TXN_LABEL[r.type] ?? r.type,
+            r.debit ?? '',
+            r.credit ?? '',
+            r.balanceAfter,
+            r.referenceId ?? '',
+        ]),
+    );
+
+    return (
+        <div className="space-y-6 max-w-[1360px]">
+            {/* In / out summary */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                <StatCard label="Total Spent (Debit)" value={fmtMoney(totals.debit)} />
+                <StatCard label="Total Paid / Reversed (Credit)" value={fmtMoney(totals.credit)} />
+                <StatCard label="Entries" value={filtered.length} />
+            </div>
+
+            <div className="bg-white p-6 md:p-10 rounded-[12px] border border-[#DCDCDC] shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                    <div>
+                        <h3 className="text-[18px] font-bold text-[#000000]">Transaction Statement</h3>
+                        <p className="text-[#000000] text-[12px] font-medium opacity-60 mt-1">Every credit movement across all wallets — spends, repayments, interest &amp; reversals</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="relative w-full max-w-[240px]">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AEAEAE]" size={16} />
+                            <input
+                                type="text"
+                                placeholder="search customer / wallet / note"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="h-[40px] w-full bg-white border border-[#DCDCDC] rounded-[10px] pl-10 pr-4 text-[13px] outline-none transition-all placeholder:text-[#AEAEAE] font-medium focus:border-[#299E60]/40 shadow-sm"
+                            />
+                        </div>
+                        <select
+                            value={dir}
+                            onChange={(e) => setDir(e.target.value as '' | 'debit' | 'credit')}
+                            className="h-[40px] bg-white border border-[#DCDCDC] rounded-[10px] px-3 text-[13px] font-semibold outline-none focus:border-[#299E60]/40 cursor-pointer shadow-sm"
+                        >
+                            <option value="">All entries</option>
+                            <option value="debit">Debit (spends / fees)</option>
+                            <option value="credit">Credit (repayments)</option>
+                        </select>
+                        <DownloadBtn onClick={exportCsv} disabled={filtered.length === 0} />
+                    </div>
+                </div>
+
+                {loading ? (
+                    <div className="flex items-center justify-center py-20">
+                        <Loader2 className="animate-spin text-[#299E60]" size={32} />
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full border-separate border-spacing-0">
+                            <thead>
+                                <tr className="bg-[#EFEFEF] h-[52px]">
+                                    <th className="px-5 text-left text-[14px] font-bold text-[#4B4B4B] first:rounded-l-[10px]">Date</th>
+                                    <th className="px-5 text-left text-[14px] font-bold text-[#4B4B4B]">Customer</th>
+                                    <th className="px-5 text-left text-[14px] font-bold text-[#4B4B4B]">Wallet</th>
+                                    <th className="px-5 text-left text-[14px] font-bold text-[#4B4B4B]">Description</th>
+                                    <th className="px-5 text-right text-[14px] font-bold text-[#4B4B4B]">Debit</th>
+                                    <th className="px-5 text-right text-[14px] font-bold text-[#4B4B4B]">Credit</th>
+                                    <th className="px-5 text-right text-[14px] font-bold text-[#4B4B4B] last:rounded-r-[10px]">Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#EEEEEE]">
+                                {filtered.length > 0 ? filtered.map((r) => (
+                                    <tr key={r.id} className="hover:bg-gray-50/30 transition-colors">
+                                        <td className="py-4 px-5 text-left text-[13px] text-[#7C7C7C] font-medium whitespace-nowrap">{fmtDateTime(r.timestamp)}</td>
+                                        <td className="py-4 px-5 text-left">
+                                            <div className="font-bold text-[14px] text-[#181725]">{r.customer}</div>
+                                            <div className="text-[12px] text-[#7C7C7C] font-medium">{r.phone || '—'}</div>
+                                        </td>
+                                        <td className="py-4 px-5 text-left text-[13px] text-[#181725] font-semibold">{r.wallet}</td>
+                                        <td className="py-4 px-5 text-left">
+                                            <span className={cn('inline-flex rounded-[7px] text-[11px] font-bold px-2.5 py-1 mb-1', DIR_STYLE[r.direction])}>{TXN_LABEL[r.type] ?? r.type}</span>
+                                            <div className="text-[12px] text-[#7C7C7C] font-medium max-w-[320px]">{r.note ?? '—'}</div>
+                                        </td>
+                                        <td className="py-4 px-5 text-right text-[14px] font-bold text-[#E74C3C] whitespace-nowrap">{r.debit != null ? fmtMoney(r.debit) : '—'}</td>
+                                        <td className="py-4 px-5 text-right text-[14px] font-bold text-[#299E60] whitespace-nowrap">{r.credit != null ? fmtMoney(r.credit) : '—'}</td>
+                                        <td className="py-4 px-5 text-right text-[14px] font-semibold text-[#181725] whitespace-nowrap">{fmtMoney(r.balanceAfter)}</td>
+                                    </tr>
+                                )) : (
+                                    <tr><td colSpan={7} className="py-16 text-center text-[14px] text-[#7C7C7C] font-medium">No transactions found.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
         </div>
     );

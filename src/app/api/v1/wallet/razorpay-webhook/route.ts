@@ -32,12 +32,14 @@ export async function POST(req: NextRequest) {
       const amount = Number(entity?.amount ?? 0) / 100;
 
       if (razorpayOrderId && razorpayPaymentId) {
-        // Mark the matching pending repayment + apply (idempotent on paymentId).
+        // Backup path: the client-driven /verify-repayment normally applies this
+        // first. applyRepayment finalizes the matching PENDING row to SUCCESS and
+        // is idempotent on razorpayPaymentId (unique index) — so a webhook that
+        // arrives after /verify (or a Razorpay replay) is a safe no-op.
         const repayment = await prisma.creditWalletRepayment.findFirst({
-          where: { razorpayOrderId, status: 'PENDING' },
+          where: { razorpayOrderId },
         });
         if (repayment) {
-          await prisma.creditWalletRepayment.update({ where: { id: repayment.id }, data: { status: 'CONSUMED' } });
           await creditWalletService.applyRepayment(repayment.walletId, amount || Number(repayment.amount), 'RAZORPAY', razorpayOrderId, razorpayPaymentId);
         }
       }
