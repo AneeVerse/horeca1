@@ -1,18 +1,19 @@
 // GET  /api/v1/admin/brands — List all brands (admin)
 // POST /api/v1/admin/brands — Admin creates a brand directly (auto-approved)
-// SUPPORTS (GET): ?status=pending|approved|rejected
-// REQUIRES: role=admin
 
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { z } from 'zod';
 import { BrandService } from '@/modules/brand/brand.service';
 import { adminOnly } from '@/middleware/rbac';
 import { requirePermission } from '@/lib/permissions/engine';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { prisma } from '@/lib/prisma';
-import { provisionDefaultAccount } from '@/lib/provisionAccount';
 import { uniqueHcid } from '@/lib/hcid';
+import { validateBrandProfile, BrandProfileSchema, derivedFullName } from '@/lib/validators/brand-profile';
+import {
+  mapToBusinessAccount,
+  mapToBrandFields,
+} from '@/lib/brandProfileMapper';
 import type { AuthContext } from '@/middleware/auth';
 
 const brandService = new BrandService();
@@ -21,72 +22,94 @@ function slugify(name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-const createBrandSchema = z.object({
-  // Owner account
-  fullName: z.string().min(2).max(100),
-  email: z.string().email(),
-  password: z.string().min(6).max(72),
-  // Brand profile
-  name: z.string().min(1).max(255),
-  description: z.string().optional(),
-  logoUrl: z.string().url().optional(),
-  website: z.string().url().optional(),
-  tagline: z.string().max(512).optional(),
-});
-
 export const GET = adminOnly(async (req: NextRequest, _ctx: AuthContext) => {
   const status = req.nextUrl.searchParams.get('status') ?? undefined;
   const brands = await brandService.adminListBrands(status);
   return NextResponse.json({ success: true, data: brands });
 });
 
-// POST — admin directly creates an approved brand (no application needed)
 export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
     requirePermission(ctx, 'brands.create');
 
     const body = await req.json();
-    const input = createBrandSchema.parse(body);
+    const input = BrandProfileSchema.passthrough().parse(body);
 
-    const existing = await prisma.user.findUnique({ where: { email: input.email }, select: { id: true } });
+    const validation = validateBrandProfile(
+      { ...input, password: body.password },
+      'adminCreate',
+    );
+    if (!validation.success) {
+      throw Errors.badRequest(validation.message ?? 'Invalid brand profile');
+    }
+
+    const email = String(body.email ?? input.email ?? '').trim().toLowerCase();
+    const password = String(body.password ?? '').trim();
+    const fullName = String(body.fullName ?? derivedFullName(input)).trim();
+
+    if (!email) throw Errors.badRequest('Email is required');
+    if (password.length < 6) throw Errors.badRequest('Password must be at least 6 characters');
+
+    const brandFields = mapToBrandFields(input);
+    const displayName = brandFields.name ?? 'Brand';
+
+    const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (existing) throw Errors.conflict('Email already in use');
 
-    const slug = slugify(input.name);
+    const slug = slugify(displayName);
     const slugExists = await prisma.brand.findUnique({ where: { slug }, select: { id: true } });
     if (slugExists) throw Errors.conflict('A brand with this name already exists');
 
-    const hashedPassword = await bcrypt.hash(input.password, 12);
-
+    const hashedPassword = await bcrypt.hash(password, 12);
     const hcidDisplay = await uniqueHcid();
+    const baData = mapToBusinessAccount(input) as Record<string, unknown>;
 
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          fullName: input.fullName,
-          email: input.email,
+          fullName,
+          email,
           password: hashedPassword,
           role: 'brand',
           isActive: true,
           hcidDisplay,
-          businessName: input.name,
+          businessName: brandFields.name,
+          gstNumber: (baData.gstin as string | null) ?? null,
+          phone: (baData.mobilePhone as string | null) ?? null,
         },
       });
-      const provision = await provisionDefaultAccount({
-        userId: user.id,
-        kind: 'brand',
-        businessName: input.name,
-        fullName: input.fullName,
-      }, tx);
+
+      const account = await tx.businessAccount.create({
+        data: {
+          ...(baData as object),
+          legalName: (baData.legalName as string) || displayName,
+          isCustomer: false,
+          isVendor: false,
+          isBrand: true,
+          status: 'active',
+        },
+      });
+
+      await tx.businessAccountMember.create({
+        data: { userId: user.id, businessAccountId: account.id, isPrimary: true, acceptedAt: new Date() },
+      });
+
+      const brandAdminTemplate = await tx.accountRole.findFirst({
+        where: { businessAccountId: null, isTemplate: true, name: 'Brand Admin', scope: 'brand' },
+        select: { id: true },
+      });
+      if (!brandAdminTemplate) throw Errors.badRequest('Brand Admin role template missing. Run seed migration.');
+
+      await tx.userRole.create({
+        data: { userId: user.id, businessAccountId: account.id, outletId: null, roleId: brandAdminTemplate.id },
+      });
+
       const brand = await tx.brand.create({
         data: {
           userId: user.id,
-          businessAccountId: provision.businessAccountId,
-          name: input.name,
+          businessAccountId: account.id,
           slug,
-          description: input.description ?? null,
-          logoUrl: input.logoUrl ?? null,
-          website: input.website ?? null,
-          tagline: input.tagline ?? null,
+          ...brandFields,
           approvalStatus: 'approved',
           isActive: true,
         },

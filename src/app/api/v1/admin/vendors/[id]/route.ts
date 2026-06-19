@@ -26,6 +26,14 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
     const vendor = await prisma.vendor.findUnique({
       where: { id },
       include: {
+        businessAccount: {
+          select: {
+            leadStatus: true,
+            manualTags: true,
+            paymentTerms: true,
+            customFields: true,
+          },
+        },
         user: {
           select: {
             id: true,
@@ -107,11 +115,12 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     // key to prisma.vendor.update throws and the whole save fails.
     const vendorFields = [
       'businessName', 'description', 'addressLine', 'city', 'state', 'addressPincode',
-      'tradeName', 'vendorType', 'gstNumber', 'panNumber', 'fssaiNumber',
+      'tradeName', 'vendorType', 'subType', 'gstNumber', 'panNumber', 'fssaiNumber',
       'udyamNumber', 'cinNumber', 'deliveryCapability', 'authorizedPersonName',
       'authorizedPersonPhone', 'authorizedPersonEmail', 'pickupAddressLine',
       'pickupCity', 'pickupState', 'pickupPincode', 'bankAccountName',
-      'bankAccountNumber', 'bankIfsc', 'bankName', 'bankAccountType'
+      'bankAccountNumber', 'bankIfsc', 'bankName', 'bankAccountType',
+      'businessSize', 'coverage', 'monthlySupplyBand',
     ];
 
     for (const field of vendorFields) {
@@ -136,17 +145,44 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     if (body.phone !== undefined) userUpdate.phone = body.phone;
     if (body.userGstNumber !== undefined) userUpdate.gstNumber = body.userGstNumber;
 
+    if (typeof body.creditEnabled === 'boolean') {
+      allowedFields.creditEnabled = body.creditEnabled;
+    }
+    if (body.categoriesHandled !== undefined) {
+      allowedFields.categoriesHandled = body.categoriesHandled;
+    }
+    if (body.warehouseCount !== undefined) {
+      allowedFields.warehouseCount = body.warehouseCount === null || body.warehouseCount === ''
+        ? null
+        : Number(body.warehouseCount);
+    }
+    if (typeof body.deliveryFleet === 'boolean') {
+      allowedFields.deliveryFleet = body.deliveryFleet;
+    }
+
+    const businessAccountUpdate: Record<string, unknown> = {};
+    if (body.leadStatus !== undefined) businessAccountUpdate.leadStatus = body.leadStatus;
+    if (body.manualTags !== undefined) businessAccountUpdate.manualTags = body.manualTags;
+    if (body.paymentTerms !== undefined) businessAccountUpdate.paymentTerms = body.paymentTerms;
+    if (body.platformCommissionPct !== undefined || body.dispatchSlaHours !== undefined) {
+      businessAccountUpdate.customFields = {
+        ...(body.platformCommissionPct !== undefined ? { platformCommissionPct: Number(body.platformCommissionPct) } : {}),
+        ...(body.dispatchSlaHours !== undefined ? { dispatchSlaHours: Number(body.dispatchSlaHours) } : {}),
+      };
+    }
+
+    const hasBusinessAccountUpdate = Object.keys(businessAccountUpdate).length > 0;
     const hasServiceAreas = body.serviceAreas !== undefined;
     const hasDeliverySlots = body.deliverySlots !== undefined;
 
-    if (Object.keys(allowedFields).length === 0 && Object.keys(userUpdate).length === 0 && !hasServiceAreas && !hasDeliverySlots) {
+    if (Object.keys(allowedFields).length === 0 && Object.keys(userUpdate).length === 0 && !hasServiceAreas && !hasDeliverySlots && !hasBusinessAccountUpdate) {
       throw Errors.notFound('No valid fields to update');
     }
 
     // Fetch current vendor state (needed for onboarding event check)
     const existing = await prisma.vendor.findUnique({
       where: { id },
-      select: { isVerified: true, userId: true, businessName: true },
+      select: { isVerified: true, userId: true, businessName: true, businessAccountId: true },
     });
 
     if (!existing) {
@@ -202,6 +238,24 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
           throw Errors.notFound('Vendor');
         }
         vendorUpdateResult = vResult;
+      }
+
+      if (hasBusinessAccountUpdate && existing.businessAccountId) {
+        const baPatch = { ...businessAccountUpdate };
+        if (baPatch.customFields) {
+          const current = await tx.businessAccount.findUnique({
+            where: { id: existing.businessAccountId },
+            select: { customFields: true },
+          });
+          const prev = (current?.customFields && typeof current.customFields === 'object')
+            ? current.customFields as Record<string, unknown>
+            : {};
+          baPatch.customFields = { ...prev, ...(baPatch.customFields as Record<string, unknown>) };
+        }
+        await tx.businessAccount.update({
+          where: { id: existing.businessAccountId },
+          data: baPatch,
+        });
       }
 
       // Sync Service Areas

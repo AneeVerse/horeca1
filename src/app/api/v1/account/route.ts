@@ -75,6 +75,16 @@ const CreateBody = z.object({
   isBrand: z.boolean().optional().default(false),
   primaryOutlet: PrimaryOutletSchema,
   vendorDetails: VendorDetailsSchema.optional(),
+  // Brand profile (when isBrand)
+  productCategories: z.array(z.string()).optional(),
+  businessSize: z.string().max(50).optional(),
+  distributionPresence: z.string().max(120).optional(),
+  targetSegments: z.array(z.string()).optional(),
+  horecaFocused: z.boolean().optional(),
+  retailFocused: z.boolean().optional(),
+  website: z.string().max(512).optional(),
+  tagline: z.string().max(512).optional(),
+  description: z.string().optional(),
 });
 
 function slugify(name: string, userId: string): string {
@@ -143,6 +153,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
           businessType: body.businessType || null,
           subType: body.subType || null,
           cuisine: body.cuisine || null,
+          businessSize: body.businessSize || null,
           salutation: body.salutation || null,
           firstName: body.firstName || null,
           lastName: body.lastName || null,
@@ -228,6 +239,21 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
               fssaiNumber: vd.fssaiNumber || null,
               udyamNumber: vd.udyamNumber || null,
               cinNumber: vd.cinNumber || null,
+              subType: vd.subType || null,
+              categoriesHandled: vd.categoriesHandled ?? [],
+              businessSize: vd.businessSize || null,
+              coverage: vd.coverage || null,
+              warehouseCount: vd.warehouseCount != null && vd.warehouseCount !== ''
+                ? Number(vd.warehouseCount)
+                : null,
+              deliveryFleet: typeof vd.deliveryFleet === 'boolean'
+                ? vd.deliveryFleet
+                : vd.deliveryFleet === 'yes' || vd.deliveryFleet === 'true'
+                  ? true
+                  : vd.deliveryFleet === 'no' || vd.deliveryFleet === 'false'
+                    ? false
+                    : null,
+              monthlySupplyBand: vd.monthlySupplyBand || null,
             } : {}),
           },
           select: { id: true },
@@ -264,8 +290,19 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
           data: {
             userId: ctx.userId,
             businessAccountId: account.id,
-            name: body.legalName,
+            name: body.displayName || body.legalName,
             slug: slugify(body.displayName || body.legalName, ctx.userId),
+            description: body.description ?? null,
+            website: body.website ?? null,
+            tagline: body.tagline ?? null,
+            categories: body.productCategories ?? [],
+            brandType: body.businessType ?? null,
+            subType: body.subType ?? null,
+            businessSize: body.businessSize ?? null,
+            distributionPresence: body.distributionPresence ?? null,
+            targetSegments: body.targetSegments ?? [],
+            horecaFocused: body.horecaFocused ?? null,
+            retailFocused: body.retailFocused ?? null,
           },
         });
         await tx.userRole.create({

@@ -24,6 +24,17 @@ const patchSchema = z.object({
   categories: z.array(z.string().max(80)).max(12).optional(),
   bgColor: z.string().max(20).nullable().optional(),
   showcaseImages: z.array(z.string().max(1024)).max(5).optional(),
+  brandTier: z.string().max(50).nullable().optional(),
+  marketplaceVisibility: z.string().max(50).nullable().optional(),
+  creditSupport: z.boolean().optional(),
+  leadStatus: z.string().max(50).nullable().optional(),
+  brandType: z.string().max(80).nullable().optional(),
+  subType: z.string().max(80).nullable().optional(),
+  businessSize: z.string().max(50).nullable().optional(),
+  distributionPresence: z.string().max(120).nullable().optional(),
+  targetSegments: z.array(z.string().max(80)).optional(),
+  horecaFocused: z.boolean().nullable().optional(),
+  retailFocused: z.boolean().nullable().optional(),
   isActive: z.boolean().optional(),
 });
 

@@ -24,6 +24,16 @@ import {
   VENDOR_TYPES, DELIVERY_CAPABILITIES,
   type VendorType, type DeliveryCapability,
 } from '@/lib/validators/vendor-kyc';
+import {
+  VendorProfileForm,
+  type VendorProfileValues,
+} from '@/components/features/vendor/VendorProfileForm';
+import { EMPTY_VENDOR_PROFILE } from '@/components/features/vendor/vendorProfileDefaults';
+import {
+  validateVendorProfile,
+  validateFieldBlur as validateVendorFieldBlur,
+  resolveVendorTypeSlug,
+} from '@/lib/validators/vendor-profile';
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
 import { cn } from '@/lib/utils';
 import { FORM, FormField as Field, FormInput, SectionLabel, selectClass, textareaClass } from '@/components/ui/form';
@@ -38,12 +48,16 @@ const STEP_LABELS = ['Owner & Business', 'KYC & Bank', 'Address & Operations'];
 interface AddressInput { addressLine: string; city: string; state: string; pincode: string }
 const blankAddress = (): AddressInput => ({ addressLine: '', city: '', state: '', pincode: '' });
 
-const VENDOR_TYPE_LABEL: Record<VendorType, string> = {
+const VENDOR_TYPE_LABEL: Partial<Record<VendorType, string>> = {
   distributor:  'Distributor',
   wholesaler:   'Wholesaler',
   brand_store:  'Brand Store',
   manufacturer: 'Manufacturer',
   dark_store:   'Dark Store',
+  sub_distributor: 'Sub Distributor',
+  importer: 'Importer',
+  trader: 'Trader',
+  packaging_supplier: 'Packaging Supplier',
 };
 
 const DELIVERY_LABEL: Record<DeliveryCapability, string> = {
@@ -57,6 +71,8 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const [vendorProfile, setVendorProfile] = useState<VendorProfileValues>({ ...EMPTY_VENDOR_PROFILE });
 
   // Step 1 — Owner + Business basics
   const [fullName, setFullName] = useState('');
@@ -105,7 +121,12 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
       if (password.length < 6) errors.password = 'Password must be at least 6 characters';
       if (!PHONE_RE.test(phone)) errors.phone = 'Phone number must be exactly 10 digits';
       if (businessName.trim().length < 2) errors.businessName = 'Legal name is required (min 2 chars)';
-      if (!vendorType) errors.vendorType = 'Select a vendor type';
+      const profileValidation = validateVendorProfile(
+        { ...vendorProfile, legalName: businessName, tradeName, email, password, phone },
+        'adminCreate',
+        'identity',
+      );
+      Object.assign(errors, profileValidation.errors);
       if (gstin.trim() && !GST_RE.test(gstin.trim())) errors.gstin = 'Format: 22ABCDE1234F1Z5';
     } else if (s === 2) {
       if (panNumber.trim() && !PAN_RE.test(panNumber.trim())) errors.panNumber = 'Format: ABCDE1234F';
@@ -200,6 +221,17 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
         gstin: gstin.trim() || undefined,
         description: description.trim() || undefined,
         minOrderValue: minOrderValue ? Number(minOrderValue) : undefined,
+        subType: vendorProfile.subType,
+        categoriesHandled: vendorProfile.categoriesHandled,
+        businessSize: vendorProfile.businessSize,
+        coverage: vendorProfile.coverage,
+        warehouseCount: vendorProfile.warehouseCount,
+        deliveryFleet: vendorProfile.deliveryFleet,
+        monthlySupplyBand: vendorProfile.monthlySupplyBand,
+        salutation: vendorProfile.salutation,
+        firstName: vendorProfile.firstName,
+        lastName: vendorProfile.lastName,
+        designation: vendorProfile.designation,
         primaryOutlet: {
           name: outletName.trim(),
           addressLine: effectivePickup.addressLine.trim(),
@@ -208,7 +240,14 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
           pincode: effectivePickup.pincode.trim() || undefined,
         },
         vendorDetails: {
-          vendorType,
+          vendorType: resolveVendorTypeSlug({ ...vendorProfile, vendorType }) || vendorType,
+          subType: vendorProfile.subType,
+          categoriesHandled: vendorProfile.categoriesHandled,
+          businessSize: vendorProfile.businessSize,
+          coverage: vendorProfile.coverage,
+          warehouseCount: vendorProfile.warehouseCount,
+          deliveryFleet: vendorProfile.deliveryFleet,
+          monthlySupplyBand: vendorProfile.monthlySupplyBand,
           panNumber: panNumber.trim().toUpperCase(),
           authorizedPersonName: authorizedPersonName.trim(),
           authorizedPersonPhone: authorizedPersonPhone.trim(),
@@ -343,47 +382,37 @@ export function AddVendorWizard({ onClose, onCreated }: Props) {
               </Field>
 
               <div className="pt-2 border-t border-[#EEEEEE]" />
-              <SectionLabel>Business</SectionLabel>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Legal Business Name" required error={fieldErrors.businessName}>
-                  <Input
-                    name="vendor-legal-name" value={businessName}
-                    onChange={(v) => { setBusinessName(v); setFieldErrors(prev => ({ ...prev, businessName: '' })); }}
-                    hasError={!!fieldErrors.businessName} placeholder="Daily Fresh Foods Pvt Ltd"
-                  />
-                </Field>
-                <Field label="Trade Name / Display Name (optional)" error={fieldErrors.tradeName}>
-                  <Input
-                    name="vendor-trade-name" value={tradeName}
-                    onChange={(v) => { setTradeName(v); setFieldErrors(prev => ({ ...prev, tradeName: '' })); }}
-                    hasError={!!fieldErrors.tradeName} placeholder="Daily Fresh"
-                  />
-                </Field>
-              </div>
-              <Field label="Vendor Type" required error={fieldErrors.vendorType}>
-                <select
-                  value={vendorType}
-                  onChange={(e) => {
-                    setVendorType(e.target.value as VendorType);
-                    setFieldErrors(prev => ({ ...prev, vendorType: '' }));
-                  }}
-                  className={selectClass(!!fieldErrors.vendorType)}
-                >
-                  <option value="">Select vendor type…</option>
-                  {VENDOR_TYPES.map((t) => <option key={t} value={t}>{VENDOR_TYPE_LABEL[t]}</option>)}
-                </select>
-              </Field>
-              <Field label="GSTIN (optional)" hint="Optional, e.g. for unregistered small vendors" error={fieldErrors.gstin}>
-                <Input
-                  name="vendor-gstin" value={gstin}
-                  onChange={(v) => {
-                    setGstin(v.toUpperCase().slice(0, 15));
-                    setFieldErrors(prev => ({ ...prev, gstin: '' }));
-                  }}
-                  hasError={!!fieldErrors.gstin}
-                  placeholder="22ABCDE1234F1Z5"
-                />
-              </Field>
+              <VendorProfileForm
+                value={{
+                  ...vendorProfile,
+                  legalName: businessName,
+                  tradeName,
+                  displayName: tradeName,
+                  gstin,
+                  email,
+                }}
+                onChange={patch => {
+                  setVendorProfile(prev => ({ ...prev, ...patch }));
+                  if (patch.legalName !== undefined) setBusinessName(patch.legalName);
+                  if (patch.tradeName !== undefined) setTradeName(patch.tradeName);
+                  if (patch.displayName !== undefined) setTradeName(patch.displayName);
+                  if (patch.gstin !== undefined) setGstin(patch.gstin);
+                  if (patch.vendorBusinessType) {
+                    const slug = resolveVendorTypeSlug({ ...vendorProfile, ...patch });
+                    if (slug) setVendorType(slug as VendorType);
+                  }
+                }}
+                errors={fieldErrors}
+                onFieldBlur={(field, value) => {
+                  const msg = validateVendorFieldBlur(field, value);
+                  setFieldErrors(prev => {
+                    const next = { ...prev };
+                    if (msg) next[field] = msg; else delete next[field];
+                    return next;
+                  });
+                }}
+                visibleSections={{ identity: true, ops: true, tax: true }}
+              />
             </div>
           )}
 

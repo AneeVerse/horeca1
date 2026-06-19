@@ -19,6 +19,10 @@ interface Brand {
     categories: string[];
     bgColor: string | null;
     showcaseImages: string[];
+    brandTier: string | null;
+    marketplaceVisibility: string | null;
+    creditSupport: boolean | null;
+    leadStatus: string | null;
     approvalStatus: string;
     isActive: boolean;
     user: { id: string; fullName: string; email: string };
@@ -46,6 +50,10 @@ export default function AdminBrandEditPage() {
         categories: [] as string[],
         bgColor: '#f0faf4' as string,
         showcaseImages: [] as string[],
+        brandTier: '',
+        marketplaceVisibility: '',
+        creditSupport: false,
+        leadStatus: '',
     });
 
     useEffect(() => {
@@ -64,6 +72,10 @@ export default function AdminBrandEditPage() {
                     categories: b.categories ?? [],
                     bgColor: b.bgColor ?? '#f0faf4',
                     showcaseImages: b.showcaseImages ?? [],
+                    brandTier: b.brandTier ?? '',
+                    marketplaceVisibility: b.marketplaceVisibility ?? '',
+                    creditSupport: b.creditSupport ?? false,
+                    leadStatus: b.leadStatus ?? '',
                 });
             })
             .catch(() => toast.error('Failed to load brand'))
@@ -86,6 +98,10 @@ export default function AdminBrandEditPage() {
                     categories: form.categories,
                     bgColor: form.bgColor,
                     showcaseImages: form.showcaseImages,
+                    brandTier: form.brandTier || null,
+                    marketplaceVisibility: form.marketplaceVisibility || null,
+                    creditSupport: form.creditSupport,
+                    leadStatus: form.leadStatus || null,
                 }),
             });
             const json = await res.json();
@@ -209,6 +225,43 @@ export default function AdminBrandEditPage() {
                         aspectHint="Shows on the brand card top section (220×160 area)"
                         variant="brand-card-top"
                     />
+                </div>
+
+                {/* Tier B — admin ops */}
+                <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
+                    <h2 className="text-[15px] font-bold text-[#181725]">Admin Operations</h2>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-[13px] font-semibold text-gray-700">Brand Tier</label>
+                            <select value={form.brandTier} onChange={e => setForm(p => ({ ...p, brandTier: e.target.value }))}
+                                className="w-full text-[13px] border border-gray-200 rounded-xl px-3 py-2.5">
+                                <option value="">Select tier</option>
+                                {['Premium', 'Mid', 'Mass'].map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[13px] font-semibold text-gray-700">Marketplace Visibility</label>
+                            <select value={form.marketplaceVisibility} onChange={e => setForm(p => ({ ...p, marketplaceVisibility: e.target.value }))}
+                                className="w-full text-[13px] border border-gray-200 rounded-xl px-3 py-2.5">
+                                <option value="">Select visibility</option>
+                                {['Public', 'Restricted'].map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[13px] font-semibold text-gray-700">Lead Status</label>
+                            <select value={form.leadStatus} onChange={e => setForm(p => ({ ...p, leadStatus: e.target.value }))}
+                                className="w-full text-[13px] border border-gray-200 rounded-xl px-3 py-2.5">
+                                <option value="">Select status</option>
+                                {['Lead', 'Contacted', 'Active'].map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                        </div>
+                        <label className="flex items-center gap-2 text-[13px] font-semibold text-gray-700 pt-6">
+                            <input type="checkbox" checked={form.creditSupport}
+                                onChange={e => setForm(p => ({ ...p, creditSupport: e.target.checked }))}
+                                className="accent-[#299E60] w-4 h-4" />
+                            Credit support enabled
+                        </label>
+                    </div>
                 </div>
 
                 {/* Categories */}

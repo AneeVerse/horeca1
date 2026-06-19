@@ -11,28 +11,32 @@ import {
 import { cn } from '@/lib/utils';
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
 import { FORM, FormField as Field, FormInput, inputClass, selectClass } from '@/components/ui/form';
+import {
+  VendorProfileForm,
+  type VendorProfileValues,
+} from '@/components/features/vendor/VendorProfileForm';
+import { EMPTY_VENDOR_PROFILE } from '@/components/features/vendor/vendorProfileDefaults';
+import {
+  validateVendorProfile,
+  validateFieldBlur as validateVendorFieldBlur,
+  derivedLegalName,
+  derivedTradeName,
+  derivedFullName,
+  derivedAuthorizedPersonName,
+  resolveVendorTypeSlug,
+} from '@/lib/validators/vendor-profile';
 
 const STEP_TITLES = [
   { id: 1, label: 'Verify Mobile', icon: Phone },
-  { id: 2, label: 'Business Type', icon: Building2 },
-  { id: 3, label: 'Basic Details', icon: FileText },
+  { id: 2, label: 'Business Profile', icon: Building2 },
+  { id: 3, label: 'Contact & Ops', icon: FileText },
   { id: 4, label: 'GST & PAN', icon: FileText },
   { id: 5, label: 'Bank Details', icon: Landmark },
   { id: 6, label: 'Addresses', icon: MapPin },
   { id: 7, label: 'Service & KYC', icon: ShieldCheck },
 ];
 
-// Five vendor types per the platform spec. Keep keys stable — they're stored
-// on Vendor.vendorType and read by downstream filters (search, segmentation,
-// settlement rules). Any future addition must also update the API enums in
-// /api/v1/account and /api/v1/vendor/onboarding/submit.
-const VENDOR_TYPES = [
-  { id: 'distributor',  label: 'Standard Distributor', desc: 'Stocks inventory and sells directly to B2B customers.' },
-  { id: 'wholesaler',   label: 'Wholesaler',           desc: 'Large SKU catalog, regional pricing, bulk logistics.' },
-  { id: 'brand_store',  label: 'Brand Store',          desc: 'Brand-controlled storefront. Maps products to distributors; may not fulfill directly.' },
-  { id: 'manufacturer', label: 'Manufacturer',         desc: 'Direct sales, distributor-assisted sales, and institutional sales.' },
-  { id: 'dark_store',   label: 'Dark Store / Fulfillment', desc: 'Inventory holding node, delivery-driven operations.' },
-];
+// CSV-aligned vendor types are defined in VendorProfileForm / vendor-kyc VENDOR_TYPES.
 
 const PHONE_RE = /^\d{10}$/;
 const PINCODE_RE = /^\d{6}$/;
@@ -90,10 +94,10 @@ export default function VendorRegisterPage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const otpRefs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)];
 
-  // Step 2
-  const [vendorType, setVendorType] = useState<string>('');
+  // Step 2–3 — mastersheet profile (VendorProfileForm)
+  const [vendorProfile, setVendorProfile] = useState<VendorProfileValues>({ ...EMPTY_VENDOR_PROFILE });
 
-  // Step 3
+  // Legacy step 3 fields kept for submit compatibility (synced from vendorProfile)
   const [fullName, setFullName] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [tradeName, setTradeName] = useState('');
@@ -377,7 +381,29 @@ export default function VendorRegisterPage() {
   // message when the step can't advance.
   const validateStep = (s: number): string | null => {
     if (s === 1) return phoneVerified ? null : 'Please verify your mobile number first';
-    if (s === 2) return vendorType ? null : 'Select your business type';
+    if (s === 2) {
+      const v = validateVendorProfile(vendorProfile, 'selfRegister', 'identity');
+      if (!v.success) {
+        setFieldErrors(v.errors);
+        return v.message ?? 'Please fix the highlighted fields before continuing';
+      }
+      return null;
+    }
+    if (s === 3) {
+      const merged = {
+        ...vendorProfile,
+        fullName: fullName || derivedFullName(vendorProfile),
+        email,
+        password,
+        authorizedPersonPhone: vendorProfile.authorizedPersonPhone || phone,
+      };
+      const v = validateVendorProfile(merged, 'selfRegister', 'contact');
+      if (!v.success) {
+        setFieldErrors(v.errors);
+        return v.message ?? 'Please fix the highlighted fields before continuing';
+      }
+      return null;
+    }
     if (s === 7) {
       if (pincodes.length === 0) return 'Add at least one serviceable pincode';
       if (!deliveryCapability) return 'Select your delivery capability';
@@ -458,28 +484,37 @@ export default function VendorRegisterPage() {
     try {
       if (isAuthMode) {
         // ── AUTH MODE: add a vendor under existing HCID ───────────────────
+        const typeSlug = resolveVendorTypeSlug(vendorProfile);
         const body = {
-          legalName: businessName.trim(),
-          displayName: tradeName.trim(),
-          gstin: gstNumber.toUpperCase().trim(),
-          pan: panNumber.toUpperCase().trim(),
-          businessType: 'vendor',
+          legalName: derivedLegalName(vendorProfile) || businessName.trim(),
+          displayName: derivedTradeName(vendorProfile) || tradeName.trim(),
+          gstin: (gstNumber || vendorProfile.gstin || '').toUpperCase().trim(),
+          pan: (panNumber || vendorProfile.pan || '').toUpperCase().trim(),
+          businessType: vendorProfile.vendorBusinessType || 'vendor',
+          subType: vendorProfile.subType,
           isCustomer: true,
           isVendor: true,
           isBrand: false,
           primaryOutlet: {
-            name: tradeName.trim() || businessName.trim(),
+            name: derivedTradeName(vendorProfile) || tradeName.trim() || businessName.trim(),
             addressLine: pickupAddress.addressLine,
             city: pickupAddress.city,
             state: pickupAddress.state,
             pincode: pickupAddress.pincode,
           },
           vendorDetails: {
-            vendorType,
-            panNumber: panNumber.toUpperCase().trim(),
-            authorizedPersonName: authorizedPersonName.trim(),
-            authorizedPersonPhone,
-            authorizedPersonEmail: authorizedPersonEmail.trim().toLowerCase(),
+            vendorType: typeSlug,
+            subType: vendorProfile.subType,
+            categoriesHandled: vendorProfile.categoriesHandled,
+            businessSize: vendorProfile.businessSize,
+            coverage: vendorProfile.coverage,
+            warehouseCount: vendorProfile.warehouseCount,
+            deliveryFleet: vendorProfile.deliveryFleet,
+            monthlySupplyBand: vendorProfile.monthlySupplyBand,
+            panNumber: (panNumber || vendorProfile.pan || '').toUpperCase().trim(),
+            authorizedPersonName: derivedAuthorizedPersonName(vendorProfile),
+            authorizedPersonPhone: vendorProfile.authorizedPersonPhone || authorizedPersonPhone,
+            authorizedPersonEmail: (authorizedPersonEmail || vendorProfile.authorizedPersonEmail || '').trim().toLowerCase(),
             billingAddress,
             bankAccountName: bankAccountName.trim(),
             bankAccountNumber: bankAccountNumber.trim(),
@@ -517,19 +552,37 @@ export default function VendorRegisterPage() {
       }
 
       // ── PUBLIC MODE: brand-new user signup ──────────────────────────────
+      const legal = derivedLegalName(vendorProfile) || businessName.trim();
+      const trade = derivedTradeName(vendorProfile) || tradeName.trim();
+      const ownerName = fullName.trim() || derivedFullName(vendorProfile);
+      const authName = derivedAuthorizedPersonName(vendorProfile);
+      const typeSlug = resolveVendorTypeSlug(vendorProfile);
       const body = {
         phone,
-        vendorType,
-        fullName: fullName.trim(),
-        businessName: businessName.trim(),
-        tradeName: tradeName.trim(),
-        email: email.trim().toLowerCase(),
-        password,
-        authorizedPersonName: authorizedPersonName.trim(),
-        authorizedPersonPhone,
-        authorizedPersonEmail: authorizedPersonEmail.trim().toLowerCase(),
-        gstNumber: gstNumber.toUpperCase().trim(),
-        panNumber: panNumber.toUpperCase().trim(),
+        vendorType: typeSlug,
+        vendorBusinessType: vendorProfile.vendorBusinessType,
+        subType: vendorProfile.subType,
+        categoriesHandled: vendorProfile.categoriesHandled,
+        businessSize: vendorProfile.businessSize,
+        coverage: vendorProfile.coverage,
+        warehouseCount: vendorProfile.warehouseCount,
+        deliveryFleet: vendorProfile.deliveryFleet,
+        monthlySupplyBand: vendorProfile.monthlySupplyBand,
+        fullName: ownerName,
+        businessName: legal,
+        tradeName: trade,
+        email: (email || vendorProfile.email || '').trim().toLowerCase(),
+        password: password || vendorProfile.password,
+        authorizedPersonName: authName,
+        authorizedPersonPhone: vendorProfile.authorizedPersonPhone || authorizedPersonPhone,
+        authorizedPersonEmail: (authorizedPersonEmail || vendorProfile.authorizedPersonEmail || '').trim().toLowerCase(),
+        gstNumber: (gstNumber || vendorProfile.gstin || vendorProfile.gstNumber || '').toUpperCase().trim(),
+        panNumber: (panNumber || vendorProfile.pan || vendorProfile.panNumber || '').toUpperCase().trim(),
+        salutation: vendorProfile.salutation || null,
+        firstName: vendorProfile.firstName || null,
+        lastName: vendorProfile.lastName || null,
+        designation: vendorProfile.designation || null,
+        fssaiNumber: (fssaiNumber || vendorProfile.fssaiNumber || '').trim(),
         bankAccountName: bankAccountName.trim(),
         bankAccountNumber: bankAccountNumber.trim(),
         bankIfsc: bankIfsc.toUpperCase().trim(),
@@ -539,7 +592,6 @@ export default function VendorRegisterPage() {
         pickupAddress,
         serviceablePincodes: pincodes,
         deliveryCapability,
-        fssaiNumber: fssaiNumber.trim(),
         udyamNumber: udyamNumber.trim(),
         cinNumber: cinNumber.trim(),
       };
@@ -783,21 +835,18 @@ export default function VendorRegisterPage() {
           {step === 2 && (
             <section>
               <h2 className="text-[22px] font-[800] text-gray-800 mb-1">What kind of business are you?</h2>
-              <p className="text-[13px] text-gray-500 mb-6">Select the option that best describes your business.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {VENDOR_TYPES.map(t => (
-                  <button key={t.id} onClick={() => { setVendorType(t.id); setError(''); }}
-                    className={cn(
-                      'text-left p-4 border-2 rounded-xl transition-all',
-                      vendorType === t.id
-                        ? 'border-[#299E60] bg-[#ECFDF5] ring-1 ring-[#299E60]'
-                        : 'border-gray-200 bg-white hover:border-gray-300',
-                    )}>
-                    <div className="font-bold text-[15px] text-gray-800 mb-0.5">{t.label}</div>
-                    <div className="text-[12px] text-gray-500">{t.desc}</div>
-                  </button>
-                ))}
-              </div>
+              <p className="text-[13px] text-gray-500 mb-6">Select your vendor type and operational profile.</p>
+              <VendorProfileForm
+                value={vendorProfile}
+                onChange={patch => setVendorProfile(prev => ({ ...prev, ...patch }))}
+                errors={fieldErrors}
+                onFieldBlur={(field, value) => {
+                  const msg = validateVendorFieldBlur(field, value);
+                  setFE(field, msg);
+                }}
+                visibleSections={{ identity: true, ops: true }}
+                layout="wide"
+              />
             </section>
           )}
 
@@ -805,64 +854,28 @@ export default function VendorRegisterPage() {
             <section>
               <h2 className="text-[22px] font-[800] text-gray-800 mb-1">Basic Details</h2>
               <p className="text-[13px] text-gray-500 mb-6">Tell us about your business and the person we&apos;ll be in touch with.</p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="Owner Full Name" required error={fieldErrors.fullName}>
-                  <Input value={fullName} onChange={v => { setFullName(v); if (fieldErrors.fullName) setFE('fullName', V.minLen(v, 'Full name', 2)); }}
-                    onBlur={() => setFE('fullName', V.minLen(fullName, 'Full name', 2))}
-                    hasError={!!fieldErrors.fullName}
-                    placeholder="John Doe" />
-                </Field>
-                <Field label="Legal Business Name" required error={fieldErrors.businessName}>
-                  <Input value={businessName} onChange={v => { setBusinessName(v); if (fieldErrors.businessName) setFE('businessName', V.minLen(v, 'Business name', 2)); }}
-                    onBlur={() => setFE('businessName', V.minLen(businessName, 'Business name', 2))}
-                    hasError={!!fieldErrors.businessName}
-                    placeholder="Acme Foods Pvt Ltd" />
-                </Field>
-                <Field label="Trade Name / Display Name" required className="md:col-span-2" error={fieldErrors.tradeName}>
-                  <Input value={tradeName} onChange={v => { setTradeName(v); if (fieldErrors.tradeName) setFE('tradeName', V.minLen(v, 'Trade name', 2)); }}
-                    onBlur={() => setFE('tradeName', V.minLen(tradeName, 'Trade name', 2))}
-                    hasError={!!fieldErrors.tradeName}
-                    placeholder="Acme Foods" />
-                </Field>
-                <Field label="Email (optional)" error={fieldErrors.email}>
-                  <Input value={email} onChange={v => { setEmail(v); if (fieldErrors.email) setFE('email', V.email(v)); }}
-                    onBlur={() => setFE('email', V.email(email))}
-                    hasError={!!fieldErrors.email}
-                    type="email" placeholder="you@example.com" />
-                </Field>
-                <Field label="Password (optional — skip OTP next time)" error={fieldErrors.password}>
-                  <Input value={password} onChange={v => { setPassword(v); if (fieldErrors.password) setFE('password', V.password(v)); }}
-                    onBlur={() => setFE('password', V.password(password))}
-                    hasError={!!fieldErrors.password}
-                    type="password" placeholder="At least 6 characters" />
-                </Field>
-              </div>
-
-              <div className="mt-8 pt-6 border-t border-gray-100">
-                <h3 className="font-bold text-[15px] text-gray-800 mb-1">Authorized Person</h3>
-                <p className="text-[12px] text-gray-500 mb-4">The person we should contact for KYC and approvals.</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Field label="Name" required error={fieldErrors.authorizedPersonName}>
-                    <Input value={authorizedPersonName} onChange={v => { setAuthorizedPersonName(v); if (fieldErrors.authorizedPersonName) setFE('authorizedPersonName', V.minLen(v, 'Name', 2)); }}
-                      onBlur={() => setFE('authorizedPersonName', V.minLen(authorizedPersonName, 'Name', 2))}
-                      hasError={!!fieldErrors.authorizedPersonName}
-                      placeholder="Full name" />
-                  </Field>
-                  <Field label="Phone" required error={fieldErrors.authorizedPersonPhone}>
-                    <Input value={authorizedPersonPhone} onChange={v => { const n = v.replace(/\D/g, '').slice(0, 10); setAuthorizedPersonPhone(n); if (fieldErrors.authorizedPersonPhone) setFE('authorizedPersonPhone', V.phone10(n)); }}
-                      onBlur={() => setFE('authorizedPersonPhone', V.phone10(authorizedPersonPhone))}
-                      hasError={!!fieldErrors.authorizedPersonPhone}
-                      type="tel" placeholder="10-digit number" />
-                  </Field>
-                  <Field label="Email (optional)" className="md:col-span-2" error={fieldErrors.authorizedPersonEmail}>
-                    <Input value={authorizedPersonEmail} onChange={v => { setAuthorizedPersonEmail(v); if (fieldErrors.authorizedPersonEmail) setFE('authorizedPersonEmail', V.email(v)); }}
-                      onBlur={() => setFE('authorizedPersonEmail', V.email(authorizedPersonEmail))}
-                      hasError={!!fieldErrors.authorizedPersonEmail}
-                      type="email" placeholder="you@example.com" />
-                  </Field>
-                </div>
-              </div>
+              <VendorProfileForm
+                value={{ ...vendorProfile, fullName, email, password }}
+                onChange={patch => {
+                  setVendorProfile(prev => ({ ...prev, ...patch }));
+                  if (patch.fullName !== undefined) setFullName(patch.fullName);
+                  if (patch.email !== undefined) setEmail(patch.email);
+                  if (patch.password !== undefined) setPassword(patch.password);
+                  if (patch.legalName !== undefined) setBusinessName(patch.legalName);
+                  if (patch.tradeName !== undefined) setTradeName(patch.tradeName);
+                  if (patch.displayName !== undefined) setTradeName(patch.displayName);
+                  if (patch.authorizedPersonName !== undefined) setAuthorizedPersonName(patch.authorizedPersonName);
+                  if (patch.authorizedPersonPhone !== undefined) setAuthorizedPersonPhone(patch.authorizedPersonPhone);
+                  if (patch.authorizedPersonEmail !== undefined) setAuthorizedPersonEmail(patch.authorizedPersonEmail);
+                }}
+                errors={fieldErrors}
+                onFieldBlur={(field, value) => setFE(field, validateVendorFieldBlur(field, value))}
+                visibleSections={{ contact: true, auth: !isAuthMode, ops: false }}
+                showPassword
+                password={password}
+                onPasswordChange={setPassword}
+                layout="wide"
+              />
             </section>
           )}
 

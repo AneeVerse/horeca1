@@ -52,6 +52,18 @@ const createVendorSchema = z.object({
   // Pickup outlet + full KYC — same shape as /api/v1/account POST.
   primaryOutlet: PrimaryOutletSchema,
   vendorDetails: VendorDetailsSchema,
+  // Tier A profile at top level (also accepted inside vendorDetails)
+  subType: z.string().max(80).optional(),
+  categoriesHandled: z.array(z.string()).optional(),
+  businessSize: z.string().max(50).optional(),
+  coverage: z.string().max(120).optional(),
+  warehouseCount: z.union([z.number(), z.string()]).optional(),
+  deliveryFleet: z.union([z.boolean(), z.string()]).optional(),
+  monthlySupplyBand: z.string().max(50).optional(),
+  salutation: z.string().max(20).optional(),
+  firstName: z.string().max(120).optional(),
+  lastName: z.string().max(120).optional(),
+  designation: z.string().max(120).optional(),
 });
 
 export const GET = adminOnly(async (req: NextRequest, _ctx) => {
@@ -225,7 +237,13 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           billingCity: vd.billingAddress.city,
           billingState: vd.billingAddress.state,
           billingPincode: vd.billingAddress.pincode,
-          businessType: 'vendor',
+          businessType: vd.vendorType,
+          subType: vd.subType || input.subType || null,
+          businessSize: vd.businessSize || input.businessSize || null,
+          salutation: input.salutation || null,
+          firstName: input.firstName || null,
+          lastName: input.lastName || null,
+          designation: input.designation || null,
           isCustomer: true,
           isVendor: true,
           isBrand: false,
@@ -286,6 +304,21 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 
           // KYC block — fully populated, no half-built state.
           vendorType: vd.vendorType,
+          subType: vd.subType || input.subType || null,
+          categoriesHandled: vd.categoriesHandled ?? input.categoriesHandled ?? [],
+          businessSize: vd.businessSize || input.businessSize || null,
+          coverage: vd.coverage || input.coverage || null,
+          warehouseCount: vd.warehouseCount != null && vd.warehouseCount !== ''
+            ? Number(vd.warehouseCount)
+            : input.warehouseCount != null && input.warehouseCount !== ''
+              ? Number(input.warehouseCount)
+              : null,
+          deliveryFleet: typeof vd.deliveryFleet === 'boolean'
+            ? vd.deliveryFleet
+            : typeof input.deliveryFleet === 'boolean'
+              ? input.deliveryFleet
+              : null,
+          monthlySupplyBand: vd.monthlySupplyBand || input.monthlySupplyBand || null,
           panNumber: vd.panNumber,
           authorizedPersonName: vd.authorizedPersonName,
           authorizedPersonPhone: vd.authorizedPersonPhone,

@@ -12,7 +12,8 @@ import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { withRateLimit } from '@/middleware/withRateLimit';
 import { uniqueHcid } from '@/lib/hcid';
 import { emitEvent } from '@/events/emitter';
-import { GST_RE, PAN_RE } from '@/lib/validators/vendor-kyc';
+import { GST_RE, PAN_RE, VENDOR_TYPES } from '@/lib/validators/vendor-kyc';
+import { resolveVendorTypeSlug } from '@/lib/validators/vendor-profile';
 
 const PHONE_RE = /^\d{10}$/;
 const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
@@ -29,8 +30,22 @@ const Body = z.object({
   // Step 1 — phone (already verified via /auth/otp/verify)
   phone: z.string().regex(PHONE_RE, 'Invalid phone number'),
 
-  // Step 2 — vendor type (5 spec values, matches /api/v1/account)
-  vendorType: z.enum(['distributor', 'wholesaler', 'brand_store', 'manufacturer', 'dark_store']),
+  // Step 2 — vendor type (CSV-aligned + legacy slugs)
+  vendorType: z.enum(VENDOR_TYPES).optional(),
+  vendorBusinessType: z.string().max(80).optional(),
+
+  // Tier A profile (mastersheet)
+  subType: z.string().max(80).optional(),
+  categoriesHandled: z.array(z.string()).optional(),
+  businessSize: z.string().max(50).optional(),
+  coverage: z.string().max(120).optional(),
+  warehouseCount: z.union([z.number(), z.string()]).optional(),
+  deliveryFleet: z.union([z.boolean(), z.string()]).optional(),
+  monthlySupplyBand: z.string().max(50).optional(),
+  salutation: z.string().max(20).optional(),
+  firstName: z.string().max(120).optional(),
+  lastName: z.string().max(120).optional(),
+  designation: z.string().max(120).optional(),
 
   // Step 3 — basic details
   fullName: z.string().min(2).max(255),
@@ -111,6 +126,22 @@ async function postHandler(req: NextRequest) {
     const hashedPassword = input.password ? await bcrypt.hash(input.password, 12) : null;
     const hcidDisplay = await uniqueHcid();
 
+    const typeSlug = resolveVendorTypeSlug({
+      vendorBusinessType: input.vendorBusinessType,
+      vendorType: input.vendorType,
+    }) ?? input.vendorType ?? 'distributor';
+
+    const warehouseCount = input.warehouseCount != null && input.warehouseCount !== ''
+      ? Number(input.warehouseCount)
+      : null;
+    const deliveryFleet = typeof input.deliveryFleet === 'boolean'
+      ? input.deliveryFleet
+      : input.deliveryFleet === 'yes' || input.deliveryFleet === 'true'
+        ? true
+        : input.deliveryFleet === 'no' || input.deliveryFleet === 'false'
+          ? false
+          : null;
+
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -133,7 +164,13 @@ async function postHandler(req: NextRequest) {
           displayName: input.tradeName,
           gstin: input.gstNumber || null,
           pan: input.panNumber || null,
-          businessType: 'vendor',
+          businessType: input.vendorBusinessType || input.vendorType || 'vendor',
+          subType: input.subType || null,
+          businessSize: input.businessSize || null,
+          salutation: input.salutation || null,
+          firstName: input.firstName || null,
+          lastName: input.lastName || null,
+          designation: input.designation || null,
           isCustomer: true,
           isVendor: true,
           isBrand: false,
@@ -194,7 +231,14 @@ async function postHandler(req: NextRequest) {
           bankAccountType: input.bankAccountType,
 
           tradeName: input.tradeName,
-          vendorType: input.vendorType,
+          vendorType: typeSlug,
+          subType: input.subType || null,
+          categoriesHandled: input.categoriesHandled ?? [],
+          businessSize: input.businessSize || null,
+          coverage: input.coverage || null,
+          warehouseCount: Number.isFinite(warehouseCount) ? Math.round(warehouseCount!) : null,
+          deliveryFleet,
+          monthlySupplyBand: input.monthlySupplyBand || null,
           panNumber: input.panNumber || null,
           authorizedPersonName: input.authorizedPersonName,
           authorizedPersonPhone: input.authorizedPersonPhone,

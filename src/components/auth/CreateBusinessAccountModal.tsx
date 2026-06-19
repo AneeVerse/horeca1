@@ -14,11 +14,21 @@ import {
 } from '@/components/features/customer/CustomerProfileForm';
 import { EMPTY_CUSTOMER_PROFILE } from '@/components/features/customer/customerProfileDefaults';
 import {
+  BrandProfileForm,
+  type BrandProfileValues,
+} from '@/components/features/brand/BrandProfileForm';
+import { EMPTY_BRAND_PROFILE } from '@/components/features/brand/brandProfileDefaults';
+import {
   validateCustomerProfile,
-  validateFieldBlur,
+  validateFieldBlur as validateCustomerFieldBlur,
   derivedLegalName,
 } from '@/lib/validators/customer-profile';
+import {
+  validateBrandProfile,
+  validateFieldBlur as validateBrandFieldBlur,
+} from '@/lib/validators/brand-profile';
 import { mapToPrimaryOutlet } from '@/lib/customerProfileMapper';
+import { buildAddBusinessPayload } from '@/lib/brandProfileMapper';
 
 interface CreateBusinessAccountModalProps {
   isOpen: boolean;
@@ -36,6 +46,7 @@ export function CreateBusinessAccountModal({
   const { setSelectedAddress } = useAddress();
 
   const [profile, setProfile] = useState<CustomerProfileValues>({ ...EMPTY_CUSTOMER_PROFILE });
+  const [brandProfile, setBrandProfile] = useState<BrandProfileValues>({ ...EMPTY_BRAND_PROFILE });
   const [businessType, setBusinessType] = useState<'customer' | 'vendor' | 'brand'>('customer');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +86,47 @@ export function CreateBusinessAccountModal({
   const hasCoords = profile.latitude != null && profile.longitude != null;
 
   const handleSubmit = async () => {
+    if (businessType === 'brand') {
+      const validation = validateBrandProfile(brandProfile, 'addBusiness');
+      if (!validation.success) {
+        setFieldErrors(validation.errors);
+        setError(validation.message ?? 'Please fix the highlighted fields before continuing.');
+        return;
+      }
+
+      setSubmitting(true);
+      setError(null);
+      setFieldErrors({});
+
+      try {
+        const res = await fetch('/api/v1/account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildAddBusinessPayload(brandProfile)),
+        });
+
+        const json = await res.json();
+        if (!json.success) {
+          setError(json.error?.message ?? 'Could not create business account.');
+          setSubmitting(false);
+          return;
+        }
+
+        toast.success('Brand account created successfully!');
+        const newAccount = json.data.account;
+        const newOutlet = json.data.outlet;
+        await refreshAccounts();
+        await switchAccount(newAccount.id, newOutlet.id);
+        onCreated?.();
+        onClose();
+        window.location.assign('/brand/portal/dashboard');
+      } catch {
+        setError('Network error — please try again.');
+        setSubmitting(false);
+      }
+      return;
+    }
+
     const validation = validateCustomerProfile(profile, 'addBusiness');
     if (!validation.success) {
       setFieldErrors(validation.errors);
@@ -86,9 +138,8 @@ export function CreateBusinessAccountModal({
     setError(null);
     setFieldErrors({});
 
-    const isCustomer = businessType === 'customer' || businessType === 'vendor';
+    const isCustomer = businessType === 'customer';
     const isVendor = businessType === 'vendor';
-    const isBrand = businessType === 'brand';
     const legalName = derivedLegalName(profile);
     const outlet = mapToPrimaryOutlet(profile);
 
@@ -114,7 +165,7 @@ export function CreateBusinessAccountModal({
       billingPincode: profile.pincode ?? profile.billingPincode,
       isCustomer,
       isVendor,
-      isBrand,
+      isBrand: false,
       primaryOutlet: {
         name: outlet.name,
         addressLine: outlet.addressLine,
@@ -177,8 +228,6 @@ export function CreateBusinessAccountModal({
 
       if (isVendor) {
         window.location.assign('/vendor/dashboard');
-      } else if (isBrand) {
-        window.location.assign('/brand/portal/dashboard');
       } else {
         window.location.assign('/');
       }
@@ -257,18 +306,36 @@ export function CreateBusinessAccountModal({
             </div>
           )}
 
-          {businessType !== 'vendor' && (
+          {businessType === 'customer' && (
             <CustomerProfileForm
               value={profile}
               onChange={patch => setProfile(prev => ({ ...prev, ...patch }))}
               errors={fieldErrors}
-              onFieldBlur={(field, value) => setFE(field, validateFieldBlur(field, value))}
+              onFieldBlur={(field, value) => setFE(field, validateCustomerFieldBlur(field, value))}
               visibleSections={{
                 contact: true,
                 business: true,
                 auth: false,
                 tax: true,
                 address: true,
+              }}
+            />
+          )}
+
+          {businessType === 'brand' && (
+            <BrandProfileForm
+              value={brandProfile}
+              onChange={patch => setBrandProfile(prev => ({ ...prev, ...patch }))}
+              errors={fieldErrors}
+              onFieldBlur={(field, value) => setFE(field, validateBrandFieldBlur(field, value))}
+              visibleSections={{
+                contact: true,
+                identity: true,
+                market: true,
+                auth: false,
+                tax: true,
+                address: true,
+                marketing: true,
               }}
             />
           )}

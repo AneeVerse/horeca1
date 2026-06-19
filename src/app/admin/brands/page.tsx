@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Check, X, Search, Clock, CheckCircle, Loader2, ClipboardList, Store, Pencil, ArrowRight, Sparkles,
-    GitMerge, MessageSquare, Package, ExternalLink, LayoutDashboard, Plus, Eye, EyeOff, Trash2,
+    GitMerge, MessageSquare, Package, ExternalLink, LayoutDashboard, Plus, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { FORM, TextField, FormField, FormInput, FormTextarea } from '@/components/ui/form';
+import BrandFormModal from '@/components/features/admin/BrandFormModal';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
@@ -55,16 +55,6 @@ function getInitials(name: string) {
     return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
-interface CreateBrandForm {
-    fullName: string;
-    email: string;
-    password: string;
-    name: string;
-    description: string;
-    website: string;
-    tagline: string;
-}
-
 export default function AdminBrandsPage() {
     const router = useRouter();
     const perms = useAdminPermissions();
@@ -97,42 +87,6 @@ export default function AdminBrandsPage() {
 
     // Create brand modal
     const [showCreate, setShowCreate] = useState(false);
-    const [showPassword, setShowPassword] = useState(false);
-    const [creating, setCreating] = useState(false);
-    const [createError, setCreateError] = useState('');
-    const [brandForm, setBrandForm] = useState<CreateBrandForm>({
-        fullName: '', email: '', password: '', name: '', description: '', website: '', tagline: '',
-    });
-
-    const handleCreateBrand = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setCreating(true);
-        setCreateError('');
-        try {
-            const res = await fetch('/api/v1/admin/brands', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    fullName: brandForm.fullName,
-                    email: brandForm.email,
-                    password: brandForm.password,
-                    name: brandForm.name,
-                    description: brandForm.description || undefined,
-                    website: brandForm.website || undefined,
-                    tagline: brandForm.tagline || undefined,
-                }),
-            });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed to create brand');
-            setBrands(prev => [{ ...json.data, _count: { masterProducts: 0, productMappings: 0 } }, ...prev]);
-            setShowCreate(false);
-            setBrandForm({ fullName: '', email: '', password: '', name: '', description: '', website: '', tagline: '' });
-        } catch (err) {
-            setCreateError(err instanceof Error ? err.message : 'Something went wrong');
-        } finally {
-            setCreating(false);
-        }
-    };
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -620,69 +574,14 @@ export default function AdminBrandsPage() {
                 </div>
             </div>
 
-            {/* Create Brand Modal */}
             {showCreate && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowCreate(false)}>
-                    <div className="bg-white rounded-[20px] w-full max-w-[520px] shadow-2xl max-h-[calc(100vh-2rem)] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between px-6 py-5 border-b border-[#EEEEEE]">
-                            <div>
-                                <h3 className="text-[18px] font-[900] text-[#181725]">Add Brand</h3>
-                                <p className="text-[12px] text-[#AEAEAE] font-medium mt-0.5">Create an approved brand account directly</p>
-                            </div>
-                            <button onClick={() => setShowCreate(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F5F5F5] text-[#AEAEAE]">
-                                <X size={18} />
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleCreateBrand} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-                            <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">Owner Account</p>
-                            <TextField label="Full Name" required value={brandForm.fullName}
-                                onChange={v => setBrandForm(f => ({ ...f, fullName: v }))} placeholder="Jane Smith" />
-                            <TextField label="Email" required type="email" value={brandForm.email}
-                                onChange={v => setBrandForm(f => ({ ...f, email: v }))} placeholder="brand@company.com" />
-                            <FormField label="Password" required>
-                                <FormInput type={showPassword ? 'text' : 'password'} required minLength={6}
-                                    value={brandForm.password} onChange={v => setBrandForm(f => ({ ...f, password: v }))}
-                                    placeholder="Min 6 characters"
-                                    rightSlot={
-                                        <button type="button" onClick={() => setShowPassword(p => !p)} className="text-[#AEAEAE]">
-                                            {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                                        </button>
-                                    } />
-                            </FormField>
-
-                            <div className="pt-2 border-t border-[#EEEEEE]">
-                                <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-4">Brand Profile</p>
-                            </div>
-                            <TextField label="Brand Name" required value={brandForm.name}
-                                onChange={v => setBrandForm(f => ({ ...f, name: v }))} placeholder="Kissan, Everest, etc." />
-                            <TextField label="Tagline" value={brandForm.tagline}
-                                onChange={v => setBrandForm(f => ({ ...f, tagline: v }))} placeholder="Taste the difference" />
-                            <TextField label="Website" type="url" value={brandForm.website}
-                                onChange={v => setBrandForm(f => ({ ...f, website: v }))} placeholder="https://kissan.in" />
-                            <FormField label="Description">
-                                <FormTextarea value={brandForm.description} onChange={v => setBrandForm(f => ({ ...f, description: v }))}
-                                    placeholder="Brief description of the brand..." rows={2} />
-                            </FormField>
-
-                            {createError && (
-                                <p className="text-[13px] text-[#E74C3C] font-medium bg-[#FEF2F2] px-3 py-2 rounded-[8px]">{createError}</p>
-                            )}
-                        </form>
-
-                        <div className="px-6 py-4 border-t border-[#EEEEEE] flex items-center justify-end gap-3">
-                            <button type="button" onClick={() => setShowCreate(false)}
-                                className="h-[42px] px-5 bg-[#F5F5F5] text-[#7C7C7C] rounded-[10px] text-[13px] font-bold hover:bg-[#EEEEEE]">
-                                Cancel
-                            </button>
-                            <button onClick={handleCreateBrand} disabled={creating}
-                                className={cn(FORM.primaryBtn, 'h-[42px] px-6 text-[13px]')}>
-                                {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                                Create Brand
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <BrandFormModal
+                    onClose={() => setShowCreate(false)}
+                    onCreated={(data) => {
+                        setBrands(prev => [{ ...(data as Brand), _count: { masterProducts: 0, productMappings: 0 } }, ...prev]);
+                        setShowCreate(false);
+                    }}
+                />
             )}
 
             {/* Rejection Modal */}

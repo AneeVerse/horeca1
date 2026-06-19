@@ -26,8 +26,12 @@ export const BillingAddressSchema = z.object({
 });
 export type BillingAddressInput = z.infer<typeof BillingAddressSchema>;
 
-export const VENDOR_TYPES = ['distributor', 'wholesaler', 'brand_store', 'manufacturer', 'dark_store'] as const;
+export const LEGACY_VENDOR_TYPES = ['distributor', 'wholesaler', 'brand_store', 'manufacturer', 'dark_store'] as const;
+/** CSV-aligned slugs added for mastersheet onboarding (legacy slugs retained). */
+export const CSV_VENDOR_TYPE_SLUGS = ['sub_distributor', 'importer', 'trader', 'packaging_supplier'] as const;
+export const VENDOR_TYPES = [...LEGACY_VENDOR_TYPES, ...CSV_VENDOR_TYPE_SLUGS] as const;
 export type VendorType = (typeof VENDOR_TYPES)[number];
+export type LegacyVendorType = (typeof LEGACY_VENDOR_TYPES)[number];
 
 export const DELIVERY_CAPABILITIES = ['own_fleet', 'third_party', 'both'] as const;
 export type DeliveryCapability = (typeof DELIVERY_CAPABILITIES)[number];
@@ -55,6 +59,14 @@ export const VendorDetailsSchema = z.object({
   fssaiNumber: z.string().max(50).optional().or(z.literal('')),
   udyamNumber: z.string().max(50).optional().or(z.literal('')),
   cinNumber: z.string().max(50).optional().or(z.literal('')),
+  // Tier A profile (mastersheet) — optional on KYC block
+  subType: z.string().max(80).optional(),
+  categoriesHandled: z.array(z.string()).optional(),
+  businessSize: z.string().max(50).optional(),
+  coverage: z.string().max(120).optional(),
+  warehouseCount: z.union([z.number(), z.string()]).optional(),
+  deliveryFleet: z.union([z.boolean(), z.string()]).optional(),
+  monthlySupplyBand: z.string().max(50).optional(),
 });
 export type VendorDetailsInput = z.infer<typeof VendorDetailsSchema>;
 

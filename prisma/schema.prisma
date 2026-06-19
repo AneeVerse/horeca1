@@ -258,6 +258,15 @@ model Vendor {
   udyamNumber           String?  @map("udyam_number") @db.VarChar(50)
   cinNumber             String?  @map("cin_number") @db.VarChar(50)
 
+  // Profile Mastersheet — Tier A onboarding (CSV rows 13–20, attribute master 72–83)
+  subType               String?   @map("sub_type") @db.VarChar(80)
+  categoriesHandled     String[]  @default([]) @map("categories_handled")
+  businessSize          String?   @map("business_size") @db.VarChar(50)
+  coverage              String?   @db.VarChar(120)
+  warehouseCount        Int?      @map("warehouse_count")
+  deliveryFleet         Boolean?  @map("delivery_fleet")
+  monthlySupplyBand     String?   @map("monthly_supply_band") @db.VarChar(50)
+
   @@index([slug])
   @@index([isActive])
   @@index([userId])
@@ -1161,6 +1170,20 @@ model Brand {
   categories      String[]       @default([]) @map("categories")
   bgColor         String?        @map("bg_color") @db.VarChar(20)
   showcaseImages  String[]       @default([]) @map("showcase_images")
+  // Profile Mastersheet — Tier A onboarding (CSV rows 22–29, attribute master 84–93).
+  // `categories` holds Product Categories from the mastersheet.
+  brandType             String?  @map("brand_type") @db.VarChar(80)
+  subType               String?  @map("sub_type") @db.VarChar(80)
+  businessSize          String?  @map("business_size") @db.VarChar(50)
+  distributionPresence  String?  @map("distribution_presence") @db.VarChar(120)
+  targetSegments        String[] @default([]) @map("target_segments")
+  horecaFocused         Boolean? @map("horeca_focused")
+  retailFocused         Boolean? @map("retail_focused")
+  // Tier B — admin-only after onboarding
+  brandTier             String?  @map("brand_tier") @db.VarChar(50)
+  marketplaceVisibility String?  @map("marketplace_visibility") @db.VarChar(50)
+  creditSupport         Boolean? @map("credit_support")
+  leadStatus            String?  @map("lead_status") @db.VarChar(50)
   approvalStatus  ApprovalStatus @default(pending) @map("approval_status")
   isActive        Boolean        @default(true) @map("is_active")
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz

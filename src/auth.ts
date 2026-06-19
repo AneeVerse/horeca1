@@ -16,6 +16,11 @@ function vendorSlug(name: string): string {
   return `${base}-${Date.now().toString(36)}`;
 }
 
+function brandSlug(name: string): string {
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50);
+  return `${base}-${Date.now().toString(36)}`;
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
   ...(process.env.NODE_ENV === 'development' && { rateLimit: false }),
@@ -103,7 +108,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const businessName = String(credentials?.businessName ?? '').trim() || null;
           const rawEmail = String(credentials?.email ?? '').trim().toLowerCase();
           const email = rawEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : null;
-          const role = credentials?.role === 'vendor' ? 'vendor' : 'customer';
+          const role = credentials?.role === 'vendor'
+            ? 'vendor'
+            : credentials?.role === 'brand'
+              ? 'brand'
+              : 'customer';
 
           const str = (k: keyof typeof credentials) => {
             const v = credentials?.[k];
@@ -162,7 +171,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           // V2.2: provision the user's BusinessAccount + primary Outlet + Owner UserRole.
           const provision = await provisionDefaultAccount({
             userId: user.id,
-            kind: role === 'vendor' ? 'vendor' : 'customer',
+            kind: role === 'vendor' ? 'vendor' : role === 'brand' ? 'brand' : 'customer',
             businessName,
             fullName,
             gstNumber,
@@ -199,6 +208,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 slug: vendorSlug(businessName ?? fullName),
                 isActive: false,
                 isVerified: false,
+              },
+            });
+          }
+
+          if (role === 'brand') {
+            await prisma.brand.create({
+              data: {
+                userId: user.id,
+                businessAccountId: provision.businessAccountId,
+                name: businessName ?? fullName,
+                slug: brandSlug(businessName ?? fullName),
+                approvalStatus: 'pending',
+                isActive: false,
               },
             });
           }
