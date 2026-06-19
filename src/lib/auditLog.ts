@@ -23,6 +23,11 @@ export const AUDIT_ACTIONS = {
   cashbackCampaignDelete: 'cashback_campaign.delete',
   cashbackGrant: 'cashback.grant',
   cashbackMarkPaid: 'cashback.mark_paid',
+  // Bulk Update Engine — one entry per bulk run (matched/updated count in metadata).
+  productBulkUpdate: 'product.bulk_update',
+  inventoryBulkUpdate: 'inventory.bulk_update',
+  priceListBulkApply: 'price_list.bulk_apply',
+  comboCreate: 'combo.create',
 } as const;
 
 export type AuditAction = typeof AUDIT_ACTIONS[keyof typeof AUDIT_ACTIONS];

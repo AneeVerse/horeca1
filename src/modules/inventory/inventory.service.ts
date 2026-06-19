@@ -120,4 +120,73 @@ export class InventoryService {
       ),
     );
   }
+
+  // Bulk stock adjust for the Bulk Update Engine. Supports set / increase /
+  // decrease against a list of products, plus an optional low-stock threshold.
+  // Upserts the inventory row when a product doesn't have one yet (decrease
+  // clamps at 0). Pass scopeVendorId for the vendor portal (enforces ownership);
+  // omit it for admin (each row uses the product's own vendorId).
+  async bulkAdjustStock(opts: {
+    productIds: string[];
+    mode?: 'set' | 'increase' | 'decrease';
+    value?: number;
+    lowStockThreshold?: number;
+    scopeVendorId?: string | null;
+  }): Promise<{ updated: number; skipped: number }> {
+    const { productIds, mode, value, lowStockThreshold, scopeVendorId } = opts;
+
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds }, ...(scopeVendorId ? { vendorId: scopeVendorId } : {}) },
+      select: { id: true, vendorId: true },
+    });
+    const productMap = new Map(products.map(p => [p.id, p.vendorId]));
+    const missing = productIds.filter(id => !productMap.has(id));
+    if (missing.length > 0) {
+      throw new Error(`Products not found${scopeVendorId ? ' for this vendor' : ''}: ${missing.join(', ')}`);
+    }
+
+    // Current quantities so increase/decrease can be computed (and clamped).
+    const existing = await prisma.inventory.findMany({
+      where: { productId: { in: productIds } },
+      select: { productId: true, qtyAvailable: true },
+    });
+    const qtyMap = new Map(existing.map(r => [r.productId, r.qtyAvailable]));
+
+    const ops = [];
+    let skipped = 0;
+    for (const pid of productIds) {
+      const vendorId = productMap.get(pid);
+      // Catalog-level products (no vendor) can't track stock — skip them.
+      if (!vendorId) { skipped++; continue; }
+
+      const current = qtyMap.get(pid) ?? 0;
+      let nextQty: number | undefined;
+      if (value !== undefined && mode) {
+        if (mode === 'set') nextQty = Math.max(0, value);
+        else if (mode === 'increase') nextQty = current + value;
+        else nextQty = Math.max(0, current - value); // decrease, clamped
+      }
+
+      const update: { qtyAvailable?: number; lowStockThreshold?: number } = {};
+      if (nextQty !== undefined) update.qtyAvailable = nextQty;
+      if (lowStockThreshold !== undefined) update.lowStockThreshold = lowStockThreshold;
+      if (Object.keys(update).length === 0) { skipped++; continue; }
+
+      ops.push(
+        prisma.inventory.upsert({
+          where: { productId: pid },
+          create: {
+            productId: pid,
+            vendorId,
+            qtyAvailable: nextQty ?? 0,
+            lowStockThreshold: lowStockThreshold ?? 10,
+          },
+          update,
+        }),
+      );
+    }
+
+    await prisma.$transaction(ops);
+    return { updated: ops.length, skipped };
+  }
 }

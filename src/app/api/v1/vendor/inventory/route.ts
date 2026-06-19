@@ -8,10 +8,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
-import { Errors, errorResponse } from '@/middleware/errorHandler';
+import { errorResponse } from '@/middleware/errorHandler';
 import { InventoryService } from '@/modules/inventory/inventory.service';
 import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
+import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
 
 // Validation schema for inventory updates
 const updateInventorySchema = z.object({
@@ -21,11 +22,20 @@ const updateInventorySchema = z.object({
 });
 
 const bulkUpdateSchema = z.object({
+  // Legacy CSV-import shape: explicit absolute qty per product.
   items: z.array(z.object({
     productId: z.string().uuid(),
     qtyAvailable: z.number().int().min(0),
-  })).min(1).max(500),
-});
+  })).min(1).max(500).optional(),
+  // Bulk Update Engine shape: a mode applied to a selection of products.
+  productIds: z.array(z.string().uuid()).min(1).max(500).optional(),
+  mode: z.enum(['set', 'increase', 'decrease']).optional(),
+  value: z.number().int().min(0).optional(),
+  lowStockThreshold: z.number().int().min(0).optional(),
+}).refine(
+  (s) => !!s.items || (!!s.productIds && (!!s.mode || s.lowStockThreshold !== undefined)),
+  { message: 'Provide items[], or productIds[] with a mode and/or lowStockThreshold' },
+);
 
 // GET — list all inventory rows with product info + low-stock flag
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
@@ -75,19 +85,40 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
   }
 });
 
-// POST — bulk set qtyAvailable for multiple products at once (CSV import)
+// POST — bulk stock update. Two shapes:
+//   1. { items: [{productId, qtyAvailable}] }              (legacy CSV import — absolute set)
+//   2. { productIds, mode, value, lowStockThreshold }      (Bulk Update Engine — set/+/−)
 export const POST = vendorOnly(async (req: NextRequest, ctx) => {
   try {
     const { vendorId } = await resolveVendorContext(ctx, req);
     requirePermission(ctx, 'inventory.edit');
 
-    const body = await req.json();
-    const { items } = bulkUpdateSchema.parse(body);
-
+    const body = bulkUpdateSchema.parse(await req.json());
     const inventoryService = new InventoryService();
-    await inventoryService.bulkUpdateStock(vendorId, items);
 
-    return NextResponse.json({ success: true, updated: items.length });
+    if (body.items) {
+      await inventoryService.bulkUpdateStock(vendorId, body.items);
+      void logAction(ctx, req, {
+        action: AUDIT_ACTIONS.inventoryBulkUpdate,
+        entity: 'inventory',
+        metadata: { vendorId, mode: 'set', count: body.items.length },
+      });
+      return NextResponse.json({ success: true, updated: body.items.length });
+    }
+
+    const result = await inventoryService.bulkAdjustStock({
+      productIds: body.productIds!,
+      mode: body.mode,
+      value: body.value,
+      lowStockThreshold: body.lowStockThreshold,
+      scopeVendorId: vendorId,
+    });
+    void logAction(ctx, req, {
+      action: AUDIT_ACTIONS.inventoryBulkUpdate,
+      entity: 'inventory',
+      metadata: { vendorId, mode: body.mode ?? 'threshold', updated: result.updated },
+    });
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return errorResponse(error);
   }

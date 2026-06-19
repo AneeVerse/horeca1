@@ -219,6 +219,7 @@ model Vendor {
   coupons            Coupon[]
   cashbackCampaigns  CashbackCampaign[]
   customerGroups     CustomerGroup[]
+  combos             ProductCombo[]
 
   // Ordering defaults applied to new products and checkout
   defaultMOQ          Int?      @map("default_moq")
@@ -408,6 +409,7 @@ model Product {
   promoBuyRules       Promotion[]     @relation("PromoBuyProduct")
   promoGetRules       Promotion[]     @relation("PromoGetProduct")
   customerPrices      VendorCustomerPrice[]
+  comboItems          ComboItem[]
 
   @@unique([vendorId, slug])
   @@index([vendorId])
@@ -515,6 +517,47 @@ model CollectionProduct {
 
   @@unique([collectionId, productId])
   @@map("collection_products")
+}
+
+// ═══ COMBO / BUNDLE ═══════════════════════════════════
+// A vendor-owned bundle of products sold together at one combo price. Created
+// from a selection in the Bulk Update Engine (combo pricing). comboPrice is the
+// taxable bundle rate; originalPrice (optional) is the summed list price for a
+// strikethrough. Optional validity window gates when the combo is live.
+model ProductCombo {
+  id            String   @id @default(uuid()) @db.Uuid
+  vendorId      String   @map("vendor_id") @db.Uuid
+  name          String   @db.VarChar(255)
+  comboPrice    Decimal  @map("combo_price") @db.Decimal(10, 2)
+  originalPrice Decimal? @map("original_price") @db.Decimal(10, 2)
+  imageUrl      String?  @map("image_url") @db.VarChar(512)
+  isActive      Boolean  @default(true) @map("is_active")
+  validFrom     DateTime? @map("valid_from") @db.Timestamptz
+  validTo       DateTime? @map("valid_to") @db.Timestamptz
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  vendor Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  items  ComboItem[]
+
+  @@index([vendorId])
+  @@index([isActive])
+  @@map("product_combos")
+}
+
+model ComboItem {
+  id        String @id @default(uuid()) @db.Uuid
+  comboId   String @map("combo_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  qty       Int    @default(1)
+
+  combo   ProductCombo @relation(fields: [comboId], references: [id], onDelete: Cascade)
+  product Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([comboId, productId])
+  @@index([comboId])
+  @@index([productId])
+  @@map("combo_items")
 }
 
 // ═══ INVENTORY ═══════════════════════════════════════
