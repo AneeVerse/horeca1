@@ -103,13 +103,28 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
   const basePrice = Number(p.basePrice) || 0;
   const promoPrice = p.promoPrice != null ? Number(p.promoPrice) : null;
   const mrp = p.originalPrice != null ? Number(p.originalPrice) : null;
+  const taxPercent = Number(p.taxPercent) || 0;
+
+  // Helper to convert ex-GST price to gross (GST-inclusive)
+  const toGross = (val: number) => Math.round(val * (1 + taxPercent / 100) * 100) / 100;
+  const toGrossOrNull = (val: number | null) => val != null ? toGross(val) : null;
+
+  const grossBasePrice = toGross(basePrice);
+  const grossPromoPrice = toGrossOrNull(promoPrice);
+  const grossMRP = toGrossOrNull(mrp);
+
   let effectivePrice = priceSlabs.length > 0
     ? Number(priceSlabs[0].price)
     : (promoPrice != null && promoPrice < basePrice ? promoPrice : basePrice);
+  
+  let effectivePriceGross = priceSlabs.length > 0
+    ? toGross(Number(priceSlabs[0].price))
+    : (grossPromoPrice != null && grossPromoPrice < grossBasePrice ? grossPromoPrice : grossBasePrice);
+
   // Strike-through shows the higher reference price (MRP wins if present, else base when promo is active).
-  let strikePrice = mrp && mrp > effectivePrice
-    ? mrp
-    : (promoPrice != null && promoPrice < basePrice ? basePrice : undefined);
+  let strikePriceGross = grossMRP && grossMRP > effectivePriceGross
+    ? grossMRP
+    : (grossPromoPrice != null && grossPromoPrice < grossBasePrice ? grossBasePrice : undefined);
 
   // V2.2 Phase 4 — server-resolved customer-specific price (price list /
   // per-customer override) attached by the catalog APIs for logged-in
@@ -118,10 +133,12 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
   const customerPricing = p.customerPricing as { unitPrice: number } | undefined;
   const customerPriceApplied = customerPricing != null && Number.isFinite(Number(customerPricing.unitPrice));
   if (customerPriceApplied) {
-    effectivePrice = Number(customerPricing.unitPrice);
-    strikePrice = mrp && mrp > effectivePrice
-      ? mrp
-      : (basePrice > effectivePrice ? basePrice : undefined);
+    const rawCustPrice = Number(customerPricing.unitPrice);
+    effectivePrice = rawCustPrice;
+    effectivePriceGross = toGross(rawCustPrice);
+    strikePriceGross = grossMRP && grossMRP > effectivePriceGross
+      ? grossMRP
+      : (grossBasePrice > effectivePriceGross ? grossBasePrice : undefined);
   }
 
   // Brand mapping → discovery-surface name override.
@@ -161,8 +178,8 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
     brandName,
     brandSlug,
     description: (p.description as string) || '',
-    price: effectivePrice,
-    originalPrice: strikePrice,
+    price: effectivePriceGross,
+    originalPrice: strikePriceGross,
     images: p.imageUrl ? [p.imageUrl as string] : [],
     category: (p.categoryName as string) || (p.category as Record<string, unknown>)?.name as string || '',
     packSize: packSizeDisplay,
@@ -179,15 +196,17 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
     categoryParentName: (((p.category as Record<string, unknown>)?.parent as Record<string, unknown>)?.name as string) || undefined,
     bulkPrices: customerPriceApplied ? [] : priceSlabs.map((s): BulkPriceTier => ({
       minQty: Number(s.minQty),
-      price: Number(s.price),
+      price: toGross(Number(s.price)),
     })),
     creditBadge: (p.creditEligible as boolean) || false,
     minOrderQuantity: customerPriceApplied
       ? Number(p.minOrderQty) || 1
       : priceSlabs.length > 0 ? Number(priceSlabs[0].minQty) : 1,
     frequentlyOrdered: false,
-    isDeal: strikePrice !== undefined && strikePrice > effectivePrice,
+    isDeal: strikePriceGross !== undefined && strikePriceGross > effectivePriceGross,
     customerPriceApplied: customerPriceApplied || undefined,
+    taxPercent,
+    taxableRate: effectivePrice,
   };
 }
 

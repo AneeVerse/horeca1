@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { ImageUpload, MultiImageUpload } from '@/components/ui/ImageUpload';
 import { CategoryMultiPickerById } from '@/components/features/brand/CategoryMultiPickerById';
 import VendorProductImportModal from '@/components/features/vendor/VendorProductImportModal';
-import VendorProductBulkUpdateModal from '@/components/features/vendor/VendorProductBulkUpdateModal';
+import VendorBulkEngine from '@/components/features/vendor/VendorBulkEngine';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -412,15 +412,9 @@ export default function VendorProductsPage() {
     const [deleteTarget, setDeleteTarget] = useState<VendorProduct | null>(null);
     const [deleting, setDeleting] = useState(false);
 
-    // Bulk price update
-    const [showBulkPrice, setShowBulkPrice] = useState(false);
-    const [bulkUpdateType, setBulkUpdateType] = useState<'price' | 'status'>('price');
-    const [bulkPriceCategoryId, setBulkPriceCategoryId] = useState<string | null>(null);
-    const [bulkPriceType, setBulkPriceType] = useState<'percent' | 'fixed'>('percent');
-    const [bulkPriceValue, setBulkPriceValue] = useState('');
-    const [bulkPriceApplySlabs, setBulkPriceApplySlabs] = useState(true);
-    const [bulkPriceSaving, setBulkPriceSaving] = useState(false);
-    const [bulkStatus, setBulkStatus] = useState<boolean>(true);
+    // Bulk Update Engine — drawer open flag + row selection
+    const [bulkOpen, setBulkOpen] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     // Bulk import
     const [showBulkImport, setShowBulkImport] = useState(false);
@@ -1033,62 +1027,25 @@ export default function VendorProductsPage() {
         }
     };
 
-    /* ---- Bulk status update ---- */
+    /* ---- Row selection (Bulk Update Engine) ---- */
 
-    const handleBulkStatusUpdate = async () => {
-        const filtered = bulkPriceCategoryId
-            ? products.filter(p => p.category?.id === bulkPriceCategoryId)
-            : products;
-        if (filtered.length === 0) { toast.error('No products match the selected filter'); return; }
-        setBulkPriceSaving(true);
-        try {
-            await Promise.all(
-                filtered.map(p =>
-                    fetch(`/api/v1/vendor/products/${p.id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ isActive: bulkStatus }),
-                    })
-                )
-            );
-            toast.success(`Set ${filtered.length} product${filtered.length !== 1 ? 's' : ''} to ${bulkStatus ? 'Active' : 'Inactive'}`);
-            setShowBulkPrice(false);
-            fetchProducts(false);
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed');
-        } finally {
-            setBulkPriceSaving(false);
-        }
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
     };
 
-    /* ---- Bulk price update ---- */
-
-    const handleBulkPriceUpdate = async () => {
-        const val = parseFloat(bulkPriceValue);
-        if (isNaN(val) || val === 0) { toast.error('Enter a non-zero adjustment value'); return; }
-        setBulkPriceSaving(true);
-        try {
-            const res = await fetch('/api/v1/vendor/products/bulk-price', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    categoryId: bulkPriceCategoryId,
-                    adjustmentType: bulkPriceType,
-                    adjustmentValue: val,
-                    applyToSlabs: bulkPriceApplySlabs,
-                }),
-            });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed');
-            toast.success(`Updated prices for ${json.updated} product${json.updated !== 1 ? 's' : ''}`);
-            setShowBulkPrice(false);
-            setBulkPriceValue('');
-            fetchProducts(false);
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed');
-        } finally {
-            setBulkPriceSaving(false);
-        }
+    const pageIds = paginatedProducts.map(p => p.id);
+    const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
+    const toggleSelectPage = () => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (allPageSelected) pageIds.forEach(id => next.delete(id));
+            else pageIds.forEach(id => next.add(id));
+            return next;
+        });
     };
 
     /* ---- Bulk CSV import ---- */
@@ -1215,7 +1172,7 @@ export default function VendorProductsPage() {
                         Import
                     </button>
                     <button
-                        onClick={() => setShowBulkPrice(true)}
+                        onClick={() => setBulkOpen(true)}
                         className="h-[40px] px-3.5 border border-[#EEEEEE] bg-white rounded-[10px] text-[12px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all flex items-center gap-1.5 shrink-0"
                     >
                         <Wand2 size={13} className="text-[#299E60]" />
@@ -1277,9 +1234,18 @@ export default function VendorProductsPage() {
                         <table className="w-full">
                             <thead>
                                 <tr className="bg-[#FAFAFA] border-b border-[#EEEEEE]">
+                                    <th className="pl-6 pr-2 py-4 w-[44px]">
+                                        <input
+                                            type="checkbox"
+                                            checked={allPageSelected}
+                                            onChange={toggleSelectPage}
+                                            className="w-4 h-4 rounded border-gray-300 text-[#299E60] focus:ring-[#299E60] cursor-pointer"
+                                            title="Select all on this page"
+                                        />
+                                    </th>
                                     <th className="px-6 py-4 text-left text-[12px] font-bold text-[#AEAEAE] uppercase">Product</th>
                                     <th className="px-6 py-4 text-left text-[12px] font-bold text-[#AEAEAE] uppercase">Category</th>
-                                    <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Price</th>
+                                    <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Price (Gross)</th>
                                     <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Stock</th>
                                     <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Approval</th>
                                     <th className="px-6 py-4 text-center text-[12px] font-bold text-[#AEAEAE] uppercase">Status</th>
@@ -1288,7 +1254,15 @@ export default function VendorProductsPage() {
                             </thead>
                             <tbody className="divide-y divide-[#F5F5F5]">
                                 {paginatedProducts.map((product) => (
-                                    <tr key={product.id} className="hover:bg-[#FAFAFA] transition-colors">
+                                    <tr key={product.id} className={cn('transition-colors', selectedIds.has(product.id) ? 'bg-[#EEF8F1]/50' : 'hover:bg-[#FAFAFA]')}>
+                                        <td className="pl-6 pr-2 py-4">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.has(product.id)}
+                                                onChange={() => toggleSelect(product.id)}
+                                                className="w-4 h-4 rounded border-gray-300 text-[#299E60] focus:ring-[#299E60] cursor-pointer"
+                                            />
+                                        </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-[44px] h-[44px] rounded-[10px] bg-[#F1F4F9] overflow-hidden shrink-0 flex items-center justify-center">
@@ -1305,7 +1279,16 @@ export default function VendorProductsPage() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-[13px] text-[#7C7C7C] font-medium">{product.categoryName || '\u2014'}</td>
-                                        <td className="px-6 py-4 text-center text-[14px] font-bold text-[#181725]">{'\u20B9'}{Number(product.basePrice).toLocaleString('en-IN')}</td>
+                                        <td className="px-6 py-4 text-center">
+                                             <div className="flex flex-col items-center justify-center">
+                                                 <span className="text-[14px] font-black text-[#181725] tabular-nums">
+                                                     ₹{(Number(product.basePrice) * (1 + (product.taxPercent ?? 0) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                 </span>
+                                                 <span className="text-[10px] text-[#7C7C7C] font-semibold mt-0.5 whitespace-nowrap bg-gray-50 border border-gray-100 px-1.5 py-0.5 rounded-[4px]">
+                                                     ₹{Number(product.basePrice).toFixed(2)} + {product.taxPercent ?? 0}% GST
+                                                 </span>
+                                             </div>
+                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             <span className={cn(
                                                 'text-[12px] font-bold px-2.5 py-1 rounded-[6px]',
@@ -1788,61 +1771,113 @@ export default function VendorProductsPage() {
                                     <SectionHeader icon={<DollarSign size={16} />} title="Pricing & Tax" />
 
                                     <div className="space-y-4">
-                                        {/* Row 1: Taxable Rate, Tax %, Gross Rate */}
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <div>
-                                                <FieldLabel required>Taxable Rate (Amt)</FieldLabel>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    min="0"
-                                                    value={form.basePrice}
-                                                    onChange={(e) => updateField('basePrice', e.target.value)}
-                                                    className={inputCls}
-                                                    placeholder="0.00"
-                                                />
-                                            </div>
-                                            <div>
-                                                <FieldLabel required>Tax %</FieldLabel>
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    max="100"
-                                                    step="0.01"
-                                                    value={form.taxPercent}
-                                                    onChange={(e) => updateField('taxPercent', e.target.value)}
-                                                    className={inputCls}
-                                                    placeholder="0"
-                                                />
-                                            </div>
-                                            <div>
-                                                <FieldLabel required>Gross Rate (Customer Price)</FieldLabel>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    min="0"
-                                                    value={grossRate || form.originalPrice}
-                                                    onChange={(e) => {
-                                                        const newGross = e.target.value;
-                                                        updateField('originalPrice', newGross);
-                                                        // Auto-calculate taxable from gross
-                                                        const taxable = calcTaxableFromGross(newGross, form.taxPercent);
-                                                        if (taxable) updateField('basePrice', taxable);
-                                                    }}
-                                                    className={inputCls}
-                                                    placeholder="0.00"
-                                                />
-                                                {form.basePrice && parseFloat(form.taxPercent) > 0 && (
-                                                    <p className="text-[11px] text-[#7C7C7C] mt-1 font-medium">
-                                                        Taxable: {'\u20B9'}{parseFloat(form.basePrice).toFixed(2)} | GST {form.taxPercent}%: {'\u20B9'}{taxAmount}
-                                                    </p>
-                                                )}
-                                                {savings !== null && (
-                                                    <p className="text-[11px] text-[#299E60] mt-1 font-bold">
-                                                        {savings}% savings from MRP
-                                                    </p>
-                                                )}
-                                            </div>
+                                        <div className="overflow-hidden border border-[#EEEEEE] rounded-[12px] bg-[#FAFAFA]">
+                                            <table className="w-full text-left border-collapse text-[13px]">
+                                                <thead>
+                                                    <tr className="bg-[#FAFAFA] border-b border-[#EEEEEE]">
+                                                        <th className="px-5 py-3 font-bold text-[#181725] w-1/3">Price Component</th>
+                                                        <th className="px-5 py-3 font-bold text-[#181725] w-1/3">Amount / Input</th>
+                                                        <th className="px-5 py-3 font-bold text-[#7C7C7C] w-1/3 text-[11px] uppercase tracking-wider">Breakdown</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-[#F5F5F5] bg-white">
+                                                    {/* Row 1: Taxable Rate */}
+                                                    <tr>
+                                                        <td className="px-5 py-4 font-semibold text-[#181725]">
+                                                            Taxable Rate (Amt) <span className="text-[#E74C3C]">*</span>
+                                                            <p className="text-[11px] text-[#AEAEAE] font-normal mt-0.5 font-sans">Base price before tax (ex-GST)</p>
+                                                        </td>
+                                                        <td className="px-5 py-4">
+                                                            <div className="relative">
+                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">₹</span>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    value={form.basePrice}
+                                                                    onChange={(e) => updateField('basePrice', e.target.value)}
+                                                                    className={cn(inputCls, 'pl-7')}
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-5 py-4 text-[#7C7C7C] font-medium">
+                                                            {form.basePrice ? `₹${parseFloat(form.basePrice).toFixed(2)} taxable base` : '—'}
+                                                        </td>
+                                                    </tr>
+                                                    {/* Row 2: Tax % */}
+                                                    <tr>
+                                                        <td className="px-5 py-4 font-semibold text-[#181725]">
+                                                            Tax % <span className="text-[#E74C3C]">*</span>
+                                                            <p className="text-[11px] text-[#AEAEAE] font-normal mt-0.5">Applied goods & services tax percent</p>
+                                                        </td>
+                                                        <td className="px-5 py-4">
+                                                            <div className="relative">
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    max="100"
+                                                                    step="0.01"
+                                                                    value={form.taxPercent}
+                                                                    onChange={(e) => updateField('taxPercent', e.target.value)}
+                                                                    className={cn(inputCls, 'pr-7')}
+                                                                    placeholder="0"
+                                                                />
+                                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">%</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-5 py-4 text-[#7C7C7C] font-medium">
+                                                            {form.basePrice && parseFloat(form.taxPercent) > 0 
+                                                                ? `+ ₹${taxAmount} GST (${form.taxPercent}%)` 
+                                                                : 'No tax applied'}
+                                                        </td>
+                                                    </tr>
+                                                    {/* Row 3: Gross Rate */}
+                                                    <tr className="bg-[#FDFDFD]">
+                                                        <td className="px-5 py-4 font-bold text-[#181725]">
+                                                            Gross Rate <span className="text-[#299E60]">(Customer Price)</span> <span className="text-[#E74C3C]">*</span>
+                                                            <p className="text-[11px] text-[#AEAEAE] font-normal mt-0.5">Final selling price (incl. GST)</p>
+                                                        </td>
+                                                        <td className="px-5 py-4">
+                                                            <div className="relative">
+                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#299E60] font-bold">₹</span>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    value={grossRate || form.originalPrice}
+                                                                    onChange={(e) => {
+                                                                        const newGross = e.target.value;
+                                                                        updateField('originalPrice', newGross);
+                                                                        // Auto-calculate taxable from gross
+                                                                        const taxable = calcTaxableFromGross(newGross, form.taxPercent);
+                                                                        if (taxable) updateField('basePrice', taxable);
+                                                                    }}
+                                                                    className={cn(inputCls, 'pl-7 border-[#299E60]/30 focus:border-[#299E60] font-bold text-[#299E60] bg-[#EEF8F1]/10')}
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-5 py-4">
+                                                            <div className="space-y-1">
+                                                                <p className="text-[#181725] font-bold text-[13px]">
+                                                                    {grossRate ? `₹${parseFloat(grossRate).toFixed(2)} total` : '—'}
+                                                                </p>
+                                                                {form.basePrice && parseFloat(form.taxPercent) > 0 && (
+                                                                    <p className="text-[11px] text-[#7C7C7C] font-medium leading-none">
+                                                                        ₹{parseFloat(form.basePrice).toFixed(2)} base + ₹{taxAmount} GST
+                                                                    </p>
+                                                                )}
+                                                                {savings !== null && (
+                                                                    <p className="text-[11px] text-[#299E60] font-bold">
+                                                                        {savings}% savings from MRP
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
                                         </div>
                                     </div>
                                 </div>
@@ -2210,11 +2245,32 @@ export default function VendorProductsPage() {
                 onComplete={() => fetchProducts(false)}
             />
 
-            <VendorProductBulkUpdateModal
-                open={showBulkPrice}
-                onClose={() => setShowBulkPrice(false)}
-                onComplete={() => fetchProducts(false)}
+            <VendorBulkEngine
+                open={bulkOpen}
+                onClose={() => setBulkOpen(false)}
+                products={products}
+                selectedIds={Array.from(selectedIds)}
+                onComplete={() => { fetchProducts(false); setSelectedIds(new Set()); }}
             />
+
+            {/* Floating selection action bar */}
+            {selectedIds.size > 0 && !bulkOpen && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[55] flex items-center gap-3 bg-[#181725] text-white rounded-[14px] shadow-2xl px-5 py-3 animate-in slide-in-from-bottom-4 duration-200">
+                    <span className="text-[13px] font-bold">{selectedIds.size} selected</span>
+                    <button
+                        onClick={() => setBulkOpen(true)}
+                        className="h-[36px] px-4 bg-[#299E60] hover:bg-[#238a54] rounded-[10px] text-[13px] font-bold flex items-center gap-1.5 transition-colors"
+                    >
+                        <Wand2 size={14} /> Bulk edit
+                    </button>
+                    <button
+                        onClick={() => setSelectedIds(new Set())}
+                        className="h-[36px] px-3 text-[13px] font-bold text-[#AEAEAE] hover:text-white transition-colors"
+                    >
+                        Clear
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
