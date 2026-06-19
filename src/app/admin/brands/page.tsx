@@ -6,6 +6,7 @@ import {
     GitMerge, MessageSquare, Package, ExternalLink, LayoutDashboard, Plus, Eye, EyeOff, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { FORM, TextField, FormField, FormInput, FormTextarea } from '@/components/ui/form';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
@@ -635,58 +636,34 @@ export default function AdminBrandsPage() {
 
                         <form onSubmit={handleCreateBrand} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                             <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider">Owner Account</p>
-                            <div>
-                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Full Name *</label>
-                                <input required value={brandForm.fullName} onChange={e => setBrandForm(f => ({ ...f, fullName: e.target.value }))}
-                                    placeholder="Jane Smith"
-                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
-                            </div>
-                            <div>
-                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Email *</label>
-                                <input required type="email" value={brandForm.email} onChange={e => setBrandForm(f => ({ ...f, email: e.target.value }))}
-                                    placeholder="brand@company.com"
-                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
-                            </div>
-                            <div>
-                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Password *</label>
-                                <div className="relative">
-                                    <input required type={showPassword ? 'text' : 'password'} minLength={6} value={brandForm.password} onChange={e => setBrandForm(f => ({ ...f, password: e.target.value }))}
-                                        placeholder="Min 6 characters"
-                                        className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 pr-10 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
-                                    <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#AEAEAE]">
-                                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                                    </button>
-                                </div>
-                            </div>
+                            <TextField label="Full Name" required value={brandForm.fullName}
+                                onChange={v => setBrandForm(f => ({ ...f, fullName: v }))} placeholder="Jane Smith" />
+                            <TextField label="Email" required type="email" value={brandForm.email}
+                                onChange={v => setBrandForm(f => ({ ...f, email: v }))} placeholder="brand@company.com" />
+                            <FormField label="Password" required>
+                                <FormInput type={showPassword ? 'text' : 'password'} required minLength={6}
+                                    value={brandForm.password} onChange={v => setBrandForm(f => ({ ...f, password: v }))}
+                                    placeholder="Min 6 characters"
+                                    rightSlot={
+                                        <button type="button" onClick={() => setShowPassword(p => !p)} className="text-[#AEAEAE]">
+                                            {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                        </button>
+                                    } />
+                            </FormField>
 
                             <div className="pt-2 border-t border-[#EEEEEE]">
                                 <p className="text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-4">Brand Profile</p>
                             </div>
-                            <div>
-                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Brand Name *</label>
-                                <input required value={brandForm.name} onChange={e => setBrandForm(f => ({ ...f, name: e.target.value }))}
-                                    placeholder="Kissan, Everest, etc."
-                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
-                            </div>
-                            <div>
-                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Tagline</label>
-                                <input value={brandForm.tagline} onChange={e => setBrandForm(f => ({ ...f, tagline: e.target.value }))}
-                                    placeholder="Taste the difference"
-                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
-                            </div>
-                            <div>
-                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Website</label>
-                                <input type="url" value={brandForm.website} onChange={e => setBrandForm(f => ({ ...f, website: e.target.value }))}
-                                    placeholder="https://kissan.in"
-                                    className="w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-3 text-[13px] outline-none focus:border-[#299E60]/40 font-medium" />
-                            </div>
-                            <div>
-                                <label className="text-[12px] font-bold text-[#4B4B4B] mb-1.5 block">Description</label>
-                                <textarea value={brandForm.description} onChange={e => setBrandForm(f => ({ ...f, description: e.target.value }))}
-                                    placeholder="Brief description of the brand..."
-                                    rows={2}
-                                    className="w-full border border-[#EEEEEE] rounded-[10px] px-3 py-2.5 text-[13px] outline-none focus:border-[#299E60]/40 font-medium resize-none" />
-                            </div>
+                            <TextField label="Brand Name" required value={brandForm.name}
+                                onChange={v => setBrandForm(f => ({ ...f, name: v }))} placeholder="Kissan, Everest, etc." />
+                            <TextField label="Tagline" value={brandForm.tagline}
+                                onChange={v => setBrandForm(f => ({ ...f, tagline: v }))} placeholder="Taste the difference" />
+                            <TextField label="Website" type="url" value={brandForm.website}
+                                onChange={v => setBrandForm(f => ({ ...f, website: v }))} placeholder="https://kissan.in" />
+                            <FormField label="Description">
+                                <FormTextarea value={brandForm.description} onChange={v => setBrandForm(f => ({ ...f, description: v }))}
+                                    placeholder="Brief description of the brand..." rows={2} />
+                            </FormField>
 
                             {createError && (
                                 <p className="text-[13px] text-[#E74C3C] font-medium bg-[#FEF2F2] px-3 py-2 rounded-[8px]">{createError}</p>
@@ -699,7 +676,7 @@ export default function AdminBrandsPage() {
                                 Cancel
                             </button>
                             <button onClick={handleCreateBrand} disabled={creating}
-                                className="h-[42px] px-6 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] disabled:opacity-60 flex items-center gap-2">
+                                className={cn(FORM.primaryBtn, 'h-[42px] px-6 text-[13px]')}>
                                 {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                                 Create Brand
                             </button>
