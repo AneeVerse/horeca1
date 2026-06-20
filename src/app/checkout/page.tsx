@@ -12,7 +12,7 @@ import { DeliverySlotPicker } from '@/components/features/checkout/DeliverySlotP
 import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import { useAddress } from '@/context/AddressContext';
 import type { VendorCartGroup, CartItem, VendorProduct } from '@/types';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 // window.Razorpay is typed in src/types/razorpay.d.ts
 
@@ -318,8 +318,18 @@ function DeliveringToRow() {
 }
 
 function CheckoutPageContent() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
     const { groups, clearCart, removeFromCart } = useCart();
     const { status: sessionStatus } = useSession();
+
+    useEffect(() => {
+        if (sessionStatus === 'unauthenticated') {
+            const qs = searchParams?.toString();
+            const returnTo = qs ? `/checkout?${qs}` : '/checkout';
+            router.replace(`/login?redirect=${encodeURIComponent(returnTo)}`);
+        }
+    }, [sessionStatus, router, searchParams]);
     const { currentOutlet, activeBusinessAccountId, activeOutletId } = useBusinessAccountSwitcher();
     const { selectedAddress } = useAddress();
     // Outlet on JWT is optional — saved "Deliver to" address is enough (server resolves at order time).
@@ -372,7 +382,6 @@ function CheckoutPageContent() {
         setExpandedVendors(prev => { const next = new Set(prev); if (next.has(vendorId)) next.delete(vendorId); else next.add(vendorId); return next; });
     };
 
-    const searchParams = useSearchParams();
     const draftId = searchParams.get('draft');
     const [draftOrder, setDraftOrder] = useState<DraftOrderDetail | null>(null);
     const [draftLoading, setDraftLoading] = useState(false);
@@ -844,28 +853,12 @@ function CheckoutPageContent() {
         );
     }
 
-    // Guest wall — prompt login before checkout
+    // Redirect to login if unauthenticated
     if (sessionStatus === 'unauthenticated') {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50/50 px-4">
-                <div className="bg-white rounded-[32px] shadow-[0_20px_60px_rgba(0,0,0,0.08)] p-10 max-w-md w-full text-center border border-gray-100">
-                    <div className="w-16 h-16 bg-[#53B175]/10 rounded-full flex items-center justify-center mx-auto mb-5">
-                        <User size={28} className="text-[#53B175]" strokeWidth={2} />
-                    </div>
-                    <h2 className="text-[22px] font-[1000] text-[#181725] tracking-tight mb-2">Sign in to Checkout</h2>
-                    <p className="text-gray-400 text-[14px] font-medium mb-8 leading-relaxed">
-                        Create a free account or log in to place your order, track deliveries, and access order lists.
-                    </p>
-                    <Link
-                        href="/login?redirect=/checkout"
-                        className="w-full block text-center bg-[#53B175] text-white font-black py-4 rounded-2xl shadow-lg shadow-green-500/20 mb-3 hover:bg-[#48a068] transition-all"
-                    >
-                        Log In / Sign Up
-                    </Link>
-                    <Link href="/" className="text-[13px] text-gray-400 font-bold hover:text-gray-600 transition-colors">
-                        Continue browsing
-                    </Link>
-                </div>
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50/50">
+                <Loader2 size={36} className="text-[#53B175] animate-spin mb-4" />
+                <p className="text-[14px] text-gray-400 font-medium">Redirecting to login...</p>
             </div>
         );
     }

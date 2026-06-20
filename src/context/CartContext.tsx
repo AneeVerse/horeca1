@@ -206,6 +206,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     // first, then load — otherwise items added while logged-out vanish.
     useEffect(() => {
         if (sessionStatus === 'loading') return;
+        // Block the localStorage-mirror effect below until THIS context finishes
+        // loading/merging. Critical on the guest→login transition: signIn briefly
+        // flips status to "authenticated" on the login page (before the redirect
+        // navigates away), which runs this effect and setCart([]). Without this
+        // guard the mirror would persist that empty array over the guest cart in
+        // localStorage, and the navigation aborts the merge before it can restore
+        // it — so the guest cart (and the items the user came to buy) vanish.
+        setIsInitialized(false);
         setCart([]); // Clear immediately on account/outlet/session change so UI doesn't flicker old data
         if (isLoggedIn) {
             const guestItems = loadLocalCart();
