@@ -35,6 +35,14 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     const body = await req.json();
     const data = suggestCategorySchema.parse(body);
 
+    const existingSlug = slugify(data.name);
+    const existing = await prisma.category.findFirst({
+      where: { slug: existingSlug },
+    });
+    if (existing) {
+      return NextResponse.json({ success: true, data: existing, alreadyExists: true });
+    }
+
     const category = await prisma.category.create({
       data: {
         name: data.name,

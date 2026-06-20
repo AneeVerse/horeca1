@@ -443,7 +443,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
 
           updated++;
         } else {
-          // ── CREATE new product (pending vendor approval) ──
+          // ── CREATE new product ──
           // P0-1: every product MUST map to a Horeca1 master SKU, exactly like
           // the single-product create path (CatalogService.createProduct). The
           // bulk path used to skip this, leaving imported rows orphaned from
@@ -452,6 +452,15 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
           const masterProductId = categoryId
             ? await findOrCreateMaster({ name: r.name, brand: r.brand ?? null, categoryId })
             : null;
+
+          let approvalStatus: 'pending' | 'approved' = 'pending';
+          if (masterProductId) {
+            const approvedMaster = await prisma.masterProduct.findFirst({
+              where: { id: masterProductId, approvalStatus: 'approved', isActive: true },
+              select: { id: true },
+            });
+            if (approvedMaster) approvalStatus = 'approved';
+          }
 
           const product = await prisma.product.create({
             data: {
@@ -470,7 +479,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
               promoStartTime: r.promoStartTime || null,
               promoEndTime: r.promoEndTime || null,
               imageUrl: r.imageUrl || null,
-              approvalStatus: 'pending',
+              approvalStatus,
               inventory: {
                 create: { vendorId, qtyAvailable: r.stock ?? 0, lowStockThreshold: 10 },
               },

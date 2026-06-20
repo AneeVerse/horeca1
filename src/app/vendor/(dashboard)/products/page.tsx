@@ -368,18 +368,6 @@ interface ProductSuggestion {
     vendor?: { businessName: string } | null;
 }
 
-interface BrandSuggestion {
-    id: string;
-    name: string;
-    description?: string | null;
-    imageUrl?: string | null;
-    packSize?: string | null;
-    unit?: string | null;
-    sku?: string | null;
-    brand: { id: string; name: string; slug: string; logoUrl?: string | null };
-    category?: { id: string; name: string; slug: string } | null;
-}
-
 export default function VendorProductsPage() {
     const [products, setProducts] = useState<VendorProduct[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -398,13 +386,18 @@ export default function VendorProductsPage() {
 
     // Product suggestion state
     const [suggestions, setSuggestions] = useState<ProductSuggestion[]>([]);
-    const [brandSuggestions, setBrandSuggestions] = useState<BrandSuggestion[]>([]);
     const [ownMatches, setOwnMatches] = useState<{ id: string; name: string; approvalStatus: string; isActive: boolean }[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [loadingSuggestions, setLoadingSuggestions] = useState(false);
     const [basedOnProductId, setBasedOnProductId] = useState<string | null>(null);
-    const [basedOnBrandMasterProductId, setBasedOnBrandMasterProductId] = useState<string | null>(null);
-    const [basedOnBrandName, setBasedOnBrandName] = useState<string | null>(null);
+    const [masterProductId, setMasterProductId] = useState<string | null>(null);
+    const [catalogSearch, setCatalogSearch] = useState('');
+    const [noCatalogMatch, setNoCatalogMatch] = useState(false);
+    const [masterSuggestions, setMasterSuggestions] = useState<Array<{
+        id: string; sku: string; name: string; brand: string | null; imageUrl: string | null;
+        category: { id: string; name: string } | null; uom: string | null;
+    }>>([]);
+    const [brandSuggesting, setBrandSuggesting] = useState(false);
     const suggestionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const suggestionsRef = useRef<HTMLDivElement>(null);
 
@@ -491,57 +484,155 @@ export default function VendorProductsPage() {
     const fetchSuggestions = useCallback(async (query: string) => {
         if (query.length < 2) {
             setSuggestions([]);
-            setBrandSuggestions([]);
+            setMasterSuggestions([]);
             setOwnMatches([]);
             setShowSuggestions(false);
+            setNoCatalogMatch(false);
             return;
         }
         setLoadingSuggestions(true);
         try {
-            const res = await fetch(`/api/v1/vendor/products/suggestions?q=${encodeURIComponent(query)}`);
+            const trimmed = query.trim();
+            const looksLikeSku = /^[A-Za-z0-9][A-Za-z0-9_-]+$/.test(trimmed);
+
+            if (looksLikeSku) {
+                const masterRes = await fetch(
+                    `/api/v1/master-products?search=${encodeURIComponent(trimmed)}&exact=true&limit=1`,
+                );
+                const masterJson = await masterRes.json();
+                if (masterJson.success && masterJson.data?.length === 1) {
+                    setMasterSuggestions(masterJson.data);
+                    setSuggestions([]);
+                    setOwnMatches([]);
+                    setShowSuggestions(true);
+                    setNoCatalogMatch(false);
+                    return;
+                }
+            }
+
+            const [res, masterRes] = await Promise.all([
+                fetch(`/api/v1/vendor/products/suggestions?q=${encodeURIComponent(query)}`),
+                fetch(`/api/v1/master-products?search=${encodeURIComponent(query)}&limit=5`),
+            ]);
             const json = await res.json();
+            const masterJson = await masterRes.json();
             if (json.success) {
                 const s = json.data.suggestions || [];
-                const bs = json.data.brandSuggestions || [];
                 const own = json.data.ownMatches || [];
+                const masters = masterJson.success ? (masterJson.data || []) : [];
                 setSuggestions(s);
-                setBrandSuggestions(bs);
+                setMasterSuggestions(masters);
                 setOwnMatches(own);
-                if (s.length > 0 || bs.length > 0 || own.length > 0) {
+                if (s.length > 0 || own.length > 0 || masters.length > 0) {
                     setShowSuggestions(true);
+                    setNoCatalogMatch(false);
                 } else {
                     setShowSuggestions(false);
+                    setNoCatalogMatch(true);
                 }
             } else {
                 setSuggestions([]);
-                setBrandSuggestions([]);
+                setMasterSuggestions([]);
                 setOwnMatches([]);
                 setShowSuggestions(false);
+                setNoCatalogMatch(true);
             }
         } catch {
             setSuggestions([]);
-            setBrandSuggestions([]);
+            setMasterSuggestions([]);
             setOwnMatches([]);
+            setNoCatalogMatch(false);
         } finally {
             setLoadingSuggestions(false);
         }
     }, []);
 
-    const handleNameChange = (name: string) => {
-        setForm(prev => ({ ...prev, name, slug: slugify(name) }));
-        setBasedOnProductId(null); // Reset if they type again
-        setBasedOnBrandMasterProductId(null);
-        setBasedOnBrandName(null);
+    const clearCatalogSelection = () => {
+        setMasterProductId(null);
+        setBasedOnProductId(null);
+        setCatalogSearch('');
+        setNoCatalogMatch(false);
+        setShowSuggestions(false);
+        setSuggestions([]);
+        setMasterSuggestions([]);
+        setOwnMatches([]);
+        setForm(prev => ({
+            ...prev,
+            name: '',
+            slug: '',
+            sku: '',
+            brand: '',
+            categoryIds: [],
+            imageUrl: '',
+        }));
+    };
 
-        // Debounce suggestion fetch (only when adding new product)
-        if (!editingProduct) {
-            if (suggestionTimeoutRef.current) clearTimeout(suggestionTimeoutRef.current);
-            suggestionTimeoutRef.current = setTimeout(() => fetchSuggestions(name), 350);
+    const handleCatalogSearchChange = (query: string) => {
+        setCatalogSearch(query);
+        setNoCatalogMatch(false);
+
+        if (suggestionTimeoutRef.current) clearTimeout(suggestionTimeoutRef.current);
+        suggestionTimeoutRef.current = setTimeout(() => fetchSuggestions(query), 350);
+    };
+
+    const handleProductNameChange = (name: string) => {
+        setForm(prev => ({ ...prev, name, slug: slugify(name) }));
+    };
+
+    const fillFromMaster = (m: {
+        id: string; sku: string; name: string; brand: string | null; imageUrl: string | null;
+        category: { id: string; name: string } | null; uom: string | null;
+    }) => {
+        setMasterProductId(m.id);
+        setBasedOnProductId(null);
+        setCatalogSearch(`${m.sku} — ${m.name}`);
+        setNoCatalogMatch(false);
+        setShowSuggestions(false);
+        setMasterSuggestions([]);
+        setForm(prev => ({
+            ...prev,
+            name: m.name,
+            slug: slugify(m.name),
+            sku: m.sku,
+            brand: m.brand || prev.brand,
+            imageUrl: m.imageUrl || prev.imageUrl,
+            unit: m.uom || prev.unit,
+            categoryIds: m.category?.id ? [m.category.id] : prev.categoryIds,
+        }));
+    };
+
+    const suggestBrand = async () => {
+        const trimmed = form.brand.trim();
+        if (trimmed.length < 2 || brandSuggesting) return;
+        const exact = brands.some(b => b.name.toLowerCase() === trimmed.toLowerCase());
+        if (exact) return;
+        setBrandSuggesting(true);
+        try {
+            const res = await fetch('/api/v1/vendor/brands/suggest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: trimmed }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Brand suggestion failed');
+            if (json.alreadyExists) {
+                toast.success(`Using existing brand "${json.data.name}"`);
+                updateField('brand', json.data.name);
+            } else {
+                toast.success(`Sent "${trimmed}" to admin for brand approval`);
+            }
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Brand suggestion failed');
+        } finally {
+            setBrandSuggesting(false);
         }
     };
 
     const fillFromSuggestion = (s: ProductSuggestion) => {
         setBasedOnProductId(s.id);
+        setMasterProductId(null);
+        setCatalogSearch(s.sku ? `${s.sku} — ${s.name}` : s.name);
+        setNoCatalogMatch(false);
         setShowSuggestions(false);
         setSuggestions([]);
         // Suggestion gives us category by slug — resolve to ID for the multi-select.
@@ -567,28 +658,6 @@ export default function VendorProductsPage() {
             taxPercent: s.taxPercent != null ? String(s.taxPercent) : '0',
             minOrderQty: s.minOrderQty != null ? String(s.minOrderQty) : '1',
             creditEligible: !!s.creditEligible,
-        }));
-    };
-
-    const fillFromBrandSuggestion = (b: BrandSuggestion) => {
-        setShowSuggestions(false);
-        setSuggestions([]);
-        setBrandSuggestions([]);
-        setBasedOnBrandMasterProductId(b.id);
-        setBasedOnBrandName(b.brand.name);
-        const matched = b.category?.slug ? categories.find(c => c.slug === b.category!.slug) : null;
-        const seedCategoryIds = matched ? [matched.id] : [];
-        setForm(prev => ({
-            ...prev,
-            name: b.name,
-            slug: slugify(b.name),
-            categoryIds: seedCategoryIds.length > 0 ? seedCategoryIds : prev.categoryIds,
-            packSize: b.packSize || prev.packSize,
-            unit: b.unit || prev.unit,
-            sku: b.sku || prev.sku,
-            brand: b.brand.name,
-            description: b.description || prev.description,
-            imageUrl: b.imageUrl || prev.imageUrl,
         }));
     };
 
@@ -621,10 +690,11 @@ export default function VendorProductsPage() {
         setForm(EMPTY_FORM);
         setFormError('');
         setBasedOnProductId(null);
-        setBasedOnBrandMasterProductId(null);
-        setBasedOnBrandName(null);
+        setMasterProductId(null);
+        setCatalogSearch('');
+        setNoCatalogMatch(false);
         setSuggestions([]);
-        setBrandSuggestions([]);
+        setMasterSuggestions([]);
         setShowSuggestions(false);
         setIsPanelOpen(true);
     };
@@ -788,7 +858,13 @@ export default function VendorProductsPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!form.name || !form.basePrice) {
-            setFormError('Product Name and Base Price are required.');
+            setFormError('Product name and base price are required.');
+            panelRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+        const isNewSubmission = !editingProduct && !masterProductId && !basedOnProductId;
+        if (isNewSubmission && form.categoryIds.length === 0) {
+            setFormError('Pick at least one category.');
             panelRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
             return;
         }
@@ -858,10 +934,12 @@ export default function VendorProductsPage() {
                 body.basedOnProductId = basedOnProductId;
             }
 
-            // If based on a brand canonical product, include so the backend
-            // auto-approves AND creates a verified BrandProductMapping.
-            if (basedOnBrandMasterProductId && !editingProduct) {
-                body.basedOnBrandMasterProductId = basedOnBrandMasterProductId;
+            if (masterProductId && !editingProduct) {
+                body.masterProductId = masterProductId;
+            }
+
+            if (isNewSubmission) {
+                delete body.sku;
             }
 
             // Don't send locked fields for approved products
@@ -896,6 +974,11 @@ export default function VendorProductsPage() {
             // Optimistically update local state immediately so the product
             // is visible right away (before the background refetch completes).
             const p = json.data;
+            if (!editingProduct && p.approvalStatus === 'pending') {
+                toast.success('Product submitted — admin will review and assign a SKU before it goes live.');
+            } else if (!editingProduct) {
+                toast.success('Product added successfully.');
+            }
             const cat = categories.find(c => c.id === p.categoryId);
             if (editingProduct) {
                 // Merge updated fields into the existing entry
@@ -1108,6 +1191,8 @@ export default function VendorProductsPage() {
 
     const grossRate = calcGrossRate(form.basePrice, form.taxPercent);
     const taxAmount = calcTaxAmount(form.basePrice, form.taxPercent);
+    const identityFromCatalog = !!masterProductId || !!basedOnProductId;
+    const isNewSubmission = !editingProduct && !identityFromCatalog;
     const savings = calcSavingsPercent(grossRate, form.originalPrice);
 
     /* ------------------------------------------------------------------ */
@@ -1498,7 +1583,35 @@ export default function VendorProductsPage() {
                                 {basedOnProductId && (
                                     <div className="bg-[#FFF8E1] text-[#8B6914] text-[13px] font-medium p-3.5 rounded-[10px] flex items-center gap-2">
                                         <Info size={16} className="shrink-0" />
-                                        Name, Brand, and Images are pre-filled from the approved product and cannot be changed.
+                                        Name, brand, and images are pre-filled from the approved product and cannot be changed.
+                                    </div>
+                                )}
+
+                                {!editingProduct && identityFromCatalog && (
+                                    <div className="bg-[#EEF8F1] text-[#299E60] text-[13px] font-medium p-3.5 rounded-[10px] flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <Info size={16} className="shrink-0" />
+                                            <span className="truncate">
+                                                Matched catalog — instant approval · {form.name}{form.sku ? ` · SKU ${form.sku}` : ''}
+                                            </span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={clearCatalogSelection}
+                                            className="shrink-0 text-[11px] font-bold text-[#E74C3C] hover:underline"
+                                        >
+                                            Change
+                                        </button>
+                                    </div>
+                                )}
+
+                                {isNewSubmission && (
+                                    <div className="bg-[#FFF8E1] text-[#8B6914] text-[13px] font-medium p-3.5 rounded-[10px] flex items-start gap-2">
+                                        <Info size={16} className="shrink-0 mt-0.5" />
+                                        <span>
+                                            New products are sent to <strong>admin for approval</strong> before they appear on the marketplace.
+                                            Admin will assign the SKU. If the product already exists in the master catalog, search above for instant listing.
+                                        </span>
                                     </div>
                                 )}
 
@@ -1507,27 +1620,58 @@ export default function VendorProductsPage() {
                                     <SectionHeader icon={<Info size={16} />} title="Basic Information" />
 
                                     <div className="space-y-4">
-                                        {/* Product Name with Autocomplete */}
-                                        <div className="relative" ref={suggestionsRef}>
-                                            <FieldLabel required>Product Name</FieldLabel>
-                                            <div className="relative">
-                                                <input
-                                                    type="text"
-                                                    value={form.name}
-                                                    onChange={(e) => handleNameChange(e.target.value)}
-                                                    onFocus={() => { if ((suggestions.length > 0 || brandSuggestions.length > 0) && !editingProduct) setShowSuggestions(true); }}
-                                                    className={cn(inputCls, basedOnProductId && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
-                                                    placeholder="e.g., Premium Basmati Rice"
-                                                    disabled={!!basedOnProductId}
-                                                />
-                                                {loadingSuggestions && (
-                                                    <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-[#AEAEAE]" />
-                                                )}
-                                            </div>
+                                        {!editingProduct && !identityFromCatalog && (
+                                            <div className="relative" ref={suggestionsRef}>
+                                                <FieldLabel>Search master catalog (optional — instant approval)</FieldLabel>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={catalogSearch}
+                                                        onChange={(e) => handleCatalogSearchChange(e.target.value)}
+                                                        onFocus={() => { if (suggestions.length > 0 || masterSuggestions.length > 0) setShowSuggestions(true); }}
+                                                        className={inputCls}
+                                                        placeholder="e.g., RIC-BAS-001 or Premium Basmati Rice"
+                                                    />
+                                                    {loadingSuggestions && (
+                                                        <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-[#AEAEAE]" />
+                                                    )}
+                                                </div>
 
-                                            {/* Suggestions dropdown */}
-                                            {showSuggestions && (suggestions.length > 0 || brandSuggestions.length > 0 || ownMatches.length > 0) && !editingProduct && (
-                                                <div className="absolute z-50 w-full mt-1 bg-white border border-[#EEEEEE] rounded-[12px] shadow-lg max-h-[320px] overflow-y-auto">
+                                                {noCatalogMatch && catalogSearch.trim().length >= 2 && !loadingSuggestions && (
+                                                    <p className="text-[12px] text-[#7C7C7C] font-medium mt-2">
+                                                        Not in catalog — fill in the form below to submit for admin approval.
+                                                    </p>
+                                                )}
+
+                                                {showSuggestions && (suggestions.length > 0 || masterSuggestions.length > 0 || ownMatches.length > 0) && (
+                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-[#EEEEEE] rounded-[12px] shadow-lg max-h-[320px] overflow-y-auto">
+                                                    {masterSuggestions.length > 0 && (
+                                                        <>
+                                                            <div className="px-4 py-2 border-b border-[#F5F5F5] bg-[#EEF8F1]">
+                                                                <p className="text-[11px] font-bold text-[#299E60] uppercase tracking-wide">
+                                                                    Master Catalog (SKU)
+                                                                </p>
+                                                            </div>
+                                                            {masterSuggestions.map(m => (
+                                                                <button
+                                                                    key={`master-${m.id}`}
+                                                                    type="button"
+                                                                    onClick={() => fillFromMaster(m)}
+                                                                    className="w-full text-left px-4 py-3 hover:bg-[#F8FBF9] transition-colors border-b border-[#F5F5F5] last:border-0 flex items-center gap-3"
+                                                                >
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-[13px] font-bold text-[#181725] truncate">{m.name}</p>
+                                                                        <p className="text-[11px] text-[#AEAEAE] font-medium truncate">
+                                                                            SKU: {m.sku}{m.brand ? ` · ${m.brand}` : ''}{m.category?.name ? ` · ${m.category.name}` : ''}
+                                                                        </p>
+                                                                    </div>
+                                                                    <span className="text-[10px] font-bold text-[#299E60] bg-[#EEF8F1] px-2 py-1 rounded-[6px] shrink-0">
+                                                                        MASTER
+                                                                    </span>
+                                                                </button>
+                                                            ))}
+                                                        </>
+                                                    )}
                                                     {/* Duplicate warning — vendor already has this product */}
                                                     {ownMatches.length > 0 && (
                                                         <div className="px-4 py-3 bg-[#FFF8F0] border-b border-[#FFE0B2]">
@@ -1551,45 +1695,6 @@ export default function VendorProductsPage() {
                                                                 Creating a duplicate will be blocked. Edit the existing product instead.
                                                             </p>
                                                         </div>
-                                                    )}
-
-                                                    {/* Brand catalog suggestions */}
-                                                    {brandSuggestions.length > 0 && (
-                                                        <>
-                                                            <div className="px-4 py-2 border-b border-[#F5F5F5] bg-[#F8F9FF]">
-                                                                <p className="text-[11px] font-bold text-[#4F46E5] uppercase tracking-wide">
-                                                                    From Brand Catalog — auto-fill & link to brand
-                                                                </p>
-                                                            </div>
-                                                            {brandSuggestions.map(b => (
-                                                                <button
-                                                                    key={`brand-${b.id}`}
-                                                                    type="button"
-                                                                    onClick={() => fillFromBrandSuggestion(b)}
-                                                                    className="w-full text-left px-4 py-3 hover:bg-[#F8FBF9] transition-colors border-b border-[#F5F5F5] last:border-0 flex items-center gap-3"
-                                                                >
-                                                                    {b.imageUrl ? (
-                                                                        // eslint-disable-next-line @next/next/no-img-element
-                                                                        <img src={b.imageUrl} alt="" className="w-[36px] h-[36px] rounded-[8px] object-cover shrink-0 border border-[#EEEEEE]" />
-                                                                    ) : (
-                                                                        <div className="w-[36px] h-[36px] rounded-[8px] bg-[#F5F5F5] flex items-center justify-center shrink-0">
-                                                                            <Package size={16} className="text-[#AEAEAE]" />
-                                                                        </div>
-                                                                    )}
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <p className="text-[13px] font-bold text-[#181725] truncate">{b.name}</p>
-                                                                        <p className="text-[11px] text-[#AEAEAE] font-medium truncate">
-                                                                            <span className="text-[#4F46E5] font-bold">{b.brand.name}</span>
-                                                                            {b.packSize ? ` · ${b.packSize}${b.unit ? ` ${b.unit}` : ''}` : ''}
-                                                                            {b.category?.name ? ` · ${b.category.name}` : ''}
-                                                                        </p>
-                                                                    </div>
-                                                                    <span className="text-[10px] font-bold text-[#4F46E5] bg-[#EEF0FF] px-2 py-1 rounded-[6px] shrink-0">
-                                                                        BRAND
-                                                                    </span>
-                                                                </button>
-                                                            ))}
-                                                        </>
                                                     )}
 
                                                     {/* Catalog suggestions */}
@@ -1631,138 +1736,155 @@ export default function VendorProductsPage() {
                                                     )}
                                                 </div>
                                             )}
+                                            </div>
+                                        )}
 
-                                            {/* Based-on badge */}
-                                            {basedOnProductId && (
-                                                <div className="flex items-center gap-2 mt-1.5">
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#EEF8F1] text-[#299E60] text-[11px] font-bold rounded-[6px]">
-                                                        <ChevronRight size={12} />
-                                                        Based on existing product — will auto-approve
-                                                    </span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setBasedOnProductId(null)}
-                                                        className="text-[#AEAEAE] hover:text-[#E74C3C] transition-colors"
-                                                    >
-                                                        <X size={14} />
-                                                    </button>
+                                        {identityFromCatalog && !editingProduct ? (
+                                            <>
+                                                <div>
+                                                    <FieldLabel>Product Name</FieldLabel>
+                                                    <input type="text" value={form.name} readOnly className={cn(inputCls, 'bg-[#F5F5F5] cursor-not-allowed')} />
                                                 </div>
-                                            )}
-
-                                            {/* Brand-linked badge */}
-                                            {basedOnBrandMasterProductId && (
-                                                <div className="flex items-center gap-2 mt-1.5">
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#EEF0FF] text-[#4F46E5] text-[11px] font-bold rounded-[6px]">
-                                                        <ChevronRight size={12} />
-                                                        Linked to {basedOnBrandName ?? 'brand'} catalog — auto-approves & shows in their Distributor Map
-                                                    </span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setBasedOnBrandMasterProductId(null);
-                                                            setBasedOnBrandName(null);
-                                                        }}
-                                                        className="text-[#AEAEAE] hover:text-[#E74C3C] transition-colors"
-                                                    >
-                                                        <X size={14} />
-                                                    </button>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <FieldLabel>SKU</FieldLabel>
+                                                        <input type="text" value={form.sku} readOnly className={cn(inputCls, 'bg-[#F5F5F5] cursor-not-allowed')} />
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>Brand</FieldLabel>
+                                                        <input type="text" value={form.brand} readOnly className={cn(inputCls, 'bg-[#F5F5F5] cursor-not-allowed')} />
+                                                    </div>
                                                 </div>
-                                            )}
-
-                                            {form.slug && !basedOnProductId && (
-                                                <p className="text-[11px] text-[#AEAEAE] mt-1 font-medium">
-                                                    Slug: {form.slug}
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        {/* SKU, HSN, Brand, Barcode — 2-column grid */}
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <FieldLabel>SKU</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={form.sku}
-                                                    onChange={(e) => updateField('sku', e.target.value)}
-                                                    className={inputCls}
-                                                    placeholder="e.g., RIC-BAS-001"
-                                                />
-                                            </div>
-                                            <div>
-                                                <FieldLabel>HSN Code</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={form.hsn}
-                                                    onChange={(e) => updateField('hsn', e.target.value)}
-                                                    className={inputCls}
-                                                    placeholder="e.g., 1006"
-                                                />
-                                            </div>
-                                            <div>
-                                                <FieldLabel>FSSAI Reference</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    maxLength={50}
-                                                    placeholder="e.g. 10016011000015"
-                                                    value={form.fssaiRef}
-                                                    onChange={e => setForm(f => ({ ...f, fssaiRef: e.target.value }))}
-                                                    className={inputCls}
-                                                />
-                                            </div>
-                                            <div>
-                                                <FieldLabel>Brand</FieldLabel>
-                                                <div className="relative">
+                                                {form.categoryIds.length > 0 && (
+                                                    <div>
+                                                        <FieldLabel>Category</FieldLabel>
+                                                        <p className="text-[13px] text-[#181725] font-medium">
+                                                            {form.categoryIds
+                                                                .map(id => categories.find(c => c.id === id)?.name)
+                                                                .filter(Boolean)
+                                                                .join(', ')}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div>
+                                                    <FieldLabel required>Product Name</FieldLabel>
                                                     <input
                                                         type="text"
-                                                        list="brand-options"
-                                                        value={form.brand}
-                                                        onChange={(e) => updateField('brand', e.target.value)}
-                                                        className={cn(inputCls, basedOnProductId && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
-                                                        placeholder="Select or type brand name"
-                                                        disabled={!!basedOnProductId}
+                                                        value={form.name}
+                                                        onChange={(e) => handleProductNameChange(e.target.value)}
+                                                        className={cn(inputCls, editingProduct?.approvalStatus === 'approved' && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
+                                                        placeholder="e.g., Premium Basmati Rice 5kg"
+                                                        disabled={!!editingProduct && editingProduct.approvalStatus === 'approved'}
                                                     />
-                                                    <datalist id="brand-options">
-                                                        {brands.map(b => (
-                                                            <option key={b.id} value={b.name} />
-                                                        ))}
-                                                    </datalist>
                                                 </div>
-                                            </div>
-                                            <div>
-                                                <FieldLabel>Barcode</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={form.barcode}
-                                                    onChange={(e) => updateField('barcode', e.target.value)}
-                                                    className={inputCls}
-                                                    placeholder="e.g., 8901234567890"
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    {editingProduct && (
+                                                        <div>
+                                                            <FieldLabel>SKU</FieldLabel>
+                                                            <input
+                                                                type="text"
+                                                                value={form.sku}
+                                                                onChange={(e) => updateField('sku', e.target.value)}
+                                                                className={inputCls}
+                                                                placeholder="e.g., RIC-BAS-001"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    {!editingProduct && isNewSubmission && (
+                                                        <div className="col-span-2">
+                                                            <p className="text-[12px] text-[#7C7C7C] font-medium bg-[#FAFAFA] border border-[#EEEEEE] rounded-[10px] px-3.5 py-2.5">
+                                                                SKU is assigned by admin after approval.
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    <div>
+                                                        <FieldLabel>HSN Code</FieldLabel>
+                                                        <input
+                                                            type="text"
+                                                            value={form.hsn}
+                                                            onChange={(e) => updateField('hsn', e.target.value)}
+                                                            className={inputCls}
+                                                            placeholder="e.g., 1006"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>FSSAI Reference</FieldLabel>
+                                                        <input
+                                                            type="text"
+                                                            maxLength={50}
+                                                            placeholder="e.g. 10016011000015"
+                                                            value={form.fssaiRef}
+                                                            onChange={e => setForm(f => ({ ...f, fssaiRef: e.target.value }))}
+                                                            className={inputCls}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>Brand</FieldLabel>
+                                                        <div className="relative flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                list="brand-options"
+                                                                value={form.brand}
+                                                                onChange={(e) => updateField('brand', e.target.value)}
+                                                                className={cn(inputCls, editingProduct?.approvalStatus === 'approved' && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
+                                                                placeholder="Select or type brand name"
+                                                                disabled={!!editingProduct && editingProduct.approvalStatus === 'approved'}
+                                                            />
+                                                            <datalist id="brand-options">
+                                                                {brands.map(b => (
+                                                                    <option key={b.id} value={b.name} />
+                                                                ))}
+                                                            </datalist>
+                                                            {isNewSubmission && form.brand.trim().length >= 2
+                                                                && !brands.some(b => b.name.toLowerCase() === form.brand.trim().toLowerCase()) && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={suggestBrand}
+                                                                    disabled={brandSuggesting}
+                                                                    className="shrink-0 px-3 text-[11px] font-bold text-[#299E60] bg-[#EEF8F1] rounded-[8px] hover:bg-[#53B175] hover:text-white transition-colors disabled:opacity-50"
+                                                                >
+                                                                    {brandSuggesting ? '…' : 'Request'}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>Barcode</FieldLabel>
+                                                        <input
+                                                            type="text"
+                                                            value={form.barcode}
+                                                            onChange={(e) => updateField('barcode', e.target.value)}
+                                                            className={inputCls}
+                                                            placeholder="e.g., 8901234567890"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <CategoryMultiPickerById
+                                                    value={form.categoryIds}
+                                                    onChange={(ids) => updateField('categoryIds', ids)}
+                                                    max={5}
+                                                    endpoint="/api/v1/vendor/categories/suggest"
+                                                    label="Categories"
+                                                    helper="Pick up to 5 — first one becomes the primary. Customers can find your product under any of these."
                                                 />
-                                            </div>
-                                        </div>
 
-                                        {/* Categories — multi-select. First pick becomes the primary
-                                            and is mirrored into Product.categoryId on the server so
-                                            existing single-category filters keep working. */}
-                                        <CategoryMultiPickerById
-                                            value={form.categoryIds}
-                                            onChange={(ids) => updateField('categoryIds', ids)}
-                                            max={5}
-                                            endpoint="/api/v1/vendor/categories/suggest"
-                                            label="Categories"
-                                            helper="Pick up to 5 — first one becomes the primary. Customers can find your product under any of these."
-                                        />
-
-                                        {/* Description */}
-                                        <div>
-                                            <FieldLabel>Description</FieldLabel>
-                                            <textarea
-                                                value={form.description}
-                                                onChange={(e) => updateField('description', e.target.value)}
-                                                rows={4}
-                                                className={textareaCls}
-                                                placeholder="Describe the product, its quality, origin, etc."
-                                            />
-                                        </div>
+                                                <div>
+                                                    <FieldLabel>Description</FieldLabel>
+                                                    <textarea
+                                                        value={form.description}
+                                                        onChange={(e) => updateField('description', e.target.value)}
+                                                        rows={4}
+                                                        className={textareaCls}
+                                                        placeholder="Describe the product, its quality, origin, etc."
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
 
@@ -2192,7 +2314,7 @@ export default function VendorProductsPage() {
                                         className="flex-1 h-[48px] bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         {saving && <Loader2 size={16} className="animate-spin" />}
-                                        {saving ? 'Saving...' : editingProduct ? 'Update Product' : 'Add Product'}
+                                        {saving ? 'Saving...' : editingProduct ? 'Update Product' : isNewSubmission ? 'Submit for Approval' : 'Add Product'}
                                     </button>
                                 </div>
                             </form>
