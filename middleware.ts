@@ -35,11 +35,13 @@ export default auth((req) => {
   const isProtected = protectedRoutes.some(route => pathname.startsWith(route));
   if (!isProtected) return NextResponse.next();
 
-  // If not authenticated, redirect to home (auth overlay handles login)
+  // If not authenticated, send to login and return here after sign-in.
   if (!req.auth) {
+    const returnTo = pathname + req.nextUrl.search;
     const url = req.nextUrl.clone();
-    url.pathname = '/';
-    url.searchParams.set('callbackUrl', pathname);
+    url.pathname = '/login';
+    url.search = '';
+    url.searchParams.set('redirect', returnTo);
     return NextResponse.redirect(url);
   }
 

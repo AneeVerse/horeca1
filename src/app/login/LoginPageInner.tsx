@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import {
   prepareFreshLoginNavigation,
   readForcePickerCookie,
+  sanitizeRedirect,
   setPendingRedirect,
 } from '@/lib/postLoginPicker';
 
@@ -25,7 +26,9 @@ type Step = 'form' | 'otp';
 
 export default function LoginPageInner() {
   const params = useSearchParams();
-  const redirectTo = params?.get('redirect') || null;
+  const redirectTo = sanitizeRedirect(
+    params?.get('redirect') || params?.get('callbackUrl') || null,
+  );
   // Pre-fill the phone/email field when callers (vendor register success
   // screen, etc.) pass ?phone= or ?email= — saves the user retyping the
   // number they just verified.
@@ -41,8 +44,10 @@ export default function LoginPageInner() {
   useEffect(() => {
     if (sessionStatus !== 'authenticated') return;
     if (readForcePickerCookie()) {
+      // Picker still pending — go straight to the destination; the global picker
+      // overlays it and completePostLoginPicker handles any post-pick reload.
       setPendingRedirect(redirectTo);
-      window.location.href = '/';
+      window.location.href = redirectTo || '/';
       return;
     }
     window.location.href = redirectTo || '/';

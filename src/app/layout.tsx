@@ -14,6 +14,7 @@ import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 import { VendorApplicationBanner } from '@/components/features/homepage/VendorApplicationBanner';
 import { ScrollRestoration } from '@/components/layout/ScrollRestoration';
 import { PostLoginAccountSelector } from '@/components/auth/PostLoginAccountSelector';
+import { CallbackUrlRedirect } from '@/components/auth/CallbackUrlRedirect';
 import { OutletCompletionBanner } from '@/components/auth/OutletCompletionBanner';
 
 const inter = Inter({
@@ -47,6 +48,7 @@ export default function RootLayout({
                 <CartProvider>
                   <ConfirmProvider>
                     <Suspense fallback={null}><ScrollRestoration /></Suspense>
+                    <Suspense fallback={null}><CallbackUrlRedirect /></Suspense>
                     <Toaster position="top-center" richColors />
                     <Navbar />
                     <OutletCompletionBanner />

@@ -49,10 +49,18 @@ export function clearDismissFlag(): void {
   }
 }
 
+export function sanitizeRedirect(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return null;
+  return trimmed;
+}
+
 export function setPendingRedirect(url: string | null): void {
   if (typeof sessionStorage === 'undefined') return;
   try {
-    if (url) sessionStorage.setItem(PENDING_REDIRECT_KEY, url);
+    const safe = sanitizeRedirect(url);
+    if (safe) sessionStorage.setItem(PENDING_REDIRECT_KEY, safe);
     else sessionStorage.removeItem(PENDING_REDIRECT_KEY);
   } catch {
     /* ignore */
@@ -75,19 +83,39 @@ export function prepareFreshLoginNavigation(redirectTo: string | null): void {
   clearDismissFlag();
   setPendingRedirect(redirectTo);
   setForcePickerCookie();
-  window.location.href = '/';
+  // Go straight to the destination (e.g. /checkout) instead of bouncing through
+  // the homepage — the account picker is global and overlays whatever page we
+  // land on. The pending redirect is still stashed so completePostLoginPicker
+  // can reload the destination IF the picker changes the active context.
+  window.location.href = sanitizeRedirect(redirectTo) ?? '/';
 }
 
-/** Called when the picker finishes (or when no pick is needed). */
-export function completePostLoginPicker(): void {
+/**
+ * Called when the picker finishes (or when no pick is needed).
+ *
+ * `contextChanged` — whether the user actually switched account/outlet. We now
+ * navigate straight to the destination after login, so when nothing changed the
+ * current page is already correct for this session and we skip the redundant
+ * reload (the fast path). We only hard-reload when the context changed (so
+ * server-rendered, account-scoped data refreshes) or we're not on the
+ * destination yet.
+ */
+export function completePostLoginPicker(contextChanged = true): void {
   clearForcePickerCookie();
   try {
     sessionStorage.setItem(DISMISS_KEY, '1');
   } catch {
     /* ignore */
   }
-  const pending = consumePendingRedirect();
-  if (pending) window.location.href = pending;
+  const safe = sanitizeRedirect(consumePendingRedirect());
+  if (!safe) return;
+  const here =
+    typeof window !== 'undefined'
+      ? window.location.pathname + window.location.search
+      : '';
+  if (contextChanged || safe !== here) {
+    window.location.href = safe;
+  }
 }
 
 /** Overlay / in-page login — no navigation, just arm the picker. */

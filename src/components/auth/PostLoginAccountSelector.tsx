@@ -11,14 +11,13 @@
  * V2 — adds an outlet-selection step for accounts with multiple outlets.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useBusinessAccountSwitcher, type AccountSummary } from '@/hooks/useBusinessAccountSwitcher';
 import {
   DISMISS_KEY,
   readForcePickerCookie,
   completePostLoginPicker,
-  clearForcePickerCookie,
 } from '@/lib/postLoginPicker';
 import { ShieldCheck, Store, Sparkles, User, MapPin, Loader2, X, ChevronLeft, Check } from 'lucide-react';
 
@@ -42,6 +41,9 @@ export function PostLoginAccountSelector() {
   const [pickingId, setPickingId] = useState<string | null>(null);
   const [outletStep, setOutletStep] = useState<AccountSummary | null>(null);
   const [mandatoryPick, setMandatoryPick] = useState(false);
+  // Carries "did the account switch?" from the account step into the outlet
+  // step, so the final reload decision in completePostLoginPicker is accurate.
+  const accountChangedRef = useRef(false);
 
   const u = (session?.user ?? {}) as Record<string, unknown>;
   const accessibleOutletIds = Array.isArray(u.accessibleOutletIds) ? (u.accessibleOutletIds as string[]) : [];
@@ -83,9 +85,12 @@ export function PostLoginAccountSelector() {
           setOpen(true);
         });
       } else if (forcePick) {
-        // Nothing to pick but a fresh-login force flag is armed — clear it so
-        // refreshes/redirects don't keep the picker primed.
-        void update({ accountPickerCompleted: true }).then(() => completePostLoginPicker());
+        // Nothing to pick but a fresh-login force flag is armed — honor any
+        // pending post-login redirect (e.g. /checkout) and clear the flag.
+        // The JWT-flag clear is best-effort: it must never block or swallow the
+        // redirect, so fire-and-forget it and redirect immediately.
+        void update({ accountPickerCompleted: true }).catch(() => {});
+        completePostLoginPicker(false);
       }
       return;
     }
@@ -96,12 +101,17 @@ export function PostLoginAccountSelector() {
 
   if (!open) return null;
 
-  const finishPicker = async () => {
+  // Clearing the force-picker flag on the JWT is best-effort — it must never
+  // block (or, on rejection/hang, swallow) the post-login redirect. The cookie
+  // clear + dismiss flag inside completePostLoginPicker already stop the picker
+  // reopening, and the redirect is a full page load that reloads a fresh
+  // session, so we fire-and-forget the update and redirect immediately.
+  const finishPicker = (contextChanged: boolean) => {
     setOpen(false);
     setOutletStep(null);
     setPickingId(null);
-    await update({ accountPickerCompleted: true });
-    completePostLoginPicker();
+    void update({ accountPickerCompleted: true }).catch(() => {});
+    completePostLoginPicker(contextChanged);
   };
 
   const handlePick = async (a: AccountSummary) => {
@@ -109,24 +119,27 @@ export function PostLoginAccountSelector() {
     if (!mandatoryPick) {
       try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ }
     }
+    let contextChanged = false;
     if (a.id !== currentAccount?.id) {
-      await switchAccount(a.id);
+      // A failed switch must not strand the user — the redirect below still has
+      // to fire. The choice is persisted server-side by the POST inside
+      // switchAccount regardless of the client session refresh resolving.
+      try { await switchAccount(a.id); contextChanged = true; } catch { /* ignore */ }
     }
     if (filterOutlets(a).length > 1) {
+      accountChangedRef.current = contextChanged;
       setOutletStep(a);
       setPickingId(null);
     } else {
-      await finishPicker();
+      finishPicker(contextChanged);
     }
   };
 
-  const handleDismiss = async () => {
+  const handleDismiss = () => {
     if (mandatoryPick) return;
-    try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ }
-    clearForcePickerCookie();
-    await update({ accountPickerCompleted: true });
     setOpen(false);
     setOutletStep(null);
+    finishPicker(false);
   };
 
   // Outlet step view
@@ -172,8 +185,11 @@ export function PostLoginAccountSelector() {
                   <button
                     onClick={async () => {
                       setPickingId(o.id);
-                      await switchOutlet(o.id);
-                      await finishPicker();
+                      const outletChanged = o.id !== activeOutletId;
+                      if (outletChanged) {
+                        try { await switchOutlet(o.id); } catch { /* ignore — redirect must still fire */ }
+                      }
+                      finishPicker(outletChanged || accountChangedRef.current);
                     }}
                     disabled={switching || isPicking}
                     className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-[#F8F8F8] transition-colors text-left disabled:opacity-60"
