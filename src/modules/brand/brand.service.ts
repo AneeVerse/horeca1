@@ -3,6 +3,8 @@ import { emitEvent } from '@/events/emitter';
 import { Errors } from '@/middleware/errorHandler';
 import { provisionDefaultAccount } from '@/lib/provisionAccount';
 import { runMappingForProduct, runMappingForBrand, embedBrandMasterProduct } from './brand-mapper';
+import { validateMasterSku } from '@/lib/sku';
+import { assertLeafCategory } from '@/modules/catalog/catalog.service';
 function slugify(str: string): string {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
@@ -525,6 +527,7 @@ export class BrandService {
     const product = await prisma.brandMasterProduct.create({
       data: {
         brandId,
+        masterProductId: input.masterProductId ?? null,
         slug: slugify(input.name),
         name: input.name,
         description: input.description,
@@ -576,6 +579,53 @@ export class BrandService {
       .finally(() => runMappingForProduct(product.id).catch(console.error));
 
     return product;
+  }
+
+  // ── Brand: submit new master catalog entry for admin approval ──
+  async submitPendingMasterProduct(
+    userId: string,
+    input: { name: string; sku: string; categoryId: string; imageUrl?: string; uom?: string },
+  ) {
+    const brandId = await this.getBrandIdForUser(userId);
+    const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { name: true } });
+    if (!brand) throw Errors.notFound('Brand profile not found');
+
+    const skuCheck = validateMasterSku(input.sku);
+    if (!skuCheck.ok) throw Errors.badRequest(skuCheck.message);
+
+    const existingSku = await prisma.masterProduct.findFirst({
+      where: { sku: { equals: skuCheck.normalized, mode: 'insensitive' } },
+      select: { id: true, approvalStatus: true },
+    });
+    if (existingSku) {
+      if (existingSku.approvalStatus === 'approved') {
+        throw Errors.conflict(`SKU "${skuCheck.normalized}" already exists in the master catalog`);
+      }
+      throw Errors.conflict(`SKU "${skuCheck.normalized}" is already pending approval`);
+    }
+
+    await assertLeafCategory([input.categoryId]);
+
+    const master = await prisma.masterProduct.create({
+      data: {
+        sku: skuCheck.normalized,
+        name: input.name.trim(),
+        brand: brand.name,
+        categoryId: input.categoryId,
+        imageUrl: input.imageUrl ?? null,
+        uom: input.uom ?? null,
+        approvalStatus: 'pending',
+        suggestedBy: userId,
+      },
+    });
+
+    emitEvent('ProductSubmitted', {
+      productId: master.id,
+      vendorId: '',
+      productName: master.name,
+    });
+
+    return master;
   }
 
   // ── Brand: update master product ──────────────────────────

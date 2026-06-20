@@ -98,11 +98,47 @@ export function CategoryMultiPickerById({
         );
     }, [allCats, value, lcQuery]);
 
-    const exactMatch = useMemo(
-        () => allCats.some(c => c.name.toLowerCase() === lcQuery),
-        [allCats, lcQuery],
-    );
-    const canSuggest = !disableSuggest && trimmedQuery.length >= 2 && !exactMatch;
+    const exactMatch = useMemo(() => {
+        if (allCats.some(c => c.name.toLowerCase() === lcQuery)) return true;
+        for (const root of allCats.filter(c => !c.parentName)) {
+            const prefix = `${root.name} `.toLowerCase();
+            if (lcQuery.startsWith(prefix)) {
+                const childName = trimmedQuery.slice(root.name.length).trim().toLowerCase();
+                if (allCats.some(c => c.name.toLowerCase() === childName && c.parentName === root.name)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }, [allCats, lcQuery, trimmedQuery]);
+
+    const suggestParentId = useMemo((): string | undefined => {
+        const parentsInFilter = [...new Set(filtered.map(c => c.parentName).filter(Boolean))];
+        if (parentsInFilter.length === 1) {
+            const parent = allCats.find(c => c.name === parentsInFilter[0] && !c.parentName);
+            if (parent) return parent.id;
+        }
+        for (const root of allCats.filter(c => !c.parentName)) {
+            const prefix = `${root.name} `.toLowerCase();
+            if (lcQuery.startsWith(prefix) && lcQuery.length > prefix.length) {
+                return root.id;
+            }
+        }
+        return undefined;
+    }, [filtered, lcQuery, trimmedQuery, allCats]);
+
+    const suggestName = useMemo(() => {
+        if (!suggestParentId) return trimmedQuery;
+        const parent = allCats.find(c => c.id === suggestParentId);
+        if (!parent) return trimmedQuery;
+        const prefix = `${parent.name} `.toLowerCase();
+        if (lcQuery.startsWith(prefix)) {
+            return trimmedQuery.slice(parent.name.length).trim() || trimmedQuery;
+        }
+        return trimmedQuery;
+    }, [suggestParentId, trimmedQuery, lcQuery, allCats]);
+
+    const canSuggest = !disableSuggest && suggestName.length >= 2 && !exactMatch;
 
     const select = (id: string) => {
         if (value.includes(id)) return;
@@ -125,18 +161,25 @@ export function CategoryMultiPickerById({
             const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: trimmedQuery }),
+                body: JSON.stringify({
+                    name: suggestName,
+                    ...(suggestParentId ? { parentId: suggestParentId } : {}),
+                }),
             });
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Suggestion failed');
             const cat = json.data;
-            // Add returned category (may be pending) to selection AND to the local pool
-            setAllCats(prev => prev.some(p => p.id === cat.id) ? prev : [...prev, { id: cat.id, name: cat.name, parentName: null }]);
+            const parent = suggestParentId ? allCats.find(c => c.id === suggestParentId) : null;
+            setAllCats(prev => prev.some(p => p.id === cat.id) ? prev : [...prev, {
+                id: cat.id,
+                name: cat.name,
+                parentName: parent?.name ?? null,
+            }]);
             select(cat.id);
             if (json.alreadyExists) {
                 toast.success(`Picked existing category "${cat.name}"`);
             } else {
-                toast.success(`Sent "${trimmedQuery}" to admin for review`);
+                toast.success(`Sent "${suggestName}" to admin for review`);
             }
         } catch (e: unknown) {
             toast.error(e instanceof Error ? e.message : 'Suggestion failed');
@@ -221,7 +264,7 @@ export function CategoryMultiPickerById({
                                 >
                                     <span className="flex items-center gap-2 text-[12px] font-bold">
                                         {suggesting ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-                                        Request &ldquo;{trimmedQuery}&rdquo; — admin will review
+                                        Request &ldquo;{suggestName}&rdquo;{suggestParentId ? ' (sub-category)' : ''} — admin will review
                                     </span>
                                     <Check size={12} className="opacity-60" />
                                 </button>

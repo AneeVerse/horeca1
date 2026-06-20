@@ -85,16 +85,29 @@ export default function BrandProductsPage() {
         }
         setSearchingMasters(true);
         try {
-            // First search strictly within the brand
+            const trimmed = q.trim();
+            const looksLikeSku = /^[A-Za-z0-9][A-Za-z0-9_-]+$/.test(trimmed) && trimmed.length >= 2;
+
+            if (looksLikeSku) {
+                const exactRes = await fetch(
+                    `/api/v1/master-products?search=${encodeURIComponent(trimmed)}&exact=true&brand=${encodeURIComponent(brandName)}&limit=1`,
+                );
+                const exactJson = await exactRes.json();
+                if (exactJson.success && exactJson.data?.length === 1) {
+                    setMasterSuggestions(exactJson.data);
+                    setShowMasterSuggestions(true);
+                    return;
+                }
+            }
+
             let res = await fetch(`/api/v1/master-products?brand=${encodeURIComponent(brandName)}&search=${encodeURIComponent(q)}&limit=10`);
             let json = await res.json();
-            
-            // If no brand-specific results, fall back to searching all products in master catalog
+
             if (json.success && (!json.data || json.data.length === 0)) {
                 res = await fetch(`/api/v1/master-products?search=${encodeURIComponent(q)}&limit=10`);
                 json = await res.json();
             }
-            
+
             if (json.success) {
                 setMasterSuggestions(json.data || []);
                 setShowMasterSuggestions(true);
@@ -152,9 +165,35 @@ export default function BrandProductsPage() {
 
     const handleSubmit = async () => {
         if (!form.name.trim()) { setFormError('Product name is required'); return; }
+        if (!form.masterProductId && !editingId) {
+            if (!form.sku.trim()) { setFormError('SKU is required for new products'); return; }
+            if (form.categoryIds.length === 0) { setFormError('At least one category is required'); return; }
+        }
         setActionLoading('form');
         setFormError(null);
         try {
+            if (!editingId && !form.masterProductId) {
+                const res = await fetch('/api/v1/brand/master-products', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: form.name.trim(),
+                        sku: form.sku.trim(),
+                        categoryId: form.categoryIds[0],
+                        ...(form.imageUrl && { imageUrl: form.imageUrl }),
+                        ...(form.unit && { uom: form.unit }),
+                    }),
+                });
+                const json = await res.json();
+                if (json.success) {
+                    toast.success('Product submitted for admin approval');
+                    setShowForm(false);
+                } else {
+                    setFormError(json.error?.message ?? 'Failed to submit product');
+                }
+                return;
+            }
+
             const payload = {
                 name: form.name.trim(),
                 ...(form.packSize && { packSize: form.packSize }),
@@ -319,6 +358,16 @@ export default function BrandProductsPage() {
                             </button>
                         </div>
                         <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
+                            {!editingId && !form.masterProductId && (
+                                <div className="rounded-[10px] bg-[#FFF7E6] border border-amber-200 px-4 py-3 text-[12px] font-medium text-amber-800">
+                                    New products not found in the master catalog are sent to admin for approval before appearing in search.
+                                </div>
+                            )}
+                            {form.masterProductId && (
+                                <div className="rounded-[10px] bg-[#EEF8F1] border border-[#53B175]/30 px-4 py-3 text-[12px] font-medium text-[#299E60]">
+                                    Linked to master catalog — will be added to your brand storefront instantly.
+                                </div>
+                            )}
                             {/* Image upload field */}
                             <div>
                                 <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">Product Image</label>
@@ -469,13 +518,19 @@ export default function BrandProductsPage() {
                             />
 
                             <div>
-                                <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">SKU (optional)</label>
+                                <label className="block text-[12px] font-bold text-[#7C7C7C] mb-1.5 uppercase tracking-wider">
+                                    SKU {!form.masterProductId && !editingId ? '*' : ''}
+                                </label>
                                 <input
                                     type="text"
                                     value={form.sku}
-                                    onChange={e => setForm(prev => ({ ...prev, sku: e.target.value }))}
-                                    placeholder="Your internal product code"
-                                    className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-2.5 text-[14px] font-medium outline-none focus:border-[#53B175]/50 focus:bg-white bg-[#FAFAFA]"
+                                    onChange={e => setForm(prev => ({ ...prev, sku: e.target.value.toUpperCase() }))}
+                                    placeholder="e.g. RIC-BAS-001"
+                                    readOnly={!!form.masterProductId}
+                                    className={cn(
+                                        'w-full border border-[#EEEEEE] rounded-[10px] px-4 py-2.5 text-[14px] font-medium outline-none focus:border-[#53B175]/50 focus:bg-white bg-[#FAFAFA]',
+                                        form.masterProductId && 'bg-[#F8F9FB] cursor-not-allowed',
+                                    )}
                                 />
                             </div>
                             {formError && (

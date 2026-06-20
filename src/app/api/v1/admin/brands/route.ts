@@ -33,6 +33,77 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
     requirePermission(ctx, 'brands.create');
 
     const body = await req.json();
+
+    // Quick create — brand name only (for catalog listing before storefront setup).
+    if (body.quickCreate === true) {
+      const name = String(body.name ?? '').trim();
+      if (!name) throw Errors.badRequest('Brand name is required');
+
+      const slug = slugify(name);
+      const slugExists = await prisma.brand.findUnique({ where: { slug }, select: { id: true } });
+      if (slugExists) throw Errors.conflict('A brand with this name already exists');
+
+      const emailBase = slug.replace(/-/g, '') || 'brand';
+      const email = `${emailBase}.${Date.now()}@brand.internal.horeca1`;
+      const password = String(body.password ?? `Hc1-${Math.random().toString(36).slice(2, 10)}!`);
+      if (password.length < 6) throw Errors.badRequest('Password must be at least 6 characters');
+
+      const hashedPassword = await bcrypt.hash(password, 12);
+      const hcidDisplay = await uniqueHcid();
+
+      const result = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            fullName: name,
+            email,
+            password: hashedPassword,
+            role: 'brand',
+            isActive: true,
+            hcidDisplay,
+            businessName: name,
+          },
+        });
+
+        const account = await tx.businessAccount.create({
+          data: {
+            legalName: name,
+            isCustomer: false,
+            isVendor: false,
+            isBrand: true,
+            status: 'active',
+          },
+        });
+
+        await tx.businessAccountMember.create({
+          data: { userId: user.id, businessAccountId: account.id, isPrimary: true, acceptedAt: new Date() },
+        });
+
+        const brandAdminTemplate = await tx.accountRole.findFirst({
+          where: { businessAccountId: null, isTemplate: true, name: 'Brand Admin', scope: 'brand' },
+          select: { id: true },
+        });
+        if (!brandAdminTemplate) throw Errors.badRequest('Brand Admin role template missing. Run seed migration.');
+
+        await tx.userRole.create({
+          data: { userId: user.id, businessAccountId: account.id, outletId: null, roleId: brandAdminTemplate.id },
+        });
+
+        return tx.brand.create({
+          data: {
+            userId: user.id,
+            businessAccountId: account.id,
+            slug,
+            name,
+            approvalStatus: 'approved',
+            isActive: true,
+          },
+          select: { id: true, name: true, slug: true, logoUrl: true, approvalStatus: true, isActive: true, createdAt: true },
+        });
+      });
+
+      return NextResponse.json({ success: true, data: result }, { status: 201 });
+    }
+
     const input = BrandProfileSchema.passthrough().parse(body);
 
     const validation = validateBrandProfile(
