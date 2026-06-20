@@ -233,12 +233,11 @@ export default function VendorSettingsPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     businessName,
-                    // These three are optional-but-not-nullable on the API (z.string().url() etc.).
-                    // Sending `null` for an empty value fails Zod and rejects the whole save, so
-                    // omit empties instead (undefined → key dropped by JSON.stringify).
-                    description: description || undefined,
-                    logoUrl: logoUrl || undefined,
-                    bannerUrl: bannerUrl || undefined,
+                    // The API now accepts null/empty values and relative/absolute URLs.
+                    // Sending null allows the vendor to clear these fields in the database.
+                    description: description || null,
+                    logoUrl: logoUrl || null,
+                    bannerUrl: bannerUrl || null,
                     minOrderValue: parseFloat(minOrderValue) || 0,
                     creditEnabled,
                     addressLine: addressLine || undefined,

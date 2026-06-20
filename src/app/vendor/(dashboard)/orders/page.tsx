@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Search, Loader2, Eye, CheckCircle2, ChevronRight, ChevronLeft, AlertTriangle, Download, X } from 'lucide-react';
+import { Search, Loader2, Eye, CheckCircle2, ChevronRight, ChevronLeft, AlertTriangle, Download, X, ChevronDown, ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -23,16 +23,16 @@ interface VendorOrder {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_STYLE: Record<string, string> = {
-    draft: 'bg-gray-50 text-gray-600',
-    delivered: 'bg-[#EEF8F1] text-[#299E60]',
-    confirmed: 'bg-blue-50 text-blue-600',
-    processing: 'bg-indigo-50 text-indigo-600',
-    pending: 'bg-[#FFF4E5] text-[#976538]',
-    ready_for_dispatch: 'bg-cyan-50 text-cyan-600',
-    shipped: 'bg-purple-50 text-purple-600',
-    partially_delivered: 'bg-orange-50 text-orange-600',
-    returned: 'bg-rose-50 text-rose-600',
-    cancelled: 'bg-[#FFF0F0] text-[#E74C3C]',
+    draft: 'bg-gray-100 text-gray-700 border-gray-200',
+    delivered: 'bg-[#EEF8F1] text-[#299E60] border-[#D1FAE5]',
+    confirmed: 'bg-blue-50 text-blue-700 border-blue-100',
+    processing: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+    pending: 'bg-[#FFF8EB] text-[#D97706] border-[#FEF3C7]',
+    ready_for_dispatch: 'bg-cyan-50 text-cyan-700 border-cyan-100',
+    shipped: 'bg-purple-50 text-purple-700 border-purple-100',
+    partially_delivered: 'bg-orange-50 text-orange-700 border-orange-100',
+    returned: 'bg-rose-50 text-rose-700 border-rose-100',
+    cancelled: 'bg-[#FDF2F2] text-[#EF4444] border-[#FEE2E2]',
 };
 
 const PAYMENT_STYLE: Record<string, string> = {
@@ -41,6 +41,24 @@ const PAYMENT_STYLE: Record<string, string> = {
     partial: 'bg-blue-50 text-blue-600',
     refunded: 'bg-[#F3F4F6] text-[#6B7280]',
 };
+
+const STATUS_LABELS: Record<string, string> = {
+    draft: 'Draft',
+    pending: 'Pending Approval',
+    confirmed: 'Accepted',
+    processing: 'Packing',
+    ready_for_dispatch: 'Ready for Dispatch',
+    shipped: 'Out for Delivery',
+    partially_delivered: 'Partially Delivered',
+    delivered: 'Delivered',
+    returned: 'Returned',
+    cancelled: 'Cancelled',
+};
+
+const STATUS_OPTIONS = [
+    'pending', 'confirmed', 'processing', 'ready_for_dispatch',
+    'shipped', 'partially_delivered', 'delivered', 'returned', 'cancelled',
+];
 
 const STATUS_TABS = ['all', 'pending', 'confirmed', 'processing', 'ready_for_dispatch', 'shipped', 'partially_delivered', 'delivered', 'returned', 'cancelled'] as const;
 const PAGE_SIZE = 20;
@@ -68,7 +86,7 @@ export default function VendorOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [cursor, setCursor] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(false);
-    const [accepting, setAccepting] = useState<string | null>(null);
+    const [busyId, setBusyId] = useState<string | null>(null);
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [paymentStatusFilter, setPaymentStatusFilter] = useState('');
@@ -150,24 +168,25 @@ export default function VendorOrdersPage() {
         fetchOrders({ tab: activeTab, q: searchQuery, cur: stack[stack.length - 1] ?? null, from: dateFrom, to: dateTo, payment: paymentStatusFilter });
     };
 
-    const handleAccept = async (order: VendorOrder) => {
-        setAccepting(order.id);
+    const updateOrderStatus = async (orderId: string, newStatus: string) => {
+        const prev = orders.find(o => o.id === orderId)?.status;
+        if (!prev || prev === newStatus) return;
+        setBusyId(orderId);
+        setOrders(os => os.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
         try {
-            const res = await fetch(`/api/v1/vendor/orders/${order.id}`, {
+            const res = await fetch(`/api/v1/vendor/orders/${orderId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'confirmed' }),
+                body: JSON.stringify({ status: newStatus }),
             });
             const json = await res.json();
-            if (!json.success) throw new Error(json.error?.message || 'Failed to accept');
-            toast.success(`${order.orderNumber} accepted!`);
-            setOrders(prev => prev.map(o =>
-                o.id === order.id ? { ...o, status: 'confirmed' } : o
-            ));
+            if (!res.ok || !json.success) throw new Error(json.error?.message || json.message || 'Failed to update status');
+            toast.success(`Order set to ${STATUS_LABELS[newStatus] || newStatus.replace(/_/g, ' ')}`);
         } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : 'Accept failed');
+            setOrders(os => os.map(o => o.id === orderId ? { ...o, status: prev } : o));
+            toast.error(err instanceof Error ? err.message : 'Failed to update status');
         } finally {
-            setAccepting(null);
+            setBusyId(null);
         }
     };
 
@@ -326,7 +345,6 @@ export default function VendorOrdersPage() {
                                     </tr>
                                 ) : orders.map((order) => {
                                     const overSLA = order.status === 'pending' && isOverSLA(order.createdAt);
-                                    const isAccepting = accepting === order.id;
                                     return (
                                         <tr
                                             key={order.id}
@@ -375,32 +393,44 @@ export default function VendorOrdersPage() {
                                                 </span>
                                             </td>
                                             <td className="px-5 py-4 text-center">
-                                                <span className={cn(
-                                                    'inline-flex px-3 py-1 rounded-[8px] text-[12px] font-bold capitalize',
-                                                    STATUS_STYLE[order.status] || 'bg-gray-100 text-gray-600'
-                                                )}>
-                                                    {order.status.replace(/_/g, ' ')}
-                                                </span>
+                                                <div className="flex justify-center items-center">
+                                                    <div className="relative inline-block">
+                                                        <select
+                                                            value={order.status}
+                                                            disabled={busyId === order.id}
+                                                            onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                                                            className={cn(
+                                                                "cursor-pointer rounded-[8px] text-[11px] font-black uppercase tracking-wider pl-3.5 pr-8 py-2 outline-none border border-transparent appearance-none disabled:opacity-50 transition-all shadow-sm",
+                                                                STATUS_STYLE[order.status] || 'bg-gray-100 text-gray-700 border-gray-200'
+                                                            )}
+                                                        >
+                                                            {!STATUS_OPTIONS.includes(order.status) && (
+                                                                <option value={order.status} disabled className="bg-white text-gray-800 capitalize">
+                                                                    {STATUS_LABELS[order.status] || order.status.replace(/_/g, ' ')}
+                                                                </option>
+                                                            )}
+                                                            {STATUS_OPTIONS.map((s) => (
+                                                                <option key={s} value={s} className="bg-white text-gray-800 capitalize">
+                                                                    {STATUS_LABELS[s] || s.replace(/_/g, ' ')}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+                                                    </div>
+                                                    {busyId === order.id && (
+                                                        <Loader2 size={13} className="animate-spin text-[#299E60] ml-1.5 shrink-0" />
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-5 py-4 text-center">
-                                                <div className="flex items-center justify-center gap-1.5">
-                                                    {order.status === 'pending' && (
-                                                        <button
-                                                            onClick={() => handleAccept(order)}
-                                                            disabled={!!accepting}
-                                                            className="h-8 px-3 rounded-[8px] bg-[#299E60] text-white text-[12px] font-bold hover:bg-[#238a54] transition-all flex items-center gap-1 disabled:opacity-60"
-                                                        >
-                                                            {isAccepting
-                                                                ? <Loader2 size={12} className="animate-spin" />
-                                                                : <CheckCircle2 size={12} />}
-                                                            Accept
-                                                        </button>
-                                                    )}
+                                                <div className="flex justify-center">
                                                     <Link
                                                         href={`/vendor/orders/${order.id}`}
-                                                        className="h-8 px-3 rounded-[8px] border border-[#EEEEEE] text-[12px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all flex items-center gap-1"
+                                                        className="h-[34px] px-3.5 bg-[#EEF8F1] border border-[#299E60]/10 hover:bg-[#D1FAE5] text-[#299E60] text-[12px] font-bold rounded-[8px] transition-all flex items-center justify-center gap-1 shadow-sm active:scale-97 whitespace-nowrap"
                                                     >
                                                         <Eye size={13} />
+                                                        <span>View Details</span>
+                                                        <ArrowUpRight size={11} className="opacity-65" />
                                                     </Link>
                                                 </div>
                                             </td>

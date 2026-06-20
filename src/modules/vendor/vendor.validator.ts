@@ -17,11 +17,20 @@ export const createVendorSchema = z.object({
   minOrderValue: z.number().min(0).default(0),
 });
 
+const optionalUrlSchema = z.string()
+  .optional()
+  .nullable()
+  .or(z.literal(''))
+  .refine(
+    (val) => !val || val.startsWith('/') || /^(https?:\/\/)/.test(val),
+    { message: 'Invalid URL format' }
+  );
+
 export const updateVendorSchema = z.object({
   businessName: z.string().min(2).optional(),
   description: z.string().optional(),
-  logoUrl: z.string().url().optional(),
-  bannerUrl: z.string().url().optional(),
+  logoUrl: optionalUrlSchema,
+  bannerUrl: optionalUrlSchema,
   minOrderValue: z.number().min(0).optional(),
   creditEnabled: z.boolean().optional(),
 });

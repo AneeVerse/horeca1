@@ -72,7 +72,7 @@ export const listOrdersSchema = z.object({
 // 'draft' and 'pending' are entry states (set by save-draft / submit), never
 // a transition target here.
 export const updateStatusSchema = z.object({
-  status: z.enum(['confirmed', 'processing', 'ready_for_dispatch', 'shipped', 'partially_delivered', 'delivered', 'returned', 'cancelled']),
+  status: z.enum(['pending', 'confirmed', 'processing', 'ready_for_dispatch', 'shipped', 'partially_delivered', 'delivered', 'returned', 'cancelled']),
   reason: z.string().min(1).max(500).optional(),
   proof: z.object({
     proofType: z.enum(['otp', 'photo', 'signature', 'notes', 'none']).optional(),
@@ -82,6 +82,7 @@ export const updateStatusSchema = z.object({
     // against the OTP issued for this order when proofType='otp'.
     otp: z.string().regex(/^\d{4}$/).optional(),
   }).optional(),
+  force: z.boolean().optional(),
 }).refine(
   (d) => d.status !== 'cancelled' || (d.reason && d.reason.trim().length > 0),
   { message: 'A reason is required when cancelling an order', path: ['reason'] },

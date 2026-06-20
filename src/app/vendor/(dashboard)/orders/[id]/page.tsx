@@ -6,7 +6,8 @@ import { useParams, useRouter } from 'next/navigation';
 import {
     ChevronLeft, User, Package, MapPin, Loader2, AlertCircle, Clock,
     CheckCircle2, XCircle, Printer, ChevronRight, AlertTriangle,
-    Truck, ClipboardList, Minus, Plus, Info,
+    Truck, ClipboardList, Minus, Plus, Info, ShoppingBag, Landmark,
+    Calendar, FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -47,6 +48,17 @@ interface OrderPayment {
     createdAt: string;
 }
 
+interface OrderVendor {
+    id: string;
+    businessName: string;
+    slug: string;
+    logoUrl: string | null;
+    addressLine: string | null;
+    city: string | null;
+    state: string | null;
+    addressPincode: string | null;
+}
+
 interface OrderData {
     id: string;
     orderNumber: string;
@@ -70,6 +82,8 @@ interface OrderData {
     deliveryNotes: string | null;
     ewayBillNo: string | null;
     isPartial: boolean;
+    deliveryAddressSnapshot: any;
+    vendor: OrderVendor;
     user: OrderUser;
     items: OrderItem[];
     payments: OrderPayment[];
@@ -107,12 +121,68 @@ function getStatusIndex(status: string): number {
     return STATUS_FLOW.indexOf(status as typeof STATUS_FLOW[number]);
 }
 
+function getStatusBadgeClasses(status: string): string {
+    switch (status) {
+        case 'delivered':
+        case 'confirmed':
+            return 'bg-[#EEF8F1] text-[#299E60] border-[#D1FAE5]';
+        case 'processing':
+        case 'pending':
+            return 'bg-[#FFF8EB] text-[#D97706] border-[#FEF3C7]';
+        case 'shipped':
+            return 'bg-[#E8F0FE] text-[#1A56DB] border-[#DBEAFE]';
+        case 'cancelled':
+            return 'bg-[#FDF2F2] text-[#EF4444] border-[#FEE2E2]';
+        default:
+            return 'bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]';
+    }
+}
+
+function getPaymentStatusBadgeClasses(status: string): string {
+    switch (status) {
+        case 'paid':
+            return 'bg-[#EEF8F1] text-[#299E60] border-[#D1FAE5]';
+        case 'pending':
+            return 'bg-[#FFF8EB] text-[#D97706] border-[#FEF3C7]';
+        case 'failed':
+            return 'bg-[#FDF2F2] text-[#EF4444] border-[#FEE2E2]';
+        default:
+            return 'bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]';
+    }
+}
+
+function formatSnapshotAddress(snapshot: any): { address: string; pincode: string | null } {
+    if (!snapshot) return { address: 'Not specified', pincode: null };
+    const parts = [
+        snapshot.flatInfo,
+        snapshot.addressLine,
+        snapshot.landmark ? `Near ${snapshot.landmark}` : null,
+        snapshot.city,
+        snapshot.state
+    ].filter(Boolean);
+    return {
+        address: parts.length > 0 ? parts.join(', ') : 'Not specified',
+        pincode: snapshot.pincode || null
+    };
+}
+
 // ─── StatusTimeline ───────────────────────────────────────────────────────────
 
-function StatusTimeline({ status, createdAt, acceptedAt }: {
-    status: string; createdAt: string; acceptedAt: string | null;
+function StatusTimeline({
+    status,
+    createdAt,
+    acceptedAt,
+    onChangeStatus,
+    disabled
+}: {
+    status: string;
+    createdAt: string;
+    acceptedAt: string | null;
+    onChangeStatus: (status: string) => Promise<void>;
+    disabled?: boolean;
 }) {
     const currentIdx = getStatusIndex(status);
+    const [updatingStep, setUpdatingStep] = useState<string | null>(null);
 
     if (status === 'cancelled') {
         return (
@@ -126,9 +196,21 @@ function StatusTimeline({ status, createdAt, acceptedAt }: {
         );
     }
 
+    const handleStepClick = async (step: string) => {
+        if (step === status || updatingStep || disabled) return;
+        setUpdatingStep(step);
+        try {
+            await onChangeStatus(step);
+        } catch (err) {
+            // Error handling is managed by caller
+        } finally {
+            setUpdatingStep(null);
+        }
+    };
+
     return (
         <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
-            <div className="flex items-center justify-between relative">
+            <div className="flex items-start justify-between relative">
                 <div className="absolute top-[18px] left-[18px] right-[18px] h-[2px] bg-[#EEEEEE] -z-0" />
                 <div
                     className="absolute top-[18px] left-[18px] h-[2px] bg-[#299E60] -z-0 transition-all duration-500"
@@ -137,21 +219,36 @@ function StatusTimeline({ status, createdAt, acceptedAt }: {
                 {STATUS_FLOW.map((step, idx) => {
                     const done = currentIdx > idx;
                     const current = currentIdx === idx;
+                    const isUpdating = updatingStep === step;
                     const ts = idx === 0 ? createdAt : idx === 1 ? acceptedAt : null;
                     return (
-                        <div key={step} className="flex flex-col items-center z-10 gap-1.5 min-w-0">
+                        <div
+                            key={step}
+                            onClick={() => handleStepClick(step)}
+                            className={cn(
+                                "flex flex-col items-center z-10 gap-1.5 min-w-0 transition-all select-none",
+                                step !== status && !updatingStep && !disabled ? "cursor-pointer hover:scale-105" : "cursor-default"
+                            )}
+                        >
                             <div className={cn(
                                 'w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all',
                                 done ? 'bg-[#299E60] border-[#299E60]' :
                                     current ? 'bg-white border-[#299E60] ring-4 ring-[#299E60]/20' :
-                                        'bg-white border-[#DDDDDD]'
+                                        'bg-white border-[#DDDDDD]',
+                                isUpdating && 'ring-4 ring-yellow-400/30 border-yellow-400'
                             )}>
-                                {done ? <CheckCircle2 size={18} className="text-white" />
-                                    : current ? <div className="w-3 h-3 rounded-full bg-[#299E60] animate-pulse" />
-                                        : <div className="w-3 h-3 rounded-full bg-[#DDDDDD]" />}
+                                {isUpdating ? (
+                                    <Loader2 size={16} className="animate-spin text-[#299E60]" />
+                                ) : done ? (
+                                    <CheckCircle2 size={18} className="text-white" />
+                                ) : current ? (
+                                    <div className="w-3 h-3 rounded-full bg-[#299E60] animate-pulse" />
+                                ) : (
+                                    <div className="w-3 h-3 rounded-full bg-[#DDDDDD]" />
+                                )}
                             </div>
                             <div className="text-center">
-                                <p className={cn('text-[11px] font-bold', done || current ? 'text-[#181725]' : 'text-[#AEAEAE]')}>
+                                <p className={cn('text-[11px] font-bold transition-colors', done || current ? 'text-[#181725]' : 'text-[#AEAEAE]', step !== status && !updatingStep && !disabled && "hover:text-[#299E60]")}>
                                     {STATUS_LABELS[step]}
                                 </p>
                                 {ts && (done || current) && (
@@ -209,9 +306,9 @@ function ActionPanel({ order, fulfilledQtys, adjustedTotal, isPartialAccept, onA
 
     return (
         <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-[#EEEEEE] flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-[#EEEEEE] flex flex-col gap-1">
                 <h3 className="text-[15px] font-bold text-[#181725]">Actions</h3>
-                <span className="text-[12px] text-[#AEAEAE] hidden sm:block">{hint}</span>
+                <span className="text-[12px] text-[#AEAEAE]">{hint}</span>
             </div>
             <div className="p-6">
 
@@ -571,6 +668,24 @@ export default function VendorOrderDetailPage() {
         }
     }, [order, orderId]);
 
+    const handleTimelineStatusChange = useCallback(async (status: string) => {
+        if (!order) return;
+        try {
+            const res = await fetch(`/api/v1/vendor/orders/${orderId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status, force: true }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Update failed');
+            setOrder(prev => prev ? { ...prev, ...json.data } : prev);
+            toast.success(`Order status set to ${STATUS_LABELS[status] ?? status}.`);
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Action failed');
+            throw err;
+        }
+    }, [order, orderId]);
+
     const handleAccept = useCallback(async (qtys: Record<string, number>) => {
         if (!order) return;
         try {
@@ -609,7 +724,7 @@ export default function VendorOrderDetailPage() {
             });
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Save failed');
-            setOrder(prev => prev ? { ...prev, ewayBillNo: ewayBill.trim() } : prev);
+setOrder(prev => prev ? { ...prev, ewayBillNo: ewayBill.trim() } : prev);
             toast.success('E-Way Bill number saved.');
         } catch (err: unknown) {
             toast.error(err instanceof Error ? err.message : 'Failed to save');
@@ -642,47 +757,43 @@ export default function VendorOrderDetailPage() {
     const isPending = order.status === 'pending';
 
     return (
-        <div className="space-y-5 pb-12">
+        <div className="space-y-6 pb-12 px-4 md:px-0">
 
-            {/* ── Header ───────────────────────────────────────── */}
-            <div className="flex items-start justify-between print:hidden">
-                <div className="flex items-center gap-3">
+            {/* Page Header */}
+            <div className="flex items-center justify-between border-b border-[#EEEEEE] pb-4 print:hidden">
+                <div className="flex items-center gap-3 text-[13px] text-[#6B7280]">
                     <button
                         onClick={() => router.back()}
-                        className="w-9 h-9 rounded-full hover:bg-[#F1F4F9] flex items-center justify-center transition-colors"
+                        className="w-[34px] h-[34px] rounded-[10px] bg-white border border-[#E5E7EB] flex items-center justify-center hover:bg-[#F9FAFB] transition-all shadow-sm shrink-0 active:scale-95"
                     >
-                        <ChevronLeft size={20} className="text-[#181725]" />
+                        <ChevronLeft size={16} className="text-[#374151]" />
                     </button>
-                    <div>
+                    <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                            <h1 className="text-[22px] font-bold text-[#181725]">{order.orderNumber}</h1>
+                            <h1 className="text-[20px] font-black text-[#111827] leading-none">Order Details</h1>
+                            <span className={cn(
+                                'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border',
+                                getStatusBadgeClasses(order.status)
+                            )}>
+                                {STATUS_LABELS[order.status] ?? order.status}
+                            </span>
                             {order.isPartial && (
-                                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#FFF4E5] text-[#976538]">Partial</span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border bg-[#FFF4E5] text-[#976538]">Partial</span>
                             )}
                         </div>
-                        <p className="text-[12px] text-[#AEAEAE]">Placed {formatDateTime(order.createdAt)}</p>
+                        <p className="text-[#6B7280] text-[12px] font-medium mt-1">ID: {order.orderNumber} &bull; Placed at {formatDateTime(order.createdAt)}</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-[13px]">
                     {(['confirmed', 'processing', 'shipped'] as const).includes(order.status as 'confirmed' | 'processing' | 'shipped') && (
                         <button
                             onClick={() => window.print()}
-                            className="h-9 px-4 rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] flex items-center gap-1.5 transition-all"
+                            className="h-[34px] px-4 rounded-[10px] border border-[#EEEEEE] text-[13px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
                         >
                             <Printer size={15} />
                             Print Picklist
                         </button>
                     )}
-                    <span className={cn(
-                        'px-4 py-2 rounded-[10px] text-[13px] font-bold capitalize',
-                        order.status === 'delivered' || order.status === 'confirmed' ? 'bg-[#EEF8F1] text-[#299E60]' :
-                            order.status === 'processing' || order.status === 'pending' ? 'bg-[#FFF4E5] text-[#976538]' :
-                                order.status === 'shipped' ? 'bg-blue-50 text-blue-600' :
-                                    order.status === 'cancelled' ? 'bg-[#FFF0F0] text-[#E74C3C]' :
-                                        'bg-gray-100 text-gray-600'
-                    )}>
-                        {STATUS_LABELS[order.status] ?? order.status}
-                    </span>
                 </div>
             </div>
 
@@ -692,24 +803,17 @@ export default function VendorOrderDetailPage() {
                 <PrintPicklist order={order} />
             )}
 
-            {/* ── Status Timeline ───────────────────────────────── */}
+            {/* Status Timeline */}
             <div className="print:hidden">
-                <StatusTimeline status={order.status} createdAt={order.createdAt} acceptedAt={order.acceptedAt} />
-            </div>
-
-            {/* ── Action Panel ──────────────────────────────────── */}
-            <div className="print:hidden">
-                <ActionPanel
-                    order={order}
-                    fulfilledQtys={fulfilledQtys}
-                    adjustedTotal={adjustedTotal}
-                    isPartialAccept={!!isPartialAccept}
-                    onAction={handleAction}
-                    onAccept={handleAccept}
+                <StatusTimeline 
+                    status={order.status} 
+                    createdAt={order.createdAt} 
+                    acceptedAt={order.acceptedAt} 
+                    onChangeStatus={handleTimelineStatusChange}
                 />
             </div>
 
-            {/* ── Delivery proof ────────────────────────────────── */}
+            {/* Delivery proof banner */}
             {order.status === 'delivered' && (order.deliveryProofType || order.deliveredAt) && (
                 <div className="bg-[#EEF8F1] border border-[#299E60]/20 rounded-[14px] p-5 flex gap-3 print:hidden">
                     <CheckCircle2 size={18} className="text-[#299E60] shrink-0 mt-0.5" />
@@ -730,7 +834,7 @@ export default function VendorOrderDetailPage() {
                 </div>
             )}
 
-            {/* ── Rejection reason ──────────────────────────────── */}
+            {/* Rejection reason banner */}
             {order.status === 'cancelled' && order.rejectionReason && (
                 <div className="bg-[#FFF8ED] border border-[#FFDCB3] rounded-[14px] p-5 flex gap-3 print:hidden">
                     <AlertTriangle size={18} className="text-[#F59E0B] shrink-0 mt-0.5" />
@@ -741,285 +845,341 @@ export default function VendorOrderDetailPage() {
                 </div>
             )}
 
-            {/* ── Info cards ────────────────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                        <User size={16} className="text-[#299E60]" />
-                        <h3 className="text-[14px] font-bold text-[#181725]">Customer</h3>
+            {/* Main Layout Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Left side 2 columns: Cards and tables */}
+                <div className="lg:col-span-2 space-y-6">
+                    {/* Information Cards (Customer, Delivery Destination, Finance & Vendor) */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                        {/* Customer Profile */}
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] p-5 shadow-sm flex flex-col justify-between">
+                            <div className="flex items-start gap-3">
+                                <div className="w-9 h-9 rounded-[10px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60] shrink-0 border border-[#D1FAE5]">
+                                    <User size={16} />
+                                </div>
+                                <div className="min-w-0">
+                                    <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-wider mb-1">Customer Profile</h4>
+                                    <p className="text-[13px] font-bold text-[#374151] truncate">{order.user.fullName}</p>
+                                    <p className="text-[12px] text-[#6B7280] truncate font-medium mt-0.5">{order.user.email}</p>
+                                    {order.user.phone && <p className="text-[11px] text-[#9CA3AF] font-semibold font-mono mt-0.5">{order.user.phone}</p>}
+                                </div>
+                            </div>
+                            {order.user.businessName && (
+                                <div className="mt-3 pt-2 border-t border-[#F3F4F6]">
+                                    <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Business:</span>
+                                    <span className="text-[12px] font-semibold text-[#4B5563] block truncate">{order.user.businessName}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Delivery Destination */}
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] p-5 shadow-sm flex flex-col justify-between">
+                            <div className="flex items-start gap-3">
+                                <div className="w-9 h-9 rounded-[10px] bg-[#EFF6FF] flex items-center justify-center text-[#3B82F6] shrink-0 border border-[#DBEAFE]">
+                                    <MapPin size={16} />
+                                </div>
+                                <div className="min-w-0">
+                                    <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-wider mb-1">Delivery Destination</h4>
+                                    {(() => {
+                                        const snapAddr = formatSnapshotAddress(order.deliveryAddressSnapshot);
+                                        return (
+                                            <>
+                                                <p className="text-[12px] font-semibold text-[#4B5563] line-clamp-2 leading-relaxed">{snapAddr.address}</p>
+                                                {snapAddr.pincode && (
+                                                    <p className="text-[11px] font-bold text-[#374151] mt-1 inline-block bg-[#F3F4F6] px-1.5 py-0.5 rounded">Pin: {snapAddr.pincode}</p>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                            {order.deliverySlot && (
+                                <div className="mt-3 pt-2 border-t border-[#F3F4F6]">
+                                    <span className="text-[10px] uppercase font-bold text-[#9CA3AF] flex items-center gap-1">
+                                        <Calendar size={10} /> Delivery Slot:
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-[#4B5563] block mt-0.5">
+                                        {DAY_NAMES[Number(order.deliverySlot.dayOfWeek)] || `Day ${order.deliverySlot.dayOfWeek}`} ({formatTime(order.deliverySlot.slotStart)} - {formatTime(order.deliverySlot.slotEnd)})
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Finance & Vendor */}
+                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] p-5 shadow-sm flex flex-col justify-between">
+                            <div className="flex items-start gap-3">
+                                <div className="w-9 h-9 rounded-[10px] bg-[#FFF8EB] flex items-center justify-center text-[#D97706] shrink-0 border border-[#FEF3C7]">
+                                    <ShoppingBag size={16} />
+                                </div>
+                                <div className="min-w-0 space-y-1">
+                                    <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-wider mb-1">Finance &amp; Vendor</h4>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[11px] text-[#6B7280] font-medium">Payment:</span>
+                                        <span className={cn(
+                                            'inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase border',
+                                            getPaymentStatusBadgeClasses(order.paymentStatus)
+                                        )}>
+                                            {order.paymentStatus}
+                                        </span>
+                                    </div>
+                                    {order.paymentMethod && (
+                                        <p className="text-[12px] text-[#4B5563] font-semibold">
+                                            <span className="text-[#9CA3AF] font-medium">Method:</span> {order.paymentMethod}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            {order.vendor && (
+                                <div className="mt-3 pt-2 border-t border-[#F3F4F6] text-[12px] text-[#4B5563]">
+                                    <span className="text-[10px] uppercase font-bold text-[#9CA3AF] block mb-1">Vendor Partner:</span>
+                                    <span className="font-bold text-[#299E60] block truncate">{order.vendor.businessName}</span>
+                                    {(() => {
+                                        const vendorAddress = [
+                                            order.vendor.addressLine,
+                                            order.vendor.city,
+                                            order.vendor.state
+                                        ].filter(Boolean).join(', ');
+                                        const vendorPincode = order.vendor.addressPincode;
+                                        return vendorAddress ? (
+                                            <p className="text-[11px] text-[#6B7280] font-medium leading-relaxed mt-1">
+                                                {vendorAddress}{vendorPincode ? ` - ${vendorPincode}` : ''}
+                                            </p>
+                                        ) : (
+                                            <p className="text-[11px] text-[#9CA3AF] font-medium mt-1">No address specified</p>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    <div className="space-y-1.5 text-[13px]">
-                        <p className="font-bold text-[#181725]">{order.user.fullName}</p>
-                        {order.user.businessName && <p className="text-[#7C7C7C]">{order.user.businessName}</p>}
-                        <p className="text-[#7C7C7C]">{order.user.email}</p>
-                        {order.user.phone && <p className="text-[#7C7C7C]">{order.user.phone}</p>}
+
+                    {/* Order Items Table Card */}
+                    <div className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden">
+                        <div className="px-5 py-4 border-b border-[#EEEEEE] bg-[#FAFAFA] flex items-center justify-between">
+                            <h3 className="text-[14px] font-black text-[#111827] flex items-center gap-1.5">
+                                <Package size={16} className="text-[#299E60]" />
+                                Products Sub-items List ({order.items.length})
+                            </h3>
+                            {isPending && (
+                                <span className="text-[11px] text-[#AEAEAE] hidden sm:block">
+                                    Adjust &quot;Fulfil&quot; qty to ship less than ordered
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="overflow-x-auto w-full">
+                            <table className="w-full border-collapse text-left text-[13px]">
+                                <thead>
+                                    <tr className="bg-[#FAFAFA] border-b border-[#EEEEEE] text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">
+                                        <th className="px-5 py-3 font-bold">Product Item</th>
+                                        <th className="px-5 py-3 font-bold text-center">SKU / HSN</th>
+                                        <th className="px-5 py-3 font-bold text-right">Unit Price</th>
+                                        <th className="px-5 py-3 font-bold text-center">Ordered</th>
+                                        {isPending && (
+                                            <th className="px-5 py-3 font-bold text-center text-[#976538]">Fulfil</th>
+                                        )}
+                                        <th className="px-5 py-3 font-bold text-center print:hidden">GST</th>
+                                        <th className="px-5 py-3 font-bold text-right">Total Price</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#F3F4F6]">
+                                    {order.items.map((item) => {
+                                        const taxPct = Number(item.product?.taxPercent ?? 0);
+                                        const itemGST = taxPct > 0
+                                            ? Number(item.totalPrice) - (Number(item.totalPrice) / (1 + taxPct / 100))
+                                            : 0;
+                                        const fulfilled = isPending ? (fulfilledQtys[item.id] ?? item.quantity) : item.fulfilledQty;
+                                        const isReduced = isPending && fulfilled < item.quantity;
+                                        const isSkipped = isPending && fulfilled === 0;
+
+                                        return (
+                                            <tr key={item.id} className={cn(
+                                                'hover:bg-[#F9FAFB]/30 transition-colors',
+                                                isSkipped && isPending ? 'opacity-40' : ''
+                                            )}>
+                                                <td className="px-5 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        {item.product?.imageUrl ? (
+                                                            <div className="w-10 h-10 rounded-[8px] overflow-hidden bg-[#F1F4F9] shrink-0 relative print:hidden">
+                                                                <Image src={item.product.imageUrl} alt={item.productName} fill className="object-cover" />
+                                                            </div>
+                                                        ) : (
+                                                            <div className="w-10 h-10 rounded-[8px] bg-[#F1F4F9] shrink-0 flex items-center justify-center print:hidden">
+                                                                <Package size={16} className="text-[#AEAEAE]" />
+                                                            </div>
+                                                        )}
+                                                        <div>
+                                                            <p className="text-[13px] font-bold text-[#111827] block leading-tight">{item.productName}</p>
+                                                            {item.product?.packSize && (
+                                                                <p className="text-[11px] text-[#7C7C7C] font-semibold mt-0.5">
+                                                                    {item.product.packSize}{item.product.unit ? ` · ${item.product.unit}` : ''}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-5 py-4 text-center">
+                                                    <div className="text-[11px] text-[#7C7C7C] font-semibold">
+                                                        {item.product?.sku && <p className="font-bold">{item.product.sku}</p>}
+                                                        {item.product?.hsn && <p>HSN: {item.product.hsn}</p>}
+                                                        {!item.product?.sku && !item.product?.hsn && <span className="text-[#DDDDDD]">—</span>}
+                                                    </div>
+                                                </td>
+                                                <td className="px-5 py-4 text-right font-semibold text-[#4B5563]">
+                                                    {formatPrice(item.unitPrice)}
+                                                </td>
+                                                <td className="px-5 py-4 text-center font-extrabold text-[#111827]">
+                                                    {item.quantity}
+                                                </td>
+                                                
+                                                {/* Fulfil qty editor — only visible on pending orders */}
+                                                {isPending && (
+                                                    <td className="px-5 py-4 text-center">
+                                                        <div className="inline-flex items-center gap-1">
+                                                            <button
+                                                                onClick={() => setFulfilledQty(item.id, (fulfilledQtys[item.id] ?? item.quantity) - 1, item.quantity)}
+                                                                className="w-7 h-7 rounded-[6px] border border-[#EEEEEE] flex items-center justify-center hover:bg-[#F5F5F5] text-[#7C7C7C] transition-colors active:scale-95"
+                                                            >
+                                                                <Minus size={12} />
+                                                            </button>
+                                                            <input
+                                                                type="number"
+                                                                min={0}
+                                                                max={item.quantity}
+                                                                value={fulfilledQtys[item.id] ?? item.quantity}
+                                                                onChange={(e) => setFulfilledQty(item.id, parseInt(e.target.value) || 0, item.quantity)}
+                                                                className={cn(
+                                                                    'w-12 h-7 text-center text-[13px] font-bold rounded-[6px] border outline-none',
+                                                                    isSkipped ? 'border-[#E74C3C] text-[#E74C3C] bg-[#FFF0F0]' :
+                                                                        isReduced ? 'border-[#F59E0B] text-[#976538] bg-[#FFF4E5]' :
+                                                                            'border-[#299E60] text-[#299E60] bg-[#F0FBF5]'
+                                                                )}
+                                                            />
+                                                            <button
+                                                                onClick={() => setFulfilledQty(item.id, (fulfilledQtys[item.id] ?? item.quantity) + 1, item.quantity)}
+                                                                className="w-7 h-7 rounded-[6px] border border-[#EEEEEE] flex items-center justify-center hover:bg-[#F5F5F5] text-[#7C7C7C] transition-colors active:scale-95"
+                                                            >
+                                                                <Plus size={12} />
+                                                            </button>
+                                                        </div>
+                                                        {isReduced && !isSkipped && (
+                                                            <p className="text-[10px] text-[#976538] mt-0.5 font-bold">of {item.quantity}</p>
+                                                        )}
+                                                        {isSkipped && (
+                                                            <p className="text-[10px] text-[#E74C3C] mt-0.5 font-bold">skipped</p>
+                                                        )}
+                                                    </td>
+                                                )}
+
+                                                <td className="px-5 py-4 text-center text-[11px] text-[#7C7C7C] font-semibold print:hidden">
+                                                    {taxPct > 0 ? (
+                                                        <div><p className="font-bold">{taxPct}%</p><p>{formatPrice(itemGST)}</p></div>
+                                                    ) : <span className="text-[#DDDDDD]">—</span>}
+                                                </td>
+                                                <td className="px-5 py-4 text-right font-bold text-[#111827]">
+                                                    {isPending && isReduced
+                                                        ? <div>
+                                                            <p className="text-[#976538]">{formatPrice(Number(item.totalPrice) * (fulfilled / item.quantity))}</p>
+                                                            <p className="text-[11px] text-[#AEAEAE] line-through font-normal">{formatPrice(item.totalPrice)}</p>
+                                                        </div>
+                                                        : formatPrice(item.totalPrice)
+                                                    }
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
-                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                        <MapPin size={16} className="text-[#3B82F6]" />
-                        <h3 className="text-[14px] font-bold text-[#181725]">Delivery</h3>
+                {/* Right side 1 column: Actions panel, Billing ledger, status overrides, and notes */}
+                <div className="space-y-6">
+                    {/* Action Panel */}
+                    <div className="print:hidden">
+                        <ActionPanel
+                            order={order}
+                            fulfilledQtys={fulfilledQtys}
+                            adjustedTotal={adjustedTotal}
+                            isPartialAccept={!!isPartialAccept}
+                            onAction={handleAction}
+                            onAccept={handleAccept}
+                        />
                     </div>
-                    <div className="space-y-1.5 text-[13px]">
-                        {order.deliverySlot && (
-                            <div className="flex items-center gap-1.5">
-                                <Clock size={13} className="text-[#3B82F6]" />
-                                <span className="font-bold">{DAY_NAMES[Number(order.deliverySlot.dayOfWeek)] || `Day ${order.deliverySlot.dayOfWeek}`}</span>
-                                <span className="text-[#7C7C7C]">{formatTime(order.deliverySlot.slotStart)} – {formatTime(order.deliverySlot.slotEnd)}</span>
+
+                    {/* Invoice ledger box */}
+                    <div className="bg-[#FAFAFA] rounded-[16px] border border-[#E5E7EB] p-5 space-y-4 shadow-inner">
+                        <div className="border-b border-[#E5E7EB] pb-2">
+                            <h4 className="text-[14px] font-black text-[#111827] flex items-center gap-1.5">
+                                <Landmark size={15} className="text-[#4B5563]" />
+                                Billing Invoice Summary
+                            </h4>
+                        </div>
+                        
+                        <div className="space-y-3.5 text-[13px] font-medium text-[#4B5563]">
+                            <div className="flex justify-between">
+                                <span>Cart Subtotal</span>
+                                <span className="text-[#111827] font-bold">{formatPrice(order.subtotal)}</span>
                             </div>
-                        )}
-                        {order.deliveryDate && (
-                            <p className="text-[#7C7C7C]">Date: <span className="font-bold text-[#181725]">
-                                {new Date(order.deliveryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
-                            </span></p>
-                        )}
-                        {order.paymentMethod && (
-                            <p className="text-[#7C7C7C]">Payment: <span className="capitalize font-bold text-[#181725]">{order.paymentMethod}</span></p>
-                        )}
-                        {/* E-Way Bill */}
-                        {(order.status === 'processing' || order.status === 'shipped') && (
-                            <div className="mt-2 pt-2 border-t border-[#F5F5F5]">
-                                <p className="text-[11px] font-bold text-[#7C7C7C] uppercase mb-1">E-Way Bill No.</p>
-                                {order.ewayBillNo && !['processing'].includes(order.status) ? (
-                                    <p className="text-[13px] font-bold text-[#181725]">{order.ewayBillNo}</p>
-                                ) : (
+                            {order.promoDiscount > 0 && (
+                                <div className="flex justify-between text-[#299E60]">
+                                    <span>Promo Discount</span>
+                                    <span className="font-bold">−{formatPrice(order.promoDiscount)}</span>
+                                </div>
+                            )}
+                            {Number(order.taxAmount) > 0 && (
+                                <div className="flex justify-between">
+                                    <span>GST / Tax</span>
+                                    <span className="text-[#111827] font-bold">{formatPrice(Number(order.taxAmount))}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between items-center pt-1.5 border-t border-dashed border-[#D1D5DB]">
+                                <span className="text-[14px] font-black text-[#111827]">Grand Total</span>
+                                <span className="text-[20px] font-black text-[#299E60]">{formatPrice(order.totalAmount)}</span>
+                            </div>
+                            {isPartialAccept && (
+                                <div className="flex justify-between text-[#976538] pt-1 border-t border-dashed border-[#D1D5DB]">
+                                    <span>Adjusted Total</span>
+                                    <span className="font-bold">{formatPrice(adjustedTotal)}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* E-Way Bill Box */}
+                    {((order.status === 'processing' || order.status === 'shipped') || order.ewayBillNo) && (
+                        <div className="bg-white rounded-[16px] border border-[#EEEEEE] p-5 shadow-sm space-y-4">
+                            <div className="border-b border-[#F3F4F6] pb-2">
+                                <h4 className="text-[14px] font-black text-[#111827] flex items-center gap-1.5">
+                                    <FileText size={15} className="text-[#3B82F6]" />
+                                    E-Way Bill Information
+                                </h4>
+                            </div>
+                            {order.ewayBillNo && !['processing'].includes(order.status) ? (
+                                <p className="text-[13px] font-bold text-[#181725]">{order.ewayBillNo}</p>
+                            ) : (
+                                <div className="space-y-3">
                                     <div className="flex gap-2">
                                         <input
                                             type="text"
                                             value={ewayBill}
                                             onChange={e => setEwayBill(e.target.value)}
                                             placeholder="Enter E-Way Bill no."
-                                            className="flex-1 h-[32px] px-2.5 rounded-[8px] border border-[#EEEEEE] text-[12px] outline-none focus:border-[#299E60]/50"
+                                            className="flex-1 h-[38px] px-3 rounded-[8px] border border-[#D1D5DB] text-[13px] outline-none focus:border-[#299E60]/50"
                                         />
                                         <button
                                             onClick={saveEwayBill}
                                             disabled={ewaySaving || !ewayBill.trim()}
-                                            className="h-[32px] px-3 rounded-[8px] bg-[#299E60] text-white text-[11px] font-bold disabled:opacity-40"
+                                            className="h-[38px] px-4 rounded-[8px] bg-[#299E60] hover:bg-[#238a54] text-white text-[13px] font-bold disabled:opacity-40 transition-colors"
                                         >
                                             {ewaySaving ? '...' : 'Save'}
                                         </button>
                                     </div>
-                                )}
-                            </div>
-                        )}
-                        {order.ewayBillNo && order.status === 'delivered' && (
-                            <p className="text-[#7C7C7C]">E-Way Bill: <span className="font-bold text-[#181725]">{order.ewayBillNo}</span></p>
-                        )}
-                        {!order.deliverySlot && !order.deliveryDate && <p className="text-[#AEAEAE]">No delivery details set</p>}
-                    </div>
-                </div>
-
-                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                        <Package size={16} className="text-[#8B5CF6]" />
-                        <h3 className="text-[14px] font-bold text-[#181725]">Payment</h3>
-                    </div>
-                    <div className="space-y-1.5 text-[13px]">
-                        <div className="flex justify-between">
-                            <span className="text-[#7C7C7C]">Status</span>
-                            <span className={cn('font-bold capitalize', order.paymentStatus === 'paid' ? 'text-[#299E60]' : 'text-[#976538]')}>
-                                {order.paymentStatus}
-                            </span>
-                        </div>
-                        {order.promoDiscount > 0 && (
-                            <>
-                                <div className="flex justify-between">
-                                    <span className="text-[#7C7C7C]">Subtotal</span>
-                                    <span className="font-semibold text-[#181725]">{formatPrice(order.subtotal)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-[#299E60]">Promo Discount</span>
-                                    <span className="font-bold text-[#299E60]">−{formatPrice(order.promoDiscount)}</span>
-                                </div>
-                            </>
-                        )}
-                        <div className="flex justify-between">
-                            <span className="text-[#7C7C7C]">Order Total</span>
-                            <span className="font-bold text-[#181725]">{formatPrice(order.totalAmount)}</span>
-                        </div>
-                        {isPartialAccept && (
-                            <div className="flex justify-between text-[#976538]">
-                                <span>Adjusted Total</span>
-                                <span className="font-bold">{formatPrice(adjustedTotal)}</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* ── Items Table ───────────────────────────────────── */}
-            <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-[#EEEEEE] flex items-center justify-between">
-                    <h3 className="text-[16px] font-bold text-[#181725]">
-                        Order Items <span className="text-[#AEAEAE] font-normal">({order.items.length})</span>
-                    </h3>
-                    {isPending && (
-                        <span className="text-[11px] text-[#AEAEAE] hidden sm:block">
-                            Adjust &quot;Fulfil&quot; qty to ship less than ordered
-                        </span>
-                    )}
-                    <ChevronRight size={16} className="text-[#AEAEAE] print:hidden" />
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="bg-[#FAFAFA] border-b border-[#EEEEEE]">
-                                <th className="px-5 py-3 text-left text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Product</th>
-                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">SKU / HSN</th>
-                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Unit Price</th>
-                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Ordered</th>
-                                {isPending && (
-                                    <th className="px-5 py-3 text-center text-[11px] font-bold text-[#976538] uppercase tracking-wide">Fulfil</th>
-                                )}
-                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide print:hidden">GST</th>
-                                <th className="px-5 py-3 text-right text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide">Total</th>
-                                <th className="px-5 py-3 text-center text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wide hidden print:table-cell">✓</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#F5F5F5]">
-                            {order.items.map((item) => {
-                                const taxPct = Number(item.product?.taxPercent ?? 0);
-                                const itemGST = taxPct > 0
-                                    ? Number(item.totalPrice) - (Number(item.totalPrice) / (1 + taxPct / 100))
-                                    : 0;
-                                const fulfilled = isPending ? (fulfilledQtys[item.id] ?? item.quantity) : item.fulfilledQty;
-                                const isReduced = isPending && fulfilled < item.quantity;
-                                const isSkipped = isPending && fulfilled === 0;
-
-                                return (
-                                    <tr key={item.id} className={cn(
-                                        'hover:bg-[#FAFAFA]',
-                                        isSkipped && isPending ? 'opacity-40' : ''
-                                    )}>
-                                        <td className="px-5 py-4">
-                                            <div className="flex items-center gap-3">
-                                                {item.product?.imageUrl ? (
-                                                    <div className="w-10 h-10 rounded-[8px] overflow-hidden bg-[#F1F4F9] shrink-0 relative print:hidden">
-                                                        <Image src={item.product.imageUrl} alt={item.productName} fill className="object-cover" />
-                                                    </div>
-                                                ) : (
-                                                    <div className="w-10 h-10 rounded-[8px] bg-[#F1F4F9] shrink-0 flex items-center justify-center print:hidden">
-                                                        <Package size={16} className="text-[#AEAEAE]" />
-                                                    </div>
-                                                )}
-                                                <div>
-                                                    <p className="text-[13px] font-bold text-[#181725]">{item.productName}</p>
-                                                    {item.product?.packSize && (
-                                                        <p className="text-[11px] text-[#7C7C7C]">
-                                                            {item.product.packSize}{item.product.unit ? ` · ${item.product.unit}` : ''}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-5 py-4 text-center">
-                                            <div className="text-[11px] text-[#7C7C7C]">
-                                                {item.product?.sku && <p className="font-medium">{item.product.sku}</p>}
-                                                {item.product?.hsn && <p>HSN: {item.product.hsn}</p>}
-                                                {!item.product?.sku && !item.product?.hsn && <span className="text-[#DDDDDD]">—</span>}
-                                            </div>
-                                        </td>
-                                        <td className="px-5 py-4 text-center text-[13px] text-[#7C7C7C]">
-                                            {formatPrice(item.unitPrice)}
-                                        </td>
-                                        <td className="px-5 py-4 text-center text-[14px] font-bold text-[#181725]">
-                                            {item.quantity}
-                                        </td>
-
-                                        {/* Fulfil qty editor — only visible on pending orders */}
-                                        {isPending && (
-                                            <td className="px-5 py-4 text-center">
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <button
-                                                        onClick={() => setFulfilledQty(item.id, (fulfilledQtys[item.id] ?? item.quantity) - 1, item.quantity)}
-                                                        className="w-7 h-7 rounded-[6px] border border-[#EEEEEE] flex items-center justify-center hover:bg-[#F5F5F5] text-[#7C7C7C] transition-colors"
-                                                    >
-                                                        <Minus size={12} />
-                                                    </button>
-                                                    <input
-                                                        type="number"
-                                                        min={0}
-                                                        max={item.quantity}
-                                                        value={fulfilledQtys[item.id] ?? item.quantity}
-                                                        onChange={(e) => setFulfilledQty(item.id, parseInt(e.target.value) || 0, item.quantity)}
-                                                        className={cn(
-                                                            'w-12 h-7 text-center text-[13px] font-bold rounded-[6px] border outline-none',
-                                                            isSkipped ? 'border-[#E74C3C] text-[#E74C3C] bg-[#FFF0F0]' :
-                                                                isReduced ? 'border-[#F59E0B] text-[#976538] bg-[#FFF4E5]' :
-                                                                    'border-[#299E60] text-[#299E60] bg-[#F0FBF5]'
-                                                        )}
-                                                    />
-                                                    <button
-                                                        onClick={() => setFulfilledQty(item.id, (fulfilledQtys[item.id] ?? item.quantity) + 1, item.quantity)}
-                                                        className="w-7 h-7 rounded-[6px] border border-[#EEEEEE] flex items-center justify-center hover:bg-[#F5F5F5] text-[#7C7C7C] transition-colors"
-                                                    >
-                                                        <Plus size={12} />
-                                                    </button>
-                                                </div>
-                                                {isReduced && !isSkipped && (
-                                                    <p className="text-[10px] text-[#976538] mt-0.5">of {item.quantity}</p>
-                                                )}
-                                                {isSkipped && (
-                                                    <p className="text-[10px] text-[#E74C3C] mt-0.5">skipped</p>
-                                                )}
-                                            </td>
-                                        )}
-
-                                        <td className="px-5 py-4 text-center text-[11px] text-[#7C7C7C] print:hidden">
-                                            {taxPct > 0 ? (
-                                                <div><p className="font-medium">{taxPct}%</p><p>{formatPrice(itemGST)}</p></div>
-                                            ) : <span className="text-[#DDDDDD]">—</span>}
-                                        </td>
-                                        <td className="px-5 py-4 text-right text-[13px] font-bold text-[#181725]">
-                                            {isPending && isReduced
-                                                ? <div>
-                                                    <p className="text-[#976538]">{formatPrice(Number(item.totalPrice) * (fulfilled / item.quantity))}</p>
-                                                    <p className="text-[11px] text-[#AEAEAE] line-through">{formatPrice(item.totalPrice)}</p>
-                                                </div>
-                                                : formatPrice(item.totalPrice)
-                                            }
-                                        </td>
-                                        <td className="px-5 py-4 text-center hidden print:table-cell">
-                                            <div className="w-5 h-5 border-2 border-gray-400 rounded inline-block" />
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Summary */}
-                <div className="px-6 py-5 border-t border-[#EEEEEE] flex flex-col items-end gap-2">
-                    {isPending && isPartialAccept ? (
-                        <>
-                            <div className="flex gap-10 text-[13px]">
-                                <span className="text-[#AEAEAE] line-through">Original Total</span>
-                                <span className="text-[#AEAEAE] line-through w-28 text-right">{formatPrice(order.totalAmount)}</span>
-                            </div>
-                            <div className="flex gap-10 text-[15px] pt-2 border-t border-[#EEEEEE] mt-1">
-                                <span className="font-bold text-[#976538]">Adjusted Total</span>
-                                <span className="font-[900] text-[#976538] w-28 text-right">{formatPrice(adjustedTotal)}</span>
-                            </div>
-                        </>
-                    ) : (
-                        <>
-                            <div className="flex gap-10 text-[13px]">
-                                <span className="text-[#7C7C7C]">Subtotal</span>
-                                <span className="font-bold text-[#181725] w-28 text-right">{formatPrice(order.subtotal)}</span>
-                            </div>
-                            {Number(order.taxAmount) > 0 && (
-                                <div className="flex gap-10 text-[13px]">
-                                    <span className="text-[#7C7C7C]">GST / Tax</span>
-                                    <span className="font-bold text-[#181725] w-28 text-right">{formatPrice(Number(order.taxAmount))}</span>
                                 </div>
                             )}
-                            <div className="flex gap-10 text-[15px] pt-2 border-t border-[#EEEEEE] mt-1">
-                                <span className="font-bold text-[#181725]">Total</span>
-                                <span className="font-[900] text-[#299E60] w-28 text-right">{formatPrice(order.totalAmount)}</span>
-                            </div>
-                        </>
+                        </div>
                     )}
                 </div>
             </div>

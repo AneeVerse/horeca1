@@ -13,12 +13,21 @@ import { resolveVendorId, resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
 import { GST_RE } from '@/lib/validators/vendor-kyc';
 
+const optionalUrlSchema = z.string()
+  .optional()
+  .nullable()
+  .or(z.literal(''))
+  .refine(
+    (val) => !val || val.startsWith('/') || /^(https?:\/\/)/.test(val),
+    { message: 'Invalid URL format' }
+  );
+
 // Validation schema for profile updates — whitelist of allowed fields
 const updateSettingsSchema = z.object({
   businessName: z.string().min(1).optional(),
   description: z.string().optional(),
-  logoUrl: z.string().url().optional(),
-  bannerUrl: z.string().url().optional(),
+  logoUrl: optionalUrlSchema,
+  bannerUrl: optionalUrlSchema,
   minOrderValue: z.number().min(0).optional(),
   creditEnabled: z.boolean().optional(),
   // Registered business address — used on tax invoices as Bill From / Shipped From.

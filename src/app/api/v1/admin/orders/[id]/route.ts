@@ -44,6 +44,10 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
             businessName: true,
             slug: true,
             logoUrl: true,
+            addressLine: true,
+            city: true,
+            state: true,
+            addressPincode: true,
           },
         },
         user: {

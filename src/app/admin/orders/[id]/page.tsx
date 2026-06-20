@@ -27,6 +27,10 @@ interface OrderVendor {
     businessName: string;
     slug: string;
     logoUrl: string | null;
+    addressLine: string | null;
+    city: string | null;
+    state: string | null;
+    addressPincode: string | null;
 }
 
 interface OrderUser {
@@ -79,8 +83,7 @@ interface OrderData {
     deliveryFee: number;
     totalAmount: number;
     paymentStatus: string;
-    deliveryAddress: string | null;
-    deliveryPincode: string | null;
+    deliveryAddressSnapshot: any;
     notes: string | null;
     createdAt: string;
     updatedAt: string;
@@ -158,6 +161,21 @@ function formatCurrency(amount: number): string {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
     }).format(amount);
+}
+
+function formatSnapshotAddress(snapshot: any): { address: string; pincode: string | null } {
+    if (!snapshot) return { address: 'Not specified', pincode: null };
+    const parts = [
+        snapshot.flatInfo,
+        snapshot.addressLine,
+        snapshot.landmark ? `Near ${snapshot.landmark}` : null,
+        snapshot.city,
+        snapshot.state
+    ].filter(Boolean);
+    return {
+        address: parts.length > 0 ? parts.join(', ') : 'Not specified',
+        pincode: snapshot.pincode || null
+    };
 }
 
 export default function OrderDetailsPage() {
@@ -392,10 +410,17 @@ export default function OrderDetailsPage() {
                                 </div>
                                 <div className="min-w-0">
                                     <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-wider mb-1">Delivery Destination</h4>
-                                    <p className="text-[12px] font-semibold text-[#4B5563] line-clamp-2 leading-relaxed">{order.deliveryAddress || 'Not specified'}</p>
-                                    {order.deliveryPincode && (
-                                        <p className="text-[11px] font-bold text-[#374151] mt-1 inline-block bg-[#F3F4F6] px-1.5 py-0.5 rounded">Pin: {order.deliveryPincode}</p>
-                                    )}
+                                    {(() => {
+                                        const snapAddr = formatSnapshotAddress(order.deliveryAddressSnapshot);
+                                        return (
+                                            <>
+                                                <p className="text-[12px] font-semibold text-[#4B5563] line-clamp-2 leading-relaxed">{snapAddr.address}</p>
+                                                {snapAddr.pincode && (
+                                                    <p className="text-[11px] font-bold text-[#374151] mt-1 inline-block bg-[#F3F4F6] px-1.5 py-0.5 rounded">Pin: {snapAddr.pincode}</p>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                             {order.deliverySlot && (
@@ -435,9 +460,24 @@ export default function OrderDetailsPage() {
                                 </div>
                             </div>
                             {order.vendor && (
-                                <div className="mt-3 pt-2 border-t border-[#F3F4F6]">
-                                    <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Assigned Vendor:</span>
-                                    <span className="text-[12px] font-bold text-[#299E60] block truncate">{order.vendor.businessName}</span>
+                                <div className="mt-3 pt-2 border-t border-[#F3F4F6] text-[12px] text-[#4B5563]">
+                                    <span className="text-[10px] uppercase font-bold text-[#9CA3AF] block mb-1">Assigned Vendor:</span>
+                                    <span className="font-bold text-[#299E60] block truncate">{order.vendor.businessName}</span>
+                                    {(() => {
+                                        const vendorAddress = [
+                                            order.vendor.addressLine,
+                                            order.vendor.city,
+                                            order.vendor.state
+                                        ].filter(Boolean).join(', ');
+                                        const vendorPincode = order.vendor.addressPincode;
+                                        return vendorAddress ? (
+                                            <p className="text-[11px] text-[#6B7280] font-medium leading-relaxed mt-1">
+                                                {vendorAddress}{vendorPincode ? ` - ${vendorPincode}` : ''}
+                                            </p>
+                                        ) : (
+                                            <p className="text-[11px] text-[#9CA3AF] font-medium mt-1">No address specified</p>
+                                        );
+                                    })()}
                                 </div>
                             )}
                         </div>

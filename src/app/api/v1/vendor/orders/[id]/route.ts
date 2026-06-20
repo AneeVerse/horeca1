@@ -29,6 +29,18 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     const order = await prisma.order.findFirst({
       where: { id: orderId, vendorId },
       include: {
+        vendor: {
+          select: {
+            id: true,
+            businessName: true,
+            slug: true,
+            logoUrl: true,
+            addressLine: true,
+            city: true,
+            state: true,
+            addressPincode: true,
+          },
+        },
         user: {
           select: {
             id: true,
@@ -136,8 +148,8 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     }
 
     // Standard status transition path
-    const { status, reason, proof } = updateStatusSchema.parse(body);
-    const updated = await orderService.updateStatus(orderId, vendorId, status, reason, proof);
+    const { status, reason, proof, force } = updateStatusSchema.parse(body);
+    const updated = await orderService.updateStatus(orderId, vendorId, status, reason, proof, force === true);
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {
     return errorResponse(error);
