@@ -35,6 +35,7 @@ interface AddressContextType {
     detectCurrentLocation: () => Promise<Address | null>;
     isDetectingLocation: boolean;
     reverseGeocode: (lat: number, lng: number) => Promise<Partial<Address> | null>;
+    geocodePincode: (pincode: string) => Promise<Partial<Address> | null>;
     refreshAddresses: () => Promise<void>;
 }
 
@@ -314,6 +315,58 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
         }
     }, [isLoaded, google]);
 
+    // ─── Forward Geocode a Pincode ───────────────────────────────────────
+    // Resolves a bare 6-digit pincode to a real location (city/state/lat/lng)
+    // so the "Deliver to" chip never shows a fabricated default area.
+    const geocodePincode = useCallback(async (pincode: string): Promise<Partial<Address> | null> => {
+        if (!isLoaded || !google) return null;
+
+        try {
+            const geocoder = new google.maps.Geocoder();
+            const response = await geocoder.geocode({
+                componentRestrictions: { country: 'IN', postalCode: pincode },
+            });
+
+            if (response.results && response.results.length > 0) {
+                const result = response.results[0];
+                const loc = result.geometry.location;
+                const components = result.address_components;
+
+                const locality = components?.find(c => c.types.includes('locality'));
+                const sublocality = components?.find(c =>
+                    c.types.includes('sublocality_level_1') || c.types.includes('sublocality')
+                );
+                const stateComp = components?.find(c => c.types.includes('administrative_area_level_1'));
+
+                const city = locality?.long_name || '';
+                const state = stateComp?.long_name || '';
+                let shortAddr = '';
+                if (sublocality && locality) {
+                    shortAddr = `${sublocality.long_name}, ${locality.long_name}`;
+                } else if (locality) {
+                    shortAddr = locality.long_name;
+                } else {
+                    shortAddr = result.formatted_address.split(',').slice(0, 2).join(',');
+                }
+
+                return {
+                    fullAddress: result.formatted_address,
+                    shortAddress: shortAddr,
+                    latitude: loc.lat(),
+                    longitude: loc.lng(),
+                    pincode,
+                    city,
+                    state,
+                    placeId: result.place_id,
+                };
+            }
+            return null;
+        } catch (error) {
+            console.error('Pincode geocode failed:', error);
+            return null;
+        }
+    }, [isLoaded, google]);
+
     // ─── Detect Current Location ─────────────────────────────────────────
 
     const detectCurrentLocation = useCallback(async (): Promise<Address | null> => {
@@ -383,6 +436,7 @@ export function AddressProvider({ children }: { children: React.ReactNode }) {
                 detectCurrentLocation,
                 isDetectingLocation,
                 reverseGeocode,
+                geocodePincode,
                 refreshAddresses,
             }}
         >

@@ -35,7 +35,7 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
     const [isCheckingServiceability, setIsCheckingServiceability] = useState(false);
     const [serviceabilityError, setServiceabilityError] = useState('');
 
-    const { addAddress, setSelectedAddress, detectCurrentLocation, isDetectingLocation } = useAddress();
+    const { addAddress, setSelectedAddress, detectCurrentLocation, isDetectingLocation, geocodePincode } = useAddress();
     const { currentAccount, accounts, switchAccount, switchOutlet, refresh: refreshAccounts } = useBusinessAccountSwitcher();
     const { predictions, isSearching, getPlaceDetails, clearPredictions } =
         useGooglePlacesAutocomplete(businessQuery, { businessMode: true, countryCode: 'in' });
@@ -142,7 +142,9 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
         setIsCheckingServiceability(true);
         try {
             const res = await fetch(`/api/v1/vendors/serviceability?pincode=${details.pincode}`);
-            const data = await res.json();
+            const json = await res.json();
+            // API wraps the result in a { success, data } envelope — unwrap it.
+            const data = json.data ?? json;
 
             localStorage.setItem('pincode_interacted', 'true');
             localStorage.setItem('user_pincode', details.pincode);
@@ -206,10 +208,27 @@ export function InitialPincodeOverlay({ onComplete }: InitialPincodeOverlayProps
         setPincodeError('');
         try {
             const res = await fetch(`/api/v1/vendors/serviceability?pincode=${pincode}`);
-            const data = await res.json();
+            const json = await res.json();
+            // API wraps the result in a { success, data } envelope — unwrap it.
+            const data = json.data ?? json;
             if (data.serviceable || data.vendor_count > 0) {
                 localStorage.setItem('pincode_interacted', 'true');
                 localStorage.setItem('user_pincode', pincode);
+                // Resolve the pincode to a real location so the "Deliver to"
+                // chip reflects the actual area, never a fabricated default.
+                const geo = await geocodePincode(pincode);
+                setSelectedAddress({
+                    id: `pin_${Date.now()}`,
+                    label: 'Other',
+                    fullAddress: geo?.fullAddress || `Pincode ${pincode}`,
+                    shortAddress: geo?.shortAddress || `Pincode ${pincode}`,
+                    latitude: geo?.latitude ?? 0,
+                    longitude: geo?.longitude ?? 0,
+                    pincode,
+                    city: geo?.city,
+                    state: geo?.state,
+                    placeId: geo?.placeId,
+                });
                 setIsVisible(false);
                 onComplete(pincode);
             } else {

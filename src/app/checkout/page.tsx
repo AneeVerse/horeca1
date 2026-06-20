@@ -708,13 +708,13 @@ function CheckoutPageContent() {
             let createdOrders: Array<{ id: string; orderNumber: string }> = [];
             if (draftId) {
                 const submitRes = await dal.orders.submitDraft(draftId, selectedPayment) as {
-                    success: boolean;
-                    data: { id: string; orderNumber: string };
+                    id: string;
+                    orderNumber: string;
                 };
-                if (!submitRes || !submitRes.success || !submitRes.data) {
+                if (!submitRes || !submitRes.id || !submitRes.orderNumber) {
                     throw new Error('Failed to submit draft order.');
                 }
-                createdOrders = [submitRes.data];
+                createdOrders = [submitRes];
             } else {
                 const result = await dal.orders.create(vendorOrders, selectedPayment, false, {
                     ...(appliedCoupon ? { couponCode: appliedCoupon.code } : {}),
@@ -725,46 +725,44 @@ function CheckoutPageContent() {
                 createdOrders = result.orders || [];
             }
 
-            // 2. For online payment: open Razorpay popup for each order
+            // 2. For online payment: open ONE combined Razorpay popup for all selected POs
             if (selectedPayment === 'online') {
                 await loadRazorpayScript();
 
-                for (let i = 0; i < createdOrders.length; i++) {
-                    const order = createdOrders[i];
+                const initiateRes = await fetch('/api/v1/payments/initiate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ orderIds: createdOrders.map(o => o.id) }),
+                });
+                const initiateData = await initiateRes.json();
+                if (!initiateRes.ok) throw new Error(initiateData.error?.message || 'Payment initiation failed');
 
-                    // Initiate — get razorpay_order_id from our backend
-                    const initiateRes = await fetch('/api/v1/payments/initiate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ orderId: order.id }),
-                    });
-                    const initiateData = await initiateRes.json();
-                    if (!initiateRes.ok) throw new Error(initiateData.error?.message || 'Payment initiation failed');
+                const { razorpay_order_id, amount, currency, key_id } = initiateData.data;
 
-                    const { razorpay_order_id, amount, currency, key_id } = initiateData.data;
+                const description = createdOrders.length === 1
+                    ? `Order ${createdOrders[0].orderNumber}`
+                    : `${createdOrders.length} orders · ${createdOrders[0].orderNumber} +${createdOrders.length - 1}`;
 
-                    // Open popup — awaits user completing or dismissing payment
-                    const payment = await openRazorpayPopup({
-                        key: key_id,
-                        amount,
-                        currency,
-                        order_id: razorpay_order_id,
-                        description: `Order ${order.orderNumber}${createdOrders.length > 1 ? ` (${i + 1}/${createdOrders.length})` : ''}`,
-                    });
+                const payment = await openRazorpayPopup({
+                    key: key_id,
+                    amount,
+                    currency,
+                    order_id: razorpay_order_id,
+                    description,
+                });
 
-                    // Verify HMAC signature on our backend
-                    const verifyRes = await fetch('/api/v1/payments/verify', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            razorpay_order_id: payment.razorpay_order_id,
-                            razorpay_payment_id: payment.razorpay_payment_id,
-                            razorpay_signature: payment.razorpay_signature,
-                        }),
-                    });
-                    const verifyData = await verifyRes.json();
-                    if (!verifyRes.ok) throw new Error(verifyData.error?.message || 'Payment verification failed');
-                }
+                // Single verify call covers all linked Payment rows on the backend.
+                const verifyRes = await fetch('/api/v1/payments/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        razorpay_order_id: payment.razorpay_order_id,
+                        razorpay_payment_id: payment.razorpay_payment_id,
+                        razorpay_signature: payment.razorpay_signature,
+                    }),
+                });
+                const verifyData = await verifyRes.json();
+                if (!verifyRes.ok) throw new Error(verifyData.error?.message || 'Payment verification failed');
             }
 
             // 3. Show confirmation
@@ -779,6 +777,8 @@ function CheckoutPageContent() {
                 } else {
                     selectedGroups.forEach(g => g.items.forEach((i: CartItem) => removeFromCart(i.productId)));
                 }
+            } else {
+                clearCart();
             }
 
             // Redirect to dedicated order-success page
@@ -812,6 +812,7 @@ function CheckoutPageContent() {
                 ...(notesByVendor[group.vendorId]?.trim() ? { notes: notesByVendor[group.vendorId].trim() } : {}),
             }));
             await dal.orders.create(vendorOrders, selectedPayment || 'cod', true);
+            clearCart();
             window.location.href = '/orders?status=draft';
         } catch (err: unknown) {
             setOrderError(err instanceof Error ? err.message : 'Failed to save draft.');

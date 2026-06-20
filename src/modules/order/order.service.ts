@@ -386,15 +386,13 @@ export class OrderService {
         await promotionService.debitWalletForCheckout(tx, { userId, rows: walletRows });
       }
 
-      // 7. Clear the (user, account, outlet)-scoped cart — but keep it for drafts.
-      if (!isDraft) {
-        const cart = await tx.cart.findFirst({
-          where: { userId, businessAccountId, outletId },
-          select: { id: true },
-        });
-        if (cart) {
-          await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
-        }
+      // 7. Clear the (user, account, outlet)-scoped cart.
+      const cart = await tx.cart.findFirst({
+        where: { userId, businessAccountId, outletId },
+        select: { id: true },
+      });
+      if (cart) {
+        await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
       }
 
       // 8. Emit events after transaction (not for drafts — nothing to notify yet)

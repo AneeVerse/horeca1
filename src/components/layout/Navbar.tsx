@@ -124,17 +124,10 @@ export function Navbar() {
             {pathname === '/' && (
                 <InitialPincodeOverlay
                     onComplete={(pincode) => {
-                        if (pincode) {
-                            setSelectedAddress({
-                                id: `init_${Date.now()}`,
-                                label: 'Other',
-                                fullAddress: `Airoli, Navi Mumbai - ${pincode}`,
-                                shortAddress: 'Airoli',
-                                latitude: 19.1579,
-                                longitude: 72.9935,
-                                pincode: pincode
-                            });
-                        } else {
+                        // The overlay itself sets the accurate selected address for
+                        // every path (business pick, GPS, or geocoded pincode). Here we
+                        // only handle "skip" — clearing any stale location selection.
+                        if (!pincode) {
                             localStorage.removeItem('user_pincode');
                             setSelectedAddress(null);
                         }

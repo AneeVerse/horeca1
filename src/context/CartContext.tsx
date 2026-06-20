@@ -196,17 +196,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const { data: session, status: sessionStatus } = useSession();
     const isLoggedIn = sessionStatus === 'authenticated';
     const sessionUser = (session?.user ?? {}) as Record<string, unknown>;
-    const hasActiveOutlet =
-        !!(sessionUser.activeBusinessAccountId as string | undefined) &&
-        !!(sessionUser.activeOutletId as string | undefined);
+    const activeBAId = sessionUser.activeBusinessAccountId as string | undefined;
+    const activeOutletId = sessionUser.activeOutletId as string | undefined;
     const [cart, setCart] = useState<CartItemWithId[]>([]);
     const [isInitialized, setIsInitialized] = useState(false);
 
-    // On mount: load cart (API if logged in, localStorage if guest).
+    // On mount or context switch: load cart (API if logged in, localStorage if guest).
     // On guest→login transition: merge localStorage items into the server cart
     // first, then load — otherwise items added while logged-out vanish.
     useEffect(() => {
         if (sessionStatus === 'loading') return;
+        setCart([]); // Clear immediately on account/outlet/session change so UI doesn't flicker old data
         if (isLoggedIn) {
             const guestItems = loadLocalCart();
             const mergePayload = guestItems
@@ -251,13 +251,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             setIsInitialized(true);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sessionStatus, hasActiveOutlet]);
+    }, [sessionStatus, activeBAId, activeOutletId]);
 
-    // Persist to localStorage only for guest users
+    // Persist to localStorage for both guest and logged-in users so guest session preserves it on logout
     useEffect(() => {
-        if (!isInitialized || isLoggedIn) return;
+        if (!isInitialized) return;
         saveLocalCart(cart);
-    }, [cart, isInitialized, isLoggedIn]);
+    }, [cart, isInitialized]);
 
     const addToCart = useCallback((product: VendorProduct, quantity: number = 1) => {
         // product.price = base gross price (below any bulk tier)

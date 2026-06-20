@@ -103,6 +103,38 @@ export const VendorProductCard = React.memo(function VendorProductCard({
         });
     };
 
+    // ── Bulk-tier pill tap: move the cart quantity TO the tapped tier.
+    //    • Tapping a tier you're not in jumps the quantity to that tier's
+    //      minimum — up OR down (so tapping a lower tier reduces it).
+    //    • Tapping the tier you're already in buys another batch of it
+    //      (e.g. 50 → tap 50+ → 100), so you keep climbing within a tier.
+    //    The stepper +/- buttons still nudge by 1 via handleAdd / handleDecrement. ──
+    const handleTierSelect = (e: React.MouseEvent, tierMinQty: number) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const minQty = product.minOrderQuantity || 1;
+
+        if (currentQty === 0) {
+            const target = Math.max(tierMinQty, minQty);
+            addToCart(product, target);
+            toast.success(`${product.name} — quantity set to ${target} ${product.packSize || ''}`, { duration: 2000 });
+            return;
+        }
+
+        // Highest tier whose minimum the cart already meets = the tier we're "in".
+        const tiers = (product.bulkPrices ?? []).slice(0, 3);
+        const activeMin = tiers.reduce((max, t) => (currentQty >= t.minQty && t.minQty > max ? t.minQty : max), -1);
+
+        const target = tierMinQty === activeMin
+            ? currentQty + tierMinQty      // re-tapping the current tier adds another batch
+            : Math.max(tierMinQty, minQty); // a different tier — jump straight to it (up or down)
+
+        if (target === currentQty) return;
+        updateQuantity(product.id, target);
+        toast.success(`${product.name} — quantity set to ${target} ${product.packSize || ''}`, { duration: 2000 });
+    };
+
     const handleDecrement = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -170,7 +202,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            handleAdd(e, tier.minQty);
+                            handleTierSelect(e, tier.minQty);
                         }}
                         className={cn(
                             "text-[11px] font-bold transition-colors shrink-0",
@@ -514,7 +546,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({
                                                     onClick={(e) => {
                                                         e.preventDefault();
                                                         e.stopPropagation();
-                                                        handleAdd(e, tier.minQty);
+                                                        handleTierSelect(e, tier.minQty);
                                                     }}
                                                     className="text-[11px] font-black text-[#53B175] hover:text-[#2c7a2c] active:scale-95 transition-all shrink-0 ml-3 bg-white px-2.5 py-1 rounded-lg border border-[#D8ECDF]/50 shadow-sm"
                                                 >
@@ -586,7 +618,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            handleAdd(e, tier.minQty);
+                                            handleTierSelect(e, tier.minQty);
                                         }}
                                         className="text-[12px] font-bold text-[#53B175] hover:text-[#2c7a2c] active:scale-95 transition-all shrink-0 ml-3"
                                     >
@@ -916,7 +948,7 @@ export const VendorProductCard = React.memo(function VendorProductCard({
                                         </div>
                                     ) : (
                                         <button
-                                            onClick={(e) => handleAdd(e, tier.minQty)}
+                                            onClick={(e) => handleTierSelect(e, tier.minQty)}
                                             className="px-4 py-2.5 rounded-xl bg-[#53B175] text-white text-[12px] font-black shadow-[0_4px_14px_-4px_rgba(83,177,117,0.5)] hover:bg-[#489d67] active:scale-95 transition-all shrink-0"
                                         >
                                             Add {tier.minQty}

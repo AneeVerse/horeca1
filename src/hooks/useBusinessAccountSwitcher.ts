@@ -82,7 +82,6 @@ export function useBusinessAccountSwitcher() {
           body: JSON.stringify({ businessAccountId, outletId }),
         });
         if (!res.ok) { setSwitching(false); return; }
-        clearCart();
         clearWishlist();
         await update({ activeBusinessAccountId: businessAccountId, activeOutletId: outletId ?? undefined });
       } finally {
@@ -103,7 +102,6 @@ export function useBusinessAccountSwitcher() {
           body: JSON.stringify({ outletId }),
         });
         if (!res.ok) { setSwitching(false); return; }
-        clearCart();
         await update({ activeOutletId: outletId });
       } finally {
         setSwitching(false);
@@ -154,7 +152,6 @@ export function useBusinessAccountSwitcher() {
   }, [userId, loading, activeBusinessAccountId, accounts.length, update, fetchAccounts]);
 
   const handleSignOut = useCallback(async () => {
-    clearCart();
     clearWishlist();
     clearForcePickerCookie();
     clearDismissFlag();
