@@ -4,7 +4,7 @@ import { resolveStorefrontContext } from '@/lib/resolveStorefrontContext';
 import { OrderService } from '@/modules/order/order.service';
 import { submitDraftSchema } from '@/modules/order/order.validator';
 import { withAuth } from '@/middleware/auth';
-import { requirePermission } from '@/lib/permissions/engine';
+import { requireStorefrontAccess } from '@/middleware/rbac';
 import { errorResponse } from '@/middleware/errorHandler';
 
 function orderId(req: NextRequest): string {
@@ -14,7 +14,7 @@ function orderId(req: NextRequest): string {
 
 export const PATCH = withAuth(async (req: NextRequest, ctx) => {
   try {
-    if (ctx.role !== 'customer' && ctx.role !== 'admin') requirePermission(ctx, 'storefront.order');
+    requireStorefrontAccess(ctx, 'storefront.order');
     const storefrontCtx = await resolveStorefrontContext(ctx);
     const body = await req.json().catch(() => ({}));
     const { paymentMethod } = submitDraftSchema.parse(body);

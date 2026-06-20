@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { OrderService } from '@/modules/order/order.service';
 import { resolveCartContext } from '@/modules/cart/cart.service';
 import { withAuth } from '@/middleware/auth';
-import { requirePermission } from '@/lib/permissions/engine';
+import { requireStorefrontAccess } from '@/middleware/rbac';
 import { errorResponse } from '@/middleware/errorHandler';
 
 const orderService = new OrderService();
@@ -17,8 +17,9 @@ const orderService = new OrderService();
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
     // Vendor/brand team members buying through the storefront need the same
-    // explicit permission the cart POST requires; plain customers are free.
-    if (ctx.role !== 'customer' && ctx.role !== 'admin') requirePermission(ctx, 'storefront.order');
+    // explicit permission the cart POST requires; customers (legacy role or
+    // active customer account) and admins are free.
+    requireStorefrontAccess(ctx, 'storefront.order');
 
     const cartCtx = await resolveCartContext(ctx);
     const segments = new URL(req.url).pathname.split('/').filter(Boolean);

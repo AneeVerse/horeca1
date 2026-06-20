@@ -18,7 +18,7 @@ import { resolveStorefrontContext } from '@/lib/resolveStorefrontContext';
 import { OrderService } from '@/modules/order/order.service';
 import { createOrderSchema, listOrdersSchema } from '@/modules/order/order.validator';
 import { withAuth } from '@/middleware/auth';
-import { requirePermission } from '@/lib/permissions/engine';
+import { requireStorefrontAccess } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { checkRateLimit } from '@/lib/rateLimit';
 
@@ -41,8 +41,8 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
     // Vendor/brand team members need explicit storefront.order to place orders.
-    // Customers and admin users are unrestricted.
-    if (ctx.role !== 'customer' && ctx.role !== 'admin') requirePermission(ctx, 'storefront.order');
+    // Customers (legacy role or active customer account) and admins are unrestricted.
+    requireStorefrontAccess(ctx, 'storefront.order');
     // Rate limit: 10 orders per user per minute (prevents checkout spam)
     const { allowed } = await checkRateLimit(`order:${ctx.userId}`, 10, 60000);
     if (!allowed) {
