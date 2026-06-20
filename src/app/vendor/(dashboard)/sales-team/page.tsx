@@ -71,7 +71,9 @@ export default function SalesTeamPage() {
 
   useEffect(() => { refreshSalespersons(); }, [refreshSalespersons]);
 
-  if (status === 'loading') {
+  // Only block on initial load — a background session revalidation keeps
+  // `session` populated and must not unmount any open salesperson modal.
+  if (status === 'loading' && !session) {
     return (
       <div className="flex items-center justify-center py-24">
         <Loader2 size={28} className="animate-spin text-[#299E60]" />

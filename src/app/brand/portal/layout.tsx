@@ -144,7 +144,11 @@ export default function BrandPortalLayout({ children }: { children: React.ReactN
         router.push('/admin/brands');
     };
 
-    if (status === 'loading' || (status === 'authenticated' && isActiveBrand && !isAdmin && checkingApplication)) {
+    // Only gate on the genuine initial load (no session yet). A background
+    // session revalidation (window-focus refetch) flips `status` to 'loading'
+    // while `session` stays populated; gating on bare 'loading' would unmount
+    // the children subtree and close any open modal mid-edit. See vendor layout.
+    if ((status === 'loading' && !session) || (status === 'authenticated' && isActiveBrand && !isAdmin && checkingApplication)) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-[#F8F9FB]">
                 <Loader2 className="animate-spin text-[#53B175]" size={40} />

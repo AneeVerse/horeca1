@@ -32,7 +32,7 @@ const PHONE_RE = /^\d{10}$/;
 const RESEND_COOLDOWN = 60;
 
 export default function BrandRegisterPage() {
-  const { status: sessionStatus } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const isAuthMode = sessionStatus === 'authenticated';
   const { switchAccount, refresh: refreshAccounts } = useBusinessAccountSwitcher();
 
@@ -272,7 +272,10 @@ export default function BrandRegisterPage() {
     }
   };
 
-  if (sessionStatus === 'loading') {
+  // Only block on initial load — a background session revalidation keeps
+  // `session` populated and must not unmount the multi-step form (would wipe
+  // everything the applicant has typed).
+  if (sessionStatus === 'loading' && !session) {
     return (
       <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center">
         <Loader2 size={28} className="animate-spin text-[#299E60]" />

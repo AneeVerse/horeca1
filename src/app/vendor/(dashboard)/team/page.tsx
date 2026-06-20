@@ -109,7 +109,9 @@ export default function VendorTeamPage() {
         }
     };
 
-    if (sessionStatus === 'loading') {
+    // Only block on initial load — a background session revalidation keeps
+    // `session` populated and must not unmount the open Add Member modal.
+    if (sessionStatus === 'loading' && !session) {
         return (
             <div className="flex items-center justify-center py-24">
                 <Loader2 size={28} className="animate-spin text-[#299E60]" />

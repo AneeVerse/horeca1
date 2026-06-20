@@ -111,7 +111,9 @@ export default function AdminTeamPage() {
         }
     };
 
-    if (sessionStatus === 'loading' || perms.loading) {
+    // Guard on !session so a background session revalidation doesn't unmount
+    // this page (and any open Add/Edit Member modal) mid-edit.
+    if ((sessionStatus === 'loading' && !session) || perms.loading) {
         return (
             <div className="flex items-center justify-center py-24">
                 <Loader2 size={28} className="animate-spin text-[#E74C3C]" />

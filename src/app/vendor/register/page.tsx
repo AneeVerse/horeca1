@@ -684,7 +684,12 @@ export default function VendorRegisterPage() {
   // public signup flow or the "add a vendor under my HCID" flow. Hold the
   // wizard behind a loader so an authenticated user never flashes the
   // Verify-Mobile step before the auth-seed effect jumps them to step 2.
-  if (sessionStatus === 'loading') {
+  // Guard on !session: only the genuine initial load should hold the wizard
+  // behind a loader. A background session revalidation (window-focus refetch)
+  // briefly flips status to 'loading' while session stays populated — without
+  // this guard it would unmount the whole multi-step form and wipe everything
+  // the applicant has typed so far.
+  if (sessionStatus === 'loading' && !session) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 size={28} className="animate-spin text-[#299E60]" />

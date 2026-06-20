@@ -102,9 +102,11 @@ function OrdersPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const statusParam = searchParams.get('status') || undefined;
-    const { status: sessionStatus } = useSession();
+    const { data: session, status: sessionStatus } = useSession();
     const isLoggedIn = sessionStatus === 'authenticated';
-    const isLoading = sessionStatus === 'loading';
+    // !session so a background session revalidation doesn't re-flash the
+    // skeleton or refetch the list while the user is mid-action.
+    const isLoading = sessionStatus === 'loading' && !session;
     const [orders, setOrders] = React.useState<ApiOrder[]>([]);
     const [ordersLoading, setOrdersLoading] = React.useState(true);
     const [ratingModal, setRatingModal] = React.useState<{ orderId: string } | null>(null);

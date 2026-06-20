@@ -38,7 +38,10 @@ export function useAdminPermissions(): AdminPermissions {
   const { data: session, status } = useSession();
   const perms = (session?.user as { permissions?: string[] } | undefined)?.permissions;
   return {
-    loading: status === 'loading',
+    // Only "loading" on the genuine initial load. A background session
+    // revalidation flips status to 'loading' while session stays populated;
+    // treating that as loading would make consumers unmount their UI.
+    loading: status === 'loading' && !session,
     canRead: has(perms, 'dashboard.view'),
     canWriteOrders: has(perms, 'orders.edit'),
     canWriteProducts: has(perms, 'products.edit'),

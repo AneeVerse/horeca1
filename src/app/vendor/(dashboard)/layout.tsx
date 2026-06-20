@@ -200,8 +200,15 @@ export default function VendorLayout({
         router.push('/admin/vendors');
     };
 
-    // Show loading while checking auth or application status
-    if (status === 'loading' || (status === 'authenticated' && isActiveVendor && !isAdmin && checkingApplication)) {
+    // Show loading while checking auth or application status.
+    // IMPORTANT: only gate on the *initial* load (no session yet). A background
+    // session revalidation — e.g. the 60s updateSession() interval below or a
+    // window-focus refetch — momentarily flips `status` to 'loading' while the
+    // existing `session` stays populated. Gating on bare `status === 'loading'`
+    // would unmount this whole children subtree on every revalidation, closing
+    // any open modal/sidebar and wiping in-progress form state. The `!session`
+    // guard keeps children mounted through background refreshes.
+    if ((status === 'loading' && !session) || (status === 'authenticated' && isActiveVendor && !isAdmin && checkingApplication)) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-[#F8F9FB]">
                 <Loader2 className="animate-spin text-[#299E60]" size={40} />

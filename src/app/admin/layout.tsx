@@ -105,8 +105,11 @@ export default function AdminLayout({
         return () => { cancelled = true; clearInterval(id); };
     }, [status, pathname]);
 
-    // Show loading while checking auth
-    if (status === 'loading') {
+    // Show loading only on the genuine initial load (no session yet). A
+    // background session revalidation (window-focus refetch) briefly flips
+    // `status` to 'loading' while `session` stays populated; gating on bare
+    // 'loading' would unmount this subtree and close any open modal mid-edit.
+    if (status === 'loading' && !session) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-[#F8F9FB]">
                 <Loader2 className="animate-spin text-[#299E60]" size={40} />
