@@ -14,21 +14,26 @@ export const GET = withRole(['vendor', 'brand', 'admin'], async (req: NextReques
     const params = req.nextUrl.searchParams;
     const search = params.get('search')?.trim() || undefined;
     const brandParam = params.get('brand')?.trim() || undefined;
+    const exact = params.get('exact') === 'true';
     const limit = Math.min(Number(params.get('limit')) || 20, 50);
 
-    const where: Prisma.MasterProductWhereInput = { isActive: true };
+    const where: Prisma.MasterProductWhereInput = { isActive: true, approvalStatus: 'approved' };
 
     if (brandParam) {
       where.brand = { equals: brandParam, mode: 'insensitive' as const };
     }
 
     if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' as const } },
-        { sku: { contains: search, mode: 'insensitive' as const } },
-        ...(brandParam ? [] : [{ brand: { contains: search, mode: 'insensitive' as const } }]),
-        { aliasNames: { has: search.toLowerCase() } },
-      ];
+      if (exact) {
+        where.sku = { equals: search.toUpperCase(), mode: 'insensitive' as const };
+      } else {
+        where.OR = [
+          { name: { contains: search, mode: 'insensitive' as const } },
+          { sku: { contains: search, mode: 'insensitive' as const } },
+          ...(brandParam ? [] : [{ brand: { contains: search, mode: 'insensitive' as const } }]),
+          { aliasNames: { has: search.toLowerCase() } },
+        ];
+      }
     }
 
     const masters = await prisma.masterProduct.findMany({

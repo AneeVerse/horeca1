@@ -65,6 +65,7 @@ interface Product {
     categoryLinks?: { categoryId: string; isPrimary: boolean; category: { id: string; name: string } }[];
     inventory: { qtyAvailable: number } | null;
     vendorCount?: number;
+    isMasterRow?: boolean;
     vendors?: string[];
     vendorStock?: { vendor: string; qty: number }[];
     totalStock?: number;
@@ -466,14 +467,51 @@ export default function ProductsPage() {
                 params.set('page', String(targetPage));
                 if (debouncedSearch) params.set('search', debouncedSearch);
                 if (filterStatus) params.set('approvalStatus', filterStatus);
-                if (filterVendor) params.set('vendorId', filterVendor);
                 if (filterCategory) params.set('categoryId', filterCategory);
 
-                const res = await fetch(`/api/v1/admin/products?${params.toString()}`);
+                const res = await fetch(`/api/v1/admin/master-products?${params.toString()}`);
                 const json = await res.json();
 
                 if (json.success) {
-                    const incoming: Product[] = json.data?.products ?? json.data ?? [];
+                    const masters = json.data?.masterProducts ?? [];
+                    const incoming: Product[] = masters.map((m: {
+                        id: string;
+                        name: string;
+                        sku: string;
+                        brand: string | null;
+                        imageUrl: string | null;
+                        approvalStatus: 'pending' | 'approved' | 'rejected';
+                        isActive: boolean;
+                        createdAt: string;
+                        taxPercent: number | string;
+                        uom: string | null;
+                        category: { id: string; name: string } | null;
+                        vendorCount: number;
+                    }) => ({
+                        id: m.id,
+                        name: m.name,
+                        slug: m.sku,
+                        sku: m.sku,
+                        brand: m.brand,
+                        basePrice: 0,
+                        originalPrice: null,
+                        imageUrl: m.imageUrl,
+                        hsn: null,
+                        taxPercent: Number(m.taxPercent) || 0,
+                        minOrderQty: 1,
+                        creditEligible: false,
+                        description: null,
+                        isActive: m.isActive,
+                        approvalStatus: m.approvalStatus,
+                        approvalNote: null,
+                        createdAt: m.createdAt,
+                        vendor: null,
+                        category: m.category,
+                        inventory: null,
+                        vendorCount: m.vendorCount,
+                        unit: m.uom,
+                        isMasterRow: true,
+                    }));
                     setProducts(incoming);
                     originalProductsRef.current = JSON.parse(JSON.stringify(incoming));
                     
@@ -537,21 +575,27 @@ export default function ProductsPage() {
         }));
 
         try {
-            let url = `/api/v1/admin/products/${productId}`;
+            const row = products.find(p => p.id === productId);
+            const isMaster = row?.isMasterRow;
+            const baseUrl = isMaster
+                ? `/api/v1/admin/master-products/${productId}`
+                : `/api/v1/admin/products/${productId}`;
+            let url = baseUrl;
             const method = 'PATCH';
             let bodyPayload: Record<string, unknown> = {};
 
             if (field === 'approvalStatus') {
-                url = `/api/v1/admin/products/${productId}/approval`;
+                url = isMaster
+                    ? `/api/v1/admin/master-products/${productId}/approval`
+                    : `/api/v1/admin/products/${productId}/approval`;
                 bodyPayload = {
                     action: value === 'approved' ? 'approve' : 'reject',
-                    note: value === 'rejected' ? 'Rejected from list view' : undefined
+                    note: value === 'rejected' ? 'Rejected from list view' : undefined,
                 };
             } else if (field === 'primaryCategoryId') {
-                bodyPayload = {
-                    primaryCategoryId: value,
-                    categoryIds: value ? [value] : []
-                };
+                bodyPayload = isMaster
+                    ? { categoryId: value }
+                    : { primaryCategoryId: value, categoryIds: value ? [value] : [] };
             } else {
                 bodyPayload = { [field]: value };
             }
@@ -620,7 +664,10 @@ export default function ProductsPage() {
     const toggleActive = async (product: Product) => {
         setActionLoading(product.id);
         try {
-            const res = await fetch(`/api/v1/admin/products/${product.id}`, {
+            const url = product.isMasterRow
+                ? `/api/v1/admin/master-products/${product.id}`
+                : `/api/v1/admin/products/${product.id}`;
+            const res = await fetch(url, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ isActive: !product.isActive }),
@@ -646,7 +693,10 @@ export default function ProductsPage() {
         if (!deleteTarget) return;
         setDeleting(true);
         try {
-            const res = await fetch(`/api/v1/admin/products/${deleteTarget.id}`, { method: 'DELETE' });
+            const url = deleteTarget.isMasterRow
+                ? `/api/v1/admin/master-products/${deleteTarget.id}`
+                : `/api/v1/admin/products/${deleteTarget.id}`;
+            const res = await fetch(url, { method: 'DELETE' });
             const json = await res.json();
             if (json.success || res.ok) {
                 setProducts(prev => prev.filter(p => p.id !== deleteTarget.id));
@@ -689,9 +739,28 @@ export default function ProductsPage() {
         setActiveTab('general');
 
         try {
-            const res = await fetch(`/api/v1/admin/products/${product.id}`);
+            const isMaster = product.isMasterRow;
+            const res = await fetch(
+                isMaster ? `/api/v1/admin/master-products/${product.id}` : `/api/v1/admin/products/${product.id}`,
+                { method: 'GET' },
+            );
             const json = await res.json();
             const p = json.success ? json.data : product;
+
+            if (isMaster) {
+                setFormData({
+                    ...EMPTY_FORM,
+                    name: p.name || '',
+                    sku: p.sku ?? '',
+                    brand: p.brand ?? '',
+                    categoryIds: p.category?.id ? [p.category.id] : [],
+                    description: '',
+                    imageUrl: p.imageUrl ?? '',
+                    unit: p.uom ?? 'piece',
+                    images: Array.isArray(p.images) ? p.images.filter(Boolean) : [],
+                });
+                return;
+            }
 
             const primaryId = p.category?.id ?? '';
             const linkIds = Array.isArray(p.categoryLinks)
@@ -786,7 +855,13 @@ export default function ProductsPage() {
     const validateForm = (): boolean => {
         const errors: Record<string, string> = {};
         if (!formData.name.trim()) errors.name = 'Product name is required';
-        if (!formData.basePrice || Number(formData.basePrice) <= 0) errors.basePrice = 'Valid base price is required';
+        if (!formData.sku.trim()) errors.sku = 'SKU is required';
+        if (!formData.brand.trim()) errors.brand = 'Brand is required';
+        if (formData.categoryIds.length === 0) errors.categoryIds = 'At least one category is required';
+        const isVendorListing = !!formData.vendorId;
+        if (isVendorListing && (!formData.basePrice || Number(formData.basePrice) <= 0)) {
+            errors.basePrice = 'Valid base price is required when listing for a vendor';
+        }
         setFormErrors(errors);
         return Object.keys(errors).length === 0;
     };
@@ -795,6 +870,44 @@ export default function ProductsPage() {
         if (!validateForm()) return;
         setSaving(true);
         try {
+            const isMasterEdit = !!editingProduct?.isMasterRow;
+            const isMasterCreate = !editingProduct && !formData.vendorId;
+
+            if (isMasterEdit || isMasterCreate) {
+                const masterPayload: Record<string, unknown> = {
+                    name: formData.name.trim(),
+                    brand: formData.brand.trim(),
+                    categoryId: formData.categoryIds[0],
+                };
+                if (formData.imageUrl) masterPayload.imageUrl = formData.imageUrl;
+                const additionalImages = formData.images.filter(Boolean);
+                if (additionalImages.length > 0) masterPayload.images = additionalImages;
+                if (formData.unit) masterPayload.uom = formData.unit;
+                if (Number(formData.taxPercent)) masterPayload.taxPercent = Number(formData.taxPercent);
+
+                const isEdit = !!editingProduct;
+                const url = isEdit
+                    ? `/api/v1/admin/master-products/${editingProduct!.id}`
+                    : '/api/v1/admin/master-products';
+                const method = isEdit ? 'PATCH' : 'POST';
+                if (!isEdit) masterPayload.sku = formData.sku.trim();
+
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(masterPayload),
+                });
+                const json = await res.json();
+                if (json.success || res.ok) {
+                    closePanel();
+                    fetchProducts(currentPage);
+                } else {
+                    const msg = json.error?.message ?? json.message ?? 'Failed to save master product';
+                    setFormErrors({ _server: msg });
+                }
+                return;
+            }
+
             const payload: Record<string, unknown> = {
                 name: formData.name.trim(),
                 basePrice: Number(formData.basePrice),
@@ -1585,14 +1698,18 @@ export default function ProductsPage() {
                                             {/* SKU, HSN, Brand, Barcode — 2-column grid */}
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <FieldLabel>SKU</FieldLabel>
+                                                    <FieldLabel required>SKU</FieldLabel>
                                                     <input
                                                         type="text"
                                                         value={formData.sku}
-                                                        onChange={e => updateField('sku', e.target.value)}
+                                                        onChange={e => updateField('sku', e.target.value.toUpperCase())}
                                                         placeholder="e.g., RIC-BAS-001"
-                                                        className={inputCls}
+                                                        readOnly={!!editingProduct?.isMasterRow}
+                                                        className={cn(inputCls, editingProduct?.isMasterRow && 'bg-[#F8F9FB] cursor-not-allowed')}
                                                     />
+                                                    {formErrors.sku && (
+                                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.sku}</p>
+                                                    )}
                                                 </div>
                                                 <div>
                                                     <FieldLabel>HSN Code</FieldLabel>
@@ -1605,17 +1722,20 @@ export default function ProductsPage() {
                                                     />
                                                 </div>
                                                 <div>
-                                                    <FieldLabel>Brand</FieldLabel>
+                                                    <FieldLabel required>Brand</FieldLabel>
                                                     <select
                                                         value={formData.brand}
                                                         onChange={e => updateField('brand', e.target.value)}
-                                                        className={cn(selectCls, 'cursor-pointer')}
+                                                        className={cn(selectCls, 'cursor-pointer', formErrors.brand && 'border-[#E74C3C]')}
                                                     >
                                                         <option value="">Select brand</option>
                                                         {brands.map(b => (
                                                             <option key={b.id} value={b.name}>{b.name}</option>
                                                         ))}
                                                     </select>
+                                                    {formErrors.brand && (
+                                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.brand}</p>
+                                                    )}
                                                     {brands.length === 0 && (
                                                         <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
                                                             No brands yet — add one in <Link href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</Link>
@@ -1643,6 +1763,9 @@ export default function ProductsPage() {
                                                 label="Categories"
                                                 helper="Pick up to 5 — first chip is the primary. Customers can find this product under any of these categories."
                                             />
+                                            {formErrors.categoryIds && (
+                                                <p className="text-[11px] text-[#E74C3C] font-semibold">{formErrors.categoryIds}</p>
+                                            )}
 
                                             {/* Description */}
                                             <div>

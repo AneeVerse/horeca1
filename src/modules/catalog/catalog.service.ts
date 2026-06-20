@@ -257,26 +257,23 @@ export class CatalogService {
     await assertLeafCategory(resolvedCategoryIds);
     productData.categoryId = resolvedCategoryIds[0];
 
-    // P0-1: guarantee a Horeca1 master SKU — use the supplied one or auto-link/create
-    // by (name, brand). Keeps product creation working without a picker.
-    if (!productData.masterProductId) {
-      productData.masterProductId = await findOrCreateMaster({
-        name: productData.name,
-        brand: productData.brand ?? null,
-        categoryId: resolvedCategoryIds[0],
-      });
+    // Req 5: a product MUST map to at least one leaf (level-2) sub-category.
+    if (resolvedCategoryIds.length === 0) {
+      throw Errors.badRequest('Product must be mapped to at least one sub-category.');
     }
+    await assertLeafCategory(resolvedCategoryIds);
+    productData.categoryId = resolvedCategoryIds[0];
 
-    // If based on an existing approved product, auto-approve and lock name/brand/images
+    // If based on an existing approved product, inherit master SKU and auto-approve.
     let approvalStatus: 'pending' | 'approved' = 'pending';
     if (basedOnProductId) {
       const source = await prisma.product.findFirst({
         where: { id: basedOnProductId, approvalStatus: 'approved' },
-        select: { id: true, name: true, brand: true, imageUrl: true, images: true },
+        select: { id: true, name: true, brand: true, imageUrl: true, images: true, masterProductId: true },
       });
       if (source) {
         approvalStatus = 'approved';
-        // Force name, brand, images from the approved source — vendors cannot override these
+        if (source.masterProductId) productData.masterProductId = source.masterProductId;
         productData.name = source.name;
         if (source.brand) productData.brand = source.brand;
         if (source.imageUrl) productData.imageUrl = source.imageUrl;
@@ -286,9 +283,7 @@ export class CatalogService {
       }
     }
 
-    // If based on a brand canonical product, auto-approve too — the vendor is
-    // explicitly saying "I distribute this branded item", which is a strong
-    // quality signal equivalent to picking an existing approved vendor product.
+    // If based on a brand canonical product, inherit master link when available.
     let brandMaster: { id: string; brandId: string; name: string; brandName: string } | null = null;
     if (basedOnBrandMasterProductId) {
       const mp = await prisma.brandMasterProduct.findFirst({
@@ -301,14 +296,72 @@ export class CatalogService {
           id: true,
           brandId: true,
           name: true,
+          sku: true,
+          masterProductId: true,
           brand: { select: { name: true } },
         },
       });
       if (mp) {
         approvalStatus = 'approved';
+        if (mp.masterProductId) {
+          productData.masterProductId = mp.masterProductId;
+        } else if (mp.sku) {
+          const linked = await prisma.masterProduct.findFirst({
+            where: { sku: { equals: mp.sku, mode: 'insensitive' }, approvalStatus: 'approved' },
+            select: { id: true },
+          });
+          if (linked) productData.masterProductId = linked.id;
+        }
         brandMaster = { id: mp.id, brandId: mp.brandId, name: mp.name, brandName: mp.brand.name };
-        // Force brand field to the canonical brand name so the link is unambiguous
         productData.brand = mp.brand.name;
+      }
+    }
+
+    // Master catalog match → instant approved listing with admin-assigned SKU.
+    if (productData.masterProductId) {
+      const master = await prisma.masterProduct.findFirst({
+        where: { id: productData.masterProductId, approvalStatus: 'approved', isActive: true },
+        select: { id: true, name: true, brand: true, sku: true, categoryId: true, imageUrl: true, images: true, uom: true },
+      });
+      if (!master) throw Errors.badRequest('Master product not found or not approved.');
+      approvalStatus = 'approved';
+      productData.name = master.name;
+      if (master.brand) productData.brand = master.brand;
+      productData.sku = master.sku;
+      if (master.imageUrl && !productData.imageUrl) productData.imageUrl = master.imageUrl;
+      if (master.images.length > 0 && (!productData.images || productData.images.length === 0)) {
+        productData.images = master.images;
+      }
+      if (resolvedCategoryIds.length === 0) {
+        resolvedCategoryIds = [master.categoryId];
+        productData.categoryId = master.categoryId;
+      }
+
+      const dup = await prisma.product.findFirst({
+        where: {
+          vendorId,
+          masterProductId: productData.masterProductId,
+          slug: { not: { startsWith: TOMBSTONE_PREFIX } },
+        },
+        select: { id: true, name: true },
+      });
+      if (dup) {
+        throw Errors.conflict(`You already list "${dup.name}" for this master SKU. Edit the existing product instead.`);
+      }
+    } else if (approvalStatus === 'pending') {
+      // New vendor submission — admin reviews and assigns SKU before it goes live.
+      delete productData.masterProductId;
+      delete productData.sku;
+
+      const dupSlug = await prisma.product.findFirst({
+        where: {
+          vendorId,
+          slug: productData.slug,
+        },
+        select: { id: true, name: true, slug: true },
+      });
+      if (dupSlug && !dupSlug.slug.startsWith(TOMBSTONE_PREFIX)) {
+        throw Errors.conflict(`You already have a product named "${dupSlug.name}". Edit it instead.`);
       }
     }
 

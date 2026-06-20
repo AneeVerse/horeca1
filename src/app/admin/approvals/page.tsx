@@ -52,6 +52,9 @@ interface PendingProduct {
     createdAt: string;
     vendor: { id: string; businessName: string };
     category: { id: string; name: string } | null;
+    kind?: 'master' | 'vendor';
+    sku?: string | null;
+    brand?: string | null;
 }
 
 interface PendingCategory {
@@ -111,7 +114,7 @@ export default function ApprovalsPage() {
     const [pendingBrands, setPendingBrands] = useState<PendingBrand[]>([]);
 
     // Rejection modal
-    const [rejectTarget, setRejectTarget] = useState<{ type: 'product' | 'category' | 'brand'; id: string; name: string } | null>(null);
+    const [rejectTarget, setRejectTarget] = useState<{ type: 'product' | 'category' | 'brand'; id: string; name: string; kind?: 'master' | 'vendor' } | null>(null);
     const [rejectNote, setRejectNote] = useState('');
 
     // Summary counts
@@ -120,22 +123,46 @@ export default function ApprovalsPage() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [pendingVRes, approvedVRes, productsRes, categoriesRes, brandsRes, summaryRes] = await Promise.all([
+            const [pendingVRes, approvedVRes, productsRes, mastersRes, categoriesRes, brandsRes, summaryRes] = await Promise.all([
                 fetch('/api/v1/admin/vendors?verified=false&limit=50'),
                 fetch('/api/v1/admin/vendors?verified=true&limit=50'),
                 fetch('/api/v1/admin/products?approvalStatus=pending&limit=50'),
+                fetch('/api/v1/admin/master-products?approvalStatus=pending&limit=50'),
                 fetch('/api/v1/admin/categories?approvalStatus=pending'),
                 fetch('/api/v1/admin/brands?status=pending'),
                 fetch('/api/v1/admin/approvals/summary'),
             ]);
 
-            const [pv, av, pr, cat, br, sum] = await Promise.all([
-                pendingVRes.json(), approvedVRes.json(), productsRes.json(), categoriesRes.json(), brandsRes.json(), summaryRes.json(),
+            const [pv, av, pr, mr, cat, br, sum] = await Promise.all([
+                pendingVRes.json(), approvedVRes.json(), productsRes.json(), mastersRes.json(), categoriesRes.json(), brandsRes.json(), summaryRes.json(),
             ]);
 
             if (pv.success) setPendingVendors(pv.data.vendors);
             if (av.success) setApprovedVendors(av.data.vendors);
-            if (pr.success) setPendingProducts(pr.data.products || []);
+            const vendorPending: PendingProduct[] = pr.success
+                ? (pr.data.products || []).map((p: PendingProduct) => ({ ...p, kind: 'vendor' as const }))
+                : [];
+            const masterPending: PendingProduct[] = mr.success
+                ? (mr.data.masterProducts || []).map((m: {
+                    id: string; name: string; sku: string; brand: string | null; imageUrl: string | null;
+                    createdAt: string; category: { id: string; name: string } | null;
+                }) => ({
+                    id: m.id,
+                    name: m.name,
+                    slug: m.sku,
+                    sku: m.sku,
+                    brand: m.brand,
+                    basePrice: 0,
+                    imageUrl: m.imageUrl,
+                    approvalStatus: 'pending',
+                    approvalNote: null,
+                    createdAt: m.createdAt,
+                    vendor: { id: 'master', businessName: 'Master Catalog' },
+                    category: m.category,
+                    kind: 'master' as const,
+                }))
+                : [];
+            setPendingProducts([...masterPending, ...vendorPending]);
             if (cat.success) setPendingCategories(cat.data || []);
             if (br.success) setPendingBrands(br.data || []);
             if (sum.success) setSummary(sum.data);
@@ -187,7 +214,10 @@ export default function ApprovalsPage() {
     const handleApproveProduct = async (product: PendingProduct) => {
         setActionLoading(product.id);
         try {
-            const res = await fetch(`/api/v1/admin/products/${product.id}/approval`, {
+            const url = product.kind === 'master'
+                ? `/api/v1/admin/master-products/${product.id}/approval`
+                : `/api/v1/admin/products/${product.id}/approval`;
+            const res = await fetch(url, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'approve' }),
@@ -200,10 +230,13 @@ export default function ApprovalsPage() {
         finally { setActionLoading(null); }
     };
 
-    const handleRejectProduct = async (id: string, note: string) => {
+    const handleRejectProduct = async (id: string, note: string, kind?: 'master' | 'vendor') => {
         setActionLoading(id);
         try {
-            const res = await fetch(`/api/v1/admin/products/${id}/approval`, {
+            const url = kind === 'master'
+                ? `/api/v1/admin/master-products/${id}/approval`
+                : `/api/v1/admin/products/${id}/approval`;
+            const res = await fetch(url, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'reject', note }),
@@ -292,7 +325,12 @@ export default function ApprovalsPage() {
         if (q) list = list.filter(v => v.businessName.toLowerCase().includes(q) || v.user.fullName.toLowerCase().includes(q));
         return list;
     };
-    const filteredProducts = q ? pendingProducts.filter(p => p.name.toLowerCase().includes(q) || p.vendor.businessName.toLowerCase().includes(q)) : pendingProducts;
+    const filteredProducts = q
+        ? pendingProducts.filter(p =>
+            p.name.toLowerCase().includes(q)
+            || p.vendor.businessName.toLowerCase().includes(q)
+            || (p.sku && p.sku.toLowerCase().includes(q)))
+        : pendingProducts;
     const filteredCategories = q ? pendingCategories.filter(c => c.name.toLowerCase().includes(q)) : pendingCategories;
     const filteredBrands = q
         ? pendingBrands.filter(b =>
@@ -507,12 +545,29 @@ export default function ApprovalsPage() {
                                                         <Package size={16} />
                                                     </div>
                                                 )}
-                                                <span className="text-[14px] font-bold text-[#181725]">{product.name}</span>
+                                                <div>
+                                                    <span className="text-[14px] font-bold text-[#181725]">{product.name}</span>
+                                                    {product.sku && (
+                                                        <p className="text-[11px] text-[#AEAEAE] font-medium">SKU: {product.sku}</p>
+                                                    )}
+                                                </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-[13px] font-semibold text-[#181725]">{product.vendor.businessName}</td>
+                                        <td className="px-6 py-4">
+                                            <span className={cn(
+                                                'text-[13px] font-semibold',
+                                                product.kind === 'master' ? 'text-[#299E60]' : 'text-[#181725]',
+                                            )}>
+                                                {product.kind === 'master' ? 'Master Catalog' : product.vendor.businessName}
+                                            </span>
+                                            {product.brand && (
+                                                <p className="text-[11px] text-[#AEAEAE]">{product.brand}</p>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{product.category?.name || '—'}</td>
-                                        <td className="px-6 py-4 text-[13px] font-bold text-[#181725]">{formatINR(Number(product.basePrice))}</td>
+                                        <td className="px-6 py-4 text-[13px] font-bold text-[#181725]">
+                                            {product.kind === 'master' ? '—' : formatINR(Number(product.basePrice))}
+                                        </td>
                                         <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{formatDate(product.createdAt)}</td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2">
@@ -520,7 +575,7 @@ export default function ApprovalsPage() {
                                                     className="flex items-center gap-1 h-[34px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
                                                     {actionLoading === product.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve
                                                 </button>
-                                                <button onClick={() => setRejectTarget({ type: 'product', id: product.id, name: product.name })}
+                                                <button onClick={() => setRejectTarget({ type: 'product', id: product.id, name: product.name, kind: product.kind })}
                                                     className="flex items-center gap-1 h-[34px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold">
                                                     <X size={14} /> Reject
                                                 </button>
@@ -693,7 +748,7 @@ export default function ApprovalsPage() {
                             <button
                                 onClick={() => {
                                     if (!rejectNote.trim()) { toast.error('Please provide a reason'); return; }
-                                    if (rejectTarget.type === 'product') handleRejectProduct(rejectTarget.id, rejectNote);
+                                    if (rejectTarget.type === 'product') handleRejectProduct(rejectTarget.id, rejectNote, rejectTarget.kind);
                                     else if (rejectTarget.type === 'category') handleRejectCategory(rejectTarget.id, rejectNote);
                                     else handleRejectBrand(rejectTarget.id, rejectNote);
                                 }}
