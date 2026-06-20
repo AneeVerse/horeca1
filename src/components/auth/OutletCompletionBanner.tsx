@@ -23,13 +23,19 @@ import { useBusinessAccountSwitcher } from '@/hooks/useBusinessAccountSwitcher';
 import { usePathname } from 'next/navigation';
 
 export function OutletCompletionBanner() {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const { currentOutlet, activeBusinessAccountId } = useBusinessAccountSwitcher();
   // B-2: hooks must run unconditionally on every render — call usePathname()
   // before any early return, not after.
   const pathname = usePathname();
 
   if (status !== 'authenticated') return null;
+  // Admin staff are intentionally outside the customer BusinessAccount system
+  // (see multi-account-rbac-implementation-plan.md §2). Their account is an
+  // auto-provisioned artifact whose primary outlet has no real address, which
+  // would otherwise show this "add a delivery address" nag on every storefront
+  // page. Operators don't need it — they add addresses via the location picker.
+  if ((session?.user as { role?: string } | undefined)?.role === 'admin') return null;
   if (!currentOutlet) return null;
   if (!currentOutlet.requiresAddressUpdate) return null;
   if (

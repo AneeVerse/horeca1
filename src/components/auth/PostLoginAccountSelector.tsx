@@ -68,25 +68,31 @@ export function PostLoginAccountSelector() {
     }
 
     const visibleOutlets = filterOutlets(accounts[0]);
-    // 1 account, 0-1 accessible outlets → nothing to pick
-    if (accounts.length === 1 && visibleOutlets.length <= 1) {
-      if (forcePick) {
+    // Single account: only auto-open the outlet step when the user has NOT yet
+    // landed on an active outlet. The session always bootstraps one (primary or
+    // first outlet), so in practice this means: never re-prompt on fresh login /
+    // new tab once an outlet is active — the user re-picks anytime via the nav
+    // "Deliver to" selector. Without this guard the modal reopened on every
+    // login for any single-account user with 2+ outlets (notably admin test
+    // accounts, which carry an auto-provisioned customer account + 2 outlets).
+    if (accounts.length === 1) {
+      const needsOutletPick = visibleOutlets.length > 1 && !activeOutletId;
+      if (needsOutletPick) {
+        Promise.resolve().then(() => {
+          setOutletStep(accounts[0]);
+          setOpen(true);
+        });
+      } else if (forcePick) {
+        // Nothing to pick but a fresh-login force flag is armed — clear it so
+        // refreshes/redirects don't keep the picker primed.
         void update({ accountPickerCompleted: true }).then(() => completePostLoginPicker());
       }
-      return;
-    }
-    // 1 account, multiple accessible outlets → outlet step
-    if (accounts.length === 1 && visibleOutlets.length > 1) {
-      Promise.resolve().then(() => {
-        setOutletStep(accounts[0]);
-        setOpen(true);
-      });
       return;
     }
     // 2+ accounts → account picker
     Promise.resolve().then(() => setOpen(true));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, accounts, session?.user?.id, accessibleOutletIds.join(',')]);
+  }, [status, accounts, session?.user?.id, activeOutletId, accessibleOutletIds.join(',')]);
 
   if (!open) return null;
 
