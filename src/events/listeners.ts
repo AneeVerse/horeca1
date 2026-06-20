@@ -7,7 +7,11 @@ import { SMS_TEMPLATES } from '@/lib/providers/smsTemplates';
 
 const notifications = new NotificationService();
 
-let registered = false;
+// Idempotency lives on globalThis (not a module-scoped boolean): the bus is a
+// process-wide singleton, so its listeners must be registered exactly once even
+// if Next.js evaluates this module in more than one bundle. A module-local flag
+// would not be shared across those instances and could double-subscribe.
+const globalForListeners = globalThis as unknown as { eventListenersRegistered?: boolean };
 
 /**
  * Register all event listeners for the HoReCa1 event bus.
@@ -15,11 +19,11 @@ let registered = false;
  * Guarded against duplicate registration (e.g. during hot reload).
  */
 export function registerEventListeners(): void {
-  if (registered) {
+  if (globalForListeners.eventListenersRegistered) {
     console.log('[Events] Listeners already registered, skipping');
     return;
   }
-  registered = true;
+  globalForListeners.eventListenersRegistered = true;
   // ── Order lifecycle ─────────────────────────────────────────────
 
   eventBus.on('OrderCreated', async (payload) => {
