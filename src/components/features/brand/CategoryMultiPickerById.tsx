@@ -63,7 +63,10 @@ export function CategoryMultiPickerById({
                 const list: CatRow[] = Array.isArray(j.data) ? j.data : (j.data ?? []);
                 const flat: FlatCat[] = [];
                 const walk = (node: CatRow, parentName: string | null) => {
-                    flat.push({ id: node.id, name: node.name, parentName });
+                    const hasChildren = node.children && node.children.length > 0;
+                    if (!hasChildren) {
+                        flat.push({ id: node.id, name: node.name, parentName });
+                    }
                     for (const child of node.children ?? []) walk(child, node.name);
                 };
                 for (const root of list) walk(root, null);
