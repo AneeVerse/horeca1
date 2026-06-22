@@ -357,11 +357,13 @@ export default function CategoriesPage() {
                 method: 'DELETE',
             });
             const json = await res.json();
-            if (!res.ok) throw new Error(json.error || 'Delete failed');
+            if (!res.ok) throw new Error(json.error?.message || json.error || json.message || 'Delete failed');
             closeDeleteModal();
             fetchCategories();
+            toast.success('Category deleted successfully');
         } catch (err) {
             console.error('Delete failed:', err);
+            toast.error(err instanceof Error ? err.message : 'Delete failed');
         } finally {
             setDeleteLoading(false);
         }

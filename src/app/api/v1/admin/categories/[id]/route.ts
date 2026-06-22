@@ -129,9 +129,31 @@ export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
 
     const existing = await prisma.category.findUnique({
       where: { id },
-      select: { id: true },
+      include: {
+        _count: {
+          select: {
+            children: true,
+            products: true,
+            masterProducts: true,
+            brandMasterProducts: true,
+          },
+        },
+      },
     });
     if (!existing) throw Errors.notFound('Category');
+
+    if (existing._count.children > 0) {
+      throw Errors.badRequest('Cannot delete category because it has subcategories. Please delete or reassign them first.');
+    }
+    if (existing._count.products > 0) {
+      throw Errors.badRequest('Cannot delete category because it has products associated with it. Please reassign or delete the products first.');
+    }
+    if (existing._count.masterProducts > 0) {
+      throw Errors.badRequest('Cannot delete category because it has master products associated with it. Please reassign or delete them first.');
+    }
+    if (existing._count.brandMasterProducts > 0) {
+      throw Errors.badRequest('Cannot delete category because it has brand master products associated with it. Please reassign or delete them first.');
+    }
 
     await prisma.category.delete({
       where: { id },

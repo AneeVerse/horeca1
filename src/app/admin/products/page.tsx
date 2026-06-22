@@ -374,6 +374,8 @@ export default function ProductsPage() {
     // Delete confirmation
     const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
     const [deleting, setDeleting] = useState(false);
+    const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+    const [bulkDeleting, setBulkDeleting] = useState(false);
 
     // Bulk Update Engine — row selection
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -700,12 +702,74 @@ export default function ProductsPage() {
             const json = await res.json();
             if (json.success || res.ok) {
                 setProducts(prev => prev.filter(p => p.id !== deleteTarget.id));
+                toast.success('Product deleted successfully');
+            } else {
+                throw new Error(json.error?.message || json.error || json.message || 'Delete failed');
             }
         } catch (err) {
             console.error('Failed to delete product:', err);
+            toast.error(err instanceof Error ? err.message : 'Delete failed');
         } finally {
             setDeleting(false);
             setDeleteTarget(null);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        setBulkDeleting(true);
+        try {
+            const idsArray = Array.from(selectedIds);
+            const deletePromises = idsArray.map(async (id) => {
+                const product = products.find(p => p.id === id);
+                const url = product?.isMasterRow
+                    ? `/api/v1/admin/master-products/${id}`
+                    : `/api/v1/admin/products/${id}`;
+                const res = await fetch(url, { method: 'DELETE' });
+                const json = await res.json();
+                if (!res.ok) {
+                    throw new Error(json.error?.message || json.error || json.message || 'Failed to delete');
+                }
+                return id;
+            });
+
+            const results = await Promise.allSettled(deletePromises);
+            
+            const succeededIds: string[] = [];
+            const failedMessages: string[] = [];
+            
+            results.forEach((result, index) => {
+                const id = idsArray[index];
+                const product = products.find(p => p.id === id);
+                const name = product?.name || id;
+                if (result.status === 'fulfilled') {
+                    succeededIds.push(id);
+                } else {
+                    const errorMsg = result.reason?.message || 'Unknown error';
+                    failedMessages.push(`"${name}": ${errorMsg}`);
+                }
+            });
+
+            if (succeededIds.length > 0) {
+                setProducts(prev => prev.filter(p => !succeededIds.includes(p.id)));
+                setSelectedIds(prev => {
+                    const next = new Set(prev);
+                    succeededIds.forEach(id => next.delete(id));
+                    return next;
+                });
+                toast.success(`Successfully deleted ${succeededIds.length} product(s)`);
+            }
+
+            if (failedMessages.length > 0) {
+                toast.error(`Failed to delete ${failedMessages.length} product(s). ${failedMessages[0]}`);
+                console.error('Bulk delete failures:', failedMessages);
+            } else {
+                setShowBulkDeleteModal(false);
+            }
+        } catch (err) {
+            console.error('Bulk delete failed:', err);
+            toast.error(err instanceof Error ? err.message : 'Bulk delete failed');
+        } finally {
+            setBulkDeleting(false);
         }
     };
 
@@ -2314,6 +2378,12 @@ export default function ProductsPage() {
                         <Wand2 size={14} /> Bulk edit
                     </button>
                     <button
+                        onClick={() => setShowBulkDeleteModal(true)}
+                        className="h-[36px] px-4 bg-[#E74C3C] hover:bg-[#cf4436] rounded-[10px] text-[13px] font-bold flex items-center gap-1.5 transition-colors"
+                    >
+                        <Trash2 size={14} /> Delete
+                    </button>
+                    <button
                         onClick={() => setSelectedIds(new Set())}
                         className="h-[36px] px-3 text-[13px] font-bold text-[#AEAEAE] hover:text-white transition-colors"
                     >
@@ -2359,6 +2429,50 @@ export default function ProductsPage() {
                                         className="flex-1 h-[48px] bg-[#E74C3C] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#cf4436] transition-all flex items-center justify-center gap-2 shadow-sm shadow-[#E74C3C]/20 disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
                                         {deleting && <Loader2 size={16} className="animate-spin" />}
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Bulk Delete Confirmation Modal */}
+            {showBulkDeleteModal && (
+                <>
+                    <div
+                        className="fixed inset-0 bg-black/40 z-[80] animate-in fade-in duration-200"
+                        onClick={() => !bulkDeleting && setShowBulkDeleteModal(false)}
+                    />
+                    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+                        <div
+                            className="bg-white rounded-[20px] border border-[#EEEEEE] shadow-2xl w-full max-w-[440px] p-8 animate-in zoom-in-95 duration-200"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="flex flex-col items-center text-center gap-4">
+                                <div className="w-[56px] h-[56px] bg-[#FFF0F0] rounded-[16px] flex items-center justify-center text-[#E74C3C]">
+                                    <AlertTriangle size={28} />
+                                </div>
+                                <h3 className="text-[20px] font-[900] text-[#181725]">Delete {selectedIds.size} Products?</h3>
+                                <p className="text-[14px] text-[#7C7C7C] font-medium leading-relaxed">
+                                    Are you sure you want to delete the <strong className="text-[#181725]">{selectedIds.size}</strong> selected products?
+                                    This action cannot be undone.
+                                </p>
+                                <div className="flex items-center gap-4 w-full mt-2">
+                                    <button
+                                        onClick={() => setShowBulkDeleteModal(false)}
+                                        disabled={bulkDeleting}
+                                        className="flex-1 h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[12px] text-[14px] font-bold hover:bg-[#EEEEEE] transition-all disabled:opacity-60"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleBulkDelete}
+                                        disabled={bulkDeleting}
+                                        className="flex-1 h-[48px] bg-[#E74C3C] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#cf4436] transition-all flex items-center justify-center gap-2 shadow-sm shadow-[#E74C3C]/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                        {bulkDeleting && <Loader2 size={16} className="animate-spin" />}
                                         Delete
                                     </button>
                                 </div>

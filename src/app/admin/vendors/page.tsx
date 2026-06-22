@@ -84,6 +84,9 @@ export default function VendorsPage() {
         router.push('/vendor/dashboard');
     };
 
+    // Navigate to the vendor detail page (used by clickable card / table row)
+    const openDetails = (vendorId: string) => router.push(`/admin/vendors/${vendorId}`);
+
     useEffect(() => {
         fetch('/api/v1/admin/vendors?limit=50')
             .then(res => res.json())
@@ -272,8 +275,11 @@ export default function VendorsPage() {
                         key={vendor.id}
                         className="bg-white rounded-[16px] border border-[#E5E7EB] shadow-sm overflow-hidden flex flex-col h-full hover:shadow-md hover:border-[#299E60]/30 hover:-translate-y-0.5 transition-all w-full"
                     >
-                        {/* Upper Section */}
-                        <div className="p-4 flex-1 flex flex-col">
+                        {/* Upper Section — click anywhere to open vendor details */}
+                        <div
+                            onClick={() => openDetails(vendor.id)}
+                            className="p-4 flex-1 flex flex-col cursor-pointer"
+                        >
                             {/* Visual Logo Container */}
                             <div className="bg-[#F9FAFB] rounded-[12px] h-[120px] relative flex items-center justify-center p-4 border border-[#F3F4F6] mb-4">
                                 {/* Verification Status Pin */}
@@ -402,7 +408,8 @@ export default function VendorsPage() {
                         {filteredVendors.map((vendor, i) => (
                             <tr
                                 key={vendor.id}
-                                className="group hover:bg-[#F9FAFB]/60 transition-colors"
+                                onClick={() => openDetails(vendor.id)}
+                                className="group hover:bg-[#F9FAFB]/60 transition-colors cursor-pointer"
                             >
                                 {/* Index */}
                                 <td className="px-6 py-4 text-center font-bold text-[#9CA3AF] text-[12px]">
@@ -484,7 +491,7 @@ export default function VendorsPage() {
                                 <td className="px-6 py-4 text-right">
                                     <div className="flex items-center justify-end gap-2">
                                         <button
-                                            onClick={() => viewDashboard(vendor.id)}
+                                            onClick={(e) => { e.stopPropagation(); viewDashboard(vendor.id); }}
                                             className="h-[34px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold hover:bg-[#238a54] active:scale-97 transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-[#299E60]/5 whitespace-nowrap"
                                         >
                                             <LayoutDashboard size={12} />
@@ -493,13 +500,14 @@ export default function VendorsPage() {
                                         </button>
                                         <Link
                                             href={`/admin/vendors/${vendor.id}`}
+                                            onClick={(e) => e.stopPropagation()}
                                             className="h-[34px] px-3 bg-white border border-[#E5E7EB] text-[#374151] rounded-[8px] text-[12px] font-bold hover:bg-[#F9FAFB] transition-all flex items-center justify-center whitespace-nowrap"
                                         >
                                             Details
                                         </Link>
                                         {!vendor.isVerified ? (
                                             <button
-                                                onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
+                                                onClick={(e) => { e.stopPropagation(); toggleVerified(vendor.id, vendor.isVerified); }}
                                                 className="h-[34px] px-3 bg-[#EEF8F1] text-[#299E60] border border-[#299E60]/10 rounded-[8px] text-[12px] font-bold hover:bg-[#D1FAE5] transition-all flex items-center justify-center gap-1 whitespace-nowrap"
                                             >
                                                 <CheckCircle size={12} />
@@ -507,7 +515,7 @@ export default function VendorsPage() {
                                             </button>
                                         ) : (
                                             <button
-                                                onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
+                                                onClick={(e) => { e.stopPropagation(); toggleVerified(vendor.id, vendor.isVerified); }}
                                                 className="h-[34px] px-3 bg-[#FDF2F2] text-[#EF4444] border border-[#EF4444]/10 rounded-[8px] text-[12px] font-bold hover:bg-[#FEE2E2] transition-all flex items-center justify-center gap-1 whitespace-nowrap"
                                             >
                                                 <XCircle size={12} />
