@@ -192,28 +192,13 @@ export function CategoryMultiPickerById({
     };
 
     return (
-        <div className="space-y-2" ref={containerRef}>
+        <div className="space-y-2.5" ref={containerRef}>
             <div>
-                <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">{label}</label>
+                <label className="block text-[13px] font-bold text-[#181725] mb-1">{label}</label>
                 {helper && <p className="text-[11px] text-gray-400 mt-0.5">{helper}</p>}
             </div>
 
-            {/* Selected chips */}
-            <div className="flex flex-wrap gap-2 min-h-[44px] p-2 border border-gray-200 rounded-xl bg-gray-50">
-                {selectedRows.length === 0 && (
-                    <span className="text-[12px] text-gray-400 italic px-1">No categories selected yet</span>
-                )}
-                {selectedRows.map(c => (
-                    <span key={c.id} className="flex items-center gap-1 bg-[#e8f5e9] text-[#2e7d46] text-[12px] font-semibold rounded-full px-3 py-1">
-                        {c.name}
-                        <button type="button" onClick={() => remove(c.id)} className="hover:text-red-500 transition-colors">
-                            <X size={11} />
-                        </button>
-                    </span>
-                ))}
-            </div>
-
-            <div className="relative">
+            <div className={cn("relative", open && "z-[50]")}>
                 <div className="relative">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
@@ -279,6 +264,21 @@ export function CategoryMultiPickerById({
                         )}
                     </div>
                 )}
+            </div>
+
+            {/* Selected chips */}
+            <div className="flex flex-wrap gap-2 min-h-[44px] p-2 border border-gray-200 rounded-xl bg-gray-50">
+                {selectedRows.length === 0 && (
+                    <span className="text-[12px] text-gray-400 italic px-1">No categories selected yet</span>
+                )}
+                {selectedRows.map(c => (
+                    <span key={c.id} className="flex items-center gap-1 bg-[#e8f5e9] text-[#2e7d46] text-[12px] font-semibold rounded-full px-3 py-1">
+                        {c.name}
+                        <button type="button" onClick={() => remove(c.id)} className="hover:text-red-500 transition-colors">
+                            <X size={11} />
+                        </button>
+                    </span>
+                ))}
             </div>
 
             <p className="text-[11px] text-gray-400">{value.length} / {max} selected</p>

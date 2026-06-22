@@ -128,12 +128,12 @@ export function CategorySinglePicker({
     return (
         <div className="space-y-1.5" ref={containerRef}>
             {label && (
-                <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wider">{label}</label>
+                <label className="block text-[13px] font-bold text-[#181725] mb-1">{label}</label>
             )}
             {helper && <p className="text-[11px] text-gray-400">{helper}</p>}
 
             {/* Trigger button — looks like an input */}
-            <div className="relative">
+            <div className={cn("relative", open && "z-[50]")}>
                 <button
                     type="button"
                     onClick={() => setOpen(o => !o)}
