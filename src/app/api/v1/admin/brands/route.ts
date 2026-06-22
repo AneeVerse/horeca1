@@ -97,7 +97,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx: AuthContext) => {
             approvalStatus: 'approved',
             isActive: true,
           },
-          select: { id: true, name: true, slug: true, logoUrl: true, approvalStatus: true, isActive: true, createdAt: true },
+          select: { id: true, name: true, slug: true, logoUrl: true, approvalStatus: true, isActive: true, createdAt: true, user: { select: { id: true, fullName: true, email: true } } },
         });
       });
 

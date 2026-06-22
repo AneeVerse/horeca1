@@ -1164,9 +1164,13 @@ enum NotificationStatus {
 // The brand company entity (e.g. "Kissan", "Everest")
 model Brand {
   id              String         @id @default(uuid()) @db.Uuid
-  userId          String         @map("user_id") @db.Uuid
-  // V2.2: Brand is a 1:1 extension of BusinessAccount (isBrand=true). NOT NULL after Step C.
-  businessAccountId String       @unique @map("business_account_id") @db.Uuid
+  // Nullable: a brand can exist as a pure catalog label (created via product
+  // import / vendor add) with no backing login account. The account is
+  // provisioned only when the real brand company onboards to the portal.
+  userId          String?        @map("user_id") @db.Uuid
+  // V2.2: Brand is a 1:1 extension of BusinessAccount (isBrand=true) when an
+  // account exists; null for label-only brands.
+  businessAccountId String?      @unique @map("business_account_id") @db.Uuid
   name            String         @unique @db.VarChar(255)
   slug            String         @unique @db.VarChar(255)
   description     String?        @db.Text
@@ -1196,8 +1200,8 @@ model Brand {
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  user            User                  @relation(fields: [userId], references: [id])
-  businessAccount BusinessAccount       @relation(fields: [businessAccountId], references: [id])
+  user            User?                 @relation(fields: [userId], references: [id])
+  businessAccount BusinessAccount?      @relation(fields: [businessAccountId], references: [id])
   masterProducts  BrandMasterProduct[]
   productMappings BrandProductMapping[]
   teamMembers     BrandTeamMember[]

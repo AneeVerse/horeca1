@@ -61,7 +61,9 @@ interface CategoryFormData {
 
 interface ImportResult {
     created: number;
-    errors: string[];
+    // The import API returns structured { row, message } errors; the client-side
+    // catch path pushes a plain string. Render must tolerate both.
+    errors: Array<string | { row: number; message: string }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1170,7 +1172,7 @@ export default function CategoriesPage() {
                                                 {importResult.errors.map((err, i) => (
                                                     <li key={i} className="flex items-start gap-1.5">
                                                         <span className="mt-0.5 shrink-0">-</span>
-                                                        {err}
+                                                        {typeof err === 'string' ? err : `Row ${err.row}: ${err.message}`}
                                                     </li>
                                                 ))}
                                             </ul>

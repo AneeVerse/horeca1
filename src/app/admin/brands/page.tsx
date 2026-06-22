@@ -263,7 +263,7 @@ export default function AdminBrandsPage() {
     const q = searchQuery.toLowerCase();
     const filteredBrands = brands
         .filter(b => brandFilter === 'all' || b.approvalStatus === brandFilter)
-        .filter(b => !q || b.name.toLowerCase().includes(q) || b.user.email.toLowerCase().includes(q));
+        .filter(b => !q || b.name.toLowerCase().includes(q) || (b.user?.email?.toLowerCase().includes(q) ?? false));
     const filteredMappings = mappings.filter(m =>
         !q || m.brandMasterProduct.name.toLowerCase().includes(q) || m.distributorProduct.vendor.businessName.toLowerCase().includes(q)
     );
@@ -437,8 +437,8 @@ export default function AdminBrandsPage() {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <p className="text-[13px] font-semibold text-[#181725]">{brand.user.fullName}</p>
-                                                <p className="text-[11px] text-[#AEAEAE]">{brand.user.email}</p>
+                                                <p className="text-[13px] font-semibold text-[#181725]">{brand.user?.fullName ?? '—'}</p>
+                                                <p className="text-[11px] text-[#AEAEAE]">{brand.user?.email ?? '—'}</p>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className="flex items-center gap-1 text-[13px] font-bold text-[#181725]">
