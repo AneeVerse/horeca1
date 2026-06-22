@@ -67,14 +67,17 @@ export async function resolveUserId(ctx: AuthContext, req: NextRequest): Promise
     if (ctx.activeBusinessAccountId) {
       const ownBrand = await prisma.brand.findFirst({
         where: { userId: ctx.userId, businessAccountId: ctx.activeBusinessAccountId },
-        select: { userId: true },
+        select: { id: true },
       });
-      if (ownBrand) return ownBrand.userId;
+      // Matched on userId: ctx.userId, so the owner is the caller.
+      if (ownBrand) return ctx.userId;
     }
     const impersonateId = req.cookies.get('admin_impersonate_brand_id')?.value;
     if (!impersonateId) throw Errors.forbidden('No brand selected for admin view.');
     const brand = await prisma.brand.findUnique({ where: { id: impersonateId }, select: { userId: true } });
     if (!brand) throw Errors.forbidden('Impersonated brand not found');
+    // Lightweight (label-only) brands have no linked account to act as.
+    if (!brand.userId) throw Errors.forbidden('This brand has no linked account');
     return brand.userId;
   }
   // Owner path — Brand.userId no longer unique, prefer active account.
@@ -83,9 +86,10 @@ export async function resolveUserId(ctx: AuthContext, req: NextRequest): Promise
       userId: ctx.userId,
       ...(ctx.activeBusinessAccountId ? { businessAccountId: ctx.activeBusinessAccountId } : {}),
     },
-    select: { userId: true },
+    select: { id: true },
   });
-  if (ownBrand) return ownBrand.userId;
+  // Matched on userId: ctx.userId, so the owner is the caller.
+  if (ownBrand) return ctx.userId;
 
   // Team member — return the brand owner's userId
   const membership = await prisma.brandTeamMember.findFirst({
@@ -93,5 +97,6 @@ export async function resolveUserId(ctx: AuthContext, req: NextRequest): Promise
     select: { brand: { select: { userId: true } } },
   });
   if (!membership) throw Errors.forbidden('No brand profile linked to your account');
+  if (!membership.brand.userId) throw Errors.forbidden('This brand has no linked account');
   return membership.brand.userId;
 }

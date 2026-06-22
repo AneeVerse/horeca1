@@ -2,22 +2,17 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-    Check,
-    X,
     Search,
-    Clock,
     Loader2,
     ClipboardList,
     Store,
     Package,
     Tag,
-    MessageSquare,
-    Pencil,
     Sparkles,
+    Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import Link from 'next/link';
-import { toast } from 'sonner';
+import { ApprovalReviewDrawer, type ReviewTarget } from '@/components/features/admin/ApprovalReviewDrawer';
 
 // ── Interfaces ──
 
@@ -76,7 +71,7 @@ interface PendingBrand {
     logoUrl: string | null;
     approvalStatus: string;
     createdAt: string;
-    user: { id: string; fullName: string; email: string };
+    user: { id: string; fullName: string; email: string } | null;
 }
 
 type SectionTab = 'Vendors' | 'Products' | 'Categories' | 'Brands';
@@ -97,7 +92,7 @@ export default function ApprovalsPage() {
     const [sectionTab, setSectionTab] = useState<SectionTab>('Vendors');
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
-    const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
 
     // Vendor state
     const [pendingVendors, setPendingVendors] = useState<Vendor[]>([]);
@@ -112,10 +107,6 @@ export default function ApprovalsPage() {
 
     // Brand state
     const [pendingBrands, setPendingBrands] = useState<PendingBrand[]>([]);
-
-    // Rejection modal
-    const [rejectTarget, setRejectTarget] = useState<{ type: 'product' | 'category' | 'brand'; id: string; name: string; kind?: 'master' | 'vendor' } | null>(null);
-    const [rejectNote, setRejectNote] = useState('');
 
     // Summary counts
     const [summary, setSummary] = useState({ pendingVendors: 0, pendingProducts: 0, pendingCategories: 0, pendingBrands: 0 });
@@ -175,148 +166,6 @@ export default function ApprovalsPage() {
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    // ── Vendor Actions ──
-    const handleApproveVendor = async (vendor: Vendor) => {
-        setActionLoading(vendor.id);
-        try {
-            const res = await fetch(`/api/v1/admin/vendors/${vendor.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ isVerified: true }),
-            });
-            if ((await res.json()).success || res.ok) {
-                setPendingVendors(prev => prev.filter(v => v.id !== vendor.id));
-                setApprovedVendors(prev => [{ ...vendor, isVerified: true }, ...prev]);
-                setSummary(prev => ({ ...prev, pendingVendors: prev.pendingVendors - 1 }));
-            }
-        } catch (err) { console.error(err); }
-        finally { setActionLoading(null); }
-    };
-
-    const handleRevokeVendor = async (vendor: Vendor) => {
-        setActionLoading(vendor.id);
-        try {
-            const res = await fetch(`/api/v1/admin/vendors/${vendor.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ isVerified: false }),
-            });
-            if ((await res.json()).success || res.ok) {
-                setApprovedVendors(prev => prev.filter(v => v.id !== vendor.id));
-                setPendingVendors(prev => [{ ...vendor, isVerified: false }, ...prev]);
-                setSummary(prev => ({ ...prev, pendingVendors: prev.pendingVendors + 1 }));
-            }
-        } catch (err) { console.error(err); }
-        finally { setActionLoading(null); }
-    };
-
-    // ── Product Actions ──
-    const handleApproveProduct = async (product: PendingProduct) => {
-        setActionLoading(product.id);
-        try {
-            const url = product.kind === 'master'
-                ? `/api/v1/admin/master-products/${product.id}/approval`
-                : `/api/v1/admin/products/${product.id}/approval`;
-            const res = await fetch(url, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'approve' }),
-            });
-            if ((await res.json()).success || res.ok) {
-                setPendingProducts(prev => prev.filter(p => p.id !== product.id));
-                setSummary(prev => ({ ...prev, pendingProducts: prev.pendingProducts - 1 }));
-            }
-        } catch (err) { console.error(err); }
-        finally { setActionLoading(null); }
-    };
-
-    const handleRejectProduct = async (id: string, note: string, kind?: 'master' | 'vendor') => {
-        setActionLoading(id);
-        try {
-            const url = kind === 'master'
-                ? `/api/v1/admin/master-products/${id}/approval`
-                : `/api/v1/admin/products/${id}/approval`;
-            const res = await fetch(url, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'reject', note }),
-            });
-            if ((await res.json()).success || res.ok) {
-                setPendingProducts(prev => prev.filter(p => p.id !== id));
-                setSummary(prev => ({ ...prev, pendingProducts: prev.pendingProducts - 1 }));
-            }
-        } catch (err) { console.error(err); }
-        finally { setActionLoading(null); setRejectTarget(null); setRejectNote(''); }
-    };
-
-    // ── Category Actions ──
-    const handleApproveCategory = async (cat: PendingCategory) => {
-        setActionLoading(cat.id);
-        try {
-            const res = await fetch(`/api/v1/admin/categories/${cat.id}/approval`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'approve' }),
-            });
-            if ((await res.json()).success || res.ok) {
-                setPendingCategories(prev => prev.filter(c => c.id !== cat.id));
-                setSummary(prev => ({ ...prev, pendingCategories: prev.pendingCategories - 1 }));
-            }
-        } catch (err) { console.error(err); }
-        finally { setActionLoading(null); }
-    };
-
-    const handleRejectCategory = async (id: string, note: string) => {
-        setActionLoading(id);
-        try {
-            const res = await fetch(`/api/v1/admin/categories/${id}/approval`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'reject', note }),
-            });
-            if ((await res.json()).success || res.ok) {
-                setPendingCategories(prev => prev.filter(c => c.id !== id));
-                setSummary(prev => ({ ...prev, pendingCategories: prev.pendingCategories - 1 }));
-            }
-        } catch (err) { console.error(err); }
-        finally { setActionLoading(null); setRejectTarget(null); setRejectNote(''); }
-    };
-
-    // ── Brand Actions ──
-    const handleApproveBrand = async (brand: PendingBrand) => {
-        setActionLoading(brand.id);
-        try {
-            const res = await fetch(`/api/v1/admin/brands/${brand.id}/approve`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'approved' }),
-            });
-            if ((await res.json()).success || res.ok) {
-                setPendingBrands(prev => prev.filter(b => b.id !== brand.id));
-                setSummary(prev => ({ ...prev, pendingBrands: prev.pendingBrands - 1 }));
-                toast.success(`${brand.name} approved`);
-            }
-        } catch (err) { console.error(err); }
-        finally { setActionLoading(null); }
-    };
-
-    const handleRejectBrand = async (id: string, note: string) => {
-        setActionLoading(id);
-        try {
-            const res = await fetch(`/api/v1/admin/brands/${id}/approve`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'rejected', reviewNote: note }),
-            });
-            if ((await res.json()).success || res.ok) {
-                setPendingBrands(prev => prev.filter(b => b.id !== id));
-                setSummary(prev => ({ ...prev, pendingBrands: prev.pendingBrands - 1 }));
-                toast.success('Brand rejected');
-            }
-        } catch (err) { console.error(err); }
-        finally { setActionLoading(null); setRejectTarget(null); setRejectNote(''); }
-    };
-
     // ── Filter logic ──
     const q = searchQuery.toLowerCase();
     const allVendors = [...pendingVendors, ...approvedVendors];
@@ -335,11 +184,12 @@ export default function ApprovalsPage() {
     const filteredBrands = q
         ? pendingBrands.filter(b =>
             b.name.toLowerCase().includes(q) ||
-            b.user.fullName.toLowerCase().includes(q) ||
-            b.user.email.toLowerCase().includes(q))
+            (b.user?.fullName.toLowerCase().includes(q) ?? false) ||
+            (b.user?.email.toLowerCase().includes(q) ?? false))
         : pendingBrands;
 
-    const totalPending = summary.pendingVendors + summary.pendingProducts + summary.pendingCategories + summary.pendingBrands;
+    const reviewBtnCls =
+        'flex items-center gap-1.5 h-[34px] px-4 bg-[#181725] text-white rounded-[8px] text-[12px] font-bold hover:bg-[#2d2d3d] transition-colors';
 
     if (loading) {
         return (
@@ -350,62 +200,46 @@ export default function ApprovalsPage() {
     }
 
     return (
-        <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500">
-            {/* Header */}
-            <div>
-                <h1 className="text-[28px] font-[900] text-[#181725] tracking-tight">Approvals</h1>
-                <p className="text-[#7C7C7C] font-medium mt-1">Review and manage pending approvals</p>
-            </div>
-
-            {/* Stats Row */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
-                {[
-                    { label: 'Pending Vendors', value: summary.pendingVendors, icon: Store, color: '#F59E0B', bg: '#FFF7E6' },
-                    { label: 'Pending Products', value: summary.pendingProducts, icon: Package, color: '#3B82F6', bg: '#EFF6FF' },
-                    { label: 'Pending Categories', value: summary.pendingCategories, icon: Tag, color: '#8B5CF6', bg: '#F3F0FF' },
-                    { label: 'Pending Brands', value: summary.pendingBrands, icon: Sparkles, color: '#7C3AED', bg: '#EDE9FE' },
-                    { label: 'Total Pending', value: totalPending, icon: Clock, color: '#E74C3C', bg: '#FEF2F2' },
-                ].map((stat, idx) => (
-                    <div key={idx} className="bg-white p-5 rounded-[16px] border border-[#EEEEEE] shadow-sm flex items-center gap-4">
-                        <div className="w-[52px] h-[52px] rounded-[14px] flex items-center justify-center shrink-0" style={{ backgroundColor: stat.bg, color: stat.color }}>
-                            <stat.icon size={26} strokeWidth={2.5} />
-                        </div>
-                        <div>
-                            <p className="text-[12px] font-bold text-[#AEAEAE] uppercase tracking-wider">{stat.label}</p>
-                            <h3 className="text-[26px] font-[900] text-[#181725] leading-none mt-0.5">{stat.value}</h3>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Section Tabs */}
-            <div className="flex items-center gap-2 bg-[#F8F9FB] p-1.5 rounded-[16px] w-fit">
-                {([
-                    { key: 'Vendors' as SectionTab, icon: Store, count: summary.pendingVendors },
-                    { key: 'Products' as SectionTab, icon: Package, count: summary.pendingProducts },
-                    { key: 'Categories' as SectionTab, icon: Tag, count: summary.pendingCategories },
-                    { key: 'Brands' as SectionTab, icon: Sparkles, count: summary.pendingBrands },
-                ]).map(({ key, icon: Icon, count }) => (
-                    <button
-                        key={key}
-                        onClick={() => { setSectionTab(key); setSearchQuery(''); }}
-                        className={cn(
-                            'flex items-center gap-2 px-6 py-2.5 rounded-[12px] text-[14px] font-bold transition-all',
-                            sectionTab === key ? 'bg-white text-[#181725] shadow-sm' : 'text-[#AEAEAE] hover:text-[#7C7C7C]'
-                        )}
-                    >
-                        <Icon size={18} strokeWidth={2.5} />
-                        {key}
-                        {count > 0 && (
-                            <span className={cn(
-                                'px-2 py-0.5 rounded-[6px] text-[11px] font-[900]',
-                                sectionTab === key ? 'bg-[#E74C3C] text-white' : 'bg-[#EEEEEE] text-[#AEAEAE]'
-                            )}>
-                                {count}
-                            </span>
-                        )}
-                    </button>
-                ))}
+        <div className="max-w-[1600px] mx-auto space-y-6 animate-in fade-in duration-500">
+            {/* Centered section tabs */}
+            <div className="flex justify-center">
+                <nav className="inline-flex items-center gap-0.5 border-b border-[#EEEEEE]">
+                    {([
+                        { key: 'Vendors' as SectionTab, icon: Store, count: summary.pendingVendors },
+                        { key: 'Products' as SectionTab, icon: Package, count: summary.pendingProducts },
+                        { key: 'Categories' as SectionTab, icon: Tag, count: summary.pendingCategories },
+                        { key: 'Brands' as SectionTab, icon: Sparkles, count: summary.pendingBrands },
+                    ]).map(({ key, icon: Icon, count }) => {
+                        const isActive = sectionTab === key;
+                        return (
+                        <button
+                            key={key}
+                            onClick={() => { setSectionTab(key); setSearchQuery(''); }}
+                            className={cn(
+                                'flex items-center gap-2 px-6 py-3 text-[14px] font-bold transition-all border-b-2 -mb-px',
+                                isActive
+                                    ? 'border-[#299E60] text-[#299E60] bg-[#EEF8F1]/60'
+                                    : 'border-transparent text-[#181725] hover:text-[#299E60] hover:bg-[#F8F9FB]',
+                            )}
+                        >
+                            <Icon
+                                size={18}
+                                strokeWidth={2.5}
+                                className={cn(isActive ? 'text-[#299E60]' : 'text-[#181725]')}
+                            />
+                            {key}
+                            {count > 0 && (
+                                <span className={cn(
+                                    'px-2 py-0.5 rounded-[6px] text-[11px] font-[900]',
+                                    isActive ? 'bg-[#E74C3C] text-white' : 'bg-[#181725] text-white',
+                                )}>
+                                    {count}
+                                </span>
+                            )}
+                        </button>
+                        );
+                    })}
+                </nav>
             </div>
 
             {/* Main Content Card */}
@@ -436,7 +270,7 @@ export default function ApprovalsPage() {
                                 onClick={() => setVendorTab(tab)}
                                 className={cn(
                                     'px-4 py-1.5 rounded-[8px] text-[13px] font-bold transition-all',
-                                    vendorTab === tab ? 'bg-[#299E60] text-white' : 'bg-[#F8F9FB] text-[#AEAEAE] hover:text-[#7C7C7C]'
+                                    vendorTab === tab ? 'bg-[#299E60] text-white' : 'bg-[#F8F9FB] text-[#AEAEAE] hover:text-[#7C7C7C]',
                                 )}
                             >
                                 {tab}
@@ -471,9 +305,7 @@ export default function ApprovalsPage() {
                                                         {getInitials(vendor.businessName)}
                                                     </div>
                                                 )}
-                                                <Link href={`/admin/vendors/${vendor.id}`} className="text-[14px] font-bold text-[#181725] hover:text-[#299E60]">
-                                                    {vendor.businessName}
-                                                </Link>
+                                                <span className="text-[14px] font-bold text-[#181725]">{vendor.businessName}</span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-[13px] font-semibold text-[#181725]">{vendor.user.fullName}</td>
@@ -482,29 +314,18 @@ export default function ApprovalsPage() {
                                         <td className="px-6 py-4">
                                             <span className={cn(
                                                 'text-[11px] font-[900] px-2.5 py-1 rounded-[6px] uppercase',
-                                                vendor.isVerified ? 'bg-[#EEF8F1] text-[#299E60]' : 'bg-[#FFF7E6] text-[#F59E0B]'
+                                                vendor.isVerified ? 'bg-[#EEF8F1] text-[#299E60]' : 'bg-[#FFF7E6] text-[#F59E0B]',
                                             )}>
                                                 {vendor.isVerified ? 'Verified' : 'Pending'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2">
-                                                {vendor.isVerified ? (
-                                                    <button onClick={() => handleRevokeVendor(vendor)} disabled={actionLoading === vendor.id}
-                                                        className="flex items-center gap-1 h-[34px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
-                                                        {actionLoading === vendor.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />} Revoke
-                                                    </button>
-                                                ) : (
-                                                    <button onClick={() => handleApproveVendor(vendor)} disabled={actionLoading === vendor.id}
-                                                        className="flex items-center gap-1 h-[34px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
-                                                        {actionLoading === vendor.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve
-                                                    </button>
-                                                )}
-                                                <Link href={`/admin/vendors/${vendor.id}?edit=true`}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[8px] text-[12px] font-bold hover:bg-[#EEF8F1] hover:border-[#299E60]/40 hover:text-[#299E60] transition-colors">
-                                                    <Pencil size={13} /> Edit
-                                                </Link>
-                                            </div>
+                                            <button
+                                                onClick={() => setReviewTarget({ type: 'vendor', id: vendor.id })}
+                                                className={reviewBtnCls}
+                                            >
+                                                <Eye size={14} /> Review
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
@@ -570,20 +391,16 @@ export default function ApprovalsPage() {
                                         </td>
                                         <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{formatDate(product.createdAt)}</td>
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <button onClick={() => handleApproveProduct(product)} disabled={actionLoading === product.id}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
-                                                    {actionLoading === product.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve
-                                                </button>
-                                                <button onClick={() => setRejectTarget({ type: 'product', id: product.id, name: product.name, kind: product.kind })}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold">
-                                                    <X size={14} /> Reject
-                                                </button>
-                                                <Link href={`/admin/products?editId=${product.id}`}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[8px] text-[12px] font-bold hover:bg-[#EEF8F1] hover:border-[#299E60]/40 hover:text-[#299E60] transition-colors">
-                                                    <Pencil size={13} /> Edit
-                                                </Link>
-                                            </div>
+                                            <button
+                                                onClick={() => setReviewTarget({
+                                                    type: 'product',
+                                                    id: product.id,
+                                                    kind: product.kind ?? 'vendor',
+                                                })}
+                                                className={reviewBtnCls}
+                                            >
+                                                <Eye size={14} /> Review
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
@@ -624,20 +441,12 @@ export default function ApprovalsPage() {
                                         <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{cat.parent?.name || 'Top-level'}</td>
                                         <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{formatDate(cat.createdAt)}</td>
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <button onClick={() => handleApproveCategory(cat)} disabled={actionLoading === cat.id}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
-                                                    {actionLoading === cat.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve
-                                                </button>
-                                                <button onClick={() => setRejectTarget({ type: 'category', id: cat.id, name: cat.name })}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold">
-                                                    <X size={14} /> Reject
-                                                </button>
-                                                <Link href={`/admin/categories?editId=${cat.id}`}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[8px] text-[12px] font-bold hover:bg-[#EEF8F1] hover:border-[#299E60]/40 hover:text-[#299E60] transition-colors">
-                                                    <Pencil size={13} /> Edit
-                                                </Link>
-                                            </div>
+                                            <button
+                                                onClick={() => setReviewTarget({ type: 'category', id: cat.id })}
+                                                className={reviewBtnCls}
+                                            >
+                                                <Eye size={14} /> Review
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
@@ -677,29 +486,19 @@ export default function ApprovalsPage() {
                                                         {getInitials(brand.name)}
                                                     </div>
                                                 )}
-                                                <Link href={`/admin/brands/${brand.id}`} className="text-[14px] font-bold text-[#181725] hover:text-[#7C3AED]">
-                                                    {brand.name}
-                                                </Link>
+                                                <span className="text-[14px] font-bold text-[#181725]">{brand.name}</span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-[13px] font-semibold text-[#181725]">{brand.user.fullName}</td>
-                                        <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{brand.user.email}</td>
+                                        <td className="px-6 py-4 text-[13px] font-semibold text-[#181725]">{brand.user?.fullName ?? '—'}</td>
+                                        <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{brand.user?.email ?? 'Label-only brand'}</td>
                                         <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{formatDate(brand.createdAt)}</td>
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <button onClick={() => handleApproveBrand(brand)} disabled={actionLoading === brand.id}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
-                                                    {actionLoading === brand.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve
-                                                </button>
-                                                <button onClick={() => setRejectTarget({ type: 'brand', id: brand.id, name: brand.name })}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold">
-                                                    <X size={14} /> Reject
-                                                </button>
-                                                <Link href={`/admin/brands/${brand.id}?edit=true&from=approvals`}
-                                                    className="flex items-center gap-1 h-[34px] px-3 bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[8px] text-[12px] font-bold hover:bg-[#EEF8F1] hover:border-[#299E60]/40 hover:text-[#299E60] transition-colors">
-                                                    <Pencil size={13} /> Edit
-                                                </Link>
-                                            </div>
+                                            <button
+                                                onClick={() => setReviewTarget({ type: 'brand', id: brand.id })}
+                                                className={reviewBtnCls}
+                                            >
+                                                <Eye size={14} /> Review
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
@@ -725,42 +524,11 @@ export default function ApprovalsPage() {
                 </div>
             </div>
 
-            {/* ── Rejection Note Modal ── */}
-            {rejectTarget && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setRejectTarget(null)}>
-                    <div className="bg-white rounded-[16px] w-full max-w-[440px] p-6 shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center gap-2 mb-4">
-                            <MessageSquare size={20} className="text-[#E74C3C]" />
-                            <h3 className="text-[16px] font-bold text-[#181725]">Reject {rejectTarget.name}</h3>
-                        </div>
-                        <textarea
-                            value={rejectNote}
-                            onChange={e => setRejectNote(e.target.value)}
-                            placeholder="Reason for rejection (required)..."
-                            rows={3}
-                            className="w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#E74C3C]/40 resize-none mb-4"
-                        />
-                        <div className="flex items-center gap-3 justify-end">
-                            <button onClick={() => { setRejectTarget(null); setRejectNote(''); }}
-                                className="h-[40px] px-5 bg-gray-100 rounded-[10px] text-[13px] font-bold text-[#7C7C7C] hover:bg-gray-200">
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => {
-                                    if (!rejectNote.trim()) { toast.error('Please provide a reason'); return; }
-                                    if (rejectTarget.type === 'product') handleRejectProduct(rejectTarget.id, rejectNote, rejectTarget.kind);
-                                    else if (rejectTarget.type === 'category') handleRejectCategory(rejectTarget.id, rejectNote);
-                                    else handleRejectBrand(rejectTarget.id, rejectNote);
-                                }}
-                                disabled={!rejectNote.trim() || !!actionLoading}
-                                className="h-[40px] px-5 bg-[#E74C3C] text-white rounded-[10px] text-[13px] font-bold disabled:opacity-50 flex items-center gap-1.5">
-                                {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
-                                Reject
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ApprovalReviewDrawer
+                target={reviewTarget}
+                onClose={() => setReviewTarget(null)}
+                onComplete={() => { setReviewTarget(null); void fetchData(); }}
+            />
         </div>
     );
 }

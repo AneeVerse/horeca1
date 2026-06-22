@@ -132,23 +132,50 @@ async function postHandler(req: NextRequest) {
         data: { userId: user.id, businessAccountId: account.id, outletId: null, roleId: brandAdminTemplate.id },
       });
 
-      const slug = slugify(brandName, user.id);
-      const slugTaken = await tx.brand.findUnique({ where: { slug }, select: { id: true } });
-      if (slugTaken) {
+      // A label-only brand (no owner) may already exist for this name — created
+      // earlier via product import or vendor "Request brand". Brand.name is
+      // unique, so we CLAIM that record (attach this onboarding account) instead
+      // of inserting a duplicate. If the name is owned by a real account already,
+      // it's a genuine conflict.
+      const existingBrand = await tx.brand.findFirst({
+        where: { name: { equals: brandName, mode: 'insensitive' } },
+        select: { id: true, userId: true, slug: true },
+      });
+      if (existingBrand?.userId) {
         throw Errors.conflict('A brand with this name already exists.');
       }
 
-      const brand = await tx.brand.create({
-        data: {
-          userId: user.id,
-          businessAccountId: account.id,
-          slug,
-          approvalStatus: 'pending',
-          isActive: false,
-          ...brandFields,
-        },
-        select: { id: true, slug: true },
-      });
+      let brand: { id: string; slug: string };
+      if (existingBrand) {
+        brand = await tx.brand.update({
+          where: { id: existingBrand.id },
+          data: {
+            userId: user.id,
+            businessAccountId: account.id,
+            approvalStatus: 'pending',
+            isActive: false,
+            ...brandFields,
+          },
+          select: { id: true, slug: true },
+        });
+      } else {
+        const slug = slugify(brandName, user.id);
+        const slugTaken = await tx.brand.findUnique({ where: { slug }, select: { id: true } });
+        if (slugTaken) {
+          throw Errors.conflict('A brand with this name already exists.');
+        }
+        brand = await tx.brand.create({
+          data: {
+            userId: user.id,
+            businessAccountId: account.id,
+            slug,
+            approvalStatus: 'pending',
+            isActive: false,
+            ...brandFields,
+          },
+          select: { id: true, slug: true },
+        });
+      }
 
       return { user, brand };
     });

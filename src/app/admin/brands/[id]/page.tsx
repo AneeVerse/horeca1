@@ -64,7 +64,7 @@ interface Brand {
     retailFocused: boolean | null;
     approvalStatus: string;
     isActive: boolean;
-    user: { id: string; fullName: string; email: string; phone: string | null; gstNumber: string | null };
+    user: { id: string; fullName: string; email: string; phone: string | null; gstNumber: string | null } | null;
     businessAccount: BusinessAccountReview | null;
     _count: { masterProducts: number; productMappings: number };
 }
@@ -277,6 +277,11 @@ export default function AdminBrandEditPage() {
 
     const statusStyle = STATUS_STYLE[brand.approvalStatus] ?? STATUS_STYLE.pending;
     const ba = brand.businessAccount;
+    const owner = brand.user;
+    // Admin-created brands have no owner account (or a placeholder internal email) and
+    // no submitted onboarding profile — treat those as a blank "create storefront" form.
+    const isDraftStorefront = !owner || owner.email.includes('brand.internal.horeca1');
+    const hasApplication = !!ba || (!!owner && !owner.email.includes('brand.internal.horeca1'));
     const billingParts = [
         ba?.billingAddressLine,
         ba?.billingCity,
@@ -284,8 +289,8 @@ export default function AdminBrandEditPage() {
         ba?.billingPincode,
     ].filter(Boolean);
     const billingAddress = billingParts.length > 0 ? billingParts.join(', ') : null;
-    const gst = ba?.gstin ?? brand.user.gstNumber;
-    const phone = brand.user.phone ?? ba?.mobilePhone ?? ba?.workPhone;
+    const gst = ba?.gstin ?? owner?.gstNumber ?? null;
+    const phone = owner?.phone ?? ba?.mobilePhone ?? ba?.workPhone;
 
     const reviewFields: Array<{ label: string; value: string }> = [
         { label: 'Brand Type', value: formatLabel(brand.brandType ?? ba?.businessType) },
@@ -317,13 +322,15 @@ export default function AdminBrandEditPage() {
                         </button>
                         <div>
                             <h1 className="text-[18px] font-extrabold text-[#1A1C1E]">{brand.name}</h1>
-                            <p className="text-[12px] text-gray-400">{brand.user.email} · {brand.approvalStatus}</p>
+                            <p className="text-[12px] text-gray-400">
+                                {isDraftStorefront ? 'Admin-managed storefront' : owner?.email} · {brand.approvalStatus}
+                            </p>
                         </div>
                     </div>
                     <button onClick={save} disabled={saving}
                         className="flex items-center gap-2 px-5 py-2.5 bg-[#53B175] text-white text-[14px] font-bold rounded-2xl hover:bg-[#3d9e5f] transition-colors disabled:opacity-60">
                         {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                        Save Changes
+                        {isDraftStorefront ? 'Save Storefront' : 'Save Changes'}
                     </button>
                 </div>
             </div>
@@ -332,6 +339,11 @@ export default function AdminBrandEditPage() {
                 {fromApprovals && brand.approvalStatus === 'pending' && (
                     <div className="bg-[#FFF7E6] border border-[#F59E0B]/30 rounded-2xl px-4 py-3 text-[13px] font-semibold text-[#92400E]">
                         Review this brand application before approving.
+                    </div>
+                )}
+                {isDraftStorefront && !fromApprovals && (
+                    <div className="bg-[#EEF8F1] border border-[#299E60]/25 rounded-2xl px-4 py-3 text-[13px] font-semibold text-[#1f6b41]">
+                        This is an admin-managed brand with no owner application. Fill in the storefront details below — logo, banner, info and categories — then Save to publish it.
                     </div>
                 )}
 
@@ -367,24 +379,38 @@ export default function AdminBrandEditPage() {
                             <p className="text-[13px] text-[#6B7280] font-medium mt-1">{brand.tagline}</p>
                         )}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 border-t border-[#F3F4F6] pt-4 text-left">
-                            <div className="flex items-center gap-2.5">
-                                <div className="w-[30px] h-[30px] rounded-[8px] bg-[#EDE9FE] flex items-center justify-center text-[#7C3AED]">
-                                    <User size={13} />
+                            {owner ? (
+                                <>
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-[30px] h-[30px] rounded-[8px] bg-[#EDE9FE] flex items-center justify-center text-[#7C3AED]">
+                                            <User size={13} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <span className="text-[10px] text-[#9CA3AF] uppercase block font-bold">Owner</span>
+                                            <span className="text-[12px] font-bold text-[#374151] truncate block">{owner.fullName}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-[30px] h-[30px] rounded-[8px] bg-[#EDE9FE] flex items-center justify-center text-[#7C3AED]">
+                                            <Mail size={13} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <span className="text-[10px] text-[#9CA3AF] uppercase block font-bold">Email</span>
+                                            <span className="text-[12px] font-bold text-[#374151] truncate block">{owner.email}</span>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex items-center gap-2.5 sm:col-span-2">
+                                    <div className="w-[30px] h-[30px] rounded-[8px] bg-[#F3F4F6] flex items-center justify-center text-[#9CA3AF]">
+                                        <User size={13} />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <span className="text-[10px] text-[#9CA3AF] uppercase block font-bold">Owner</span>
+                                        <span className="text-[12px] font-bold text-[#9CA3AF] block">No owner account linked</span>
+                                    </div>
                                 </div>
-                                <div className="min-w-0">
-                                    <span className="text-[10px] text-[#9CA3AF] uppercase block font-bold">Owner</span>
-                                    <span className="text-[12px] font-bold text-[#374151] truncate block">{brand.user.fullName}</span>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2.5">
-                                <div className="w-[30px] h-[30px] rounded-[8px] bg-[#EDE9FE] flex items-center justify-center text-[#7C3AED]">
-                                    <Mail size={13} />
-                                </div>
-                                <div className="min-w-0">
-                                    <span className="text-[10px] text-[#9CA3AF] uppercase block font-bold">Email</span>
-                                    <span className="text-[12px] font-bold text-[#374151] truncate block">{brand.user.email}</span>
-                                </div>
-                            </div>
+                            )}
                             {phone && (
                                 <div className="flex items-center gap-2.5">
                                     <div className="w-[30px] h-[30px] rounded-[8px] bg-[#EDE9FE] flex items-center justify-center text-[#7C3AED]">
@@ -447,8 +473,8 @@ export default function AdminBrandEditPage() {
                     )}
                 </div>
 
-                {/* Application review (read-only) */}
-                {(isReviewMode || brand.approvalStatus === 'pending') && (
+                {/* Application review (read-only) — only when there's a real submitted application */}
+                {hasApplication && (isReviewMode || brand.approvalStatus === 'pending') && (
                     <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
                         <h2 className="text-[15px] font-bold text-[#181725]">Application Review</h2>
                         <p className="text-[12px] text-gray-500 -mt-2">Submitted onboarding profile — review before approving.</p>

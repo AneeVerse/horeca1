@@ -45,6 +45,9 @@ export const GET = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
       select: { userId: true, user: { select: { id: true, fullName: true, email: true, phone: true, hcidDisplay: true, isActive: true, createdAt: true } } },
     });
     if (!brand) throw Errors.notFound('Brand not found');
+    // Label-only brands (created via import) have no owner account; team
+    // management isn't reachable for them, but guard so types stay sound.
+    if (!brand.user) throw Errors.badRequest('This brand has no linked account yet.');
 
     const members = await prisma.brandTeamMember.findMany({
       where: { brandId },
@@ -96,6 +99,7 @@ export const POST = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
       select: { businessAccountId: true, name: true },
     });
     if (!brand) throw Errors.notFound('Brand not found');
+    if (!brand.businessAccountId) throw Errors.badRequest('This brand has no linked account yet.');
 
     let role: { id: string; name: string; scope: string; description: string | null };
     if (input.permissions && Object.keys(input.permissions).length > 0) {

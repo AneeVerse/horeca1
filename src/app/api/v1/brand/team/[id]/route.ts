@@ -48,6 +48,7 @@ export const PATCH = brandOnly(async (req: NextRequest, ctx) => {
       select: { businessAccountId: true },
     });
     if (!brand) throw Errors.notFound('Brand not found');
+    if (!brand.businessAccountId) throw Errors.badRequest('This brand has no linked account yet.');
 
     let role: { id: string; name: string; scope: string };
     if (input.permissions && Object.keys(input.permissions).length > 0) {
@@ -127,6 +128,10 @@ export const DELETE = brandOnly(async (req: NextRequest, ctx) => {
       select: { businessAccountId: true },
     });
     if (!brand) throw Errors.notFound('Brand not found');
+    if (!brand.businessAccountId) throw Errors.badRequest('This brand has no linked account yet.');
+    // Copy to a local const so the non-null narrowing survives into the
+    // transaction closure below (TS resets property narrowing across callbacks).
+    const businessAccountId = brand.businessAccountId;
 
     await prisma.$transaction(async (tx) => {
       await tx.brandTeamMember.delete({ where: { id: member.id } });
@@ -134,7 +139,7 @@ export const DELETE = brandOnly(async (req: NextRequest, ctx) => {
       await tx.userRole.deleteMany({
         where: {
           userId: member.userId,
-          businessAccountId: brand.businessAccountId,
+          businessAccountId,
           role: { scope: 'brand' },
         },
       });
