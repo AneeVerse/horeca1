@@ -152,16 +152,35 @@ export async function loadActiveContext(
         OR: [{ outletId: null }, ...(activeOutletId ? [{ outletId: activeOutletId }] : [])],
       },
       select: {
-        role: { select: { permissions: true } },
+        role: { select: { name: true, permissions: true } },
       },
     });
 
-    // Account OWNER (the isPrimary membership — same semantics the account
-    // routes use for owner checks) always gets the FULL current permission
-    // set. Stored role JSON snapshots go stale when new modules are added to
-    // the registry (storefront.* locked owners out of their own checkout this
-    // way); deriving from ALL_PERMISSION_KEYS at session time can't go stale.
-    const permissions = chosen.isPrimary
+    // Account OWNER always gets the FULL current permission set, derived from
+    // ALL_PERMISSION_KEYS at session time so it can never go stale when new
+    // modules (e.g. storefront.*) are added to the registry — stale role JSON
+    // snapshots are what locked owners out of their own checkout before.
+    //
+    // Ownership is NOT the same as `isPrimary`. `isPrimary` marks the user's ONE
+    // default account, but a single user can OWN many accounts: when a vendor
+    // also creates a brand account via POST /api/v1/account, that membership is
+    // written with isPrimary=false even though the user owns it (and is granted
+    // the Owner/Brand Admin role). Keying the full-permission grant off
+    // `isPrimary` therefore left multi-account owners with only the stale stored
+    // JSON on every account except their primary — so a brand/vendor owner who
+    // switched into their non-primary account couldn't place orders
+    // ("Requires storefront.order permission"), even though brand/vendor
+    // accounts are meant to buy as customers too.
+    //
+    // The reliable owner signal is holding an owner-class role on the ACTIVE
+    // account — these are the exact roles the account-creation paths
+    // (provisionDefaultAccount / account POST) assign to the creator. This lets
+    // a multi-account owner buy/manage on EVERY account they own.
+    const OWNER_ROLE_NAMES = new Set(['Owner', 'Vendor Admin', 'Brand Admin']);
+    const isOwner =
+      chosen.isPrimary || userRoles.some((ur) => OWNER_ROLE_NAMES.has(ur.role.name));
+
+    const permissions = isOwner
       ? [...ALL_PERMISSION_KEYS]
       : Array.from(mergePermissions(
           ...userRoles.map((ur) => flatten(ur.role.permissions as PermissionsJson | null)),
