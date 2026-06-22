@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { isVendorPortalPath } from '@/lib/vendorPortalPaths';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileSearchOverlay } from './MobileSearchOverlay';
 import { LocationSelectionOverlay } from './LocationSelectionOverlay';
@@ -100,8 +101,7 @@ export function Navbar() {
     const pathname = usePathname();
     const isShipmentPage = pathname?.includes('/cart/shipment/');
     const isAdminPage = pathname?.startsWith('/admin');
-    const vendorDashboardPaths = ['/vendor/dashboard', '/vendor/orders', '/vendor/products', '/vendor/inventory', '/vendor/settings'];
-    const isVendorDashboard = vendorDashboardPaths.some(p => pathname?.startsWith(p));
+    const isVendorDashboard = isVendorPortalPath(pathname);
     const isBrandPortal = pathname?.startsWith('/brand/portal');
     const isAccountPage = pathname?.startsWith('/account');
 

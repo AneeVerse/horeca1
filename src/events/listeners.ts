@@ -425,28 +425,7 @@ export function registerEventListeners(): void {
     }
   });
 
-  eventBus.on('ProductRejected', async (payload) => {
-    try {
-      const vendor = await prisma.vendor.findUnique({
-        where: { id: payload.vendorId },
-        select: { userId: true },
-      });
-      if (vendor) {
-        const reasonSuffix = payload.reason ? `: ${payload.reason}` : '';
-        await notifications.send({
-          userId: vendor.userId,
-          type: 'approval',
-          channel: 'in_app',
-          title: 'Product Rejected',
-          body: `Your product '${payload.productName}' was rejected${reasonSuffix}`,
-          referenceId: payload.productId,
-          referenceType: 'product',
-        });
-      }
-    } catch (error) {
-      console.error('[Events] ProductRejected listener failed:', error);
-    }
-  });
+  // ProductRejected — sent directly from approval API routes via sendProductRejectedNotifications().
 
   // ── Approval: Categories ──────────────────────────────────────
 

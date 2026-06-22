@@ -56,6 +56,7 @@ import {
 import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
 import { VendorOutletStrip } from '@/components/vendor/VendorOutletStrip';
+import { VendorNotificationBell } from '@/components/features/vendor/VendorNotificationBell';
 import type { PermissionKey } from '@/lib/permissions/registry';
 
 interface VendorSidebarLink {
@@ -418,9 +419,7 @@ export default function VendorLayout({
 
                 {/* Right Side - Bell + User */}
                 <div className="flex items-center gap-5 shrink-0">
-                    <button className="relative hover:bg-gray-50 rounded-full p-2 transition-colors">
-                        <Bell size={22} className="text-[#181725]" fill="#181725" />
-                    </button>
+                    <VendorNotificationBell />
 
                     <BusinessAccountSwitcherDropdown />
                 </div>

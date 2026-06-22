@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/providers/email';
-import { phoneLookupVariants } from '@/lib/phone';
 import { withRateLimit } from '@/middleware/withRateLimit';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -84,14 +83,12 @@ async function postHandler(req: NextRequest) {
       );
     }
 
-    // Verify the account exists for login
-    if (mode === 'login') {
-      const existing = usePhone
-        ? await prisma.user.findFirst({
-            where: { phone: { in: phoneLookupVariants(phone) } },
-            select: { id: true },
-          })
-        : await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    // Account-existence check applies to EMAIL login only. A phone login
+    // doubles as passwordless signup: when no account exists we still send the
+    // OTP and auth.ts auto-creates a customer on verify. Email cannot
+    // self-register (registration requires a phone), so it stays gated.
+    if (mode === 'login' && useEmail) {
+      const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
       if (!existing) {
         return NextResponse.json(
           { success: false, code: 'NO_ACCOUNT', error: 'No account found. Please register first.' },

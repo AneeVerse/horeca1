@@ -14,6 +14,7 @@ import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 import { VendorApplicationBanner } from '@/components/features/homepage/VendorApplicationBanner';
 import { ScrollRestoration } from '@/components/layout/ScrollRestoration';
 import { PostLoginAccountSelector } from '@/components/auth/PostLoginAccountSelector';
+import { MandatoryAddressGate } from '@/components/auth/MandatoryAddressGate';
 import { CallbackUrlRedirect } from '@/components/auth/CallbackUrlRedirect';
 import { OutletCompletionBanner } from '@/components/auth/OutletCompletionBanner';
 
@@ -58,6 +59,7 @@ export default function RootLayout({
                     </main>
                     <Footer />
                     <PostLoginAccountSelector />
+                    <MandatoryAddressGate />
                   </ConfirmProvider>
                 </CartProvider>
               </WishlistProvider>

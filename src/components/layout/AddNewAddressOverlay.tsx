@@ -18,6 +18,9 @@ interface AddNewAddressOverlayProps {
     initialLat?: number;
     initialLng?: number;
     defaultMode?: 'business' | 'map';
+    /** When false the overlay cannot be dismissed (no back button, no backdrop
+     *  close) — used by the mandatory first-address gate. Defaults to true. */
+    dismissible?: boolean;
 }
 
 const DEFAULT_CENTER = { lat: 19.076, lng: 72.8777 };
@@ -41,6 +44,7 @@ export function AddNewAddressOverlay({
     initialLat,
     initialLng,
     defaultMode = 'business',
+    dismissible = true,
 }: AddNewAddressOverlayProps) {
     const { isLoaded, google } = useGoogleMaps();
     const { reverseGeocode } = useAddress();
@@ -330,10 +334,10 @@ export function AddNewAddressOverlay({
 
     return (
         <>
-            {/* Desktop backdrop */}
+            {/* Desktop backdrop — click-to-close only when dismissible */}
             <div
                 className="hidden md:block fixed inset-0 z-[12000] bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
-                onClick={onClose}
+                onClick={dismissible ? onClose : undefined}
             />
 
             {/*
@@ -359,10 +363,21 @@ export function AddNewAddressOverlay({
                     {/* Header */}
                     <div className="shrink-0 bg-white border-b border-gray-100">
                         <div className="flex items-center gap-3 px-4 py-3">
-                            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-full transition-colors">
-                                <ArrowLeft size={22} className="text-gray-700" />
-                            </button>
-                            <h2 className="text-[16px] font-bold text-gray-800">Add Delivery Address</h2>
+                            {dismissible && (
+                                <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-full transition-colors">
+                                    <ArrowLeft size={22} className="text-gray-700" />
+                                </button>
+                            )}
+                            <div>
+                                <h2 className="text-[16px] font-bold text-gray-800">
+                                    {dismissible ? 'Add Delivery Address' : 'Set your delivery address'}
+                                </h2>
+                                {!dismissible && (
+                                    <p className="text-[11px] text-gray-400 font-medium mt-0.5">
+                                        Required to show prices &amp; place orders
+                                    </p>
+                                )}
+                            </div>
                         </div>
                         <div className="flex px-4 gap-1">
                             {([

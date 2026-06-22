@@ -1,9 +1,15 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Bell, Loader2, CheckCheck, AlertCircle, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import {
+    handleVendorNotificationClick,
+    vendorNotificationAccent,
+    getVendorNotificationHref,
+} from '@/components/features/vendor/VendorNotificationBell';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,12 +47,8 @@ const CHANNELS: { key: string; label: string }[] = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function typeColor(type: string) {
-    if (type.includes('Order')) return 'bg-blue-50 text-blue-600';
-    if (type.includes('Low') || type.includes('Stock')) return 'bg-amber-50 text-amber-600';
-    if (type.includes('Payment') || type.includes('Credit')) return 'bg-[#EEF8F1] text-[#299E60]';
-    if (type.includes('Cancel') || type.includes('Reject')) return 'bg-[#FFF0F0] text-[#E74C3C]';
-    return 'bg-[#F5F5F5] text-[#7C7C7C]';
+function typeColor(title: string | null, type: string) {
+    return vendorNotificationAccent(title, type);
 }
 
 function relativeTime(isoStr: string) {
@@ -62,6 +64,7 @@ function relativeTime(isoStr: string) {
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function VendorNotificationsPage() {
+    const router = useRouter();
     const [activeTab, setActiveTab] = useState<'feed' | 'preferences'>('feed');
 
     // Feed state
@@ -160,6 +163,18 @@ export default function VendorNotificationsPage() {
         }
     };
 
+    const onNotificationClick = async (n: VendorNotification) => {
+        if (!n.readAt) {
+            setNotifications((prev) =>
+                prev.map((item) =>
+                    item.id === n.id ? { ...item, readAt: new Date().toISOString() } : item
+                )
+            );
+            setUnreadCount((c) => Math.max(0, c - 1));
+        }
+        await handleVendorNotificationClick(n, router);
+    };
+
     return (
         <div className="space-y-5 pb-10">
             {/* Header */}
@@ -217,20 +232,24 @@ export default function VendorNotificationsPage() {
                         </div>
                     ) : (
                         <div className="divide-y divide-[#F5F5F5]">
-                            {notifications.map(n => (
-                                <div
+                            {notifications.map(n => {
+                                const href = getVendorNotificationHref(n);
+                                return (
+                                <button
                                     key={n.id}
+                                    type="button"
+                                    onClick={() => void onNotificationClick(n)}
+                                    disabled={!href}
                                     className={cn(
-                                        'flex items-start gap-4 px-5 py-4 transition-colors hover:bg-[#FAFAFA]',
-                                        !n.readAt && 'bg-blue-50/20'
+                                        'w-full text-left flex items-start gap-4 px-5 py-4 transition-colors hover:bg-[#FAFAFA]',
+                                        !n.readAt && 'bg-blue-50/20',
+                                        !href && 'cursor-default'
                                     )}
                                 >
-                                    {/* Type dot */}
-                                    <div className={cn('mt-0.5 w-8 h-8 rounded-[8px] shrink-0 flex items-center justify-center text-[10px] font-bold uppercase', typeColor(n.type))}>
-                                        {n.type.slice(0, 2)}
+                                    <div className={cn('mt-0.5 w-8 h-8 rounded-[8px] shrink-0 flex items-center justify-center text-[10px] font-bold uppercase', typeColor(n.title, n.type))}>
+                                        {(n.title ?? n.type).slice(0, 2)}
                                     </div>
 
-                                    {/* Content */}
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-start justify-between gap-3">
                                             <p className={cn('text-[13px] leading-snug', n.readAt ? 'text-[#7C7C7C]' : 'font-bold text-[#181725]')}>
@@ -244,6 +263,9 @@ export default function VendorNotificationsPage() {
                                         {n.body && (
                                             <p className="text-[12px] text-[#AEAEAE] mt-0.5 line-clamp-2">{n.body}</p>
                                         )}
+                                        {href && (
+                                            <p className="text-[11px] font-bold text-[#299E60] mt-1">Open product</p>
+                                        )}
                                         {n.status === 'failed' && (
                                             <div className="flex items-center gap-1 mt-1">
                                                 <AlertCircle size={11} className="text-[#E74C3C]" />
@@ -251,8 +273,8 @@ export default function VendorNotificationsPage() {
                                             </div>
                                         )}
                                     </div>
-                                </div>
-                            ))}
+                                </button>
+                            );})}
                         </div>
                     )}
                 </div>

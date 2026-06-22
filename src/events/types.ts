@@ -171,6 +171,14 @@ export interface BrandApprovedPayload {
   approvedBy: string;
 }
 
+// A lightweight (account-less) brand was auto-created from a product import or
+// vendor add and needs admin approval before its products can go live.
+export interface BrandSuggestedPayload {
+  brandId: string;
+  brandName: string;
+  suggestedBy?: string;
+}
+
 export interface BrandProductCreatedPayload {
   brandMasterProductId: string;
   brandId: string;
@@ -222,6 +230,7 @@ export interface EventMap {
   CategoryRejected: CategoryRejectedPayload;
   BrandCreated: BrandCreatedPayload;
   BrandApproved: BrandApprovedPayload;
+  BrandSuggested: BrandSuggestedPayload;
   BrandProductCreated: BrandProductCreatedPayload;
   BrandProductMapped: BrandProductMappedPayload;
   BrandDistributorInviteCreated: BrandDistributorInviteCreatedPayload;

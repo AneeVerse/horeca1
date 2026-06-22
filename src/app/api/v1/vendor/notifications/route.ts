@@ -9,13 +9,18 @@ import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { errorResponse } from '@/middleware/errorHandler';
 import type { AuthContext } from '@/middleware/auth';
+import { ADMIN_ONLY_NOTIFICATION_TITLES } from '@/lib/vendorNotifications';
 
 export const GET = vendorOnly(async (_req: NextRequest, ctx: AuthContext) => {
   try {
     const userId = ctx.userId;
 
     const notifications = await prisma.notification.findMany({
-      where: { userId, channel: 'in_app' },
+      where: {
+        userId,
+        channel: 'in_app',
+        title: { notIn: [...ADMIN_ONLY_NOTIFICATION_TITLES] },
+      },
       orderBy: { createdAt: 'desc' },
       take: 50,
     });

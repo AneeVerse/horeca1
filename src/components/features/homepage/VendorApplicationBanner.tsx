@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { usePathname, useRouter } from 'next/navigation';
+import { isVendorPortalPath } from '@/lib/vendorPortalPaths';
 import { Clock, X, PartyPopper, ArrowRight } from 'lucide-react';
 
 interface ApplicationStatus {
@@ -81,11 +82,14 @@ export function VendorApplicationBanner() {
 
   if (dismissed || !appStatus?.hasApplication) return null;
 
-  // Don't show on vendor dashboard pages
-  if (pathname?.startsWith('/vendor/dashboard') || pathname?.startsWith('/vendor/orders') ||
-      pathname?.startsWith('/vendor/products') || pathname?.startsWith('/vendor/inventory') ||
-      pathname?.startsWith('/vendor/settings') || pathname?.startsWith('/admin') ||
-      pathname?.startsWith('/account')) return null;
+  // Don't show on vendor portal or admin/account pages
+  if (
+    isVendorPortalPath(pathname) ||
+    pathname?.startsWith('/admin') ||
+    pathname?.startsWith('/account')
+  ) {
+    return null;
+  }
 
   // === APPROVED BANNER ===
   if (appStatus.status === 'approved') {
