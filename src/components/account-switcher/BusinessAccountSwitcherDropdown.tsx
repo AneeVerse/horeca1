@@ -35,7 +35,7 @@ function initialsOf(name: string): string {
     .toUpperCase() || name.slice(0, 2).toUpperCase();
 }
 
-export function BusinessAccountSwitcherDropdown() {
+export function BusinessAccountSwitcherDropdown({ isAdminMode = false }: { isAdminMode?: boolean }) {
   const {
     loading, switching,
     accounts, currentAccount, currentOutlet,
@@ -93,8 +93,8 @@ export function BusinessAccountSwitcherDropdown() {
   // header look broken (no identity, no menu). Render a proper user menu
   // here so the admin still sees who they're signed in as + has the same
   // dropdown shape as any other portal.
-  if (!loading && accounts.length === 0) {
-    return <UserOnlyMenu session={session} signOut={signOut} hcidDisplay={hcidDisplay} />;
+  if (isAdminMode || (!loading && accounts.length === 0)) {
+    return <UserOnlyMenu session={session} signOut={signOut} hcidDisplay={hcidDisplay} isAdminMode={isAdminMode} />;
   }
 
   const displayName = currentAccount?.displayName ?? currentAccount?.legalName ?? 'Account';
@@ -386,10 +386,12 @@ function UserOnlyMenu({
   session,
   signOut,
   hcidDisplay,
+  isAdminMode,
 }: {
   session: SessionLike;
   signOut: () => void;
   hcidDisplay: string | null;
+  isAdminMode?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -408,7 +410,11 @@ function UserOnlyMenu({
   const name = u.fullName || u.name || u.email || 'Signed in';
   const email = u.email ?? '';
   const role = (u.role ?? 'admin').toLowerCase();
-  const conf = ROLE_STYLE_FALLBACK[role] ?? ROLE_STYLE_FALLBACK.admin;
+  const baseConf = ROLE_STYLE_FALLBACK[role] ?? ROLE_STYLE_FALLBACK.admin;
+  const conf = {
+    ...baseConf,
+    label: isAdminMode ? 'Platform Admin' : baseConf.label,
+  };
   const initials = initialsOf(name);
 
   return (

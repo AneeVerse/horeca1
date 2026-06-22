@@ -185,7 +185,7 @@ export default function AdminLayout({
                         <Bell size={22} className="text-[#181725]" fill="#181725" />
                     </button>
 
-                    <BusinessAccountSwitcherDropdown />
+                    <BusinessAccountSwitcherDropdown isAdminMode={true} />
                 </div>
             </header>
 
