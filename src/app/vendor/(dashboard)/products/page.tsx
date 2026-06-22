@@ -1,16 +1,18 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
     Search, Plus, Loader2, Package, Pencil, X,
     ChevronRight, ChevronLeft, Info, ImageIcon, Settings, DollarSign, Trash2,
     BarChart3, BoxIcon, Tag, Upload, Percent, Star, Wand2,
-    ChevronDown, FileDown, FileSpreadsheet,
+    ChevronDown, FileDown, FileSpreadsheet, AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ImageUpload, MultiImageUpload } from '@/components/ui/ImageUpload';
 import { CategoryMultiPickerById } from '@/components/features/brand/CategoryMultiPickerById';
+import { BrandSinglePicker } from '@/components/features/brand/BrandSinglePicker';
 import VendorProductImportModal from '@/components/features/vendor/VendorProductImportModal';
 import VendorBulkEngine from '@/components/features/vendor/VendorBulkEngine';
 
@@ -108,7 +110,6 @@ interface ProductForm {
 /* ------------------------------------------------------------------ */
 
 const UNIT_OPTIONS = ['kg', 'g', 'ml', 'L', 'piece', 'pack', 'box', 'dozen', 'case', 'bag', 'bottle', 'can', 'carton', 'tray'];
-const PAGE_SIZE = 20;
 
 const EMPTY_FORM: ProductForm = {
     name: '',
@@ -369,18 +370,24 @@ interface ProductSuggestion {
 }
 
 export default function VendorProductsPage() {
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const deepLinkHandled = useRef(false);
     const [products, setProducts] = useState<VendorProduct[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [brands, setBrands] = useState<BrandOption[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'featured'>('all');
+    const [approvalFilter, setApprovalFilter] = useState<'all' | 'pending' | 'rejected' | 'approved'>('all');
     const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(20);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<VendorProduct | null>(null);
     const [form, setForm] = useState<ProductForm>(EMPTY_FORM);
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [loadingProduct, setLoadingProduct] = useState(false);
     const panelRef = useRef<HTMLDivElement>(null);
 
@@ -462,7 +469,7 @@ export default function VendorProductsPage() {
     }, [fetchProducts]);
 
     // Reset to page 1 when search or filter changes
-    useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter]);
+    useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, approvalFilter]);
 
     const filteredProducts = products.filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -472,11 +479,17 @@ export default function VendorProductsPage() {
             statusFilter === 'inactive' ? !p.isActive :
             statusFilter === 'featured' ? p.isFeatured :
             true;
-        return matchesSearch && matchesFilter;
+        const matchesApproval =
+            approvalFilter === 'all' ? true :
+            approvalFilter === 'pending' ? p.approvalStatus === 'pending' :
+            approvalFilter === 'rejected' ? p.approvalStatus === 'rejected' :
+            approvalFilter === 'approved' ? p.approvalStatus === 'approved' :
+            true;
+        return matchesSearch && matchesFilter && matchesApproval;
     });
-    const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
     const safeCurrentPage = Math.min(currentPage, totalPages);
-    const paginatedProducts = filteredProducts.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
+    const paginatedProducts = filteredProducts.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
     const pageRange = getPageRange(safeCurrentPage, totalPages);
 
     /* ---- Product suggestions (autocomplete) ---- */
@@ -577,6 +590,7 @@ export default function VendorProductsPage() {
 
     const handleProductNameChange = (name: string) => {
         setForm(prev => ({ ...prev, name, slug: slugify(name) }));
+        clearFieldError('name');
     };
 
     const fillFromMaster = (m: {
@@ -601,8 +615,8 @@ export default function VendorProductsPage() {
         }));
     };
 
-    const suggestBrand = async () => {
-        const trimmed = form.brand.trim();
+    const suggestBrand = async (nameOverride?: string) => {
+        const trimmed = (nameOverride ?? form.brand).trim();
         if (trimmed.length < 2 || brandSuggesting) return;
         const exact = brands.some(b => b.name.toLowerCase() === trimmed.toLowerCase());
         if (exact) return;
@@ -620,6 +634,7 @@ export default function VendorProductsPage() {
                 updateField('brand', json.data.name);
             } else {
                 toast.success(`Sent "${trimmed}" to admin for brand approval`);
+                updateField('brand', trimmed);
             }
         } catch (e: unknown) {
             toast.error(e instanceof Error ? e.message : 'Brand suggestion failed');
@@ -689,6 +704,7 @@ export default function VendorProductsPage() {
         setEditingProduct(null);
         setForm(EMPTY_FORM);
         setFormError('');
+        setFieldErrors({});
         setBasedOnProductId(null);
         setMasterProductId(null);
         setCatalogSearch('');
@@ -702,6 +718,7 @@ export default function VendorProductsPage() {
     const openEditPanel = async (product: VendorProduct) => {
         setEditingProduct(product);
         setFormError('');
+        setFieldErrors({});
         setIsPanelOpen(true);
         setLoadingProduct(true);
 
@@ -711,6 +728,15 @@ export default function VendorProductsPage() {
             const json = await res.json();
             const p = json.success ? json.data : product;
 
+            setEditingProduct({
+                ...product,
+                approvalStatus: p.approvalStatus ?? product.approvalStatus,
+                approvalNote: p.approvalNote ?? product.approvalNote ?? null,
+            });
+            setMasterProductId(
+                typeof p.masterProductId === 'string' ? p.masterProductId : null
+            );
+            setBasedOnProductId(null);
             // Pre-fill multi-category: prefer the categoryLinks join rows (full set,
             // primary-first), fall back to the legacy single Product.categoryId for
             // older rows that haven't been migrated to the join table yet.
@@ -797,6 +823,55 @@ export default function VendorProductsPage() {
         }
     };
 
+    // Deep link from notifications: /vendor/products?edit={productId}
+    useEffect(() => {
+        const editId = searchParams.get('edit');
+        if (!editId || deepLinkHandled.current || isPanelOpen) return;
+
+        const openFromDeepLink = async () => {
+            const fromList = products.find((p) => p.id === editId);
+            if (fromList) {
+                deepLinkHandled.current = true;
+                router.replace('/vendor/products', { scroll: false });
+                await openEditPanel(fromList);
+                return;
+            }
+            if (loading) return;
+            try {
+                const res = await fetch(`/api/v1/vendor/products/${editId}`);
+                const json = await res.json();
+                if (!json.success) return;
+                const p = json.data as VendorProduct & { masterProductId?: string | null };
+                deepLinkHandled.current = true;
+                router.replace('/vendor/products', { scroll: false });
+                await openEditPanel({
+                    id: p.id,
+                    name: p.name,
+                    slug: p.slug,
+                    basePrice: Number(p.basePrice),
+                    packSize: p.packSize,
+                    unit: p.unit,
+                    imageUrl: p.imageUrl,
+                    isActive: p.isActive,
+                    isFeatured: p.isFeatured,
+                    description: p.description,
+                    creditEligible: p.creditEligible,
+                    categoryName: p.category?.name ?? '',
+                    categorySlug: p.category?.slug ?? '',
+                    in_stock: false,
+                    qty_available: 0,
+                    approvalStatus: p.approvalStatus,
+                    approvalNote: p.approvalNote ?? null,
+                    category: p.category,
+                });
+            } catch {
+                /* silent */
+            }
+        };
+
+        void openFromDeepLink();
+    }, [searchParams, products, loading, isPanelOpen, router]);
+
     const closePanel = () => {
         setIsPanelOpen(false);
         setEditingProduct(null);
@@ -806,6 +881,68 @@ export default function VendorProductsPage() {
 
     const updateField = <K extends keyof ProductForm>(key: K, value: ProductForm[K]) => {
         setForm(prev => ({ ...prev, [key]: value }));
+        clearFieldError(key as string);
+    };
+
+    const clearFieldError = (key: string) => {
+        setFieldErrors(prev => {
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
+    };
+
+    // Order we walk fields in to surface the first offender. No tabs here — the
+    // whole form is one scroll panel — so we just scroll the field into view.
+    const ERROR_FIELD_ORDER = ['name', 'brand', 'sku', 'categoryIds', 'basePrice'];
+
+    // Jump to the first field with an error: scroll it into view inside the
+    // panel and focus its input, so the message shows right under the bad field.
+    const focusFirstError = (errors: Record<string, string>) => {
+        const field = ERROR_FIELD_ORDER.find(f => errors[f]);
+        if (!field) {
+            panelRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+        setTimeout(() => {
+            const el = document.getElementById(`ff-${field}`);
+            if (!el) {
+                panelRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.querySelector<HTMLElement>('input, textarea, select')?.focus({ preventScroll: true });
+        }, 50);
+    };
+
+    // Best-effort: route a server error message to the field it's about so it
+    // renders inline (and we can scroll to it) rather than only in the banner.
+    const mapServerErrorToField = (msg: string): string | null => {
+        const m = msg.toLowerCase();
+        if (m.includes('sku')) return 'sku';
+        if (m.includes('categor')) return 'categoryIds';
+        if (m.includes('brand')) return 'brand';
+        if (m.includes('price')) return 'basePrice';
+        if (m.includes('name')) return 'name';
+        return null;
+    };
+
+    // Apply a server error: attach to its field (inline + scroll) when we can
+    // identify it, otherwise fall back to the banner at the top of the panel.
+    const applyServerError = (msg: string) => {
+        const field = mapServerErrorToField(msg);
+        // Only attach inline if the field is actually on screen (e.g. SKU only
+        // shows when editing) — otherwise the message would have nowhere to render.
+        if (field && document.getElementById(`ff-${field}`)) {
+            setFormError('');
+            setFieldErrors({ [field]: msg });
+            focusFirstError({ [field]: msg });
+        } else {
+            setFieldErrors({});
+            setFormError(msg);
+            panelRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        }
     };
 
     /* ---- Price slabs ---- */
@@ -857,20 +994,21 @@ export default function VendorProductsPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!form.name || !form.basePrice) {
-            setFormError('Product name and base price are required.');
-            panelRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
-        }
         const isNewSubmission = !editingProduct && !masterProductId && !basedOnProductId;
-        if (isNewSubmission && form.categoryIds.length === 0) {
-            setFormError('Pick at least one category.');
-            panelRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        const errors: Record<string, string> = {};
+        if (!form.name.trim()) errors.name = 'Product name is required';
+        if (!form.basePrice || Number(form.basePrice) <= 0) errors.basePrice = 'A valid base price is required';
+        if (isNewSubmission && form.categoryIds.length === 0) errors.categoryIds = 'Pick at least one category';
+        if (Object.keys(errors).length > 0) {
+            setFormError('');
+            setFieldErrors(errors);
+            focusFirstError(errors);
             return;
         }
 
         setSaving(true);
         setFormError('');
+        setFieldErrors({});
         try {
             const body: Record<string, unknown> = {
                 name: form.name,
@@ -934,7 +1072,7 @@ export default function VendorProductsPage() {
                 body.basedOnProductId = basedOnProductId;
             }
 
-            if (masterProductId && !editingProduct) {
+            if (masterProductId && (!editingProduct || editingProduct.approvalStatus === 'rejected')) {
                 body.masterProductId = masterProductId;
             }
 
@@ -971,13 +1109,21 @@ export default function VendorProductsPage() {
 
             closePanel();
 
-            // Optimistically update local state immediately so the product
-            // is visible right away (before the background refetch completes).
             const p = json.data;
             if (!editingProduct && p.approvalStatus === 'pending') {
                 toast.success('Product submitted — admin will review and assign a SKU before it goes live.');
             } else if (!editingProduct) {
                 toast.success('Product added successfully.');
+            } else if (editingProduct.approvalStatus === 'rejected') {
+                if (p.approvalStatus === 'approved') {
+                    toast.success('Product approved automatically — it is now live on the marketplace.');
+                } else {
+                    toast.success('Sent for admin review — we will notify you once approved.');
+                }
+            } else if (editingProduct.approvalStatus === 'pending') {
+                toast.success('Product updated (still pending review).');
+            } else {
+                toast.success('Product updated.');
             }
             const cat = categories.find(c => c.id === p.categoryId);
             if (editingProduct) {
@@ -1042,8 +1188,7 @@ export default function VendorProductsPage() {
             fetchProducts(false);
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Save failed';
-            setFormError(msg);
-            panelRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+            applyServerError(msg);
         } finally {
             setSaving(false);
         }
@@ -1301,6 +1446,40 @@ export default function VendorProductsPage() {
                 ))}
             </div>
 
+            {/* Approval filter */}
+            <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-[11px] font-bold text-[#AEAEAE] uppercase mr-1">Approval:</span>
+                {(['all', 'pending', 'rejected', 'approved'] as const).map((tab) => (
+                    <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setApprovalFilter(tab)}
+                        className={cn(
+                            'h-[30px] px-3 rounded-[8px] text-[11px] font-bold transition-all flex items-center gap-1.5',
+                            approvalFilter === tab
+                                ? tab === 'rejected'
+                                    ? 'bg-[#E74C3C] text-white shadow-sm'
+                                    : tab === 'approved'
+                                      ? 'bg-[#299E60] text-white shadow-sm'
+                                      : tab === 'pending'
+                                        ? 'bg-[#F59E0B] text-white shadow-sm'
+                                        : 'bg-[#181725] text-white shadow-sm'
+                                : 'bg-white border border-[#EEEEEE] text-[#7C7C7C] hover:bg-[#F5F5F5]'
+                        )}
+                    >
+                        {tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        <span className={cn(
+                            'text-[10px] font-[900] px-1.5 py-0.5 rounded-[4px]',
+                            approvalFilter === tab ? 'bg-white/20 text-white' : 'bg-[#F5F5F5] text-[#AEAEAE]'
+                        )}>
+                            {tab === 'all'
+                                ? products.length
+                                : products.filter((p) => p.approvalStatus === tab).length}
+                        </span>
+                    </button>
+                ))}
+            </div>
+
             {/* Products Table */}
             <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-hidden">
                 {loading ? (
@@ -1339,7 +1518,14 @@ export default function VendorProductsPage() {
                             </thead>
                             <tbody className="divide-y divide-[#F5F5F5]">
                                 {paginatedProducts.map((product) => (
-                                    <tr key={product.id} className={cn('transition-colors', selectedIds.has(product.id) ? 'bg-[#EEF8F1]/50' : 'hover:bg-[#FAFAFA]')}>
+                                    <tr
+                                        key={product.id}
+                                        className={cn(
+                                            'transition-colors',
+                                            product.approvalStatus === 'rejected' && !selectedIds.has(product.id) && 'bg-[#FFF8F8]',
+                                            selectedIds.has(product.id) ? 'bg-[#EEF8F1]/50' : 'hover:bg-[#FAFAFA]'
+                                        )}
+                                    >
                                         <td className="pl-6 pr-2 py-4">
                                             <input
                                                 type="checkbox"
@@ -1385,17 +1571,26 @@ export default function VendorProductsPage() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-center">
-                                            <span className={cn(
-                                                'text-[11px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase',
-                                                product.approvalStatus === 'approved' ? 'bg-[#EEF8F1] text-[#299E60]' :
-                                                product.approvalStatus === 'rejected' ? 'bg-[#FFF0F0] text-[#E74C3C]' :
-                                                'bg-[#FFF7E6] text-[#F59E0B]'
-                                            )}
-                                            title={product.approvalStatus === 'rejected' && product.approvalNote ? `Reason: ${product.approvalNote}` : undefined}
-                                            >
-                                                {product.approvalStatus === 'approved' ? 'Approved' :
-                                                 product.approvalStatus === 'rejected' ? 'Rejected' : 'Pending'}
-                                            </span>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <span className={cn(
+                                                    'text-[11px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase',
+                                                    product.approvalStatus === 'approved' ? 'bg-[#EEF8F1] text-[#299E60]' :
+                                                    product.approvalStatus === 'rejected' ? 'bg-[#FFF0F0] text-[#E74C3C]' :
+                                                    'bg-[#FFF7E6] text-[#F59E0B]'
+                                                )}>
+                                                    {product.approvalStatus === 'approved' ? 'Approved' :
+                                                     product.approvalStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                                                </span>
+                                                {product.approvalStatus === 'rejected' && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void openEditPanel(product)}
+                                                        className="text-[10px] font-bold text-[#E74C3C] hover:underline"
+                                                    >
+                                                        View reason
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             <span className={cn(
@@ -1458,17 +1653,36 @@ export default function VendorProductsPage() {
 
                 {/* Pagination bar — only when there are results */}
                 {!loading && filteredProducts.length > 0 && (
-                    <div className="flex items-center justify-between px-6 py-4 border-t border-[#F5F5F5]">
+                    <div className="flex items-center justify-between px-6 py-4 border-t border-[#F5F5F5] flex-wrap gap-4">
                         {/* Count */}
-                        <p className="text-[13px] text-[#7C7C7C] font-medium">
-                            Showing{' '}
-                            <span className="text-[#181725] font-bold">
-                                {(safeCurrentPage - 1) * PAGE_SIZE + 1}–{Math.min(safeCurrentPage * PAGE_SIZE, filteredProducts.length)}
-                            </span>
-                            {' '}of{' '}
-                            <span className="text-[#181725] font-bold">{filteredProducts.length}</span>
-                            {' '}products
-                        </p>
+                        <div className="flex items-center gap-4 flex-wrap">
+                            <p className="text-[13px] text-[#7C7C7C] font-medium">
+                                Showing{' '}
+                                <span className="text-[#181725] font-bold">
+                                    {(safeCurrentPage - 1) * pageSize + 1}–{Math.min(safeCurrentPage * pageSize, filteredProducts.length)}
+                                </span>
+                                {' '}of{' '}
+                                <span className="text-[#181725] font-bold">{filteredProducts.length}</span>
+                                {' '}products
+                            </p>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[13px] text-[#7C7C7C] font-semibold">· Show</span>
+                                <select
+                                    value={pageSize}
+                                    onChange={e => {
+                                        const val = Number(e.target.value);
+                                        setPageSize(val);
+                                        setCurrentPage(1);
+                                    }}
+                                    className="h-[28px] px-1.5 bg-white border border-[#EEEEEE] rounded-[6px] text-[12px] font-bold text-[#181725] outline-none cursor-pointer focus:border-[#299E60]/40"
+                                >
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                    <option value={100}>100</option>
+                                </select>
+                                <span className="text-[13px] text-[#7C7C7C] font-semibold">per page</span>
+                            </div>
+                        </div>
 
                         {/* Page numbers */}
                         {totalPages > 1 && (
@@ -1559,7 +1773,7 @@ export default function VendorProductsPage() {
                                 className="h-[40px] px-5 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm disabled:opacity-50 flex items-center gap-2"
                             >
                                 {saving ? <Loader2 size={14} className="animate-spin" /> : null}
-                                {saving ? 'Saving...' : editingProduct ? 'Update' : 'Save'}
+                                {saving ? 'Saving...' : editingProduct?.approvalStatus === 'rejected' ? 'Resubmit for Review' : editingProduct ? 'Update' : 'Save'}
                             </button>
                         </div>
 
@@ -1576,6 +1790,28 @@ export default function VendorProductsPage() {
                                     <div className="bg-[#FFF0F0] text-[#E74C3C] text-[13px] font-medium p-3.5 rounded-[10px] flex items-center gap-2">
                                         <Info size={16} className="shrink-0" />
                                         {formError}
+                                    </div>
+                                )}
+
+                                {editingProduct?.approvalStatus === 'rejected' && (
+                                    <div className="bg-[#FFF0F0] border border-[#F5C6C6] text-[#C0392B] text-[13px] p-4 rounded-[10px] flex items-start gap-3">
+                                        <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                                        <div className="space-y-1">
+                                            <p className="font-bold text-[#181725]">Product rejected</p>
+                                            <p className="text-[#7C7C7C]">
+                                                {editingProduct.approvalNote?.trim() || 'No reason provided.'}
+                                            </p>
+                                            <p className="text-[12px] text-[#AEAEAE] pt-1">
+                                                Fix the issues below, then resubmit for review. If your product matches an approved catalog SKU, it may be approved automatically.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {editingProduct?.approvalStatus === 'rejected' && identityFromCatalog && (
+                                    <div className="bg-[#EEF8F1] text-[#299E60] text-[13px] font-medium p-3.5 rounded-[10px] flex items-center gap-2">
+                                        <Info size={16} className="shrink-0" />
+                                        Catalog match selected — this product may be approved automatically when you resubmit.
                                     </div>
                                 )}
 
@@ -1620,7 +1856,7 @@ export default function VendorProductsPage() {
                                     <SectionHeader icon={<Info size={16} />} title="Basic Information" />
 
                                     <div className="space-y-4">
-                                        {!editingProduct && !identityFromCatalog && (
+                                        {(!editingProduct || editingProduct.approvalStatus === 'rejected') && !identityFromCatalog && (
                                             <div className="relative" ref={suggestionsRef}>
                                                 <FieldLabel>Search master catalog (optional — instant approval)</FieldLabel>
                                                 <div className="relative">
@@ -1769,48 +2005,36 @@ export default function VendorProductsPage() {
                                             </>
                                         ) : (
                                             <>
-                                                <div>
+                                                <div id="ff-name">
                                                     <FieldLabel required>Product Name</FieldLabel>
                                                     <input
                                                         type="text"
                                                         value={form.name}
                                                         onChange={(e) => handleProductNameChange(e.target.value)}
-                                                        className={cn(inputCls, editingProduct?.approvalStatus === 'approved' && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
+                                                        className={cn(inputCls, fieldErrors.name && 'border-[#E74C3C] focus:border-[#E74C3C]', editingProduct?.approvalStatus === 'approved' && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
                                                         placeholder="e.g., Premium Basmati Rice 5kg"
                                                         disabled={!!editingProduct && editingProduct.approvalStatus === 'approved'}
                                                     />
+                                                    {fieldErrors.name && (
+                                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.name}</p>
+                                                    )}
                                                 </div>
 
                                                 <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <FieldLabel>Brand</FieldLabel>
-                                                        <div className="relative flex gap-2">
-                                                            <input
-                                                                type="text"
-                                                                list="brand-options"
-                                                                value={form.brand}
-                                                                onChange={(e) => updateField('brand', e.target.value)}
-                                                                className={cn(inputCls, editingProduct?.approvalStatus === 'approved' && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
-                                                                placeholder="Select or type brand name"
-                                                                disabled={!!editingProduct && editingProduct.approvalStatus === 'approved'}
-                                                            />
-                                                            <datalist id="brand-options">
-                                                                {brands.map(b => (
-                                                                    <option key={b.id} value={b.name} />
-                                                                ))}
-                                                            </datalist>
-                                                            {isNewSubmission && form.brand.trim().length >= 2
-                                                                && !brands.some(b => b.name.toLowerCase() === form.brand.trim().toLowerCase()) && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={suggestBrand}
-                                                                    disabled={brandSuggesting}
-                                                                    className="shrink-0 px-3 text-[11px] font-bold text-[#299E60] bg-[#EEF8F1] rounded-[8px] hover:bg-[#53B175] hover:text-white transition-colors disabled:opacity-50"
-                                                                >
-                                                                    {brandSuggesting ? '…' : 'Request'}
-                                                                </button>
-                                                            )}
-                                                        </div>
+                                                    <div id="ff-brand">
+                                                         <FieldLabel>Brand</FieldLabel>
+                                                         <BrandSinglePicker
+                                                             value={form.brand}
+                                                             onChange={(val) => updateField('brand', val)}
+                                                             brands={brands}
+                                                             placeholder="Select brand"
+                                                             disabled={!!editingProduct && editingProduct.approvalStatus === 'approved'}
+                                                             onSuggest={isNewSubmission ? (name) => suggestBrand(name) : undefined}
+                                                             suggesting={brandSuggesting}
+                                                         />
+                                                         {fieldErrors.brand && (
+                                                             <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.brand}</p>
+                                                         )}
                                                     </div>
                                                     <div>
                                                         <FieldLabel>HSN Code</FieldLabel>
@@ -1823,15 +2047,18 @@ export default function VendorProductsPage() {
                                                         />
                                                     </div>
                                                     {editingProduct && (
-                                                        <div>
+                                                        <div id="ff-sku">
                                                             <FieldLabel>SKU</FieldLabel>
                                                             <input
                                                                 type="text"
                                                                 value={form.sku}
                                                                 onChange={(e) => updateField('sku', e.target.value)}
-                                                                className={inputCls}
+                                                                className={cn(inputCls, fieldErrors.sku && 'border-[#E74C3C] focus:border-[#E74C3C]')}
                                                                 placeholder="e.g., RIC-BAS-001"
                                                             />
+                                                            {fieldErrors.sku && (
+                                                                <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.sku}</p>
+                                                            )}
                                                         </div>
                                                     )}
                                                     {!editingProduct && isNewSubmission && (
@@ -1864,14 +2091,19 @@ export default function VendorProductsPage() {
                                                     </div>
                                                 </div>
 
-                                                <CategoryMultiPickerById
-                                                    value={form.categoryIds}
-                                                    onChange={(ids) => updateField('categoryIds', ids)}
-                                                    max={5}
-                                                    endpoint="/api/v1/vendor/categories/suggest"
-                                                    label="Categories"
-                                                    helper="Pick up to 5 — first one becomes the primary. Customers can find your product under any of these."
-                                                />
+                                                <div id="ff-categoryIds">
+                                                    <CategoryMultiPickerById
+                                                        value={form.categoryIds}
+                                                        onChange={(ids) => updateField('categoryIds', ids)}
+                                                        max={5}
+                                                        endpoint="/api/v1/vendor/categories/suggest"
+                                                        label="Categories"
+                                                        helper="Pick up to 5 — first one becomes the primary. Customers can find your product under any of these."
+                                                    />
+                                                    {fieldErrors.categoryIds && (
+                                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.categoryIds}</p>
+                                                    )}
+                                                </div>
 
                                                 <div>
                                                     <FieldLabel>Description</FieldLabel>
@@ -1909,7 +2141,7 @@ export default function VendorProductsPage() {
                                                             Taxable Rate (Amt) <span className="text-[#E74C3C]">*</span>
                                                             <p className="text-[11px] text-[#AEAEAE] font-normal mt-0.5 font-sans">Base price before tax (ex-GST)</p>
                                                         </td>
-                                                        <td className="px-5 py-4">
+                                                        <td className="px-5 py-4" id="ff-basePrice">
                                                             <div className="relative">
                                                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">₹</span>
                                                                 <input
@@ -1918,10 +2150,13 @@ export default function VendorProductsPage() {
                                                                     min="0"
                                                                     value={form.basePrice}
                                                                     onChange={(e) => updateField('basePrice', e.target.value)}
-                                                                    className={cn(inputCls, 'pl-7')}
+                                                                    className={cn(inputCls, 'pl-7', fieldErrors.basePrice && 'border-[#E74C3C] focus:border-[#E74C3C]')}
                                                                     placeholder="0.00"
                                                                 />
                                                             </div>
+                                                            {fieldErrors.basePrice && (
+                                                                <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.basePrice}</p>
+                                                            )}
                                                         </td>
                                                         <td className="px-5 py-4 text-[#7C7C7C] font-medium">
                                                             {form.basePrice ? `₹${parseFloat(form.basePrice).toFixed(2)} taxable base` : '—'}
@@ -2314,7 +2549,7 @@ export default function VendorProductsPage() {
                                         className="flex-1 h-[48px] bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         {saving && <Loader2 size={16} className="animate-spin" />}
-                                        {saving ? 'Saving...' : editingProduct ? 'Update Product' : isNewSubmission ? 'Submit for Approval' : 'Add Product'}
+                                        {saving ? 'Saving...' : editingProduct?.approvalStatus === 'rejected' ? 'Resubmit for Review' : editingProduct ? 'Update Product' : isNewSubmission ? 'Submit for Approval' : 'Add Product'}
                                     </button>
                                 </div>
                             </form>

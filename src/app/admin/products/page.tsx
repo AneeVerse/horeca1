@@ -36,6 +36,8 @@ import ProductImportModal from '@/components/features/admin/ProductImportModal';
 import AdminBulkEngine from '@/components/features/admin/AdminBulkEngine';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 import { CategoryMultiPickerById } from '@/components/features/brand/CategoryMultiPickerById';
+import { BrandSinglePicker } from '@/components/features/brand/BrandSinglePicker';
+import { validateMasterSku } from '@/lib/sku';
 import { toast } from 'sonner';
 
 // ---------------------------------------------------------------------------
@@ -316,8 +318,6 @@ function SubstituteProductPicker({
     );
 }
 
-const PAGE_LIMIT = 20;
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -327,6 +327,7 @@ export default function ProductsPage() {
     const searchParams = useSearchParams();
     const editIdParam = searchParams.get('editId');
     const autoOpenedRef = useRef(false);
+    const [pageSize, setPageSize] = useState(20);
     // Data state
     const [products, setProducts] = useState<Product[]>([]);
     const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -460,12 +461,12 @@ export default function ProductsPage() {
     // -----------------------------------------------------------------------
 
     const fetchProducts = useCallback(
-        async (targetPage = 1) => {
+        async (targetPage = 1, currentLimit = pageSize) => {
             setLoading(true);
 
             try {
                 const params = new URLSearchParams();
-                params.set('limit', String(PAGE_LIMIT));
+                params.set('limit', String(currentLimit));
                 params.set('page', String(targetPage));
                 if (debouncedSearch) params.set('search', debouncedSearch);
                 if (filterStatus) params.set('approvalStatus', filterStatus);
@@ -535,7 +536,7 @@ export default function ProductsPage() {
                 setLoading(false);
             }
         },
-        [debouncedSearch, filterStatus, filterVendor, filterCategory],
+        [debouncedSearch, filterStatus, filterVendor, filterCategory, pageSize],
     );
 
     // Refetch on filter change (reset to page 1)
@@ -919,7 +920,14 @@ export default function ProductsPage() {
     const validateForm = (): boolean => {
         const errors: Record<string, string> = {};
         if (!formData.name.trim()) errors.name = 'Product name is required';
-        if (!formData.sku.trim()) errors.sku = 'SKU is required';
+        if (!formData.sku.trim()) {
+            errors.sku = 'SKU is required';
+        } else if (!editingProduct && !formData.vendorId) {
+            // Master create — mirror the server's SKU format rule client-side so
+            // the error lands inline on the SKU field, not as a server banner.
+            const skuCheck = validateMasterSku(formData.sku);
+            if (!skuCheck.ok) errors.sku = skuCheck.message;
+        }
         if (!formData.brand.trim()) errors.brand = 'Brand is required';
         if (formData.categoryIds.length === 0) errors.categoryIds = 'At least one category is required';
         const isVendorListing = !!formData.vendorId;
@@ -927,6 +935,7 @@ export default function ProductsPage() {
             errors.basePrice = 'Valid base price is required when listing for a vendor';
         }
         setFormErrors(errors);
+        if (Object.keys(errors).length > 0) focusFirstError(errors);
         return Object.keys(errors).length === 0;
     };
 
@@ -967,7 +976,7 @@ export default function ProductsPage() {
                     fetchProducts(currentPage);
                 } else {
                     const msg = json.error?.message ?? json.message ?? 'Failed to save master product';
-                    setFormErrors({ _server: msg });
+                    applyServerError(msg);
                 }
                 return;
             }
@@ -1048,7 +1057,7 @@ export default function ProductsPage() {
                 closePanel();
             } else {
                 const msg = json.error?.message ?? json.message ?? 'Failed to save product';
-                setFormErrors({ _server: msg });
+                applyServerError(msg);
             }
         } catch (err) {
             console.error('Failed to save product:', err);
@@ -1102,6 +1111,50 @@ export default function ProductsPage() {
                 return next;
             });
         }
+    };
+
+    // Which tab each errorable field lives on, plus the order we walk them to
+    // find the first offender. Keeps error feedback next to the bad field.
+    const ERROR_FIELD_TAB = {
+        name: 'general', brand: 'general', sku: 'general', categoryIds: 'general', basePrice: 'pricing',
+    } as const;
+    const ERROR_FIELD_ORDER: Array<keyof typeof ERROR_FIELD_TAB> = ['name', 'brand', 'sku', 'categoryIds', 'basePrice'];
+
+    // Jump to the first field with an error: open its tab, scroll it into view,
+    // and focus its input — so the message shows right under the offending
+    // field instead of only as a banner at the top of the panel.
+    const focusFirstError = (errors: Record<string, string>) => {
+        const field = ERROR_FIELD_ORDER.find(f => errors[f]);
+        if (!field) return;
+        setActiveTab(ERROR_FIELD_TAB[field]);
+        // Defer until the (possibly just-switched) tab content has mounted.
+        setTimeout(() => {
+            const el = document.getElementById(`ff-${field}`);
+            if (!el) return;
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.querySelector<HTMLElement>('input, textarea, select')?.focus({ preventScroll: true });
+        }, 60);
+    };
+
+    // Best-effort: route a server error message to the field it's about so it
+    // renders inline (and we can scroll to it) rather than in the top banner.
+    const mapServerErrorToField = (msg: string): keyof typeof ERROR_FIELD_TAB | null => {
+        const m = msg.toLowerCase();
+        if (m.includes('sku')) return 'sku';
+        if (m.includes('categor')) return 'categoryIds';
+        if (m.includes('brand')) return 'brand';
+        if (m.includes('price')) return 'basePrice';
+        if (m.includes('name')) return 'name';
+        return null;
+    };
+
+    // Apply a server error: attach to its field (inline + scroll) when we can
+    // identify it, otherwise fall back to the top-of-panel banner.
+    const applyServerError = (msg: string) => {
+        const field = mapServerErrorToField(msg);
+        const errs: Record<string, string> = field ? { [field]: msg } : { _server: msg };
+        setFormErrors(errs);
+        focusFirstError(errs);
     };
 
     // -----------------------------------------------------------------------
@@ -1599,15 +1652,34 @@ export default function ProductsPage() {
 
                     {/* Footer / Pagination */}
                     <div className="p-6 bg-[#FDFDFD] border-t border-[#EEEEEE] flex items-center justify-between flex-wrap gap-4">
-                        <p className="text-[13px] text-[#7C7C7C] font-semibold">
-                            Showing{' '}
-                            <span className="text-[#181725] font-bold">
-                                {totalProductsCount === 0 ? 0 : (currentPage - 1) * PAGE_LIMIT + 1}–{Math.min(currentPage * PAGE_LIMIT, totalProductsCount)}
-                            </span>
-                            {' '}of{' '}
-                            <span className="text-[#181725] font-bold">{totalProductsCount}</span>
-                            {' '}products
-                        </p>
+                        <div className="flex items-center gap-4 flex-wrap">
+                            <p className="text-[13px] text-[#7C7C7C] font-semibold">
+                                Showing{' '}
+                                <span className="text-[#181725] font-bold">
+                                    {totalProductsCount === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalProductsCount)}
+                                </span>
+                                {' '}of{' '}
+                                <span className="text-[#181725] font-bold">{totalProductsCount}</span>
+                                {' '}products
+                            </p>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[13px] text-[#7C7C7C] font-semibold">· Show</span>
+                                <select
+                                    value={pageSize}
+                                    onChange={e => {
+                                        const val = Number(e.target.value);
+                                        setPageSize(val);
+                                        setCurrentPage(1);
+                                    }}
+                                    className="h-[28px] px-1.5 bg-white border border-[#EEEEEE] rounded-[6px] text-[12px] font-bold text-[#181725] outline-none cursor-pointer focus:border-[#299E60]/40"
+                                >
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                    <option value={100}>100</option>
+                                </select>
+                                <span className="text-[13px] text-[#7C7C7C] font-semibold">per page</span>
+                            </div>
+                        </div>
                         
                         {totalPages > 1 && (
                             <div className="flex items-center gap-1">
@@ -1742,7 +1814,7 @@ export default function ProductsPage() {
                                         <SectionHeader icon={<Info size={16} />} title="Basic Information" />
                                         <div className="space-y-4">
                                             {/* Product Name */}
-                                            <div>
+                                            <div id="ff-name">
                                                 <FieldLabel required>Product Name</FieldLabel>
                                                 <input
                                                     type="text"
@@ -1761,18 +1833,15 @@ export default function ProductsPage() {
 
                                             {/* Brand, HSN, SKU, Barcode — 2-column grid */}
                                             <div className="grid grid-cols-2 gap-4">
-                                                <div>
+                                                <div id="ff-brand">
                                                     <FieldLabel required>Brand</FieldLabel>
-                                                    <select
+                                                    <BrandSinglePicker
                                                         value={formData.brand}
-                                                        onChange={e => updateField('brand', e.target.value)}
-                                                        className={cn(selectCls, 'cursor-pointer', formErrors.brand && 'border-[#E74C3C]')}
-                                                    >
-                                                        <option value="">Select brand</option>
-                                                        {brands.map(b => (
-                                                            <option key={b.id} value={b.name}>{b.name}</option>
-                                                        ))}
-                                                    </select>
+                                                        onChange={val => updateField('brand', val)}
+                                                        brands={brands}
+                                                        placeholder="Select brand"
+                                                        hasError={!!formErrors.brand}
+                                                    />
                                                     {formErrors.brand && (
                                                         <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.brand}</p>
                                                     )}
@@ -1792,7 +1861,7 @@ export default function ProductsPage() {
                                                         className={inputCls}
                                                     />
                                                 </div>
-                                                <div>
+                                                <div id="ff-sku">
                                                     <FieldLabel required>SKU</FieldLabel>
                                                     <input
                                                         type="text"
@@ -1819,17 +1888,19 @@ export default function ProductsPage() {
                                             </div>
 
                                             {/* Categories — multi-select */}
-                                            <CategoryMultiPickerById
-                                                value={formData.categoryIds}
-                                                onChange={(ids) => setFormData(prev => ({ ...prev, categoryIds: ids }))}
-                                                max={5}
-                                                disableSuggest
-                                                label="Categories"
-                                                helper="Pick up to 5 — first chip is the primary. Customers can find this product under any of these categories."
-                                            />
-                                            {formErrors.categoryIds && (
-                                                <p className="text-[11px] text-[#E74C3C] font-semibold">{formErrors.categoryIds}</p>
-                                            )}
+                                            <div id="ff-categoryIds">
+                                                <CategoryMultiPickerById
+                                                    value={formData.categoryIds}
+                                                    onChange={(ids) => setFormData(prev => ({ ...prev, categoryIds: ids }))}
+                                                    max={5}
+                                                    disableSuggest
+                                                    label="Categories"
+                                                    helper="Pick up to 5 — first chip is the primary. Customers can find this product under any of these categories."
+                                                />
+                                                {formErrors.categoryIds && (
+                                                    <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.categoryIds}</p>
+                                                )}
+                                            </div>
 
                                             {/* Description */}
                                             <div>
@@ -1893,7 +1964,7 @@ export default function ProductsPage() {
                                                                 Taxable Rate (Amt) <span className="text-[#E74C3C]">*</span>
                                                                 <p className="text-[11px] text-[#AEAEAE] font-normal mt-0.5 font-sans">Base price before tax (ex-GST)</p>
                                                             </td>
-                                                            <td className="px-5 py-4">
+                                                            <td className="px-5 py-4" id="ff-basePrice">
                                                                 <div className="relative">
                                                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">₹</span>
                                                                     <input

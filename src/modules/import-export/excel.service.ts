@@ -34,7 +34,12 @@ function cleanRow(raw: Record<string, any>): Record<string, unknown> {
   ];
 
   for (const [key, val] of Object.entries(raw)) {
-    const k = key.trim();
+    // Normalize the header to the canonical schema key: match case-insensitively
+    // and resolve known aliases. Without this, a CSV that says "Image URL"
+    // (the CSV export header) never reaches the schema's "product image url"
+    // key, so the column is silently dropped on import.
+    const trimmedKey = key.trim();
+    const k = HEADER_MAP[trimmedKey.toLowerCase()] ?? trimmedKey;
     let v = typeof val === 'string' ? val.trim() : val;
 
     if (numericKeys.includes(k) && typeof v === 'string') {
@@ -100,6 +105,27 @@ const productImportRowSchema = z.object({
 });
 
 export type RawImportRow = z.infer<typeof productImportRowSchema>;
+
+// Lowercased header → canonical schema key. Built from the schema's own keys
+// (so any casing variant resolves) plus explicit aliases for headers that drift
+// between the CSV export, the XLSX export, and hand-edited sheets. This is what
+// makes the importer resilient regardless of which export produced the file.
+const HEADER_MAP: Record<string, string> = (() => {
+  const map: Record<string, string> = {};
+  for (const key of Object.keys(productImportRowSchema.shape)) {
+    map[key.toLowerCase()] = key;
+  }
+  const aliases: Record<string, string> = {
+    'image url': 'product image url',
+    'image_url': 'product image url',
+    'gross rate 1pc': 'Gross Rate 1Pc (visible to the Customer)',
+    'promo rate': '6pm to 9am Promo Rate - Single Unit',
+  };
+  for (const [alias, canonical] of Object.entries(aliases)) {
+    map[alias] = canonical;
+  }
+  return map;
+})();
 
 // Normalized row after parsing — flat fields + bulk slabs
 export interface ParsedProductRow {
@@ -346,14 +372,16 @@ export function exportProductsToCsv(products: ProductExportRow[]): string {
       'Category': p.categoryName || '',
       'Taxable Rate (Amt)': Number(p.basePrice),
       'Tax %': `${tax}%`,
-      'Gross Rate 1Pc': toGross(Number(p.basePrice), tax),
+      // Canonical headers — keep identical to the XLSX export and the import
+      // schema so a CSV export round-trips back through the importer cleanly.
+      'Gross Rate 1Pc (visible to the Customer)': toGross(Number(p.basePrice), tax),
       'Bulk Rates 1 - Qty': slab1?.minQty ?? '',
       'Bulk Rates 1 - Gross Rate / Unit': slab1 ? toGross(Number(slab1.price), tax) : '',
       'Bulk Rates 2 - Qty': slab2?.minQty ?? '',
       'Bulk Rates 2 - Gross Rate / Unit': slab2 ? toGross(Number(slab2.price), tax) : '',
-      'Promo Rate': p.promoPrice ? toGross(Number(p.promoPrice), tax) : '',
+      '6pm to 9am Promo Rate - Single Unit': p.promoPrice ? toGross(Number(p.promoPrice), tax) : '',
       'Available Stock': p.stock ?? 0,
-      'Image URL': p.imageUrl || '',
+      'product image url': p.imageUrl || '',
       'Image Name': p.imageName || '',
     };
   });

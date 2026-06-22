@@ -69,6 +69,16 @@ export const GET = adminOnly(async (req: NextRequest) => {
         include: {
           category: { select: { id: true, name: true } },
           _count: { select: { vendorProducts: true } },
+          // Fallback image source: a master's own imageUrl is usually empty
+          // (it isn't set when the master is auto-created during product
+          // import), so borrow the image from a linked vendor product that has
+          // one. Keeps the catalog list from showing blank placeholders.
+          vendorProducts: {
+            where: { imageUrl: { not: null } },
+            select: { imageUrl: true },
+            take: 1,
+            orderBy: { updatedAt: 'desc' },
+          },
         },
       });
       pagination = { page, totalPages: Math.max(1, Math.ceil(total / limit)), total };
@@ -81,6 +91,16 @@ export const GET = adminOnly(async (req: NextRequest) => {
         include: {
           category: { select: { id: true, name: true } },
           _count: { select: { vendorProducts: true } },
+          // Fallback image source: a master's own imageUrl is usually empty
+          // (it isn't set when the master is auto-created during product
+          // import), so borrow the image from a linked vendor product that has
+          // one. Keeps the catalog list from showing blank placeholders.
+          vendorProducts: {
+            where: { imageUrl: { not: null } },
+            select: { imageUrl: true },
+            take: 1,
+            orderBy: { updatedAt: 'desc' },
+          },
         },
       });
     }
@@ -91,7 +111,11 @@ export const GET = adminOnly(async (req: NextRequest) => {
     return NextResponse.json({
       success: true,
       data: {
-        masterProducts: rows.map((m) => ({ ...m, vendorCount: m._count.vendorProducts })),
+        masterProducts: rows.map((m) => {
+          const { vendorProducts, _count, ...rest } = m;
+          const imageUrl = m.imageUrl || vendorProducts.find((vp) => vp.imageUrl)?.imageUrl || null;
+          return { ...rest, imageUrl, vendorCount: _count.vendorProducts };
+        }),
         nextCursor: hasMore && !pageParam ? rows[rows.length - 1]?.id : null,
         hasMore,
         pagination,

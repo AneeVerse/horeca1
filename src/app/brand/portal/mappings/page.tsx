@@ -18,7 +18,7 @@ interface CoverageItem {
             id: string;
             name: string;
             basePrice: number;
-            vendor: { id: string; businessName: string; logoUrl: string | null };
+            vendor: { id: string; businessName: string; logoUrl: string | null } | null;
         };
     }>;
 }
@@ -175,7 +175,7 @@ export default function BrandMappingsPage() {
                                         const confidenceTone = TONE_STYLES[confidence.tone];
                                         return (
                                             <div key={mapping.id} className="px-5 py-3 flex items-center gap-3">
-                                                {mapping.distributorProduct.vendor.logoUrl ? (
+                                                {mapping.distributorProduct.vendor?.logoUrl ? (
                                                     <img src={mapping.distributorProduct.vendor.logoUrl} alt=""
                                                         className="w-9 h-9 rounded-[8px] object-contain border border-[#EEEEEE] p-1 bg-white shrink-0" />
                                                 ) : (
@@ -185,7 +185,7 @@ export default function BrandMappingsPage() {
                                                 )}
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-[14px] font-bold text-[#181725] truncate">
-                                                        {mapping.distributorProduct.vendor.businessName}
+                                                        {mapping.distributorProduct.vendor?.businessName ?? 'Unassigned product'}
                                                     </p>
                                                     <p className="text-[12px] text-[#AEAEAE] truncate">{mapping.distributorProduct.name}</p>
                                                 </div>

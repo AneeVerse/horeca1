@@ -28,7 +28,8 @@ import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { parseProductImport, generateImportTemplate, type ParsedProductRow } from '@/modules/import-export/excel.service';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
-import { findOrCreateMaster } from '@/modules/catalog/catalog.service';
+import { findOrCreateMaster, findOrCreateCategoryByName } from '@/modules/catalog/catalog.service';
+import { findOrCreateBrandByName } from '@/modules/brand/brand.service';
 
 // ── Response shapes — kept identical to the admin importer so the review
 //    wizard UI is portable between the two portals. ──
@@ -180,6 +181,25 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     function findExisting(row: { sku?: string; name: string }) {
       if (row.sku && existingBySku.has(row.sku)) return existingBySku.get(row.sku)!;
       return existingByName.get(row.name.toLowerCase());
+    }
+
+    // Products created earlier in THIS commit run. The snapshot maps above are
+    // taken before any writes, so when a file lists the same item twice (a
+    // common export artifact), the second row wouldn't see the product the
+    // first row just created and would insert a DUPLICATE. Tracking in-run
+    // creations lets the duplicate row update that product instead.
+    const createdThisRun = new Map<string, { id: string; sku: string | null; categoryId: string | null }>();
+    function findCreated(row: { sku?: string; name: string }) {
+      if (row.sku) {
+        const bySku = createdThisRun.get('sku:' + row.sku.toLowerCase());
+        if (bySku) return bySku;
+      }
+      return createdThisRun.get('name:' + row.name.toLowerCase());
+    }
+    function registerCreated(p: { id: string; sku: string | null; name: string; categoryId: string | null }) {
+      const ref = { id: p.id, sku: p.sku, categoryId: p.categoryId };
+      if (p.sku) createdThisRun.set('sku:' + p.sku.toLowerCase(), ref);
+      createdThisRun.set('name:' + p.name.toLowerCase(), ref);
     }
 
     // ── PREVIEW MODE ──
@@ -400,8 +420,30 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       }
 
       try {
-        const categoryId = r.category ? catMap.get(r.category.toLowerCase()) || null : null;
-        const existing = findExisting(r);
+        // ── Resolve category. catMap holds only approved+active categories, so
+        //    a miss means the category is unknown (or only pending). Vendors
+        //    can't self-approve, so create/return a PENDING category and hold
+        //    the product for review. ──
+        let categoryId = r.category ? catMap.get(r.category.toLowerCase()) || null : null;
+        let categoryPending = false;
+        if (!categoryId && r.category) {
+          categoryId = await findOrCreateCategoryByName({ name: r.category, autoApprove: false, suggestedBy: ctx.userId });
+          if (categoryId) {
+            catMap.set(r.category.toLowerCase(), categoryId);
+            categoryPending = true; // resolved outside the approved set → treat as pending
+          }
+        }
+
+        // ── Resolve brand. An unknown brand becomes a lightweight PENDING brand
+        //    record so it reaches the approvals queue instead of living only as
+        //    text on the product. ──
+        let brandPending = false;
+        if (r.brand) {
+          const resolvedBrand = await findOrCreateBrandByName({ name: r.brand, autoApprove: false, suggestedBy: ctx.userId });
+          if (resolvedBrand && resolvedBrand.approvalStatus !== 'approved') brandPending = true;
+        }
+
+        const existing = findExisting(r) ?? findCreated(r);
 
         if (existing) {
           // ── UPDATE existing product (approval left untouched) ──
@@ -410,16 +452,19 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
             data: {
               name: r.name,
               sku: r.sku ?? existing.sku,
-              hsn: r.hsn || existing.hsn,
-              unit: r.unit || existing.unit,
-              brand: r.brand || existing.brand,
               categoryId: categoryId || existing.categoryId,
               basePrice: r.basePrice,
               taxPercent: r.taxPercent,
               promoPrice: r.promoPrice || null,
               promoStartTime: r.promoStartTime || null,
               promoEndTime: r.promoEndTime || null,
-              imageUrl: r.imageUrl || existing.imageUrl,
+              // Only overwrite a descriptive field when THIS row carries a value —
+              // a blank cell (e.g. a duplicate row without the image URL) must
+              // leave the existing value alone, not revert it via a stale snapshot.
+              ...(r.hsn ? { hsn: r.hsn } : {}),
+              ...(r.unit ? { unit: r.unit } : {}),
+              ...(r.brand ? { brand: r.brand } : {}),
+              ...(r.imageUrl ? { imageUrl: r.imageUrl } : {}),
             },
           });
 
@@ -461,6 +506,10 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
             });
             if (approvedMaster) approvalStatus = 'approved';
           }
+          // Invariant: an approved product must have an approved brand AND
+          // category. If this row introduced a pending brand/category, hold the
+          // product for review even when its master is approved.
+          if (brandPending || categoryPending) approvalStatus = 'pending';
 
           const product = await prisma.product.create({
             data: {
@@ -493,6 +542,10 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
           }
 
           await updatePriceSlabs(product.id, vendorId, r);
+
+          // Register so a later duplicate row in the same file updates THIS
+          // product instead of creating another copy.
+          registerCreated(product);
 
           created++;
         }

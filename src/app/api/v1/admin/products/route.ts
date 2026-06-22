@@ -164,6 +164,13 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
       const qty = p.inventory?.qtyAvailable ?? 0;
       const existing = catalogMap.get(key);
       if (existing) {
+        // When the same item has several copies (e.g. a vendor copy + a
+        // catalog-level copy), prefer a representative that actually carries an
+        // image so the deduped row isn't blank just because the first-seen copy
+        // happened to lack one.
+        if (!existing.product.imageUrl && p.imageUrl) {
+          existing.product = { ...existing.product, imageUrl: p.imageUrl };
+        }
         if (p.vendor && !existing.vendors.includes(p.vendor.businessName)) {
           existing.vendorCount++;
           existing.vendors.push(p.vendor.businessName);

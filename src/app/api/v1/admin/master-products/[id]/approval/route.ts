@@ -10,6 +10,7 @@ import { emitEvent } from '@/events/emitter';
 import { requirePermission } from '@/lib/permissions/engine';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
 import { syncProductToBrand } from '@/modules/brand/brand.service';
+import { sendProductRejectedNotifications } from '@/lib/productRejectionNotifications';
 
 function extractId(req: NextRequest): string {
   const segments = new URL(req.url).pathname.split('/');
@@ -20,10 +21,15 @@ function slugify(str: string): string {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-const approvalSchema = z.object({
-  action: z.enum(['approve', 'reject']),
-  note: z.string().optional(),
-});
+const approvalSchema = z
+  .object({
+    action: z.enum(['approve', 'reject']),
+    note: z.string().optional(),
+  })
+  .refine((d) => d.action !== 'reject' || (d.note?.trim().length ?? 0) > 0, {
+    message: 'Rejection reason is required',
+    path: ['note'],
+  });
 
 export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
@@ -118,11 +124,9 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       },
     });
 
-    emitEvent('ProductRejected', {
+    await sendProductRejectedNotifications({
       productId: id,
-      vendorId: '',
       productName: existing.name,
-      rejectedBy: ctx.userId,
       reason: note,
     });
 

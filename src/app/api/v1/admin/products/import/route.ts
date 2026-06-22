@@ -4,8 +4,8 @@ import { adminOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { parseProductImport, type ParsedProductRow } from '@/modules/import-export/excel.service';
 import { requirePermission } from '@/lib/permissions/engine';
-import { findOrCreateMaster } from '@/modules/catalog/catalog.service';
-import { syncProductToBrand } from '@/modules/brand/brand.service';
+import { findOrCreateMaster, findOrCreateCategoryByName } from '@/modules/catalog/catalog.service';
+import { syncProductToBrand, findOrCreateBrandByName } from '@/modules/brand/brand.service';
 
 // ── Preview mode: parse file, match SKUs, return diff without committing ──
 // ── Commit mode: actually create/update products with backup ──
@@ -147,6 +147,23 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
     function findExisting(row: { sku?: string; name: string }) {
       if (row.sku && existingBySku.has(row.sku)) return existingBySku.get(row.sku)!;
       return existingByName.get(row.name.toLowerCase());
+    }
+
+    // Products created earlier in THIS commit run, so a file that lists the same
+    // item twice updates the freshly-created product instead of inserting a
+    // duplicate (the snapshot maps above predate any writes in this run).
+    const createdThisRun = new Map<string, { id: string; sku: string | null; categoryId: string | null; slug: string }>();
+    function findCreated(row: { sku?: string; name: string }) {
+      if (row.sku) {
+        const bySku = createdThisRun.get('sku:' + row.sku.toLowerCase());
+        if (bySku) return bySku;
+      }
+      return createdThisRun.get('name:' + row.name.toLowerCase());
+    }
+    function registerCreated(p: { id: string; sku: string | null; name: string; categoryId: string | null; slug: string }) {
+      const ref = { id: p.id, sku: p.sku, categoryId: p.categoryId, slug: p.slug };
+      if (p.sku) createdThisRun.set('sku:' + p.sku.toLowerCase(), ref);
+      createdThisRun.set('name:' + p.name.toLowerCase(), ref);
     }
 
     // ── PREVIEW MODE ──
@@ -376,8 +393,21 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       }
 
       try {
-        const categoryId = r.category ? catMap.get(r.category.toLowerCase()) || null : null;
-        const existing = findExisting(r);
+        let categoryId = r.category ? catMap.get(r.category.toLowerCase()) || null : null;
+        // Admin path: an unknown category in the sheet is auto-created (approved +
+        // active) so it's tracked and immediately usable — instead of being
+        // silently dropped to null as before.
+        if (!categoryId && r.category) {
+          categoryId = await findOrCreateCategoryByName({ name: r.category, autoApprove: true });
+          if (categoryId) catMap.set(r.category.toLowerCase(), categoryId);
+        }
+        // Admin path: an unknown brand is auto-created (approved + active) so it
+        // reaches the Brands list and the approvals model — instead of living
+        // only as denormalized text on the product.
+        if (r.brand) {
+          await findOrCreateBrandByName({ name: r.brand, autoApprove: true });
+        }
+        const existing = findExisting(r) ?? findCreated(r);
         const slug = existing ? existing.slug : uniqueSlug(r.name);
 
         if (existing) {
@@ -389,16 +419,22 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             data: {
               name: r.name,
               sku: r.sku ?? existing.sku,
-              hsn: r.hsn || existing.hsn,
-              unit: r.unit || existing.unit,
-              brand: r.brand || existing.brand,
               categoryId: categoryId || existing.categoryId,
               basePrice: r.basePrice,
               taxPercent: r.taxPercent,
               promoPrice: r.promoPrice || null,
               promoStartTime: r.promoStartTime || null,
               promoEndTime: r.promoEndTime || null,
-              imageUrl: r.imageUrl || existing.imageUrl,
+              // Only overwrite a descriptive field when THIS row actually carries
+              // a value. The sheet has duplicate rows per product — some carry the
+              // image URL / brand / hsn and some are blank. The old `r.x ||
+              // existing.x` read a STALE pre-import snapshot, so a blank duplicate
+              // processed after a populated row reverted the value (e.g. the image
+              // back to null). Conditional write = a blank cell leaves it alone.
+              ...(r.hsn ? { hsn: r.hsn } : {}),
+              ...(r.unit ? { unit: r.unit } : {}),
+              ...(r.brand ? { brand: r.brand } : {}),
+              ...(r.imageUrl ? { imageUrl: r.imageUrl } : {}),
             },
           });
 
@@ -511,6 +547,10 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
               product.masterProductId || undefined
             ).catch(console.error);
           }
+
+          // Register so a later duplicate row in the same file updates THIS
+          // product instead of creating another copy.
+          registerCreated(product);
 
           created++;
         }

@@ -4,6 +4,7 @@ import { Errors } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
 import { runMappingForVendorProduct, embedDistributorProduct } from '@/modules/brand/brand-mapper';
 import { nextMasterSku } from '@/lib/sku';
+import { sendProductRejectedNotifications } from '@/lib/productRejectionNotifications';
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -31,6 +32,63 @@ export async function findOrCreateMaster(input: { name: string; brand: string | 
     });
     return master.id;
   });
+}
+
+// Mirrors the slug rule in /api/v1/vendor/categories/suggest so a name maps to
+// the same slug everywhere and we match (instead of duplicate) an already-
+// suggested category.
+function categorySlugify(name: string): string {
+  return name.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/[\s]+/g, '-').replace(/-+/g, '-');
+}
+
+/**
+ * Resolve a category name to a category id, creating one when no match exists.
+ * Used by product import (admin + vendor) so an unknown category in a sheet
+ * becomes a tracked record instead of being silently dropped to null.
+ *   • autoApprove=true  (admin)  → created approved + active immediately.
+ *   • autoApprove=false (vendor) → created pending + inactive, CategorySuggested
+ *     emitted for the approvals queue.
+ * Matching is case-insensitive on name, then slug, and includes pending
+ * categories so we never create a duplicate of an already-suggested one.
+ * Returns null for empty names (caller treats category as absent, as before).
+ */
+export async function findOrCreateCategoryByName(input: {
+  name: string | null | undefined;
+  autoApprove: boolean;
+  suggestedBy?: string;
+  parentId?: string | null;
+}): Promise<string | null> {
+  const name = input.name?.trim();
+  if (!name) return null;
+
+  const slug = categorySlugify(name);
+  const existing = await prisma.category.findFirst({
+    where: { OR: [{ name: { equals: name, mode: 'insensitive' } }, { slug }] },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const category = await prisma.category.create({
+    data: {
+      name,
+      slug,
+      parentId: input.parentId ?? null,
+      approvalStatus: input.autoApprove ? 'approved' : 'pending',
+      isActive: input.autoApprove,
+      suggestedBy: input.suggestedBy ?? null,
+    },
+    select: { id: true, name: true },
+  });
+
+  if (!input.autoApprove) {
+    emitEvent('CategorySuggested', {
+      categoryId: category.id,
+      categoryName: category.name,
+      suggestedBy: input.suggestedBy ?? '',
+    });
+  }
+
+  return category.id;
 }
 
 /**
@@ -365,6 +423,16 @@ export class CatalogService {
       }
     }
 
+    // Vendor single-add loophole: a brand typed freely (not picked from the
+    // approved list) must still become a tracked record so it reaches the
+    // approvals queue — mirrors what product import does. Only for genuinely new
+    // submissions; the master / brand-canonical paths already carry an approved
+    // brand. Lazy import avoids a static import cycle with the brand module.
+    if (approvalStatus === 'pending' && productData.brand) {
+      const { findOrCreateBrandByName } = await import('@/modules/brand/brand.service');
+      await findOrCreateBrandByName({ name: productData.brand, autoApprove: false });
+    }
+
     const created = await prisma.product.create({
       data: { ...productData, vendorId, basePrice: productData.basePrice, approvalStatus },
     });
@@ -422,11 +490,85 @@ export class CatalogService {
     return created;
   }
 
+  /**
+   * Decide whether a vendor product qualifies for instant approval (catalog match).
+   * Mirrors the auto-approve branches in createProduct.
+   */
+  private async evaluateInstantApproval(input: {
+    vendorId: string;
+    masterProductId?: string | null;
+    basedOnProductId?: string;
+    basedOnBrandMasterProductId?: string;
+    excludeProductId?: string;
+  }): Promise<'approved' | 'pending'> {
+    const { vendorId, excludeProductId } = input;
+    let masterProductId = input.masterProductId ?? null;
+
+    if (input.basedOnProductId) {
+      const source = await prisma.product.findFirst({
+        where: { id: input.basedOnProductId, approvalStatus: 'approved' },
+        select: { masterProductId: true },
+      });
+      if (source) {
+        if (source.masterProductId) masterProductId = source.masterProductId;
+        return 'approved';
+      }
+    }
+
+    if (input.basedOnBrandMasterProductId) {
+      const mp = await prisma.brandMasterProduct.findFirst({
+        where: {
+          id: input.basedOnBrandMasterProductId,
+          isActive: true,
+          brand: { isActive: true, approvalStatus: 'approved' },
+        },
+        select: { masterProductId: true, sku: true },
+      });
+      if (mp) {
+        if (mp.masterProductId) {
+          masterProductId = mp.masterProductId;
+        } else if (mp.sku) {
+          const linked = await prisma.masterProduct.findFirst({
+            where: { sku: { equals: mp.sku, mode: 'insensitive' }, approvalStatus: 'approved' },
+            select: { id: true },
+          });
+          if (linked) masterProductId = linked.id;
+        }
+        return 'approved';
+      }
+    }
+
+    if (masterProductId) {
+      const master = await prisma.masterProduct.findFirst({
+        where: { id: masterProductId, approvalStatus: 'approved', isActive: true },
+        select: { id: true },
+      });
+      if (!master) return 'pending';
+
+      const dup = await prisma.product.findFirst({
+        where: {
+          vendorId,
+          masterProductId,
+          slug: { not: { startsWith: TOMBSTONE_PREFIX } },
+          ...(excludeProductId ? { id: { not: excludeProductId } } : {}),
+        },
+        select: { id: true },
+      });
+      if (dup) return 'pending';
+
+      return 'approved';
+    }
+
+    return 'pending';
+  }
+
   async updateProduct(productId: string, vendorId: string, data: Record<string, unknown>) {
     const product = await prisma.product.findFirst({
       where: { id: productId, vendorId },
     });
     if (!product) throw Errors.notFound('Product');
+
+    const isResubmit = product.approvalStatus === 'rejected';
 
     // Pull categoryIds out of the main update payload — ProductCategory is a
     // separate table. When provided, replace the existing set and sync
@@ -443,6 +585,62 @@ export class CatalogService {
       data.categoryId = categoryIds[0] ?? null;
     }
 
+    if (isResubmit) {
+      const mergedMasterId =
+        (typeof data.masterProductId === 'string' ? data.masterProductId : null) ??
+        product.masterProductId;
+      const basedOnProductId =
+        typeof data.basedOnProductId === 'string' ? data.basedOnProductId : undefined;
+      const basedOnBrandMasterProductId =
+        typeof data.basedOnBrandMasterProductId === 'string'
+          ? data.basedOnBrandMasterProductId
+          : undefined;
+
+      const approvalStatus = await this.evaluateInstantApproval({
+        vendorId,
+        masterProductId: mergedMasterId,
+        basedOnProductId,
+        basedOnBrandMasterProductId,
+        excludeProductId: productId,
+      });
+
+      if (approvalStatus === 'approved' && mergedMasterId) {
+        const master = await prisma.masterProduct.findFirst({
+          where: { id: mergedMasterId, approvalStatus: 'approved', isActive: true },
+          select: {
+            id: true,
+            name: true,
+            brand: true,
+            sku: true,
+            categoryId: true,
+            imageUrl: true,
+            images: true,
+          },
+        });
+        if (master) {
+          data.name = master.name;
+          if (master.brand) data.brand = master.brand;
+          data.sku = master.sku;
+          data.masterProductId = master.id;
+          if (master.imageUrl && !data.imageUrl) data.imageUrl = master.imageUrl;
+          if (
+            master.images.length > 0 &&
+            (!Array.isArray(data.images) || (data.images as string[]).length === 0)
+          ) {
+            data.images = master.images;
+          }
+          if (!data.categoryId && !categoryIds?.length) {
+            data.categoryId = master.categoryId;
+          }
+        }
+      }
+
+      data.approvalStatus = approvalStatus;
+      data.approvalNote = null;
+      data.approvedBy = null;
+      data.approvedAt = null;
+    }
+
     const updated = await prisma.product.update({ where: { id: productId }, data });
 
     if (categoryIds !== undefined) {
@@ -455,6 +653,26 @@ export class CatalogService {
             isPrimary: idx === 0,
           })),
           skipDuplicates: true,
+        });
+      }
+    }
+
+    if (isResubmit) {
+      if (updated.approvalStatus === 'approved') {
+        emitEvent('ProductApproved', {
+          productId: updated.id,
+          vendorId,
+          productName: updated.name,
+          approvedBy: '',
+        });
+        embedDistributorProduct(updated.id)
+          .catch(() => {})
+          .finally(() => runMappingForVendorProduct(updated.id).catch(() => {}));
+      } else if (updated.approvalStatus === 'pending') {
+        emitEvent('ProductSubmitted', {
+          productId: updated.id,
+          vendorId,
+          productName: updated.name,
         });
       }
     }
@@ -532,15 +750,12 @@ export class CatalogService {
       },
       include: { vendor: { select: { id: true, userId: true } } },
     });
-    if (product.vendorId) {
-      emitEvent('ProductRejected', {
-        productId: product.id,
-        vendorId: product.vendorId,
-        productName: product.name,
-        rejectedBy: adminUserId,
-        reason: note,
-      });
-    }
+    await sendProductRejectedNotifications({
+      productId: product.id,
+      vendorId: product.vendorId,
+      productName: product.name,
+      reason: note,
+    });
     return product;
   }
 
