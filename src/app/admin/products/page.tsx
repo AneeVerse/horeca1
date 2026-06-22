@@ -1759,32 +1759,8 @@ export default function ProductsPage() {
                                                 )}
                                             </div>
 
-                                            {/* SKU, HSN, Brand, Barcode — 2-column grid */}
+                                            {/* Brand, HSN, SKU, Barcode — 2-column grid */}
                                             <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <FieldLabel required>SKU</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.sku}
-                                                        onChange={e => updateField('sku', e.target.value.toUpperCase())}
-                                                        placeholder="e.g., RIC-BAS-001"
-                                                        readOnly={!!editingProduct?.isMasterRow}
-                                                        className={cn(inputCls, editingProduct?.isMasterRow && 'bg-[#F8F9FB] cursor-not-allowed')}
-                                                    />
-                                                    {formErrors.sku && (
-                                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.sku}</p>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <FieldLabel>HSN Code</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.hsn}
-                                                        onChange={e => updateField('hsn', e.target.value)}
-                                                        placeholder="e.g., 1006"
-                                                        className={inputCls}
-                                                    />
-                                                </div>
                                                 <div>
                                                     <FieldLabel required>Brand</FieldLabel>
                                                     <select
@@ -1804,6 +1780,30 @@ export default function ProductsPage() {
                                                         <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
                                                             No brands yet — add one in <Link href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</Link>
                                                         </p>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>HSN Code</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.hsn}
+                                                        onChange={e => updateField('hsn', e.target.value)}
+                                                        placeholder="e.g., 1006"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel required>SKU</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.sku}
+                                                        onChange={e => updateField('sku', e.target.value.toUpperCase())}
+                                                        placeholder="e.g., RIC-BAS-001"
+                                                        readOnly={!!editingProduct?.isMasterRow}
+                                                        className={cn(inputCls, editingProduct?.isMasterRow && 'bg-[#F8F9FB] cursor-not-allowed')}
+                                                    />
+                                                    {formErrors.sku && (
+                                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.sku}</p>
                                                     )}
                                                 </div>
                                                 <div>

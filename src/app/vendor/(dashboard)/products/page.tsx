@@ -1747,12 +1747,12 @@ export default function VendorProductsPage() {
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div>
-                                                        <FieldLabel>SKU</FieldLabel>
-                                                        <input type="text" value={form.sku} readOnly className={cn(inputCls, 'bg-[#F5F5F5] cursor-not-allowed')} />
-                                                    </div>
-                                                    <div>
                                                         <FieldLabel>Brand</FieldLabel>
                                                         <input type="text" value={form.brand} readOnly className={cn(inputCls, 'bg-[#F5F5F5] cursor-not-allowed')} />
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>SKU</FieldLabel>
+                                                        <input type="text" value={form.sku} readOnly className={cn(inputCls, 'bg-[#F5F5F5] cursor-not-allowed')} />
                                                     </div>
                                                 </div>
                                                 {form.categoryIds.length > 0 && (
@@ -1782,46 +1782,6 @@ export default function VendorProductsPage() {
                                                 </div>
 
                                                 <div className="grid grid-cols-2 gap-4">
-                                                    {editingProduct && (
-                                                        <div>
-                                                            <FieldLabel>SKU</FieldLabel>
-                                                            <input
-                                                                type="text"
-                                                                value={form.sku}
-                                                                onChange={(e) => updateField('sku', e.target.value)}
-                                                                className={inputCls}
-                                                                placeholder="e.g., RIC-BAS-001"
-                                                            />
-                                                        </div>
-                                                    )}
-                                                    {!editingProduct && isNewSubmission && (
-                                                        <div className="col-span-2">
-                                                            <p className="text-[12px] text-[#7C7C7C] font-medium bg-[#FAFAFA] border border-[#EEEEEE] rounded-[10px] px-3.5 py-2.5">
-                                                                SKU is assigned by admin after approval.
-                                                            </p>
-                                                        </div>
-                                                    )}
-                                                    <div>
-                                                        <FieldLabel>HSN Code</FieldLabel>
-                                                        <input
-                                                            type="text"
-                                                            value={form.hsn}
-                                                            onChange={(e) => updateField('hsn', e.target.value)}
-                                                            className={inputCls}
-                                                            placeholder="e.g., 1006"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <FieldLabel>FSSAI Reference</FieldLabel>
-                                                        <input
-                                                            type="text"
-                                                            maxLength={50}
-                                                            placeholder="e.g. 10016011000015"
-                                                            value={form.fssaiRef}
-                                                            onChange={e => setForm(f => ({ ...f, fssaiRef: e.target.value }))}
-                                                            className={inputCls}
-                                                        />
-                                                    </div>
                                                     <div>
                                                         <FieldLabel>Brand</FieldLabel>
                                                         <div className="relative flex gap-2">
@@ -1851,6 +1811,46 @@ export default function VendorProductsPage() {
                                                                 </button>
                                                             )}
                                                         </div>
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>HSN Code</FieldLabel>
+                                                        <input
+                                                            type="text"
+                                                            value={form.hsn}
+                                                            onChange={(e) => updateField('hsn', e.target.value)}
+                                                            className={inputCls}
+                                                            placeholder="e.g., 1006"
+                                                        />
+                                                    </div>
+                                                    {editingProduct && (
+                                                        <div>
+                                                            <FieldLabel>SKU</FieldLabel>
+                                                            <input
+                                                                type="text"
+                                                                value={form.sku}
+                                                                onChange={(e) => updateField('sku', e.target.value)}
+                                                                className={inputCls}
+                                                                placeholder="e.g., RIC-BAS-001"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    {!editingProduct && isNewSubmission && (
+                                                        <div className="col-span-2">
+                                                            <p className="text-[12px] text-[#7C7C7C] font-medium bg-[#FAFAFA] border border-[#EEEEEE] rounded-[10px] px-3.5 py-2.5">
+                                                                SKU is assigned by admin after approval.
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    <div>
+                                                        <FieldLabel>FSSAI Reference</FieldLabel>
+                                                        <input
+                                                            type="text"
+                                                            maxLength={50}
+                                                            placeholder="e.g. 10016011000015"
+                                                            value={form.fssaiRef}
+                                                            onChange={e => setForm(f => ({ ...f, fssaiRef: e.target.value }))}
+                                                            className={inputCls}
+                                                        />
                                                     </div>
                                                     <div>
                                                         <FieldLabel>Barcode</FieldLabel>
