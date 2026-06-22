@@ -22,7 +22,7 @@ interface Brand {
     approvalStatus: string;
     isActive: boolean;
     createdAt: string;
-    user: { id: string; fullName: string; email: string };
+    user: { id: string; fullName: string; email: string } | null;
     _count: { masterProducts: number; productMappings: number };
 }
 
@@ -41,7 +41,7 @@ interface PendingMapping {
         id: string;
         name: string;
         basePrice: number;
-        vendor: { id: string; businessName: string };
+        vendor: { id: string; businessName: string } | null;
     };
 }
 
@@ -265,7 +265,7 @@ export default function AdminBrandsPage() {
         .filter(b => brandFilter === 'all' || b.approvalStatus === brandFilter)
         .filter(b => !q || b.name.toLowerCase().includes(q) || (b.user?.email?.toLowerCase().includes(q) ?? false));
     const filteredMappings = mappings.filter(m =>
-        !q || m.brandMasterProduct.name.toLowerCase().includes(q) || m.distributorProduct.vendor.businessName.toLowerCase().includes(q)
+        !q || m.brandMasterProduct.name.toLowerCase().includes(q) || (m.distributorProduct.vendor?.businessName.toLowerCase().includes(q) ?? false)
     );
 
     const pendingBrandsCount = brands.filter(b => b.approvalStatus === 'pending').length;
@@ -404,91 +404,150 @@ export default function AdminBrandsPage() {
 
                 {/* ── BRANDS TABLE ── */}
                 {sectionTab === 'Brands' && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                    <div className="w-full overflow-x-auto">
+                        <table className="w-full border-collapse text-left text-[13px] min-w-[960px]">
                             <thead>
-                                <tr className="bg-[#F8F9FB]">
-                                    {['Brand', 'Owner', 'Products', 'Mappings', 'Date', 'Status', 'Actions'].map(h => (
-                                        <th key={h} className="px-6 py-4 text-[11px] font-bold text-[#7C7C7C] uppercase tracking-wider">{h}</th>
-                                    ))}
+                                <tr className="bg-[#F9FAFB] border-b border-[#EEEEEE] text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">
+                                    <th className="px-4 py-4 font-bold text-center w-[48px]">#</th>
+                                    <th className="px-4 py-4 font-bold min-w-[220px]">Brand</th>
+                                    <th className="px-4 py-4 font-bold min-w-[150px]">Owner</th>
+                                    <th className="px-4 py-4 font-bold text-center w-[80px]">Products</th>
+                                    <th className="px-4 py-4 font-bold text-center w-[80px]">Mappings</th>
+                                    <th className="px-4 py-4 font-bold w-[110px]">Date</th>
+                                    <th className="px-4 py-4 font-bold text-right w-[260px]">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-[#F5F5F5]">
-                                {filteredBrands.map(brand => {
+                            <tbody className="divide-y divide-[#F3F4F6]">
+                                {filteredBrands.map((brand, i) => {
                                     const sc = STATUS_COLORS[brand.approvalStatus] ?? STATUS_COLORS.pending;
+                                    const isDummyEmail = brand.user?.email?.includes('brand.internal.horeca1') || !brand.user;
                                     return (
-                                        <tr key={brand.id} className="hover:bg-[#FAFAFA] transition-colors">
-                                            <td className="px-6 py-4">
+                                        <tr
+                                            key={brand.id}
+                                            onClick={() => router.push(`/admin/brands/${brand.id}`)}
+                                            className="group hover:bg-[#F9FAFB]/60 transition-colors cursor-pointer"
+                                        >
+                                            {/* Index */}
+                                            <td className="px-4 py-4 text-center font-bold text-[#9CA3AF] text-[12px]">
+                                                {i + 1}
+                                            </td>
+
+                                            {/* Brand Info */}
+                                            <td className="px-4 py-4">
                                                 <div className="flex items-center gap-3">
-                                                    {brand.logoUrl ? (
-                                                        <img src={brand.logoUrl} alt="" className="w-9 h-9 rounded-[8px] object-cover border border-[#EEEEEE]" />
-                                                    ) : (
-                                                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold bg-[#EEF8F1] text-[#299E60]">
-                                                            {getInitials(brand.name)}
+                                                    {/* Avatar Box */}
+                                                    <div className="w-[40px] h-[40px] rounded-[10px] bg-[#F3F4F6] overflow-hidden shrink-0 border border-[#E5E7EB] flex items-center justify-center">
+                                                        {brand.logoUrl ? (
+                                                            <img src={brand.logoUrl} alt="" className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <span className="text-[15px] font-black text-[#299E60]">
+                                                                {getInitials(brand.name)}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {/* Details */}
+                                                    <div className="min-w-0">
+                                                        <p className="text-[14px] font-bold text-[#181725] truncate group-hover:text-[#299E60] transition-colors">
+                                                            {brand.name}
+                                                        </p>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            <Link
+                                                                href={`/brand/${brand.slug}`}
+                                                                target="_blank"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className="text-[11px] text-[#299E60] hover:underline flex items-center gap-0.5"
+                                                            >
+                                                                /{brand.slug} <ExternalLink size={10} />
+                                                            </Link>
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-[#E5E7EB]"></span>
+                                                            <span
+                                                                className="text-[10px] font-bold px-2 py-0.5 rounded-full border"
+                                                                style={{
+                                                                    backgroundColor: sc.bg,
+                                                                    color: sc.text,
+                                                                    borderColor: `${sc.text}20`,
+                                                                }}
+                                                            >
+                                                                {brand.approvalStatus}
+                                                            </span>
                                                         </div>
-                                                    )}
-                                                    <div>
-                                                        <p className="text-[14px] font-bold text-[#181725]">{brand.name}</p>
-                                                        <Link href={`/brand/${brand.slug}`} target="_blank"
-                                                            className="text-[11px] text-[#299E60] hover:underline flex items-center gap-0.5">
-                                                            /{brand.slug} <ExternalLink size={10} />
-                                                        </Link>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <p className="text-[13px] font-semibold text-[#181725]">{brand.user?.fullName ?? '—'}</p>
-                                                <p className="text-[11px] text-[#AEAEAE]">{brand.user?.email ?? '—'}</p>
+
+                                            {/* Owner */}
+                                            <td className="px-4 py-4">
+                                                <div className="flex flex-col gap-0.5 min-w-0">
+                                                    <span className="text-[13px] font-bold text-[#374151] truncate">
+                                                        {brand.user?.fullName ?? '—'}
+                                                    </span>
+                                                    {brand.user?.email && (
+                                                        <span className="text-[11px] text-[#9CA3AF] font-semibold truncate">
+                                                            {brand.user.email}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <span className="flex items-center gap-1 text-[13px] font-bold text-[#181725]">
-                                                    <Package size={13} className="text-[#AEAEAE]" />
-                                                    {brand._count.masterProducts}
-                                                </span>
+
+                                            {/* Products Count */}
+                                            <td className="px-4 py-4 text-center font-bold text-[#111827] text-[14px]">
+                                                {brand._count.masterProducts}
                                             </td>
-                                            <td className="px-6 py-4 text-[13px] font-bold text-[#181725]">{brand._count.productMappings}</td>
-                                            <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{formatDate(brand.createdAt)}</td>
-                                            <td className="px-6 py-4">
-                                                <span className="text-[11px] font-[900] px-2.5 py-1 rounded-[6px] uppercase"
-                                                    style={{ backgroundColor: sc.bg, color: sc.text }}>
-                                                    {brand.approvalStatus}
-                                                </span>
+
+                                            {/* Mappings Count */}
+                                            <td className="px-4 py-4 text-center font-bold text-[#111827] text-[14px]">
+                                                {brand._count.productMappings}
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-2">
+
+                                            {/* Date */}
+                                            <td className="px-4 py-4 text-[13px] text-[#7C7C7C] whitespace-nowrap">
+                                                {formatDate(brand.createdAt)}
+                                            </td>
+
+                                            {/* Actions */}
+                                            <td className="px-4 py-4">
+                                                <div className="flex items-center justify-end gap-1.5">
                                                     <Link
                                                         href={`/admin/brands/${brand.id}`}
-                                                        className="flex items-center gap-1 h-[32px] px-3 bg-[#EEF8F1] text-[#299E60] rounded-[8px] text-[12px] font-bold hover:bg-[#299E60] hover:text-white transition-colors"
-                                                        title="Edit Brand"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="flex items-center gap-1 h-[32px] px-2.5 bg-[#EEF8F1] text-[#299E60] rounded-[8px] text-[12px] font-bold hover:bg-[#299E60] hover:text-white transition-all whitespace-nowrap shrink-0"
+                                                        title={isDummyEmail ? 'Create Storefront' : 'Edit Brand Storefront'}
                                                     >
-                                                        <Package size={13} /> Edit
+                                                        {isDummyEmail ? <><Plus size={14} strokeWidth={2.5} /> Create Storefront</> : <><Pencil size={13} /> Edit</>}
                                                     </Link>
                                                     <button
-                                                        onClick={() => viewBrandPortal(brand)}
-                                                        className="flex items-center gap-1 h-[32px] px-3 bg-[#F0F4FF] text-[#3B82F6] rounded-[8px] text-[12px] font-bold hover:bg-[#3B82F6] hover:text-white transition-colors"
+                                                        onClick={(e) => { e.stopPropagation(); viewBrandPortal(brand); }}
+                                                        className="flex items-center justify-center h-[32px] w-[32px] bg-[#F0F4FF] text-[#3B82F6] rounded-[8px] hover:bg-[#3B82F6] hover:text-white transition-all shrink-0"
                                                         title="View Brand Portal"
                                                     >
-                                                        <LayoutDashboard size={13} /> Portal
+                                                        <LayoutDashboard size={14} />
                                                     </button>
                                                     {brand.approvalStatus !== 'approved' && (
-                                                        <button onClick={() => handleApproveBrand(brand)} disabled={!!actionLoading}
-                                                            className="flex items-center gap-1 h-[32px] px-3 bg-[#299E60] text-white rounded-[8px] text-[12px] font-bold disabled:opacity-50">
-                                                            {actionLoading === brand.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Approve
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleApproveBrand(brand); }}
+                                                            disabled={!!actionLoading}
+                                                            className="flex items-center justify-center h-[32px] w-[32px] bg-[#299E60] text-white rounded-[8px] disabled:opacity-50 transition-all shrink-0"
+                                                            title="Approve brand"
+                                                        >
+                                                            {actionLoading === brand.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                                                         </button>
                                                     )}
                                                     {brand.approvalStatus !== 'rejected' && (
                                                         <button
-                                                            onClick={() => setRejectTarget({ type: 'brand', id: brand.id, name: brand.name })}
-                                                            className="flex items-center gap-1 h-[32px] px-3 bg-[#E74C3C] text-white rounded-[8px] text-[12px] font-bold">
-                                                            <X size={13} /> Reject
+                                                            onClick={(e) => { e.stopPropagation(); setRejectTarget({ type: 'brand', id: brand.id, name: brand.name }); }}
+                                                            className="flex items-center justify-center h-[32px] w-[32px] bg-[#E74C3C] text-white rounded-[8px] transition-all shrink-0"
+                                                            title="Reject brand"
+                                                        >
+                                                            <X size={14} />
                                                         </button>
                                                     )}
                                                     <button
-                                                        onClick={() => handleDeleteBrand(brand)}
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteBrand(brand); }}
                                                         disabled={actionLoading === brand.id}
                                                         title="Delete brand permanently"
-                                                        className="flex items-center justify-center h-[32px] w-[32px] bg-[#FEF2F2] text-[#E74C3C] rounded-[8px] hover:bg-[#E74C3C] hover:text-white transition-colors disabled:opacity-50">
-                                                        {actionLoading === brand.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                                                        className="flex items-center justify-center h-[32px] w-[32px] bg-[#FEF2F2] text-[#E74C3C] rounded-[8px] hover:bg-[#E74C3C] hover:text-white transition-all disabled:opacity-50 shrink-0"
+                                                    >
+                                                        {actionLoading === brand.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                                                     </button>
                                                 </div>
                                             </td>
@@ -496,10 +555,12 @@ export default function AdminBrandsPage() {
                                     );
                                 })}
                                 {filteredBrands.length === 0 && (
-                                    <tr><td colSpan={7} className="py-16 text-center">
-                                        <ClipboardList size={36} className="mx-auto text-[#EEEEEE] mb-2" />
-                                        <p className="text-[#AEAEAE] font-bold text-[14px]">No brands found</p>
-                                    </td></tr>
+                                    <tr>
+                                        <td colSpan={7} className="py-16 text-center">
+                                            <ClipboardList size={36} className="mx-auto text-[#EEEEEE] mb-2" />
+                                            <p className="text-[#AEAEAE] font-bold text-[14px]">No brands found</p>
+                                        </td>
+                                    </tr>
                                 )}
                             </tbody>
                         </table>
@@ -527,7 +588,7 @@ export default function AdminBrandsPage() {
                                         <td className="px-6 py-4 text-[13px] font-semibold text-[#181725]">
                                             {mapping.distributorProduct.name}
                                         </td>
-                                        <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{mapping.distributorProduct.vendor.businessName}</td>
+                                        <td className="px-6 py-4 text-[13px] text-[#7C7C7C]">{mapping.distributorProduct.vendor?.businessName ?? '—'}</td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2">
                                                 <div className="h-1.5 w-16 bg-[#F0F0F0] rounded-full overflow-hidden">
@@ -704,7 +765,7 @@ export default function AdminBrandsPage() {
                                 </h3>
                                 <p className="text-[12px] text-gray-500 mt-1">
                                     Auto-mapper picked &ldquo;<strong>{editTarget.brandMasterProduct.name}</strong>&rdquo; for distributor product
-                                    &ldquo;<strong>{editTarget.distributorProduct.name}</strong>&rdquo; ({editTarget.distributorProduct.vendor.businessName}).
+                                    &ldquo;<strong>{editTarget.distributorProduct.name}</strong>&rdquo; ({editTarget.distributorProduct.vendor?.businessName ?? 'no vendor'}).
                                     Pick the correct brand product below — or close to keep this and click Verify on the row.
                                 </p>
                             </div>

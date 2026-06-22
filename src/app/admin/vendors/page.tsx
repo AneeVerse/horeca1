@@ -363,25 +363,20 @@ export default function VendorsPage() {
                             <div className="flex items-center gap-2">
                                 <Link
                                     href={`/admin/vendors/${vendor.id}`}
-                                    className="flex-1 h-[36px] bg-[#F3F4F6] text-[#374151] hover:bg-[#E5E7EB] rounded-[10px] text-[12px] font-bold transition-all flex items-center justify-center border border-[#E5E7EB]"
+                                    className={cn(
+                                        "h-[36px] bg-[#F3F4F6] text-[#374151] hover:bg-[#E5E7EB] rounded-[10px] text-[12px] font-bold transition-all flex items-center justify-center border border-[#E5E7EB]",
+                                        !vendor.isVerified ? "flex-1" : "w-full"
+                                    )}
                                 >
                                     Details
                                 </Link>
-                                {!vendor.isVerified ? (
+                                {!vendor.isVerified && (
                                     <button
                                         onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
                                         className="flex-1 h-[36px] bg-[#EEF8F1] text-[#299E60] border border-[#D1FAE5] hover:bg-[#D1FAE5] rounded-[10px] text-[12px] font-bold transition-all flex items-center justify-center gap-1"
                                     >
                                         <CheckCircle size={12} />
                                         Verify
-                                    </button>
-                                ) : (
-                                    <button
-                                        onClick={() => toggleVerified(vendor.id, vendor.isVerified)}
-                                        className="flex-1 h-[36px] bg-[#FDF2F2] text-[#EF4444] border border-[#FEE2E2] hover:bg-[#FEE2E2] rounded-[10px] text-[12px] font-bold transition-all flex items-center justify-center gap-1"
-                                    >
-                                        <XCircle size={12} />
-                                        Revoke
                                     </button>
                                 )}
                             </div>
@@ -505,21 +500,13 @@ export default function VendorsPage() {
                                         >
                                             Details
                                         </Link>
-                                        {!vendor.isVerified ? (
+                                        {!vendor.isVerified && (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); toggleVerified(vendor.id, vendor.isVerified); }}
                                                 className="h-[34px] px-3 bg-[#EEF8F1] text-[#299E60] border border-[#299E60]/10 rounded-[8px] text-[12px] font-bold hover:bg-[#D1FAE5] transition-all flex items-center justify-center gap-1 whitespace-nowrap"
                                             >
                                                 <CheckCircle size={12} />
                                                 Verify
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); toggleVerified(vendor.id, vendor.isVerified); }}
-                                                className="h-[34px] px-3 bg-[#FDF2F2] text-[#EF4444] border border-[#EF4444]/10 rounded-[8px] text-[12px] font-bold hover:bg-[#FEE2E2] transition-all flex items-center justify-center gap-1 whitespace-nowrap"
-                                            >
-                                                <XCircle size={12} />
-                                                Revoke
                                             </button>
                                         )}
                                     </div>

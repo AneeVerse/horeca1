@@ -72,7 +72,17 @@ export class BrandService {
     const { limit = 20, cursor } = input;
 
     const brands = await prisma.brand.findMany({
-      where: { isActive: true, approvalStatus: 'approved' },
+      where: {
+        isActive: true,
+        approvalStatus: 'approved',
+        user: {
+          email: {
+            not: {
+              contains: 'brand.internal.horeca1',
+            },
+          },
+        },
+      },
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       orderBy: { name: 'asc' },
@@ -117,8 +127,19 @@ export class BrandService {
   // returned but flagged via `coverage` so the UI can show an empty-state message.
   async getStoreBySlug(slug: string, opts?: { pincode?: string }) {
     const pincode = opts?.pincode;
-    const brand = await prisma.brand.findUnique({
-      where: { slug, isActive: true, approvalStatus: 'approved' },
+    const brand = await prisma.brand.findFirst({
+      where: {
+        slug,
+        isActive: true,
+        approvalStatus: 'approved',
+        user: {
+          email: {
+            not: {
+              contains: 'brand.internal.horeca1',
+            },
+          },
+        },
+      },
       include: {
         masterProducts: {
           where: { isActive: true },
@@ -962,4 +983,62 @@ export async function syncProductToBrand(
   } catch (err) {
     console.error('syncProductToBrand failed:', err);
   }
+}
+
+export interface ResolvedBrand {
+  id: string;
+  name: string;
+  approvalStatus: 'pending' | 'approved' | 'rejected';
+  created: boolean;
+}
+
+/**
+ * Resolve a brand name to a Brand record, creating a lightweight (account-less)
+ * brand when none exists. This is the single entry point used by product import
+ * (admin + vendor) and vendor single-add so a typed-but-unknown brand always
+ * reaches a tracked record instead of living only as denormalized text.
+ *   • autoApprove=true  (admin)  → created approved + active, goes live immediately.
+ *   • autoApprove=false (vendor) → created pending + inactive, BrandSuggested
+ *     emitted for the approvals queue.
+ * Matching is case-insensitive by name, then by slug. Returns null for empty
+ * names (caller treats brand as absent, exactly as before).
+ */
+export async function findOrCreateBrandByName(input: {
+  name: string | null | undefined;
+  autoApprove: boolean;
+  suggestedBy?: string;
+}): Promise<ResolvedBrand | null> {
+  const name = input.name?.trim();
+  if (!name) return null;
+
+  const slug = slugify(name);
+  const existing = await prisma.brand.findFirst({
+    where: { OR: [{ name: { equals: name, mode: 'insensitive' } }, { slug }] },
+    select: { id: true, name: true, approvalStatus: true },
+  });
+  if (existing) {
+    return { id: existing.id, name: existing.name, approvalStatus: existing.approvalStatus, created: false };
+  }
+
+  const brand = await prisma.brand.create({
+    data: {
+      name,
+      slug,
+      userId: null,
+      businessAccountId: null,
+      approvalStatus: input.autoApprove ? 'approved' : 'pending',
+      isActive: input.autoApprove,
+    },
+    select: { id: true, name: true, approvalStatus: true },
+  });
+
+  if (!input.autoApprove) {
+    emitEvent('BrandSuggested', {
+      brandId: brand.id,
+      brandName: brand.name,
+      suggestedBy: input.suggestedBy,
+    });
+  }
+
+  return { id: brand.id, name: brand.name, approvalStatus: brand.approvalStatus, created: true };
 }
