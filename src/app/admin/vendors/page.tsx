@@ -390,13 +390,13 @@ export default function VendorsPage() {
                 <table className="w-full border-collapse text-left text-[13px] min-w-[1000px]">
                     <thead>
                         <tr className="bg-[#F9FAFB] border-b border-[#EEEEEE] text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">
-                            <th className="px-6 py-4 font-bold text-center w-[60px]">#</th>
-                            <th className="px-6 py-4 font-bold min-w-[280px]">Vendor Partner</th>
-                            <th className="px-6 py-4 font-bold min-w-[150px]">Owner</th>
-                            <th className="px-6 py-4 font-bold min-w-[220px]">Contact Information</th>
-                            <th className="px-6 py-4 font-bold text-center w-[100px]">Products</th>
-                            <th className="px-6 py-4 font-bold text-center w-[100px]">Orders</th>
-                            <th className="px-6 py-4 font-bold text-right pr-8 min-w-[340px]">Actions</th>
+                            <th className="px-6 py-2.5 font-bold text-center w-[60px]">#</th>
+                            <th className="px-6 py-2.5 font-bold min-w-[280px]">Vendor Partner</th>
+                            <th className="px-6 py-2.5 font-bold min-w-[150px]">Owner</th>
+                            <th className="px-6 py-2.5 font-bold min-w-[220px]">Contact Information</th>
+                            <th className="px-6 py-2.5 font-bold text-center w-[100px]">Products</th>
+                            <th className="px-6 py-2.5 font-bold text-center w-[100px]">Orders</th>
+                            <th className="px-6 py-2.5 font-bold text-right pr-4">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[#F3F4F6]">
@@ -407,12 +407,12 @@ export default function VendorsPage() {
                                 className="group hover:bg-[#F9FAFB]/60 transition-colors cursor-pointer"
                             >
                                 {/* Index */}
-                                <td className="px-6 py-4 text-center font-bold text-[#9CA3AF] text-[12px]">
+                                <td className="px-6 py-2.5 text-center font-bold text-[#9CA3AF] text-[12px]">
                                     {i + 1}
                                 </td>
 
                                 {/* Vendor Partner */}
-                                <td className="px-6 py-4">
+                                <td className="px-6 py-2.5">
                                     <div className="flex items-center gap-3">
                                         {/* Avatar Box */}
                                         <div className="w-[42px] h-[42px] rounded-[10px] bg-[#F3F4F6] overflow-hidden shrink-0 border border-[#E5E7EB] flex items-center justify-center">
@@ -458,12 +458,12 @@ export default function VendorsPage() {
                                 </td>
 
                                 {/* Owner */}
-                                <td className="px-6 py-4 text-[13px] font-bold text-[#374151]">
+                                <td className="px-6 py-2.5 text-[13px] font-bold text-[#374151]">
                                     {vendor.user.fullName}
                                 </td>
 
                                 {/* Contact Information */}
-                                <td className="px-6 py-4">
+                                <td className="px-6 py-2.5">
                                     <div className="flex flex-col gap-0.5">
                                         <span className="text-[13px] font-medium text-[#4B5563] truncate block max-w-[200px]">{vendor.user.email}</span>
                                         {vendor.user.phone && (
@@ -473,17 +473,17 @@ export default function VendorsPage() {
                                 </td>
 
                                 {/* Products Count */}
-                                <td className="px-6 py-4 text-center font-bold text-[#111827] text-[14px]">
+                                <td className="px-6 py-2.5 text-center font-bold text-[#111827] text-[14px]">
                                     {vendor._count.products}
                                 </td>
 
                                 {/* Orders Count */}
-                                <td className="px-6 py-4 text-center font-bold text-[#111827] text-[14px]">
+                                <td className="px-6 py-2.5 text-center font-bold text-[#111827] text-[14px]">
                                     {vendor._count.orders}
                                 </td>
 
                                 {/* Action buttons */}
-                                <td className="px-6 py-4 text-right">
+                                <td className="px-6 py-2.5 text-right">
                                     <div className="flex items-center justify-end gap-2">
                                         <button
                                             onClick={(e) => { e.stopPropagation(); viewDashboard(vendor.id); }}

@@ -408,13 +408,13 @@ export default function AdminBrandsPage() {
                         <table className="w-full border-collapse text-left text-[13px] min-w-[960px]">
                             <thead>
                                 <tr className="bg-[#F9FAFB] border-b border-[#EEEEEE] text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">
-                                    <th className="px-4 py-4 font-bold text-center w-[48px]">#</th>
-                                    <th className="px-4 py-4 font-bold min-w-[220px]">Brand</th>
-                                    <th className="px-4 py-4 font-bold min-w-[150px]">Owner</th>
-                                    <th className="px-4 py-4 font-bold text-center w-[80px]">Products</th>
-                                    <th className="px-4 py-4 font-bold text-center w-[80px]">Mappings</th>
-                                    <th className="px-4 py-4 font-bold w-[110px]">Date</th>
-                                    <th className="px-4 py-4 font-bold text-right w-[260px]">Actions</th>
+                                    <th className="px-4 py-2.5 font-bold text-center w-[48px]">#</th>
+                                    <th className="px-4 py-2.5 font-bold min-w-[220px]">Brand</th>
+                                    <th className="px-4 py-2.5 font-bold min-w-[150px]">Owner</th>
+                                    <th className="px-4 py-2.5 font-bold text-center w-[80px]">Products</th>
+                                    <th className="px-4 py-2.5 font-bold text-center w-[80px]">Mappings</th>
+                                    <th className="px-4 py-2.5 font-bold w-[110px]">Date</th>
+                                    <th className="px-4 py-2.5 font-bold text-right pr-4">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[#F3F4F6]">
@@ -428,12 +428,12 @@ export default function AdminBrandsPage() {
                                             className="group hover:bg-[#F9FAFB]/60 transition-colors cursor-pointer"
                                         >
                                             {/* Index */}
-                                            <td className="px-4 py-4 text-center font-bold text-[#9CA3AF] text-[12px]">
+                                            <td className="px-4 py-2.5 text-center font-bold text-[#9CA3AF] text-[12px]">
                                                 {i + 1}
                                             </td>
 
                                             {/* Brand Info */}
-                                            <td className="px-4 py-4">
+                                            <td className="px-4 py-2.5">
                                                 <div className="flex items-center gap-3">
                                                     {/* Avatar Box */}
                                                     <div className="w-[40px] h-[40px] rounded-[10px] bg-[#F3F4F6] overflow-hidden shrink-0 border border-[#E5E7EB] flex items-center justify-center">
@@ -476,36 +476,44 @@ export default function AdminBrandsPage() {
                                             </td>
 
                                             {/* Owner */}
-                                            <td className="px-4 py-4">
+                                            <td className="px-4 py-2.5">
                                                 <div className="flex flex-col gap-0.5 min-w-0">
-                                                    <span className="text-[13px] font-bold text-[#374151] truncate">
-                                                        {brand.user?.fullName ?? '—'}
-                                                    </span>
-                                                    {brand.user?.email && (
-                                                        <span className="text-[11px] text-[#9CA3AF] font-semibold truncate">
-                                                            {brand.user.email}
+                                                    {isDummyEmail ? (
+                                                        <span className="text-[11px] font-bold text-amber-600 bg-amber-50 border border-amber-200/50 px-2 py-0.5 rounded-[6px] w-fit">
+                                                            Admin Managed
                                                         </span>
+                                                    ) : (
+                                                        <>
+                                                            <span className="text-[13px] font-bold text-[#374151] truncate">
+                                                                {brand.user?.fullName ?? '—'}
+                                                            </span>
+                                                            {brand.user?.email && (
+                                                                <span className="text-[11px] text-[#9CA3AF] font-semibold truncate">
+                                                                    {brand.user.email}
+                                                                </span>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </div>
                                             </td>
 
                                             {/* Products Count */}
-                                            <td className="px-4 py-4 text-center font-bold text-[#111827] text-[14px]">
+                                            <td className="px-4 py-2.5 text-center font-bold text-[#111827] text-[14px]">
                                                 {brand._count.masterProducts}
                                             </td>
 
                                             {/* Mappings Count */}
-                                            <td className="px-4 py-4 text-center font-bold text-[#111827] text-[14px]">
+                                            <td className="px-4 py-2.5 text-center font-bold text-[#111827] text-[14px]">
                                                 {brand._count.productMappings}
                                             </td>
 
                                             {/* Date */}
-                                            <td className="px-4 py-4 text-[13px] text-[#7C7C7C] whitespace-nowrap">
+                                            <td className="px-4 py-2.5 text-[13px] text-[#7C7C7C] whitespace-nowrap">
                                                 {formatDate(brand.createdAt)}
                                             </td>
 
                                             {/* Actions */}
-                                            <td className="px-4 py-4">
+                                            <td className="px-4 py-2.5">
                                                 <div className="flex items-center justify-end gap-1.5">
                                                     <Link
                                                         href={`/admin/brands/${brand.id}`}

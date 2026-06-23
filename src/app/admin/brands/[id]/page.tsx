@@ -314,7 +314,7 @@ export default function AdminBrandEditPage() {
         <div className="min-h-screen bg-[#F8F9FA]">
             {/* Header */}
             <div className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-gray-100">
-                <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+                <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <button onClick={() => router.back()}
                             className="p-2.5 hover:bg-gray-100 rounded-2xl transition-colors">
@@ -335,7 +335,7 @@ export default function AdminBrandEditPage() {
                 </div>
             </div>
 
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 pb-32 space-y-6">
+            <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-8 pb-32 space-y-6">
                 {fromApprovals && brand.approvalStatus === 'pending' && (
                     <div className="bg-[#FFF7E6] border border-[#F59E0B]/30 rounded-2xl px-4 py-3 text-[13px] font-semibold text-[#92400E]">
                         Review this brand application before approving.
@@ -506,31 +506,33 @@ export default function AdminBrandEditPage() {
                 {/* Basic info */}
                 <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
                     <h2 className="text-[15px] font-bold text-[#181725]">Brand Info</h2>
-                    {[
-                        { key: 'name', label: 'Brand Name', placeholder: 'e.g. Amul' },
-                        { key: 'tagline', label: 'Tagline', placeholder: 'e.g. The Taste of India' },
-                        { key: 'website', label: 'Website', placeholder: 'https://amul.com' },
-                    ].map(f => (
-                        <div key={f.key} className="space-y-1">
-                            <label className="text-[13px] font-semibold text-gray-700">{f.label}</label>
-                            <input
-                                type="text"
-                                value={(form as Record<string, unknown>)[f.key] as string}
-                                onChange={(e) => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                                placeholder={f.placeholder}
-                                className="w-full text-[13px] border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#53B175]/30"
+                    <div className="grid sm:grid-cols-2 gap-4">
+                        {[
+                            { key: 'name', label: 'Brand Name', placeholder: 'e.g. Amul', full: false },
+                            { key: 'tagline', label: 'Tagline', placeholder: 'e.g. The Taste of India', full: false },
+                            { key: 'website', label: 'Website', placeholder: 'https://amul.com', full: true },
+                        ].map(f => (
+                            <div key={f.key} className={cn('space-y-1', f.full && 'sm:col-span-2')}>
+                                <label className="text-[13px] font-semibold text-gray-700">{f.label}</label>
+                                <input
+                                    type="text"
+                                    value={(form as Record<string, unknown>)[f.key] as string}
+                                    onChange={(e) => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                                    placeholder={f.placeholder}
+                                    className="w-full text-[13px] border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#53B175]/30"
+                                />
+                            </div>
+                        ))}
+                        <div className="space-y-1 sm:col-span-2">
+                            <label className="text-[13px] font-semibold text-gray-700">Description</label>
+                            <textarea
+                                value={form.description}
+                                onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))}
+                                rows={3}
+                                placeholder="Short brand description…"
+                                className="w-full text-[13px] border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#53B175]/30 resize-none"
                             />
                         </div>
-                    ))}
-                    <div className="space-y-1">
-                        <label className="text-[13px] font-semibold text-gray-700">Description</label>
-                        <textarea
-                            value={form.description}
-                            onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))}
-                            rows={3}
-                            placeholder="Short brand description…"
-                            className="w-full text-[13px] border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#53B175]/30 resize-none"
-                        />
                     </div>
                 </div>
 

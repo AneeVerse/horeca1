@@ -242,7 +242,6 @@ export default function BrandFormModal({ onClose, onCreated }: Props) {
                 showPasswordToggle
                 passwordVisible={showPwd}
                 onTogglePassword={() => setShowPwd(v => !v)}
-                layout="wide"
               />
               {error && (
                 <p className="text-[13px] text-[#E74C3C] font-medium bg-[#FEF2F2] px-3 py-2 rounded-[8px]">{error}</p>

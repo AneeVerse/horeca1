@@ -49,8 +49,8 @@ const SIDEBAR_LINKS: AdminSidebarLink[] = [
     { name: 'Products', icon: Package, href: '/admin/products', requiredPerm: 'products.view' },
     { name: 'Categories', icon: Tag, href: '/admin/categories', requiredPerm: 'products.edit' },
     { name: 'Approvals', icon: CheckSquare, href: '/admin/approvals', requiredPerm: ['vendors.approve', 'brands.approve', 'products.approve'] },
-    { name: 'Returns', icon: RotateCcw, href: '/admin/returns', requiredPerm: 'orders.edit' },
     { name: 'Brands', icon: Sparkles, href: '/admin/brands', requiredPerm: 'brands.view' },
+    { name: 'Returns', icon: RotateCcw, href: '/admin/returns', requiredPerm: 'orders.edit' },
     { name: 'Finance', icon: Wallet, href: '/admin/finance', requiredPerm: 'payments.view' },
     { name: 'Credit & Wallet', icon: CreditCard, href: '/admin/credit', requiredPerm: 'payments.view' },
     { name: 'Promotions', icon: Gift, href: '/admin/promotions', requiredPerm: 'promotions.view' },
@@ -189,93 +189,99 @@ export default function AdminLayout({
 
             {/* Body: Sidebar + Content */}
             <div className="flex flex-1">
-                {/* Sidebar */}
+                {/* Sidebar Column Spacer (maintains width in flex flow) */}
                 <aside className={cn(
-                    "bg-white border-r border-[#EEEEEE] flex flex-col shrink-0 sticky top-[80px] h-[calc(100vh-80px)] overflow-y-auto transition-all duration-300 ease-in-out z-40",
+                    "shrink-0 transition-all duration-300 ease-in-out",
                     isCollapsed ? "w-[80px]" : "w-[240px]"
                 )}>
-                    <nav className="flex-1 px-4 py-6 space-y-2">
-                        {visibleLinks.map((link) => {
-                            const isActive = pathname === link.href;
-                            // Badge count only for the Approvals row (extend here if more rows need badges later).
-                            const badge = link.name === 'Approvals' ? pendingApprovals : 0;
-                            const badgeLabel = badge > 99 ? '99+' : String(badge);
-                            return (
-                                <Link
-                                    key={link.name}
-                                    href={link.href}
-                                    title={isCollapsed ? (badge > 0 ? `${link.name} (${badgeLabel} pending)` : link.name) : ""}
-                                    className={cn(
-                                        "relative flex items-center rounded-[10px] transition-all group text-[14px] overflow-hidden leading-none",
-                                        isCollapsed ? "justify-center h-[48px] px-0" : "gap-3.5 px-5 py-3.5",
-                                        isActive
-                                            ? "bg-[#299E60] text-white shadow-md shadow-[#299E60]/20"
-                                            : "text-[#191919] hover:bg-[#F8F9FB]"
-                                    )}
-                                >
-                                    <span className="relative shrink-0">
-                                        <link.icon size={22} className={cn(
-                                            "transition-colors",
-                                            isActive ? "text-white" : "text-[#000000] group-hover:text-[#000000]"
-                                        )} />
-                                        {/* Collapsed: small red dot on the icon corner with a ping ring */}
-                                        {isCollapsed && badge > 0 && (
-                                            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                                                <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
-                                                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 border border-white" />
-                                            </span>
+                    {/* Sticky Sidebar Container */}
+                    <div className={cn(
+                        "bg-white border-r border-[#EEEEEE] flex flex-col sticky top-[80px] h-[calc(100vh-80px)] overflow-y-auto z-40 transition-all duration-300 ease-in-out",
+                        isCollapsed ? "w-[80px]" : "w-[240px]"
+                    )}>
+                        <nav className="flex-1 px-4 py-6 space-y-2">
+                            {visibleLinks.map((link) => {
+                                const isActive = pathname === link.href;
+                                // Badge count only for the Approvals row (extend here if more rows need badges later).
+                                const badge = link.name === 'Approvals' ? pendingApprovals : 0;
+                                const badgeLabel = badge > 99 ? '99+' : String(badge);
+                                return (
+                                    <Link
+                                        key={link.name}
+                                        href={link.href}
+                                        title={isCollapsed ? (badge > 0 ? `${link.name} (${badgeLabel} pending)` : link.name) : ""}
+                                        className={cn(
+                                            "relative flex items-center rounded-[10px] transition-all group text-[14px] overflow-hidden leading-none",
+                                            isCollapsed ? "justify-center h-[48px] px-0" : "gap-3.5 px-5 py-3.5",
+                                            isActive
+                                                ? "bg-[#299E60] text-white shadow-md shadow-[#299E60]/20"
+                                                : "text-[#191919] hover:bg-[#F8F9FB]"
                                         )}
-                                    </span>
-                                    {!isCollapsed && (
-                                        <>
-                                            <span className="font-semibold whitespace-nowrap flex-1">{link.name}</span>
-                                            {/* Expanded: numeric pill on the right with a soft ping ring */}
-                                            {badge > 0 && (
-                                                <span className="relative inline-flex items-center justify-center">
-                                                    <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60 animate-ping" />
-                                                    <span className={cn(
-                                                        "relative inline-flex min-w-[22px] h-[22px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold border",
-                                                        isActive ? "bg-white text-red-600 border-white" : "bg-red-500 text-white border-white"
-                                                    )}>
-                                                        {badgeLabel}
-                                                    </span>
+                                    >
+                                        <span className="relative shrink-0">
+                                            <link.icon size={22} className={cn(
+                                                "transition-colors",
+                                                isActive ? "text-white" : "text-[#000000] group-hover:text-[#000000]"
+                                            )} />
+                                            {/* Collapsed: small red dot on the icon corner with a ping ring */}
+                                            {isCollapsed && badge > 0 && (
+                                                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                                                    <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
+                                                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 border border-white" />
                                                 </span>
                                             )}
-                                        </>
-                                    )}
-                                </Link>
-                            );
-                        })}
-                    </nav>
+                                        </span>
+                                        {!isCollapsed && (
+                                            <>
+                                                <span className="font-semibold whitespace-nowrap flex-1">{link.name}</span>
+                                                {/* Expanded: numeric pill on the right with a soft ping ring */}
+                                                {badge > 0 && (
+                                                    <span className="relative inline-flex items-center justify-center">
+                                                        <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60 animate-ping" />
+                                                        <span className={cn(
+                                                            "relative inline-flex min-w-[22px] h-[22px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold border",
+                                                            isActive ? "bg-white text-red-600 border-white" : "bg-red-500 text-white border-white"
+                                                        )}>
+                                                            {badgeLabel}
+                                                        </span>
+                                                    </span>
+                                                )}
+                                            </>
+                                        )}
+                                    </Link>
+                                );
+                            })}
+                        </nav>
 
-                    {/* View Storefront */}
-                    <div className="px-4 pb-3">
-                        <Link
-                            href="/"
-                            title={isCollapsed ? 'View Storefront' : ''}
-                            className={cn(
-                                'flex items-center rounded-[10px] transition-all text-[14px] overflow-hidden leading-none text-[#299E60] hover:bg-[#E8F7EF] font-semibold',
-                                isCollapsed ? 'justify-center h-[48px] px-0' : 'gap-3.5 px-5 py-3.5'
-                            )}
-                        >
-                            <Home size={22} className="shrink-0" />
-                            {!isCollapsed && <span className="whitespace-nowrap">View Storefront</span>}
-                        </Link>
-                    </div>
+                        {/* View Storefront */}
+                        <div className="px-4 pb-3">
+                            <Link
+                                href="/"
+                                title={isCollapsed ? 'View Storefront' : ''}
+                                className={cn(
+                                    'flex items-center rounded-[10px] transition-all text-[14px] overflow-hidden leading-none text-[#299E60] hover:bg-[#E8F7EF] font-semibold',
+                                    isCollapsed ? 'justify-center h-[48px] px-0' : 'gap-3.5 px-5 py-3.5'
+                                )}
+                            >
+                                <Home size={22} className="shrink-0" />
+                                {!isCollapsed && <span className="whitespace-nowrap">View Storefront</span>}
+                            </Link>
+                        </div>
 
-                    {/* Collapse Toggle Footer (Optional extra toggle) */}
-                    <div className="p-4 border-t border-[#EEEEEE] flex justify-center">
-                        <button
-                            onClick={() => setIsCollapsed(!isCollapsed)}
-                            className="w-full flex items-center justify-center p-2 hover:bg-gray-50 rounded-lg transition-colors text-[#AEAEAE] hover:text-[#181725]"
-                        >
-                            {isCollapsed ? <ChevronRight size={20} /> : <div className="flex items-center gap-2"><ChevronLeft size={20} /><span className="text-[13px] font-medium">Collapse Menu</span></div>}
-                        </button>
+                        {/* Collapse Toggle Footer (Optional extra toggle) */}
+                        <div className="p-4 border-t border-[#EEEEEE] flex justify-center">
+                            <button
+                                onClick={() => setIsCollapsed(!isCollapsed)}
+                                className="w-full flex items-center justify-center p-2 hover:bg-gray-50 rounded-lg transition-colors text-[#AEAEAE] hover:text-[#181725]"
+                            >
+                                {isCollapsed ? <ChevronRight size={20} /> : <div className="flex items-center gap-2"><ChevronLeft size={20} /><span className="text-[13px] font-medium">Collapse Menu</span></div>}
+                            </button>
+                        </div>
                     </div>
                 </aside>
 
                 {/* Main Content */}
-                <main className="flex-1 p-8 min-w-0">
+                <main className="flex-1 px-8 py-8 min-w-0">
                     {children}
                 </main>
             </div>

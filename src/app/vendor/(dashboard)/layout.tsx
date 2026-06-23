@@ -430,95 +430,101 @@ export default function VendorLayout({
 
             {/* Body: Sidebar + Content */}
             <div className="flex flex-1">
-                {/* Sidebar */}
-                <aside
-                    style={{ top: 80, height: 'calc(100vh - 80px)' }}
-                    className={cn(
-                    "bg-white border-r border-[#EEEEEE] flex flex-col shrink-0 sticky overflow-y-auto transition-all duration-300 ease-in-out z-40",
+                {/* Sidebar Column Spacer (maintains width in flex flow) */}
+                <aside className={cn(
+                    "shrink-0 transition-all duration-300 ease-in-out",
                     isCollapsed ? "w-[80px]" : "w-[240px]"
                 )}>
-                    <nav className="flex-1 px-4 py-6 space-y-2">
-                        {/* Admin View Indicator */}
-                        {adminVendorName && (
-                            <div className={cn(
-                                "mb-3 bg-amber-50 border border-amber-200 rounded-[10px] overflow-hidden",
-                                isCollapsed ? "flex justify-center py-2" : "p-3"
-                            )}>
-                                {isCollapsed ? (
-                                    <Eye size={18} className="text-amber-500" />
-                                ) : (
-                                    <>
-                                        <div className="flex items-center gap-1.5 mb-2">
-                                            <Eye size={13} className="text-amber-500 shrink-0" />
-                                            <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wide">Admin View</span>
-                                        </div>
-                                        <p className="text-[12px] font-semibold text-amber-800 truncate mb-2">{adminVendorName}</p>
-                                        <button
-                                            onClick={handleExitAdminView}
-                                            className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-1.5 rounded-[6px] transition-colors"
-                                        >
-                                            <LogOut size={11} />
-                                            Exit Admin View
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-                        )}
-                        {visibleLinks.map((link) => {
-                            const isActive = pathname === link.href;
-                            return (
-                                <Link
-                                    key={link.name}
-                                    href={link.href}
-                                    title={isCollapsed ? link.name : ""}
-                                    className={cn(
-                                        "flex items-center rounded-[10px] transition-all group text-[14px] overflow-hidden leading-none",
-                                        isCollapsed ? "justify-center h-[48px] px-0" : "gap-3.5 px-5 py-3.5",
-                                        isActive
-                                            ? "bg-[#299E60] text-white shadow-md shadow-[#299E60]/20"
-                                            : "text-[#191919] hover:bg-[#F8F9FB]"
+                    {/* Sticky Sidebar Container */}
+                    <div
+                        style={{ top: 80, height: 'calc(100vh - 80px)' }}
+                        className={cn(
+                        "bg-white border-r border-[#EEEEEE] flex flex-col sticky overflow-y-auto transition-all duration-300 ease-in-out z-40",
+                        isCollapsed ? "w-[80px]" : "w-[240px]"
+                    )}>
+                        <nav className="flex-1 px-4 py-6 space-y-2">
+                            {/* Admin View Indicator */}
+                            {adminVendorName && (
+                                <div className={cn(
+                                    "mb-3 bg-amber-50 border border-amber-200 rounded-[10px] overflow-hidden",
+                                    isCollapsed ? "flex justify-center py-2" : "p-3"
+                                )}>
+                                    {isCollapsed ? (
+                                        <Eye size={18} className="text-amber-500" />
+                                    ) : (
+                                        <>
+                                            <div className="flex items-center gap-1.5 mb-2">
+                                                <Eye size={13} className="text-amber-500 shrink-0" />
+                                                <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wide">Admin View</span>
+                                            </div>
+                                            <p className="text-[12px] font-semibold text-amber-800 truncate mb-2">{adminVendorName}</p>
+                                            <button
+                                                onClick={handleExitAdminView}
+                                                className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-1.5 rounded-[6px] transition-colors"
+                                            >
+                                                <LogOut size={11} />
+                                                Exit Admin View
+                                            </button>
+                                        </>
                                     )}
-                                >
-                                    <link.icon size={22} className={cn(
-                                        "transition-colors shrink-0",
-                                        isActive ? "text-white" : "text-[#000000] group-hover:text-[#000000]"
-                                    )} />
-                                    {!isCollapsed && (
-                                        <span className="font-semibold whitespace-nowrap">{link.name}</span>
-                                    )}
-                                </Link>
-                            );
-                        })}
-                    </nav>
-
-                    {/* View Storefront */}
-                    <div className="px-4 pb-3">
-                        <Link
-                            href="/"
-                            title={isCollapsed ? 'View Storefront' : ''}
-                            className={cn(
-                                'flex items-center rounded-[10px] transition-all text-[14px] overflow-hidden leading-none text-[#299E60] hover:bg-[#E8F7EF] font-semibold',
-                                isCollapsed ? 'justify-center h-[48px] px-0' : 'gap-3.5 px-5 py-3.5'
+                                </div>
                             )}
-                        >
-                            <Home size={22} className="shrink-0" />
-                            {!isCollapsed && <span className="whitespace-nowrap">View Storefront</span>}
-                        </Link>
-                    </div>
+                            {visibleLinks.map((link) => {
+                                const isActive = pathname === link.href;
+                                return (
+                                    <Link
+                                        key={link.name}
+                                        href={link.href}
+                                        title={isCollapsed ? link.name : ""}
+                                        className={cn(
+                                            "flex items-center rounded-[10px] transition-all group text-[14px] overflow-hidden leading-none",
+                                            isCollapsed ? "justify-center h-[48px] px-0" : "gap-3.5 px-5 py-3.5",
+                                            isActive
+                                                ? "bg-[#299E60] text-white shadow-md shadow-[#299E60]/20"
+                                                : "text-[#191919] hover:bg-[#F8F9FB]"
+                                        )}
+                                    >
+                                        <link.icon size={22} className={cn(
+                                            "transition-colors shrink-0",
+                                            isActive ? "text-white" : "text-[#000000] group-hover:text-[#000000]"
+                                        )} />
+                                        {!isCollapsed && (
+                                            <span className="font-semibold whitespace-nowrap">{link.name}</span>
+                                        )}
+                                    </Link>
+                                );
+                            })}
+                        </nav>
 
-                    {/* Collapse Toggle Footer */}
-                    <div className="p-4 border-t border-[#EEEEEE] flex justify-center">
-                        <button
-                            onClick={() => setIsCollapsed(!isCollapsed)}
-                            className="w-full flex items-center justify-center p-2 hover:bg-gray-50 rounded-lg transition-colors text-[#AEAEAE] hover:text-[#181725]"
-                        >
-                            {isCollapsed ? <ChevronRight size={20} /> : <div className="flex items-center gap-2"><ChevronLeft size={20} /><span className="text-[13px] font-medium">Collapse Menu</span></div>}
-                        </button>
+                        {/* View Storefront */}
+                        <div className="px-4 pb-3">
+                            <Link
+                                href="/"
+                                title={isCollapsed ? 'View Storefront' : ''}
+                                className={cn(
+                                    'flex items-center rounded-[10px] transition-all text-[14px] overflow-hidden leading-none text-[#299E60] hover:bg-[#E8F7EF] font-semibold',
+                                    isCollapsed ? 'justify-center h-[48px] px-0' : 'gap-3.5 px-5 py-3.5'
+                                )}
+                            >
+                                <Home size={22} className="shrink-0" />
+                                {!isCollapsed && <span className="whitespace-nowrap">View Storefront</span>}
+                            </Link>
+                        </div>
+
+                        {/* Collapse Toggle Footer */}
+                        <div className="p-4 border-t border-[#EEEEEE] flex justify-center">
+                            <button
+                                onClick={() => setIsCollapsed(!isCollapsed)}
+                                className="w-full flex items-center justify-center p-2 hover:bg-gray-50 rounded-lg transition-colors text-[#AEAEAE] hover:text-[#181725]"
+                            >
+                                {isCollapsed ? <ChevronRight size={20} /> : <div className="flex items-center gap-2"><ChevronLeft size={20} /><span className="text-[13px] font-medium">Collapse Menu</span></div>}
+                            </button>
+                        </div>
                     </div>
                 </aside>
 
                 {/* Main Content */}
-                <main className="flex-1 p-8 min-w-0">
+                <main className="flex-1 px-8 py-8 min-w-0">
                     {children}
                 </main>
             </div>
