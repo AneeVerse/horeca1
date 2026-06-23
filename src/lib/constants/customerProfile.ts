@@ -122,3 +122,10 @@ export function defaultOutletName(displayName: string, legalName: string): strin
   const base = displayName.trim() || legalName.trim();
   return base ? `${base} — Main` : 'Primary Outlet';
 }
+
+/**
+ * addressLine stamped on a freshly-provisioned primary outlet that has no real
+ * address yet. Used as the signal that the outlet is an empty placeholder the
+ * first saved address should *adopt* (fill in place) rather than duplicate.
+ */
+export const PLACEHOLDER_OUTLET_ADDRESS = 'Address pending — complete in account settings';

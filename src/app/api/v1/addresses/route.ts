@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { withRole } from '@/middleware/rbac';
 import { prisma } from '@/lib/prisma';
 import { errorResponse } from '@/middleware/errorHandler';
+import { adoptOrCreateOutlet } from '@/lib/outletWrites';
 
 const createSchema = z.object({
   label: z.string().min(1).max(50).default('Other'),
@@ -75,22 +76,19 @@ export const POST = withRole([...ALL_ROLES], async (req: NextRequest, ctx) => {
       let outletId: string | undefined;
 
       if (ctx.activeBusinessAccountId) {
-        const hasUsablePincode = !!input.pincode && /^\d{6}$/.test(input.pincode);
-        const outlet = await tx.outlet.create({
-          data: {
-            businessAccountId: ctx.activeBusinessAccountId,
-            name: input.businessName || input.label || 'Branch Outlet',
-            addressLine: input.fullAddress,
-            flatInfo: input.flatInfo || null,
-            landmark: input.landmark || null,
-            city: input.city || null,
-            state: input.state || null,
-            pincode: input.pincode || null,
-            latitude: input.latitude,
-            longitude: input.longitude,
-            placeId: input.placeId || null,
-            requiresAddressUpdate: !hasUsablePincode,
-          },
+        // First real address adopts the empty placeholder primary outlet instead
+        // of spawning a duplicate that leaves the primary stuck "Address needed".
+        const { outlet } = await adoptOrCreateOutlet(tx, ctx.activeBusinessAccountId, {
+          name: input.businessName || input.label || 'Branch Outlet',
+          addressLine: input.fullAddress,
+          flatInfo: input.flatInfo,
+          landmark: input.landmark,
+          city: input.city,
+          state: input.state,
+          pincode: input.pincode,
+          latitude: input.latitude,
+          longitude: input.longitude,
+          placeId: input.placeId,
         });
         outletId = outlet.id;
 

@@ -12,7 +12,7 @@ import {
   primaryPhoneDigits,
   resolvedAddressLine,
 } from '@/lib/validators/customer-profile';
-import { defaultOutletName } from '@/lib/constants/customerProfile';
+import { defaultOutletName, PLACEHOLDER_OUTLET_ADDRESS } from '@/lib/constants/customerProfile';
 
 function str(v: string | undefined | null): string | null {
   const t = (v ?? '').trim();
@@ -148,7 +148,7 @@ export function mapToPrimaryOutlet(p: CustomerProfileInput): {
 
   return {
     name: str(p.outletName) || defaultOutletName(displayName, legalName),
-    addressLine: addressLine || 'Address pending — complete in account settings',
+    addressLine: addressLine || PLACEHOLDER_OUTLET_ADDRESS,
     flatInfo: str(p.flatInfo),
     landmark: str(p.landmark),
     city: str(p.city || p.billingCity),

@@ -9,6 +9,7 @@ import { withAuth } from '@/middleware/auth';
 import { prisma } from '@/lib/prisma';
 import { errorResponse } from '@/middleware/errorHandler';
 import { assertAccountMember, assertAccountPermission } from '@/lib/accountAccess';
+import { adoptOrCreateOutlet } from '@/lib/outletWrites';
 
 export const GET = withAuth(async (req: NextRequest, ctx) => {
   try {
@@ -41,40 +42,50 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     const id = extractAccountId(req);
     await assertAccountPermission(ctx.userId, id, 'outlets.create');
     const body = CreateBody.parse(await req.json());
-    // "Address complete" = has a valid 6-digit pincode. Pincode is what serviceability
-    // and checkout actually use; lat/lng is nice-to-have. Without this rule, every new
-    // outlet would be permanently flagged "Address needed" because we have no geocoder yet.
-    const hasUsablePincode = !!body.pincode && /^\d{6}$/.test(body.pincode);
 
     const result = await prisma.$transaction(async (tx) => {
-      const outlet = await tx.outlet.create({
-        data: {
-          businessAccountId: id,
-          ...body,
-          requiresAddressUpdate: !hasUsablePincode,
-        },
+      // First real address adopts the empty placeholder primary outlet instead of
+      // spawning a duplicate that leaves the primary stuck "Address needed".
+      const { outlet, adopted } = await adoptOrCreateOutlet(tx, id, {
+        name: body.name,
+        code: body.code,
+        addressLine: body.addressLine,
+        flatInfo: body.flatInfo,
+        landmark: body.landmark,
+        city: body.city,
+        state: body.state,
+        pincode: body.pincode,
+        latitude: body.latitude,
+        longitude: body.longitude,
+        placeId: body.placeId,
       });
 
-      // Create a corresponding SavedAddress for this user linked to the new outlet
-      await tx.savedAddress.create({
-        data: {
-          userId: ctx.userId,
-          outletId: outlet.id,
-          label: body.name || 'Branch Outlet',
-          businessName: body.name,
-          fullAddress: body.addressLine,
-          shortAddress: body.addressLine.split(',').slice(0, 2).join(', '),
-          flatInfo: body.flatInfo,
-          landmark: body.landmark,
-          pincode: body.pincode,
-          city: body.city,
-          state: body.state,
-          latitude: body.latitude ?? 0,
-          longitude: body.longitude ?? 0,
-          placeId: body.placeId,
-          isDefault: false,
-        },
-      });
+      // Keep the linked SavedAddress in sync. Use the outlet's own name (preserved
+      // on an adopted primary) so the two never drift apart.
+      const savedData = {
+        label: outlet.name || 'Branch Outlet',
+        businessName: outlet.name,
+        fullAddress: body.addressLine,
+        shortAddress: body.addressLine.split(',').slice(0, 2).join(', '),
+        flatInfo: body.flatInfo,
+        landmark: body.landmark,
+        pincode: body.pincode,
+        city: body.city,
+        state: body.state,
+        latitude: body.latitude ?? 0,
+        longitude: body.longitude ?? 0,
+        placeId: body.placeId,
+      };
+      const existingSaved = adopted
+        ? await tx.savedAddress.findFirst({ where: { outletId: outlet.id }, select: { id: true } })
+        : null;
+      if (existingSaved) {
+        await tx.savedAddress.update({ where: { id: existingSaved.id }, data: savedData });
+      } else {
+        await tx.savedAddress.create({
+          data: { userId: ctx.userId, outletId: outlet.id, isDefault: false, ...savedData },
+        });
+      }
 
       return outlet;
     });
