@@ -13,7 +13,6 @@ import {
     Wallet,
     BarChart3,
     Settings,
-    Bell,
     Search,
     Menu,
     ChevronLeft,
@@ -30,6 +29,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
+import { NotificationBell } from '@/components/features/NotificationBell';
 import type { PermissionKey } from '@/lib/permissions/registry';
 
 interface AdminSidebarLink {
@@ -181,9 +181,7 @@ export default function AdminLayout({
 
                 {/* Right Side - Bell + Admin */}
                 <div className="flex items-center gap-5 shrink-0">
-                    <button className="relative hover:bg-gray-50 rounded-full p-2 transition-colors">
-                        <Bell size={22} className="text-[#181725]" fill="#181725" />
-                    </button>
+                    <NotificationBell />
 
                     <BusinessAccountSwitcherDropdown isAdminMode={true} />
                 </div>

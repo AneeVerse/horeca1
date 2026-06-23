@@ -11,7 +11,6 @@ import {
     Settings,
     BarChart3,
     Users,
-    Bell,
     Menu,
     ChevronLeft,
     ChevronRight,
@@ -26,6 +25,7 @@ import {
 import { cn } from '@/lib/utils';
 import { signOut } from 'next-auth/react';
 import { BusinessAccountSwitcherDropdown } from '@/components/account-switcher/BusinessAccountSwitcherDropdown';
+import { NotificationBell } from '@/components/features/NotificationBell';
 import type { PermissionKey } from '@/lib/permissions/registry';
 
 interface BrandSidebarLink {
@@ -354,9 +354,7 @@ export default function BrandPortalLayout({ children }: { children: React.ReactN
                 <div className="flex-1" />
 
                 <div className="flex items-center gap-3">
-                    <button className="relative p-2 hover:bg-gray-50 rounded-full transition-colors">
-                        <Bell size={20} className="text-[#181725]" />
-                    </button>
+                    <NotificationBell accentColor="#53B175" />
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-[#53B175]/15 flex items-center justify-center text-[#53B175] text-[12px] font-black">
                             {session?.user?.name?.[0]?.toUpperCase() ?? 'B'}

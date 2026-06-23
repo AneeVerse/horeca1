@@ -26,6 +26,7 @@ import { useCart } from '@/context/CartContext';
 import { useAddress } from '@/context/AddressContext';
 import { InitialPincodeOverlay } from './InitialPincodeOverlay';
 import { PushBell } from '../features/PushBell';
+import { NotificationBell } from '../features/NotificationBell';
 import { dal } from '@/lib/dal';
 import type { Category } from '@/types';
 import { NavDeliverySelector } from './NavDeliverySelector';
@@ -158,6 +159,7 @@ export function Navbar() {
                         />
 
                         <div className="flex items-center gap-2">
+                            {isLoggedIn && <NotificationBell accentColor="#53B175" />}
                             <PushBell />
                             <Link href="/cart" className="relative p-1 cursor-pointer">
                                 <ShoppingCart size={20} className="text-[#181725]" />
@@ -269,6 +271,7 @@ export function Navbar() {
 
                             {/* Cart + User */}
                             <div className="flex items-center gap-1 shrink-0">
+                                {isLoggedIn && <NotificationBell accentColor="#53B175" />}
                                 <Link href="/cart" className="p-2.5 hover:bg-gray-50 rounded-full transition-all relative group cursor-pointer">
                                     <ShoppingCart size={22} strokeWidth={1.5} className="text-text group-hover:text-primary transition-colors" />
                                     <span className="absolute top-0.5 right-0.5 bg-primary text-white text-[10px] w-[18px] h-[18px] flex items-center justify-center rounded-full font-bold border-2 border-white">
