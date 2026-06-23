@@ -72,6 +72,15 @@ export function registerEventListeners(): void {
         notifications.send({
           userId: payload.userId,
           type: 'order',
+          channel: 'in_app',
+          title: 'Order Placed',
+          body: `Order ${payload.orderNumber} placed (₹${payload.totalAmount.toLocaleString('en-IN')}). We'll notify you once the vendor confirms.`,
+          referenceId: payload.orderId,
+          referenceType: 'order',
+        }),
+        notifications.send({
+          userId: payload.userId,
+          type: 'order',
           channel: 'email',
           title: `Order ${payload.orderNumber} placed`,
           body: `Thank you for your order. Total: ₹${payload.totalAmount.toLocaleString('en-IN')}. We'll notify you once the vendor confirms.`,
@@ -484,6 +493,94 @@ export function registerEventListeners(): void {
       }
     } catch (error) {
       console.error('[Events] CategoryRejected listener failed:', error);
+    }
+  });
+
+  // ── Approval: Brands ──────────────────────────────────────────
+
+  eventBus.on('BrandSuggested', async (payload) => {
+    try {
+      const admins = await prisma.user.findMany({ where: { role: 'admin' }, select: { id: true } });
+      await Promise.all(
+        admins.map((admin) =>
+          notifications.send({
+            userId: admin.id,
+            type: 'approval',
+            channel: 'in_app',
+            title: 'New Brand Pending Approval',
+            body: `New brand pending approval: ${payload.brandName}`,
+            referenceId: payload.brandId,
+            referenceType: 'brand',
+          })
+        )
+      );
+    } catch (error) {
+      console.error('[Events] BrandSuggested listener failed:', error);
+    }
+  });
+
+  eventBus.on('BrandApproved', async (payload) => {
+    try {
+      const brand = await prisma.brand.findUnique({
+        where: { id: payload.brandId },
+        select: { userId: true },
+      });
+      if (!brand?.userId) return;
+      await Promise.all([
+        notifications.send({
+          userId: brand.userId,
+          type: 'approval',
+          channel: 'in_app',
+          title: 'Brand Approved',
+          body: `Congratulations! "${payload.brandName}" has been approved and your brand portal is now unlocked.`,
+          referenceId: payload.brandId,
+          referenceType: 'brand',
+        }),
+        notifications.send({
+          userId: brand.userId,
+          type: 'approval',
+          channel: 'email',
+          title: `Horeca1: Brand approved — ${payload.brandName}`,
+          body: `Your brand "${payload.brandName}" has been approved. Log into the brand portal to manage your products and distributor mappings.`,
+          referenceId: payload.brandId,
+          referenceType: 'brand',
+        }),
+      ]);
+    } catch (error) {
+      console.error('[Events] BrandApproved listener failed:', error);
+    }
+  });
+
+  eventBus.on('BrandRejected', async (payload) => {
+    try {
+      const brand = await prisma.brand.findUnique({
+        where: { id: payload.brandId },
+        select: { userId: true },
+      });
+      if (!brand?.userId) return;
+      const reasonSuffix = payload.reason?.trim() ? ` Reason: ${payload.reason.trim()}` : '';
+      await Promise.all([
+        notifications.send({
+          userId: brand.userId,
+          type: 'approval',
+          channel: 'in_app',
+          title: 'Brand Application Rejected',
+          body: `Your brand application for "${payload.brandName}" was not approved.${reasonSuffix} Please contact support if you believe this is an error.`,
+          referenceId: payload.brandId,
+          referenceType: 'brand',
+        }),
+        notifications.send({
+          userId: brand.userId,
+          type: 'approval',
+          channel: 'email',
+          title: `Horeca1: Brand application update — ${payload.brandName}`,
+          body: `Your brand application for "${payload.brandName}" was not approved.${reasonSuffix}`,
+          referenceId: payload.brandId,
+          referenceType: 'brand',
+        }),
+      ]);
+    } catch (error) {
+      console.error('[Events] BrandRejected listener failed:', error);
     }
   });
 

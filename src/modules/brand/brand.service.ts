@@ -790,6 +790,9 @@ export class BrandService {
       emitEvent('BrandApproved', { brandId, brandName: brand.name, approvedBy: adminId });
       // Kick off initial auto-mapping
       runMappingForBrand(brandId).catch(console.error);
+    } else {
+      // Rejection: notify the brand owner so they see why and can resubmit.
+      emitEvent('BrandRejected', { brandId, brandName: brand.name, rejectedBy: adminId, reason: _reviewNote });
     }
     // Note: rejection reviewNote is accepted but not yet persisted to Brand row —
     // schema has no rejection_note column. Stored in audit log via the API caller

@@ -8,14 +8,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { NotificationService } from '@/modules/notification/notification.service';
 import { withAuth } from '@/middleware/auth';
 import { errorResponse } from '@/middleware/errorHandler';
+import type { NotificationChannel } from '@prisma/client';
 
 const notificationService = new NotificationService();
+
+const VALID_CHANNELS: NotificationChannel[] = ['email', 'sms', 'whatsapp', 'in_app', 'push'];
 
 export const GET = withAuth(async (req: NextRequest, ctx) => {
   try {
     const params = req.nextUrl.searchParams;
+    const channelParam = params.get('channel');
+    const channel = channelParam && VALID_CHANNELS.includes(channelParam as NotificationChannel)
+      ? (channelParam as NotificationChannel)
+      : undefined;
     const options = {
       type: params.get('type') || undefined,
+      channel,
       read: params.has('read') ? params.get('read') === 'true' : undefined,
       cursor: params.get('cursor') || undefined,
       limit: params.has('limit') ? Number(params.get('limit')) : undefined,

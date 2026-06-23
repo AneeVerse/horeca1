@@ -46,10 +46,11 @@ export class NotificationService {
     return notification;
   }
 
-  async list(userId: string, options: { type?: string; read?: boolean; cursor?: string; limit?: number }) {
-    const { type, read, cursor, limit = 20 } = options;
+  async list(userId: string, options: { type?: string; channel?: NotificationChannel; read?: boolean; cursor?: string; limit?: number }) {
+    const { type, channel, read, cursor, limit = 20 } = options;
     const where: Record<string, unknown> = { userId };
     if (type) where.type = type;
+    if (channel) where.channel = channel;
     if (read !== undefined) where.readAt = read ? { not: null } : null;
 
     const notifications = await prisma.notification.findMany({
