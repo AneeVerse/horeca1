@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
-import { X, AtSign, Mail, Loader2, ArrowLeft } from 'lucide-react';
+import { X, AtSign, Mail, Loader2, ArrowLeft, Pencil } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { signIn } from 'next-auth/react';
@@ -217,6 +217,13 @@ export function LoginOverlay({ isOpen, onClose, onLoginSuccess }: LoginOverlayPr
             <>
               <p className="text-[13px] text-gray-400 text-center mb-6">
                 Code sent to <span className="font-bold text-gray-700">{sentToLabel}</span>
+                <button
+                  type="button"
+                  onClick={() => { setStep('identifier'); setOtp(['', '', '', '']); setError(''); }}
+                  className="inline-flex items-center gap-1 ml-2 align-baseline text-[12px] font-bold text-[#53B175] hover:underline"
+                >
+                  <Pencil size={12} /> Edit
+                </button>
               </p>
               <div className="flex gap-3 justify-center mb-6">
                 {otp.map((digit, i) => (

@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { signIn, useSession } from 'next-auth/react';
 import {
-  AtSign, Mail, Lock, Eye, EyeOff, Loader2, ArrowLeft,
+  AtSign, Mail, Lock, Eye, EyeOff, Loader2, ArrowLeft, Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -204,6 +204,13 @@ export default function LoginPageInner() {
                 <span className="font-bold text-gray-700">
                   {isEmail ? trimmedId.toLowerCase() : `+91 ${phoneDigits.slice(0, 5)} ${phoneDigits.slice(5)}`}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => { setStep('form'); setOtp(['', '', '', '']); setApiError(''); }}
+                  className="inline-flex items-center gap-1 ml-2 align-baseline text-[12px] font-bold text-[#53B175] hover:underline"
+                >
+                  <Pencil size={12} /> Edit
+                </button>
               </p>
 
               {apiError && (
