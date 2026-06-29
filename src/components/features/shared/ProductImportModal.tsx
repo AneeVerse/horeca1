@@ -10,13 +10,24 @@
  * All money is rendered in ₹ (this is an India-only B2B platform).
  */
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   X, Upload, Download, Loader2, ChevronLeft, ChevronRight,
   CheckCircle, AlertTriangle, ArrowRight, RotateCcw, Eye, Check, Store, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+
+interface ColumnDef {
+  key: string;
+  label: string;
+  width: string;
+  type: string;
+  bg?: string;
+  sticky?: boolean;
+  readOnly?: boolean;
+  options?: string[];
+}
 
 export interface ImportModalConfig {
   /** POST endpoint for preview+commit (FormData). */
@@ -45,9 +56,52 @@ type EditRow = Partial<{
   stock: number;
   imageUrl: string;
   imageName: string;
-  // Bulk price tiers as GROSS rate/unit (matches the import sheet). The backend
-  // converts gross → taxable using the row's tax% on commit.
   slabs: EditSlab[];
+  // Flat attributes
+  parentCategory: string;
+  subCategory: string;
+  additionalSubCategories: string[];
+  vegNonVeg: string;
+  storageType: string;
+  moq: number;
+  aliasName: string;
+  upc: string;
+  // Metadata fields
+  account: string;
+  accountCode: string;
+  taxable: boolean;
+  exemptionReason: string;
+  taxabilityType: string;
+  productType: string;
+  intraStateTaxName: string;
+  intraStateTaxType: string;
+  interStateTaxName: string;
+  interStateTaxRate: number;
+  interStateTaxType: string;
+  platformCommission: number;
+  inventoryAccount: string;
+  inventoryAccountCode: string;
+  valuationMethod: string;
+  trackInventory: boolean;
+  reorderPoint: number;
+  openingStock: number;
+  packageWeight: number;
+  packageLength: number;
+  packageWidth: number;
+  packageHeight: number;
+  dimensionUnit: string;
+  weightUnit: string;
+  ean: string;
+  isbn: string;
+  itemType: string;
+  source: string;
+  referenceId: string;
+  lastSync: string;
+  sellable: boolean;
+  purchasable: boolean;
+  variantMapping: string;
+  itemStatus: string;
+  activeOnlineStore: boolean;
 }>;
 
 interface PreviewSlab { minQty: number; price: number; grossRate: number; promoPrice?: number | null; promoGrossRate?: number | null }
@@ -76,6 +130,16 @@ interface PreviewItem {
     taxPercent: number; stock: number; brand?: string; sku?: string;
   };
   skipReason?: string;
+  // New flat attributes
+  parentCategory?: string;
+  subCategory?: string;
+  additionalSubCategories?: string[];
+  vegNonVeg?: string;
+  storageType?: string;
+  moq?: number;
+  aliasName?: string;
+  upc?: string;
+  metadata?: Record<string, any>;
 }
 
 interface ParseError { row: number; field?: string; message: string }
@@ -92,7 +156,10 @@ interface PreviewData {
 interface CommitResult {
   created: number;
   updated: number;
-  errors: { row: number; message: string }[];
+  imported: number;
+  blocked: boolean;
+  errors: { row: number; field?: string; message: string }[];
+  errorReport?: string;
   backupId: string;
 }
 
@@ -205,7 +272,167 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
       return next;
     });
   }, []);
+  const COLUMNS: ColumnDef[] = useMemo(() => {
+    const list = [
+      { key: 'name', label: 'Product Name', width: 'w-[280px]', type: 'text', sticky: true },
+      { key: 'action', label: 'Action', width: 'w-[80px]', type: 'custom', readOnly: true },
+      { key: 'image', label: 'Image', width: 'w-[180px]', type: 'custom' },
+      { key: 'sku', label: 'SKU', width: 'w-[130px]', type: 'text' },
+      { key: 'hsn', label: 'HSN Code', width: 'w-[110px]', type: 'text' },
+      { key: 'brand', label: 'Brand', width: 'w-[140px]', type: 'text' },
+      { key: 'unit', label: 'Unit', width: 'w-[90px]', type: 'text' },
+      { key: 'category', label: 'Category', width: 'w-[160px]', type: 'select' },
+      { key: 'parentCategory', label: 'Parent Category', width: 'w-[150px]', type: 'text' },
+      { key: 'subCategory', label: 'Sub-Category', width: 'w-[150px]', type: 'text' },
+      { key: 'additionalSubCategory', label: 'Additional Sub-Category', width: 'w-[180px]', type: 'text' },
+      { key: 'basePrice', label: 'Taxable ₹', width: 'w-[115px]', type: 'number', bg: 'bg-[#EEF6F1]' },
+      { key: 'taxPercent', label: 'Tax %', width: 'w-[90px]', type: 'number', bg: 'bg-[#EEF6F1]' },
+      { key: 'grossPrice', label: 'Gross ₹', width: 'w-[110px]', type: 'custom', bg: 'bg-[#EEF6F1]' },
+      { key: 'slab1Qty', label: 'Slab1 Qty', width: 'w-[90px]', type: 'custom', bg: 'bg-[#FBF7EC]' },
+      { key: 'slab1Rate', label: 'Slab1 ₹', width: 'w-[100px]', type: 'custom', bg: 'bg-[#FBF7EC]' },
+      { key: 'slab1PromoRate', label: 'Slab1 Promo ₹', width: 'w-[110px]', type: 'custom', bg: 'bg-[#FBF7EC]' },
+      { key: 'slab2Qty', label: 'Slab2 Qty', width: 'w-[90px]', type: 'custom', bg: 'bg-[#FBF7EC]' },
+      { key: 'slab2Rate', label: 'Slab2 ₹', width: 'w-[100px]', type: 'custom', bg: 'bg-[#FBF7EC]' },
+      { key: 'slab2PromoRate', label: 'Slab2 Promo ₹', width: 'w-[110px]', type: 'custom', bg: 'bg-[#FBF7EC]' },
+      { key: 'promoPrice', label: 'Promo ₹', width: 'w-[100px]', type: 'number' },
+      { key: 'stock', label: 'Stock', width: 'w-[90px]', type: 'number' },
+      { key: 'imageUrl', label: 'Image URL', width: 'w-[200px]', type: 'text' },
+      { key: 'aliasName', label: 'Alias Name', width: 'w-[150px]', type: 'text' },
+      { key: 'upc', label: 'UPC', width: 'w-[120px]', type: 'text' },
+      { key: 'vegNonVeg', label: 'Veg / Non-Veg', width: 'w-[120px]', type: 'select', options: ['', 'veg', 'nonveg', 'egg'] },
+      { key: 'storageType', label: 'Storage type', width: 'w-[120px]', type: 'text' },
+      { key: 'moq', label: 'MOQ', width: 'w-[90px]', type: 'number' },
+      { key: 'account', label: 'Account', width: 'w-[140px]', type: 'text' },
+      { key: 'accountCode', label: 'Account Code', width: 'w-[120px]', type: 'text' },
+      { key: 'taxable', label: 'Taxable', width: 'w-[85px]', type: 'checkbox' },
+      { key: 'exemptionReason', label: 'Exemption Reason', width: 'w-[160px]', type: 'text' },
+      { key: 'taxabilityType', label: 'Taxability Type', width: 'w-[130px]', type: 'text' },
+      { key: 'productType', label: 'Product Type', width: 'w-[110px]', type: 'text' },
+      { key: 'intraStateTaxName', label: 'Intra State Tax Name', width: 'w-[165px]', type: 'text' },
+      { key: 'intraStateTaxType', label: 'Intra State Tax Type', width: 'w-[150px]', type: 'text' },
+      { key: 'interStateTaxName', label: 'Inter State Tax Name', width: 'w-[165px]', type: 'text' },
+      { key: 'interStateTaxRate', label: 'Inter State Tax Rate', width: 'w-[130px]', type: 'number' },
+      { key: 'interStateTaxType', label: 'Inter State Tax Type', width: 'w-[150px]', type: 'text' },
+      { key: 'platformCommission', label: 'Platform Commission', width: 'w-[140px]', type: 'number' },
+      { key: 'inventoryAccount', label: 'Inventory Account', width: 'w-[160px]', type: 'text' },
+      { key: 'inventoryAccountCode', label: 'Inventory Account Code', width: 'w-[160px]', type: 'text' },
+      { key: 'valuationMethod', label: 'Inventory Valuation Method', width: 'w-[180px]', type: 'text' },
+      { key: 'trackInventory', label: 'Track Inventory', width: 'w-[110px]', type: 'checkbox' },
+      { key: 'reorderPoint', label: 'Reorder Point', width: 'w-[110px]', type: 'number' },
+      { key: 'openingStock', label: 'Opening Stock', width: 'w-[110px]', type: 'number' },
+      { key: 'packageWeight', label: 'Package Weight', width: 'w-[110px]', type: 'number' },
+      { key: 'packageLength', label: 'Package Length', width: 'w-[110px]', type: 'number' },
+      { key: 'packageWidth', label: 'Package Width', width: 'w-[110px]', type: 'number' },
+      { key: 'packageHeight', label: 'Package Height', width: 'w-[110px]', type: 'number' },
+      { key: 'dimensionUnit', label: 'Dimension Unit', width: 'w-[110px]', type: 'text' },
+      { key: 'weightUnit', label: 'Weight Unit', width: 'w-[110px]', type: 'text' },
+      { key: 'ean', label: 'EAN', width: 'w-[115px]', type: 'text' },
+      { key: 'isbn', label: 'ISBN', width: 'w-[115px]', type: 'text' },
+      { key: 'itemType', label: 'Item Type', width: 'w-[110px]', type: 'text' },
+      { key: 'source', label: 'Source', width: 'w-[110px]', type: 'text' },
+      { key: 'referenceId', label: 'Reference ID', width: 'w-[130px]', type: 'text' },
+      { key: 'lastSync', label: 'Last Sync', width: 'w-[150px]', type: 'text' },
+      { key: 'sellable', label: 'Sellable', width: 'w-[85px]', type: 'checkbox' },
+      { key: 'purchasable', label: 'Purchasable', width: 'w-[85px]', type: 'checkbox' },
+      { key: 'variantMapping', label: 'Variant Mapping', width: 'w-[145px]', type: 'text' },
+      { key: 'itemStatus', label: 'Item Status', width: 'w-[110px]', type: 'text' },
+      { key: 'activeOnlineStore', label: 'Active on Online Store', width: 'w-[140px]', type: 'checkbox' },
+    ];
+    const hasLegacyCategory = preview?.items.some((i) => i.category);
+    if (preview && !hasLegacyCategory) {
+      return list.filter((c) => c.key !== 'category');
+    }
+    return list;
+  }, [preview]);
 
+  const getVal = useCallback((item: PreviewItem, field: string): any => {
+    const rowEdit = edits[item.row] ?? {};
+    if (rowEdit[field as keyof EditRow] !== undefined) {
+      return rowEdit[field as keyof EditRow];
+    }
+
+    if (field === 'name') return item.name;
+    if (field === 'sku') return item.sku ?? '';
+    if (field === 'hsn') return item.hsn ?? '';
+    if (field === 'brand') return item.brand ?? '';
+    if (field === 'unit') return item.unit ?? '';
+    if (field === 'basePrice') return item.basePrice;
+    if (field === 'taxPercent') return item.taxPercent;
+    if (field === 'promoPrice') return item.promoPrice ?? '';
+    if (field === 'stock') return item.stock ?? '';
+    if (field === 'imageUrl') return item.imageUrl ?? '';
+    if (field === 'imageName') return item.imageName ?? '';
+    
+    if (field === 'parentCategory') return item.parentCategory ?? '';
+    if (field === 'subCategory') return item.subCategory ?? '';
+    if (field === 'additionalSubCategory') return item.additionalSubCategories?.join(', ') ?? '';
+    if (field === 'vegNonVeg') return item.vegNonVeg ?? '';
+    if (field === 'storageType') return item.storageType ?? '';
+    if (field === 'moq') return item.moq ?? 1;
+    if (field === 'aliasName') return item.aliasName ?? '';
+    if (field === 'upc') return item.upc ?? '';
+
+    const meta = item.metadata || {};
+    const acc = meta.accounting || {};
+    const inv = meta.inventory || {};
+    const pkg = meta.packaging || {};
+    const ids = meta.identifiers || {};
+    const att = meta.attributes || {};
+
+    if (field === 'account') return acc.account ?? '';
+    if (field === 'accountCode') return acc.accountCode ?? '';
+    if (field === 'taxable') return acc.taxable ?? false;
+    if (field === 'exemptionReason') return acc.exemptionReason ?? '';
+    if (field === 'taxabilityType') return acc.taxabilityType ?? '';
+    if (field === 'productType') return att.productType ?? '';
+    if (field === 'intraStateTaxName') return acc.intraStateTaxName ?? '';
+    if (field === 'intraStateTaxRate') return acc.intraStateTaxRate ?? '';
+    if (field === 'intraStateTaxType') return acc.intraStateTaxType ?? '';
+    if (field === 'interStateTaxName') return acc.interStateTaxName ?? '';
+    if (field === 'interStateTaxRate') return acc.interStateTaxRate ?? '';
+    if (field === 'interStateTaxType') return acc.interStateTaxType ?? '';
+    if (field === 'source') return att.source ?? '';
+    if (field === 'referenceId') return att.referenceId ?? '';
+    if (field === 'lastSync') return att.lastSync ?? '';
+    if (field === 'inventoryAccount') return acc.inventoryAccount ?? '';
+    if (field === 'inventoryAccountCode') return acc.inventoryAccountCode ?? '';
+    if (field === 'valuationMethod') return inv.valuationMethod ?? '';
+    if (field === 'reorderPoint') return inv.reorderPoint ?? '';
+    if (field === 'openingStock') return inv.openingStock ?? '';
+    if (field === 'itemType') return att.itemType ?? '';
+    if (field === 'sellable') return att.sellable ?? false;
+    if (field === 'purchasable') return att.purchasable ?? false;
+    if (field === 'trackInventory') return inv.trackInventory ?? false;
+    if (field === 'packageWeight') return pkg.packageWeight ?? '';
+    if (field === 'packageLength') return pkg.packageLength ?? '';
+    if (field === 'packageWidth') return pkg.packageWidth ?? '';
+    if (field === 'packageHeight') return pkg.packageHeight ?? '';
+    if (field === 'dimensionUnit') return pkg.dimensionUnit ?? '';
+    if (field === 'weightUnit') return pkg.weightUnit ?? '';
+    if (field === 'ean') return ids.ean ?? '';
+    if (field === 'isbn') return ids.isbn ?? '';
+    if (field === 'variantMapping') return att.variantMapping ?? '';
+    if (field === 'platformCommission') return acc.platformCommission ?? '';
+    if (field === 'itemStatus') return att.itemStatus ?? '';
+    if (field === 'activeOnlineStore') return att.activeOnlineStore ?? false;
+
+    return '';
+  }, [edits]);
+
+  const setVal = useCallback((row: number, field: string, value: any) => {
+    setEdits((prev) => {
+      const next = { ...prev };
+      const rowEdits = { ...(next[row] ?? {}) };
+      if (value === undefined || value === '') {
+        delete rowEdits[field as keyof EditRow];
+      } else {
+        rowEdits[field as keyof EditRow] = value;
+      }
+      if (Object.keys(rowEdits).length === 0) delete next[row];
+      else next[row] = rowEdits;
+      return next;
+    });
+  }, []);
   const handleClose = () => {
     if (!committing && !parsing) { reset(); onClose(); }
   };
@@ -249,7 +476,7 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
     }
   };
 
-  const handleCommit = async () => {
+  const handleCommit = async (force = false) => {
     if (!file || !preview) return;
     setCommitting(true);
     try {
@@ -259,26 +486,34 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
       if (config.vendors && vendorId) fd.append('vendorId', vendorId);
       if (skipRows.size > 0) fd.append('skipRows', JSON.stringify([...skipRows]));
       if (Object.keys(edits).length > 0) fd.append('edits', JSON.stringify(edits));
+      if (force) fd.append('force', 'true');
 
       const res = await fetch(config.importEndpoint, { method: 'POST', body: fd });
       const json = await res.json();
 
       if (json.success && json.data) {
+        const d = json.data;
+        const created = d.created ?? 0;
+        const updated = d.updated ?? 0;
         setResult({
-          created: json.data.created,
-          updated: json.data.updated,
-          errors: json.data.errors || [],
-          backupId: json.data.backupId,
+          created,
+          updated,
+          imported: d.imported ?? (created + updated),
+          blocked: d.blocked === true,
+          errors: d.errors || [],
+          errorReport: d.errorReport,
+          backupId: d.backupId,
         });
-        if (json.data.backup) setBackupData(JSON.stringify(json.data.backup));
+        if (d.backup) setBackupData(JSON.stringify(d.backup));
         setStep('result');
-        onComplete();
+        // Only treat as a finished import when the server didn't block the commit.
+        if (d.blocked !== true) onComplete();
       } else {
-        setResult({ created: 0, updated: 0, errors: [{ row: 0, message: json.error?.message || 'Commit failed' }], backupId: '' });
+        setResult({ created: 0, updated: 0, imported: 0, blocked: false, errors: [{ row: 0, message: json.error?.message || 'Commit failed' }], backupId: '' });
         setStep('result');
       }
     } catch {
-      setResult({ created: 0, updated: 0, errors: [{ row: 0, message: 'Network error' }], backupId: '' });
+      setResult({ created: 0, updated: 0, imported: 0, blocked: false, errors: [{ row: 0, message: 'Network error' }], backupId: '' });
       setStep('result');
     } finally {
       setCommitting(false);
@@ -320,6 +555,17 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
     URL.revokeObjectURL(url);
   };
 
+  const downloadErrorReport = () => {
+    if (!result?.errorReport) return;
+    const blob = new Blob([result.errorReport], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `import_errors_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const downloadTemplate = () => window.open(config.templateUrl, '_blank');
 
   const toggleSkip = (row: number) => {
@@ -342,7 +588,7 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
       <div className="fixed inset-0 z-[61] bg-white flex flex-col animate-in fade-in duration-150">
 
           {/* Header */}
-          <div className="flex items-center justify-between px-8 py-5 border-b border-[#EEEEEE] shrink-0">
+          <div className={cn("flex items-center justify-between border-b border-[#EEEEEE] shrink-0", step === 'review' && viewMode === 'list' ? "px-6 py-3" : "px-8 py-5")}>
             <div className="flex items-center gap-4">
               {step === 'review' && (
                 <button onClick={() => setStep('upload')} className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center hover:bg-[#F8F9FB] text-[#7C7C7C] transition-all">
@@ -374,7 +620,7 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto p-8 min-h-0 bg-[#F8F9FB]">
+          <div className={cn("flex-1 min-h-0 bg-[#F8F9FB] flex flex-col", step === 'review' && viewMode === 'list' ? "overflow-hidden p-4" : "overflow-y-auto p-8")}>
 
             {/* Step 1: Upload */}
             {step === 'upload' && (
@@ -440,9 +686,9 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
 
             {/* Step 2: Review */}
             {step === 'review' && preview && (
-              <div className="flex flex-col h-full min-h-0 space-y-4">
+              <div className="flex flex-col flex-1 min-h-0 space-y-2.5">
                 {/* Status Bar */}
-                <div className="flex items-center justify-between p-4 bg-white border border-[#EEEEEE] rounded-[14px] shadow-sm flex-wrap gap-3">
+                <div className="flex items-center justify-between py-2 px-4 bg-white border border-[#EEEEEE] rounded-[10px] shadow-sm flex-wrap gap-3">
                   <div className="flex items-center gap-6">
                     <p className="text-[13px] text-[#7C7C7C] font-semibold">Total: <strong className="text-[#181725]">{preview.totalRows}</strong></p>
                     <p className="text-[13px] text-emerald-600 font-semibold">Create: <strong>{preview.creates}</strong></p>
@@ -456,7 +702,7 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
 
                 {/* Errors strip */}
                 {preview.errors.length > 0 && (
-                  <div className="p-4 bg-[#FFF0F0] border border-[#E74C3C]/20 rounded-[14px] text-[13px] font-semibold text-[#E74C3C] space-y-1">
+                  <div className="py-2 px-4 bg-[#FFF0F0] border border-[#E74C3C]/20 rounded-[10px] text-[13px] font-semibold text-[#E74C3C] space-y-1">
                     <p className="flex items-center gap-2"><AlertTriangle size={15} /> Rows with errors are skipped automatically:</p>
                     <ul className="list-disc pl-5 font-normal text-[#181725] text-[12.5px] max-h-[100px] overflow-y-auto space-y-0.5">
                       {preview.errors.map((err, i) => (<li key={i}>Row {err.row}{err.field ? ` · ${err.field}` : ''}: {err.message}</li>))}
@@ -466,33 +712,19 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
 
                 {/* Spreadsheet (list) view — dense Excel-style grid */}
                 {viewMode === 'list' && (
-                  <div className="flex-1 bg-white rounded-[12px] border border-[#E2E2E2] overflow-hidden flex flex-col min-h-0 shadow-sm">
-                    <div className="overflow-auto">
-                      <table className="text-left border-collapse text-[11.5px] text-[#181725] min-w-[2100px] [&_td]:border-r [&_td]:border-[#EFEFEF] [&_th]:border-r [&_th]:border-[#E2E2E2]">
+                  <div className="flex-1 bg-white rounded-[10px] border border-[#E2E2E2] overflow-hidden flex flex-col min-h-0 shadow-sm">
+                    <div className="flex-1 min-h-0 overflow-auto">
+                      <table className="text-left border-collapse text-[11.5px] text-[#181725] min-w-[5000px] [&_td]:border-r [&_td]:border-[#EFEFEF] [&_th]:border-r [&_th]:border-[#E2E2E2]">
                         <thead className="sticky top-0 z-30">
                           <tr className="bg-[#F3F4F6] text-[10px] font-bold text-[#6B7280] uppercase tracking-wide">
-                            <th className="px-2 py-2 w-[44px] text-center sticky left-0 bg-[#F3F4F6] z-40">#</th>
-                            <th className="px-2 py-2 w-[210px] sticky left-[44px] bg-[#F3F4F6] z-40">Product Name</th>
-                            <th className="px-2 py-2 w-[74px] text-center">Action</th>
-                            <th className="px-2 py-2 w-[180px] text-center">Image</th>
-                            <th className="px-2 py-2 w-[110px]">SKU</th>
-                            <th className="px-2 py-2 w-[100px]">HSN</th>
-                            <th className="px-2 py-2 w-[110px]">Brand</th>
-                            <th className="px-2 py-2 w-[70px]">Unit</th>
-                            <th className="px-2 py-2 w-[140px]">Category</th>
-                            <th className="px-2 py-2 w-[92px] text-right bg-[#EEF6F1]">Taxable ₹</th>
-                            <th className="px-2 py-2 w-[58px] text-right bg-[#EEF6F1]">Tax %</th>
-                            <th className="px-2 py-2 w-[92px] text-right bg-[#EEF6F1]">Gross ₹</th>
-                            <th className="px-2 py-2 w-[64px] text-right bg-[#FBF7EC]">Slab1 Qty</th>
-                            <th className="px-2 py-2 w-[84px] text-right bg-[#FBF7EC]">Slab1 ₹</th>
-                            <th className="px-2 py-2 w-[84px] text-right bg-[#FBF7EC]">Slab1 Promo ₹</th>
-                            <th className="px-2 py-2 w-[64px] text-right bg-[#FBF7EC]">Slab2 Qty</th>
-                            <th className="px-2 py-2 w-[84px] text-right bg-[#FBF7EC]">Slab2 ₹</th>
-                            <th className="px-2 py-2 w-[84px] text-right bg-[#FBF7EC]">Slab2 Promo ₹</th>
-                            <th className="px-2 py-2 w-[80px] text-right">Promo ₹</th>
-                            <th className="px-2 py-2 w-[68px] text-right">Stock</th>
-                            <th className="px-2 py-2 w-[150px]">Image URL</th>
-                            <th className="px-2 py-2 w-[48px] text-center sticky right-0 bg-[#F3F4F6] z-40 border-r-0">Skip</th>
+                            <th className="px-2 py-1.5 w-[44px] text-center sticky left-0 bg-[#F3F4F6] z-40 border-r border-[#E2E2E2]">#</th>
+                            <th className="px-2 py-1.5 w-[280px] sticky left-[44px] bg-[#F3F4F6] z-40 border-r border-[#E2E2E2]">Product Name</th>
+                            {COLUMNS.slice(1).map((col) => (
+                              <th key={col.key} className={cn("px-2.5 py-1.5 border-b border-[#E2E2E2] font-bold text-center", col.width, col.bg || '')}>
+                                {col.label}
+                              </th>
+                            ))}
+                            <th className="px-2 py-1.5 w-[48px] text-center sticky right-0 bg-[#F3F4F6] z-40 border-r-0">Skip</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -500,19 +732,6 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                             const skipped = skipRows.has(item.row);
                             const rowEdit = edits[item.row] ?? {};
                             const hasLocalEdits = Object.keys(rowEdit).length > 0;
-                            const nameVal = rowEdit.name ?? item.name;
-                            const skuVal = rowEdit.sku ?? (item.sku ?? '');
-                            const hsnVal = rowEdit.hsn ?? (item.hsn ?? '');
-                            const brandVal = rowEdit.brand ?? (item.brand ?? '');
-                            const unitVal = rowEdit.unit ?? (item.unit ?? '');
-                            const catVal = rowEdit.category ?? (item.category ?? '');
-                            const priceVal = rowEdit.basePrice ?? item.basePrice;
-                            const taxVal = rowEdit.taxPercent ?? item.taxPercent;
-                            const promoVal = rowEdit.promoPrice ?? (item.promoPrice ?? null);
-                            const stockVal = rowEdit.stock ?? (item.stock ?? 0);
-                            const imageUrlVal = rowEdit.imageUrl !== undefined ? rowEdit.imageUrl : (item.imageUrl ?? '');
-                            const imageNameVal = rowEdit.imageName !== undefined ? rowEdit.imageName : (item.imageName ?? '');
-                            const grossVal = Math.round(priceVal * (1 + taxVal / 100) * 100) / 100;
                             // Slab tiers (gross rate/unit) from edit or parsed file.
                             const slabSrc = rowEdit.slabs ?? (item.bulkSlabs ?? []).map(s => ({ minQty: s.minQty, grossRate: s.grossRate, promoGrossRate: s.promoGrossRate }));
                             const s1q = slabSrc[0]?.minQty ?? ''; const s1r = slabSrc[0]?.grossRate ?? ''; const s1p = slabSrc[0]?.promoGrossRate ?? '';
@@ -524,74 +743,168 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                               : 'bg-white';
                             return (
                               <tr key={item.row} className={cn(rowBg, skipped && 'opacity-40', 'border-b border-[#EFEFEF] hover:bg-[#299E60]/[0.04]')}>
-                                <td className={cn('px-2 py-1 text-center font-semibold text-[#9CA3AF] sticky left-0 z-20', rowBg)}>{item.row}</td>
-                                <td className={cn('px-1 py-0.5 sticky left-[44px] z-20', rowBg)}>
-                                  <input type="text" value={nameVal} onChange={e => setEdit(item.row, 'name', e.target.value)} className={cellInput} />
+                                <td className={cn('px-2 py-1 text-center font-semibold text-[#9CA3AF] sticky left-0 z-20 border-r border-[#EFEFEF]', rowBg)}>{item.row}</td>
+                                <td className={cn('px-1 py-0.5 sticky left-[44px] z-20 border-r border-[#EFEFEF]', rowBg)}>
+                                  <input type="text" value={getVal(item, 'name')} onChange={e => setVal(item.row, 'name', e.target.value)} className={cellInput} />
                                 </td>
-                                <td className="px-2 py-1 text-center">
-                                  <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide',
-                                    item.action === 'create' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-700')}>
-                                    {item.action === 'create' ? 'New' : 'Upd'}
-                                  </span>
-                                </td>
-                                <td className="px-1 py-0.5">
-                                  <div className="flex items-center gap-1.5 px-0.5">
-                                    <div
-                                      onClick={() => {
-                                        const url = imageUrlVal || (imageNameVal ? `/uploads/${imageNameVal}` : '');
-                                        if (url) window.open(url, '_blank');
-                                      }}
-                                      className="w-7 h-7 rounded border border-[#EEEEEE] overflow-hidden flex-shrink-0 cursor-pointer hover:opacity-85 flex items-center justify-center bg-gray-50"
-                                      title="Click to view image"
-                                    >
-                                      {imageUrlVal || imageNameVal ? (
-                                        <img
-                                          src={imageUrlVal || `/uploads/${imageNameVal}`}
-                                          alt=""
-                                          className="w-full h-full object-cover"
-                                          onError={(e) => {
-                                            (e.target as HTMLElement).style.display = 'none';
-                                          }}
-                                        />
-                                      ) : (
-                                        <span className="text-[8px] text-gray-400">None</span>
-                                      )}
-                                    </div>
-                                    <input
-                                      type="text"
-                                      value={imageNameVal}
-                                      onChange={e => setEdit(item.row, 'imageName', e.target.value)}
-                                      placeholder="Image Name"
-                                      className={cellInput}
-                                    />
-                                  </div>
-                                </td>
-                                <td className="px-1 py-0.5"><input type="text" value={skuVal} onChange={e => setEdit(item.row, 'sku', e.target.value)} className={cellInput} /></td>
-                                <td className="px-1 py-0.5"><input type="text" value={hsnVal} onChange={e => setEdit(item.row, 'hsn', e.target.value)} placeholder="—" className={cellInput} /></td>
-                                <td className="px-1 py-0.5"><input type="text" value={brandVal} onChange={e => setEdit(item.row, 'brand', e.target.value)} placeholder="—" className={cellInput} /></td>
-                                <td className="px-1 py-0.5"><input type="text" value={unitVal} onChange={e => setEdit(item.row, 'unit', e.target.value)} placeholder="—" className={cellInput} /></td>
-                                <td className="px-1 py-0.5">
-                                  <select value={catVal} onChange={e => setEdit(item.row, 'category', e.target.value || undefined)} className={cn(cellInput, 'appearance-none', !catVal && 'text-rose-400')}>
-                                    <option value="">— Select —</option>
-                                    {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                                  </select>
-                                </td>
-                                <td className="px-1 py-0.5 bg-[#299E60]/[0.04]">
-                                  <input type="number" step="0.01" value={priceVal} onChange={e => setEdit(item.row, 'basePrice', parseFloat(e.target.value) || 0)} className={cn(cellInput, 'text-right')} />
-                                </td>
-                                <td className="px-1 py-0.5 bg-[#299E60]/[0.04]">
-                                  <input type="number" value={taxVal} onChange={e => setEdit(item.row, 'taxPercent', parseFloat(e.target.value) || 0)} className={cn(cellInput, 'text-right')} />
-                                </td>
-                                <td className="px-2 py-1 text-right font-bold text-[#181725] bg-[#299E60]/[0.04] tabular-nums">{inr(grossVal)}</td>
-                                <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" value={s1q} placeholder="—" onChange={e => setSlab(item.row, item, 0, 'minQty', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
-                                <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" step="0.01" value={s1r} placeholder="—" onChange={e => setSlab(item.row, item, 0, 'grossRate', parseFloat(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
-                                <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" step="0.01" value={s1p} placeholder="—" onChange={e => setSlab(item.row, item, 0, 'promoGrossRate', e.target.value === '' ? null : (parseFloat(e.target.value) || 0))} className={cn(cellInput, 'text-right')} /></td>
-                                <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" value={s2q} placeholder="—" onChange={e => setSlab(item.row, item, 1, 'minQty', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
-                                <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" step="0.01" value={s2r} placeholder="—" onChange={e => setSlab(item.row, item, 1, 'grossRate', parseFloat(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
-                                <td className="px-1 py-0.5 bg-amber-50/40"><input type="number" step="0.01" value={s2p} placeholder="—" onChange={e => setSlab(item.row, item, 1, 'promoGrossRate', e.target.value === '' ? null : (parseFloat(e.target.value) || 0))} className={cn(cellInput, 'text-right')} /></td>
-                                <td className="px-1 py-0.5"><input type="number" step="0.01" value={promoVal ?? ''} placeholder="—" onChange={e => setEdit(item.row, 'promoPrice', e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0))} className={cn(cellInput, 'text-right')} /></td>
-                                <td className="px-1 py-0.5"><input type="number" value={stockVal} onChange={e => setEdit(item.row, 'stock', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right')} /></td>
-                                <td className="px-1 py-0.5"><input type="text" value={imageUrlVal} onChange={e => setEdit(item.row, 'imageUrl', e.target.value)} placeholder="—" className={cellInput} /></td>
+                                {COLUMNS.slice(1).map((col) => {
+                                  if (col.type === 'custom') {
+                                    if (col.key === 'action') {
+                                      return (
+                                        <td key={col.key} className="px-2 py-1 text-center">
+                                          <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide',
+                                            item.action === 'create' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-700')}>
+                                            {item.action === 'create' ? 'New' : 'Upd'}
+                                          </span>
+                                        </td>
+                                      );
+                                    }
+                                    if (col.key === 'image') {
+                                      return (
+                                        <td key={col.key} className="px-1 py-0.5">
+                                          <div className="flex items-center gap-1.5 px-0.5">
+                                            <div
+                                              onClick={() => {
+                                                const url = getVal(item, 'imageUrl') || (getVal(item, 'imageName') ? `/uploads/${getVal(item, 'imageName')}` : '');
+                                                if (url) window.open(url, '_blank');
+                                              }}
+                                              className="w-7 h-7 rounded border border-[#EEEEEE] overflow-hidden flex-shrink-0 cursor-pointer hover:opacity-85 flex items-center justify-center bg-gray-50"
+                                              title="Click to view image"
+                                            >
+                                              {getVal(item, 'imageUrl') || getVal(item, 'imageName') ? (
+                                                <img
+                                                  src={getVal(item, 'imageUrl') || `/uploads/${getVal(item, 'imageName')}`}
+                                                  alt=""
+                                                  className="w-full h-full object-cover"
+                                                  onError={(e) => {
+                                                    (e.target as HTMLElement).style.display = 'none';
+                                                  }}
+                                                />
+                                              ) : (
+                                                <span className="text-[8px] text-gray-400">None</span>
+                                              )}
+                                            </div>
+                                            <input
+                                              type="text"
+                                              value={getVal(item, 'imageName')}
+                                              onChange={e => setVal(item.row, 'imageName', e.target.value)}
+                                              placeholder="Image Name"
+                                              className={cellInput}
+                                            />
+                                          </div>
+                                        </td>
+                                      );
+                                    }
+                                    if (col.key === 'grossPrice') {
+                                      const price = getVal(item, 'basePrice') || 0;
+                                      const tax = getVal(item, 'taxPercent') || 0;
+                                      const gross = Math.round(price * (1 + tax / 100) * 100) / 100;
+                                      return (
+                                        <td key={col.key} className={cn("px-2 py-1 text-right font-bold text-[#181725] tabular-nums", col.bg)}>
+                                          {inr(gross)}
+                                        </td>
+                                      );
+                                    }
+                                    if (col.key === 'slab1Qty') {
+                                      return (
+                                        <td key={col.key} className={cn("px-1 py-0.5", col.bg)}>
+                                          <input type="number" value={s1q} placeholder="—" onChange={e => setSlab(item.row, item, 0, 'minQty', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right')} />
+                                        </td>
+                                      );
+                                    }
+                                    if (col.key === 'slab1Rate') {
+                                      return (
+                                        <td key={col.key} className={cn("px-1 py-0.5", col.bg)}>
+                                          <input type="number" step="0.01" value={s1r} placeholder="—" onChange={e => setSlab(item.row, item, 0, 'grossRate', parseFloat(e.target.value) || 0)} className={cn(cellInput, 'text-right')} />
+                                        </td>
+                                      );
+                                    }
+                                    if (col.key === 'slab1PromoRate') {
+                                      return (
+                                        <td key={col.key} className={cn("px-1 py-0.5", col.bg)}>
+                                          <input type="number" step="0.01" value={s1p} placeholder="—" onChange={e => setSlab(item.row, item, 0, 'promoGrossRate', e.target.value === '' ? null : (parseFloat(e.target.value) || 0))} className={cn(cellInput, 'text-right')} />
+                                        </td>
+                                      );
+                                    }
+                                    if (col.key === 'slab2Qty') {
+                                      return (
+                                        <td key={col.key} className={cn("px-1 py-0.5", col.bg)}>
+                                          <input type="number" value={s2q} placeholder="—" onChange={e => setSlab(item.row, item, 1, 'minQty', parseInt(e.target.value) || 0)} className={cn(cellInput, 'text-right')} />
+                                        </td>
+                                      );
+                                    }
+                                    if (col.key === 'slab2Rate') {
+                                      return (
+                                        <td key={col.key} className={cn("px-1 py-0.5", col.bg)}>
+                                          <input type="number" step="0.01" value={s2r} placeholder="—" onChange={e => setSlab(item.row, item, 1, 'grossRate', parseFloat(e.target.value) || 0)} className={cn(cellInput, 'text-right')} />
+                                        </td>
+                                      );
+                                    }
+                                    if (col.key === 'slab2PromoRate') {
+                                      return (
+                                        <td key={col.key} className={cn("px-1 py-0.5", col.bg)}>
+                                          <input type="number" step="0.01" value={s2p} placeholder="—" onChange={e => setSlab(item.row, item, 1, 'promoGrossRate', e.target.value === '' ? null : (parseFloat(e.target.value) || 0))} className={cn(cellInput, 'text-right')} />
+                                        </td>
+                                      );
+                                    }
+                                  }
+
+                                  if (col.type === 'checkbox') {
+                                    return (
+                                      <td key={col.key} className={cn("p-0 text-center", col.width, col.bg || '')}>
+                                        <div className="flex items-center justify-center w-full h-[32px]">
+                                          <input
+                                            type="checkbox"
+                                            checked={getVal(item, col.key) === true || String(getVal(item, col.key)).toLowerCase() === 'true'}
+                                            onChange={(e) => setVal(item.row, col.key, e.target.checked)}
+                                            className="w-4 h-4 accent-[#299E60] cursor-pointer"
+                                          />
+                                        </div>
+                                      </td>
+                                    );
+                                  }
+
+                                  if (col.type === 'select') {
+                                    const val = getVal(item, col.key);
+                                    return (
+                                      <td key={col.key} className={cn("px-1 py-0.5 focus-within:ring-1 focus-within:ring-[#299E60]", col.width, col.bg || '')}>
+                                        <select
+                                          value={val}
+                                          onChange={e => setVal(item.row, col.key, e.target.value || undefined)}
+                                          className={cn(cellInput, 'appearance-none', col.key === 'category' && !val && 'text-rose-400')}
+                                        >
+                                          <option value="">— Select —</option>
+                                          {col.key === 'category' ? (
+                                            categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)
+                                          ) : (
+                                            (col.options || []).map((opt: string) => <option key={opt} value={opt}>{opt || '—'}</option>)
+                                          )}
+                                        </select>
+                                      </td>
+                                    );
+                                  }
+
+                                  // Default inputs
+                                  return (
+                                    <td key={col.key} className={cn("p-0 focus-within:ring-1 focus-within:ring-[#299E60]", col.width, col.bg || '')}>
+                                      <input
+                                        type={col.type}
+                                        value={getVal(item, col.key)}
+                                        onChange={(e) => {
+                                          const rawVal = e.target.value;
+                                          const finalVal = col.type === 'number' ? (rawVal === '' ? undefined : (parseFloat(rawVal) || 0)) : rawVal;
+                                          setVal(item.row, col.key, finalVal);
+                                        }}
+                                        className={cn(
+                                          cellInput,
+                                          col.type === 'number' ? 'text-right font-mono' : 'text-left',
+                                          col.key === 'sku' || col.key === 'hsn' ? 'font-mono text-[11px]' : ''
+                                        )}
+                                        placeholder="—"
+                                      />
+                                    </td>
+                                  );
+                                })}
                                 <td className={cn('px-1 py-1 text-center sticky right-0 z-20 border-r-0', rowBg)}>
                                   <button onClick={() => toggleSkip(item.row)} title={skipped ? 'Include row' : 'Skip row'} className={cn('w-[22px] h-[22px] rounded flex items-center justify-center transition-colors mx-auto',
                                     skipped ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-gray-100 text-[#9CA3AF] hover:bg-rose-50 hover:text-rose-600')}>
@@ -727,7 +1040,7 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                 {/* Footer */}
                 <div className="flex items-center justify-end gap-3 pt-3">
                   <button onClick={() => setStep('upload')} className="h-[44px] px-6 text-[13px] font-bold text-[#7C7C7C] hover:text-[#181725] transition-colors">Back</button>
-                  <button onClick={handleCommit} disabled={committing || activeItems.length === 0} className="h-[44px] px-8 bg-[#299E60] hover:bg-[#238a54] disabled:bg-[#DCDCDC] text-white rounded-[12px] text-[13px] font-bold flex items-center justify-center gap-2 shadow-sm disabled:cursor-not-allowed">
+                  <button onClick={() => handleCommit()} disabled={committing || activeItems.length === 0} className="h-[44px] px-8 bg-[#299E60] hover:bg-[#238a54] disabled:bg-[#DCDCDC] text-white rounded-[12px] text-[13px] font-bold flex items-center justify-center gap-2 shadow-sm disabled:cursor-not-allowed">
                     {committing ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
                     {committing ? 'Importing…' : `Import ${activeItems.length} product${activeItems.length === 1 ? '' : 's'}`}
                   </button>
@@ -739,11 +1052,23 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
             {step === 'result' && result && (
               <div className="max-w-[560px] mx-auto py-8 text-center space-y-8 animate-in fade-in duration-300">
                 <div className="flex flex-col items-center gap-3">
-                  <div className="w-[64px] h-[64px] rounded-full bg-[#EBFDF2] flex items-center justify-center text-[#299E60] border border-[#299E60]/10 shadow-sm">
-                    <Check size={32} strokeWidth={3} />
-                  </div>
-                  <h3 className="text-[22px] font-black text-[#181725]">Import complete</h3>
-                  <p className="text-[13px] text-[#7C7C7C] font-semibold">Products and pricing tables have been synchronized.</p>
+                  {result.blocked ? (
+                    <>
+                      <div className="w-[64px] h-[64px] rounded-full bg-[#FFF0F0] flex items-center justify-center text-[#E74C3C] border border-[#E74C3C]/10 shadow-sm">
+                        <AlertTriangle size={30} strokeWidth={2.5} />
+                      </div>
+                      <h3 className="text-[22px] font-black text-[#181725]">Import blocked</h3>
+                      <p className="text-[13px] text-[#7C7C7C] font-semibold">Nothing was saved. Fix the rows below, or commit the valid rows anyway.</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-[64px] h-[64px] rounded-full bg-[#EBFDF2] flex items-center justify-center text-[#299E60] border border-[#299E60]/10 shadow-sm">
+                        <Check size={32} strokeWidth={3} />
+                      </div>
+                      <h3 className="text-[22px] font-black text-[#181725]">Import complete</h3>
+                      <p className="text-[13px] text-[#7C7C7C] font-semibold">{result.imported} product{result.imported === 1 ? '' : 's'} synchronized.</p>
+                    </>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 bg-white border border-[#EEEEEE] rounded-[16px] p-6 shadow-sm">
@@ -758,12 +1083,25 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                 </div>
 
                 {result.errors.length > 0 && (
-                  <div className="bg-[#FFF0F0] border border-[#E74C3C]/20 rounded-[16px] p-5 text-left text-[13px] font-semibold text-[#E74C3C] space-y-2">
-                    <p className="flex items-center gap-2"><AlertTriangle size={16} /> Some rows failed:</p>
+                  <div className="bg-[#FFF0F0] border border-[#E74C3C]/20 rounded-[16px] p-5 text-left text-[13px] font-semibold text-[#E74C3C] space-y-3">
+                    <p className="flex items-center gap-2"><AlertTriangle size={16} /> {result.blocked ? 'Strict mode blocked the import — the following rows have errors:' : 'Some rows failed:'}</p>
                     <ul className="list-disc pl-5 font-normal text-[#181725] text-[12.5px] max-h-[140px] overflow-y-auto space-y-1">
-                      {result.errors.map((err, i) => (<li key={i}>Row {err.row}: {err.message}</li>))}
+                      {result.errors.map((err, i) => (<li key={i}>Row {err.row}{err.field ? ` · ${err.field}` : ''}: {err.message}</li>))}
                     </ul>
                   </div>
+                )}
+
+                {result.errorReport && (
+                  <button onClick={downloadErrorReport} className="h-[40px] mx-auto px-5 bg-white border border-[#E74C3C]/30 hover:bg-[#FFF0F0] text-[#E74C3C] rounded-[10px] text-[12px] font-bold flex items-center gap-1.5 transition-all">
+                    <Download size={14} /> Download error report
+                  </button>
+                )}
+
+                {result.blocked && (
+                  <button onClick={() => handleCommit(true)} disabled={committing} className="h-[44px] w-full px-8 bg-[#299E60] hover:bg-[#238a54] disabled:bg-[#DCDCDC] text-white rounded-[12px] text-[13px] font-bold flex items-center justify-center gap-2 shadow-sm disabled:cursor-not-allowed">
+                    {committing ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} strokeWidth={3} />}
+                    {committing ? 'Committing…' : 'Commit valid rows anyway'}
+                  </button>
                 )}
 
                 {backupData && !undone && (

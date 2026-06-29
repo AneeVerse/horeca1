@@ -28,8 +28,19 @@ import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { parseProductImport, generateImportTemplate, type ParsedProductRow } from '@/modules/import-export/excel.service';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
-import { findOrCreateMaster, findOrCreateCategoryByName } from '@/modules/catalog/catalog.service';
+import {
+  composeVendorListingSku,
+  findApprovedMasterByNameBrand,
+  resolveImportCategoryIds,
+  syncImportProductCategories,
+} from '@/modules/catalog/catalog.service';
 import { findOrCreateBrandByName } from '@/modules/brand/brand.service';
+import {
+  partitionImportRows,
+  buildImportErrorReportCsv,
+  type ImportErrorRowData,
+} from '@/modules/import-export/import-commit';
+import { Prisma } from '@prisma/client';
 
 // ── Response shapes — kept identical to the admin importer so the review
 //    wizard UI is portable between the two portals. ──
@@ -69,6 +80,15 @@ interface PreviewItem {
     sku?: string;
   };
   skipReason?: string;
+  parentCategory?: string;
+  subCategory?: string;
+  additionalSubCategories?: string[];
+  vegNonVeg?: string;
+  storageType?: string;
+  moq?: number;
+  aliasName?: string;
+  upc?: string;
+  metadata?: any;
 }
 
 interface PreviewResponse {
@@ -81,9 +101,14 @@ interface PreviewResponse {
 }
 
 interface CommitResponse {
+  blocked: boolean;
+  totalRows: number;
+  validRows: number;
   created: number;
   updated: number;
-  errors: { row: number; message: string }[];
+  imported: number;
+  errors: { row: number; field?: string; message: string }[];
+  errorReport?: string;
   backupId: string;
 }
 
@@ -250,6 +275,15 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
               brand: existing.brand || undefined,
               sku: existing.sku || undefined,
             },
+            parentCategory: r.parentCategory,
+            subCategory: r.subCategory,
+            additionalSubCategories: r.additionalSubCategories,
+            vegNonVeg: r.vegNonVeg,
+            storageType: r.storageType,
+            moq: r.moq,
+            aliasName: r.aliasName,
+            upc: r.upc,
+            metadata: r.metadata,
           });
         } else {
           creates++;
@@ -272,6 +306,15 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
             bulkSlabCount: r.bulkSlabs.length,
             bulkSlabs: slabPreview,
             hasPromo: !!r.promoPrice,
+            parentCategory: r.parentCategory,
+            subCategory: r.subCategory,
+            additionalSubCategories: r.additionalSubCategories,
+            vegNonVeg: r.vegNonVeg,
+            storageType: r.storageType,
+            moq: r.moq,
+            aliasName: r.aliasName,
+            upc: r.upc,
+            metadata: r.metadata,
           });
         }
       });
@@ -317,8 +360,9 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       })),
     }));
 
-    let created = 0, updated = 0;
-    const commitErrors: { row: number; message: string }[] = [...parseErrors];
+    // Strict by default: any invalid row blocks the whole commit. force=true
+    // commits the valid rows and skips the invalid ones.
+    const force = (formData.get('force') as string | null) === 'true';
 
     // Rows the vendor chose to skip in the review table.
     const skipRowsStr = formData.get('skipRows') as string | null;
@@ -328,7 +372,22 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     // time so a forged extra key can't reach Prisma.
     const editsStr = formData.get('edits') as string | null;
     type EditSlab = { minQty: number; grossRate: number; promoGrossRate?: number | null };
-    type EditRow = Partial<{ name: string; sku: string; hsn: string; brand: string; unit: string; category: string; basePrice: number; taxPercent: number; promoPrice: number; stock: number; imageUrl: string; imageName: string; slabs: EditSlab[] }>;
+    type EditRow = Partial<{
+      name: string; sku: string; hsn: string; brand: string; unit: string; category: string;
+      basePrice: number; taxPercent: number; promoPrice: number; stock: number; imageUrl: string; imageName: string;
+      slabs: EditSlab[];
+      parentCategory: string; subCategory: string; additionalSubCategories: string[];
+      vegNonVeg: string; storageType: string; moq: number; aliasName: string; upc: string;
+      account: string; accountCode: string; taxable: boolean; exemptionReason: string; taxabilityType: string;
+      productType: string; intraStateTaxName: string; intraStateTaxType: string; interStateTaxName: string;
+      interStateTaxRate: number; interStateTaxType: string; platformCommission: number;
+      inventoryAccount: string; inventoryAccountCode: string; valuationMethod: string; trackInventory: boolean;
+      reorderPoint: number; openingStock: number; packageWeight: number; packageLength: number;
+      packageWidth: number; packageHeight: number; dimensionUnit: string; weightUnit: string;
+      ean: string; isbn: string; itemType: string; source: string; referenceId: string;
+      lastSync: string; sellable: boolean; purchasable: boolean; variantMapping: string;
+      itemStatus: string; activeOnlineStore: boolean;
+    }>;
     let editsMap: Record<number, EditRow> = {};
     if (editsStr) {
       try {
@@ -359,6 +418,57 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
                 promoGrossRate: typeof s.promoGrossRate === 'number' && s.promoGrossRate > 0 ? s.promoGrossRate : null,
               }));
           }
+          if (typeof v.parentCategory === 'string') safe.parentCategory = v.parentCategory.trim();
+          if (typeof v.subCategory === 'string') safe.subCategory = v.subCategory.trim();
+          if (Array.isArray(v.additionalSubCategories)) {
+            safe.additionalSubCategories = v.additionalSubCategories.map(s => String(s).trim()).filter(Boolean);
+          }
+          if (typeof v.vegNonVeg === 'string') safe.vegNonVeg = v.vegNonVeg.trim();
+          if (typeof v.storageType === 'string') safe.storageType = v.storageType.trim();
+          if (typeof v.moq === 'number' && v.moq > 0) safe.moq = v.moq;
+          if (typeof v.aliasName === 'string') safe.aliasName = v.aliasName.trim();
+          if (typeof v.upc === 'string') safe.upc = v.upc.trim();
+
+          if (typeof v.account === 'string') safe.account = v.account.trim();
+          if (typeof v.accountCode === 'string') safe.accountCode = v.accountCode.trim();
+          if (v.taxable !== undefined) safe.taxable = Boolean(v.taxable);
+          if (typeof v.exemptionReason === 'string') safe.exemptionReason = v.exemptionReason.trim();
+          if (typeof v.taxabilityType === 'string') safe.taxabilityType = v.taxabilityType.trim();
+          if (typeof v.productType === 'string') safe.productType = v.productType.trim();
+          if (typeof v.intraStateTaxName === 'string') safe.intraStateTaxName = v.intraStateTaxName.trim();
+          if (typeof v.intraStateTaxType === 'string') safe.intraStateTaxType = v.intraStateTaxType.trim();
+          if (typeof v.interStateTaxName === 'string') safe.interStateTaxName = v.interStateTaxName.trim();
+          if (typeof v.interStateTaxRate === 'number') safe.interStateTaxRate = v.interStateTaxRate;
+          if (typeof v.interStateTaxType === 'string') safe.interStateTaxType = v.interStateTaxType.trim();
+          if (typeof v.platformCommission === 'number') safe.platformCommission = v.platformCommission;
+
+          if (typeof v.inventoryAccount === 'string') safe.inventoryAccount = v.inventoryAccount.trim();
+          if (typeof v.inventoryAccountCode === 'string') safe.inventoryAccountCode = v.inventoryAccountCode.trim();
+          if (typeof v.valuationMethod === 'string') safe.valuationMethod = v.valuationMethod.trim();
+          if (v.trackInventory !== undefined) safe.trackInventory = Boolean(v.trackInventory);
+          if (typeof v.reorderPoint === 'number') safe.reorderPoint = v.reorderPoint;
+          if (typeof v.openingStock === 'number') safe.openingStock = v.openingStock;
+
+          if (typeof v.packageWeight === 'number') safe.packageWeight = v.packageWeight;
+          if (typeof v.packageLength === 'number') safe.packageLength = v.packageLength;
+          if (typeof v.packageWidth === 'number') safe.packageWidth = v.packageWidth;
+          if (typeof v.packageHeight === 'number') safe.packageHeight = v.packageHeight;
+          if (typeof v.dimensionUnit === 'string') safe.dimensionUnit = v.dimensionUnit.trim();
+          if (typeof v.weightUnit === 'string') safe.weightUnit = v.weightUnit.trim();
+
+          if (typeof v.ean === 'string') safe.ean = v.ean.trim();
+          if (typeof v.isbn === 'string') safe.isbn = v.isbn.trim();
+
+          if (typeof v.itemType === 'string') safe.itemType = v.itemType.trim();
+          if (typeof v.source === 'string') safe.source = v.source.trim();
+          if (typeof v.referenceId === 'string') safe.referenceId = v.referenceId.trim();
+          if (typeof v.lastSync === 'string') safe.lastSync = v.lastSync.trim();
+          if (v.sellable !== undefined) safe.sellable = Boolean(v.sellable);
+          if (v.purchasable !== undefined) safe.purchasable = Boolean(v.purchasable);
+          if (typeof v.variantMapping === 'string') safe.variantMapping = v.variantMapping.trim();
+          if (typeof v.itemStatus === 'string') safe.itemStatus = v.itemStatus.trim();
+          if (v.activeOnlineStore !== undefined) safe.activeOnlineStore = Boolean(v.activeOnlineStore);
+
           editsMap[n] = safe;
         }
       } catch { editsMap = {}; }
@@ -381,6 +491,23 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       return candidate;
     }
 
+    // ── PASS 1: resolve reference data + validate every row. NO product writes.
+    //    Category/brand auto-creation is idempotent reference data (pending admin
+    //    approval) and may persist even if the atomic product commit later aborts.
+    interface PreparedRow {
+      rowNum: number;
+      r: ParsedProductRow;
+      existing: (typeof existingProducts)[number] | null;
+      categoryId: string | null;
+      categoryIds: string[];
+      masterProductId: string | null;
+      approvalStatus: 'pending' | 'approved';
+      composedSku: string | null;
+      vendorSku: string | null;
+    }
+    const prepared: PreparedRow[] = [];
+    const validationErrors: { row: number; field?: string; message: string }[] = [];
+
     for (let i = 0; i < rows.length; i++) {
       const parsedRow = rows[i];
       const rowNum = i + 2;
@@ -389,7 +516,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
 
       // Merge inline edits OVER the parsed row — vendor keystrokes win.
       const e = editsMap[rowNum] ?? {};
-      const r = {
+      const r: ParsedProductRow = {
         ...parsedRow,
         ...(e.name      !== undefined ? { name: e.name } : {}),
         ...(e.sku       !== undefined ? { sku: e.sku } : {}),
@@ -403,7 +530,69 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
         ...(e.stock     !== undefined ? { stock: e.stock } : {}),
         ...(e.imageUrl  !== undefined ? { imageUrl: e.imageUrl } : {}),
         ...(e.imageName !== undefined ? { imageName: e.imageName } : {}),
+        ...(e.parentCategory !== undefined ? { parentCategory: e.parentCategory } : {}),
+        ...(e.subCategory !== undefined ? { subCategory: e.subCategory } : {}),
+        ...(e.additionalSubCategories !== undefined ? { additionalSubCategories: e.additionalSubCategories } : {}),
+        ...(e.vegNonVeg !== undefined ? { vegNonVeg: e.vegNonVeg } : {}),
+        ...(e.storageType !== undefined ? { storageType: e.storageType } : {}),
+        ...(e.moq !== undefined ? { moq: e.moq } : {}),
+        ...(e.aliasName !== undefined ? { aliasName: e.aliasName } : {}),
+        ...(e.upc !== undefined ? { upc: e.upc } : {}),
       };
+
+      // Restructure metadata edits into r.metadata
+      const meta = { ...(r.metadata || {}) };
+      meta.accounting = {
+        ...(meta.accounting || {}),
+        ...(e.account !== undefined ? { account: e.account } : {}),
+        ...(e.accountCode !== undefined ? { accountCode: e.accountCode } : {}),
+        ...(e.taxable !== undefined ? { taxable: e.taxable } : {}),
+        ...(e.exemptionReason !== undefined ? { exemptionReason: e.exemptionReason } : {}),
+        ...(e.taxabilityType !== undefined ? { taxabilityType: e.taxabilityType } : {}),
+        ...(e.intraStateTaxName !== undefined ? { intraStateTaxName: e.intraStateTaxName } : {}),
+        ...(e.intraStateTaxType !== undefined ? { intraStateTaxType: e.intraStateTaxType } : {}),
+        ...(e.interStateTaxName !== undefined ? { interStateTaxName: e.interStateTaxName } : {}),
+        ...(e.interStateTaxRate !== undefined ? { interStateTaxRate: e.interStateTaxRate } : {}),
+        ...(e.interStateTaxType !== undefined ? { interStateTaxType: e.interStateTaxType } : {}),
+        ...(e.platformCommission !== undefined ? { platformCommission: e.platformCommission } : {}),
+      };
+      meta.inventory = {
+        ...(meta.inventory || {}),
+        ...(e.inventoryAccount !== undefined ? { inventoryAccount: e.inventoryAccount } : {}),
+        ...(e.inventoryAccountCode !== undefined ? { inventoryAccountCode: e.inventoryAccountCode } : {}),
+        ...(e.valuationMethod !== undefined ? { valuationMethod: e.valuationMethod } : {}),
+        ...(e.trackInventory !== undefined ? { trackInventory: e.trackInventory } : {}),
+        ...(e.reorderPoint !== undefined ? { reorderPoint: e.reorderPoint } : {}),
+        ...(e.openingStock !== undefined ? { openingStock: e.openingStock } : {}),
+      };
+      meta.packaging = {
+        ...(meta.packaging || {}),
+        ...(e.packageWeight !== undefined ? { packageWeight: e.packageWeight } : {}),
+        ...(e.packageLength !== undefined ? { packageLength: e.packageLength } : {}),
+        ...(e.packageWidth !== undefined ? { packageWidth: e.packageWidth } : {}),
+        ...(e.packageHeight !== undefined ? { packageHeight: e.packageHeight } : {}),
+        ...(e.dimensionUnit !== undefined ? { dimensionUnit: e.dimensionUnit } : {}),
+        ...(e.weightUnit !== undefined ? { weightUnit: e.weightUnit } : {}),
+      };
+      meta.identifiers = {
+        ...(meta.identifiers || {}),
+        ...(e.ean !== undefined ? { ean: e.ean } : {}),
+        ...(e.isbn !== undefined ? { isbn: e.isbn } : {}),
+      };
+      meta.attributes = {
+        ...(meta.attributes || {}),
+        ...(e.productType !== undefined ? { productType: e.productType } : {}),
+        ...(e.itemType !== undefined ? { itemType: e.itemType } : {}),
+        ...(e.source !== undefined ? { source: e.source } : {}),
+        ...(e.referenceId !== undefined ? { referenceId: e.referenceId } : {}),
+        ...(e.lastSync !== undefined ? { lastSync: e.lastSync } : {}),
+        ...(e.sellable !== undefined ? { sellable: e.sellable } : {}),
+        ...(e.purchasable !== undefined ? { purchasable: e.purchasable } : {}),
+        ...(e.variantMapping !== undefined ? { variantMapping: e.variantMapping } : {}),
+        ...(e.itemStatus !== undefined ? { itemStatus: e.itemStatus } : {}),
+        ...(e.activeOnlineStore !== undefined ? { activeOnlineStore: e.activeOnlineStore } : {}),
+      };
+      r.metadata = meta;
 
       // Edited slab tiers override the file's. Sheet uses GROSS rate/unit;
       // convert to the taxable rate updatePriceSlabs persists, using the row's tax%.
@@ -420,149 +609,237 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       }
 
       try {
-        // ── Resolve category. catMap holds only approved+active categories, so
-        //    a miss means the category is unknown (or only pending). Vendors
-        //    can't self-approve, so create/return a PENDING category and hold
-        //    the product for review. ──
-        let categoryId = r.category ? catMap.get(r.category.toLowerCase()) || null : null;
+        // ── Resolve hierarchical categories (Parent / Sub / Additional).
+        // Falls back to the legacy flat Category column during transition.
+        const hasCategoryData = !!(
+          r.parentCategory ||
+          r.subCategory ||
+          r.legacyCategory ||
+          (r.additionalSubCategories && r.additionalSubCategories.length > 0)
+        );
+        let categoryId: string | null = null;
+        let categoryIds: string[] = [];
         let categoryPending = false;
-        if (!categoryId && r.category) {
-          categoryId = await findOrCreateCategoryByName({ name: r.category, autoApprove: false, suggestedBy: ctx.userId });
-          if (categoryId) {
-            catMap.set(r.category.toLowerCase(), categoryId);
-            categoryPending = true; // resolved outside the approved set → treat as pending
-          }
+        if (hasCategoryData) {
+          const resolved = await resolveImportCategoryIds({
+            parentCategory: r.parentCategory,
+            subCategory: r.subCategory,
+            additionalSubCategories: r.additionalSubCategories,
+            legacyCategory: r.legacyCategory,
+            autoApprove: false,
+            suggestedBy: ctx.userId,
+            catMap,
+          });
+          categoryId = resolved.primaryCategoryId;
+          categoryIds = resolved.categoryIds;
+          categoryPending = resolved.pending;
         }
 
-        // ── Resolve brand. An unknown brand becomes a lightweight PENDING brand
-        //    record so it reaches the approvals queue instead of living only as
-        //    text on the product. ──
+        // ── Resolve brand → lightweight PENDING brand record when unknown.
         let brandPending = false;
         if (r.brand) {
           const resolvedBrand = await findOrCreateBrandByName({ name: r.brand, autoApprove: false, suggestedBy: ctx.userId });
           if (resolvedBrand && resolvedBrand.approvalStatus !== 'approved') brandPending = true;
         }
 
-        const existing = findExisting(r) ?? findCreated(r);
+        const existing = findExisting(r) ?? null;
 
-        if (existing) {
-          // ── UPDATE existing product (approval left untouched) ──
-          await prisma.product.update({
-            where: { id: existing.id },
-            data: {
-              name: r.name,
-              sku: r.sku ?? existing.sku,
-              categoryId: categoryId || existing.categoryId,
-              basePrice: r.basePrice,
-              taxPercent: r.taxPercent,
-              promoPrice: r.promoPrice || null,
-              promoStartTime: r.promoStartTime || null,
-              promoEndTime: r.promoEndTime || null,
-              // Only overwrite a descriptive field when THIS row carries a value —
-              // a blank cell (e.g. a duplicate row without the image URL) must
-              // leave the existing value alone, not revert it via a stale snapshot.
-              ...(r.hsn ? { hsn: r.hsn } : {}),
-              ...(r.unit ? { unit: r.unit } : {}),
-              ...(r.brand ? { brand: r.brand } : {}),
-              ...(r.imageUrl ? { imageUrl: r.imageUrl } : {}),
-            },
-          });
+        let masterProductId: string | null = null;
+        let approvalStatus: 'pending' | 'approved' = 'pending';
+        let composedSku: string | null = null;
+        const vendorSku: string | null = r.sku?.trim() || null;
 
-          if (r.stock !== undefined) {
-            await prisma.inventory.upsert({
-              where: { productId: existing.id },
-              update: { qtyAvailable: r.stock },
-              create: { productId: existing.id, vendorId, qtyAvailable: r.stock, lowStockThreshold: 10 },
-            });
-          }
-
-          await updatePriceSlabs(existing.id, vendorId, r);
-
+        if (!existing) {
+          // SKU-centric: only link to an already-approved master catalog item;
+          // unmatched rows stay pending for admin to assign a catalog SKU.
           if (categoryId) {
-            await prisma.productCategory.upsert({
-              where: { productId_categoryId: { productId: existing.id, categoryId } },
-              create: { productId: existing.id, categoryId, isPrimary: true },
-              update: { isPrimary: true },
-            });
+            const matched = await findApprovedMasterByNameBrand(r.name, r.brand ?? null);
+            if (matched) {
+              masterProductId = matched.id;
+              approvalStatus = 'approved';
+              // Compose + uniqueness-check the POS SKU NOW so a duplicate becomes a
+              // validation error (blocks strict commit) instead of a mid-write throw.
+              if (vendorSku) composedSku = await composeVendorListingSku(vendorId, vendorSku);
+            }
           }
-
-          updated++;
-        } else {
-          // ── CREATE new product ──
-          // P0-1: every product MUST map to a Horeca1 master SKU, exactly like
-          // the single-product create path (CatalogService.createProduct). The
-          // bulk path used to skip this, leaving imported rows orphaned from
-          // the central item master and un-reassignable. Link/create the master
-          // by (name, brand) when we have a resolved leaf category.
-          const masterProductId = categoryId
-            ? await findOrCreateMaster({ name: r.name, brand: r.brand ?? null, categoryId })
-            : null;
-
-          let approvalStatus: 'pending' | 'approved' = 'pending';
-          if (masterProductId) {
-            const approvedMaster = await prisma.masterProduct.findFirst({
-              where: { id: masterProductId, approvalStatus: 'approved', isActive: true },
-              select: { id: true },
-            });
-            if (approvedMaster) approvalStatus = 'approved';
-          }
-          // Invariant: an approved product must have an approved brand AND
-          // category. If this row introduced a pending brand/category, hold the
-          // product for review even when its master is approved.
+          // Invariant: an approved product needs an approved brand AND category.
           if (brandPending || categoryPending) approvalStatus = 'pending';
-
-          const product = await prisma.product.create({
-            data: {
-              vendorId,
-              categoryId,
-              masterProductId,
-              name: r.name,
-              slug: uniqueSlug(r.name),
-              sku: r.sku || null,
-              hsn: r.hsn || null,
-              unit: r.unit || null,
-              brand: r.brand || null,
-              basePrice: r.basePrice,
-              taxPercent: r.taxPercent,
-              promoPrice: r.promoPrice || null,
-              promoStartTime: r.promoStartTime || null,
-              promoEndTime: r.promoEndTime || null,
-              imageUrl: r.imageUrl || null,
-              approvalStatus,
-              inventory: {
-                create: { vendorId, qtyAvailable: r.stock ?? 0, lowStockThreshold: 10 },
-              },
-            },
-          });
-
-          if (categoryId) {
-            await prisma.productCategory.create({
-              data: { productId: product.id, categoryId, isPrimary: true },
-            });
-          }
-
-          await updatePriceSlabs(product.id, vendorId, r);
-
-          // Register so a later duplicate row in the same file updates THIS
-          // product instead of creating another copy.
-          registerCreated(product);
-
-          created++;
         }
+
+        prepared.push({ rowNum, r, existing, categoryId, categoryIds, masterProductId, approvalStatus, composedSku, vendorSku });
       } catch (err) {
-        commitErrors.push({
+        validationErrors.push({
           row: rowNum,
-          message: err instanceof Error ? err.message : 'Failed to process product',
+          message: err instanceof Error ? err.message : 'Failed to validate product',
         });
       }
+    }
+
+    // ── Decide the commit set. Strict (force=false): ANY error blocks everything.
+    const part = partitionImportRows({
+      rowNumbers: prepared.map((p) => p.rowNum),
+      errorRowNumbers: validationErrors.map((er) => er.row),
+      skipRowNumbers: [...skipRows] as number[],
+      force,
+    });
+    // Parse failures use a different (sheet) row-number space and never appear in
+    // `prepared`, so they can't be committed — but they DO block a strict commit.
+    const blocked = part.blocked || (parseErrors.length > 0 && !force);
+    const commitRowNumbers = blocked ? [] : part.commitRowNumbers;
+
+    const allErrors = [...parseErrors, ...validationErrors];
+    const rowData = new Map<number, ImportErrorRowData>(
+      prepared.map(
+        (p) =>
+          [p.rowNum, { name: p.r.name, sku: p.r.sku, hsn: p.r.hsn, brand: p.r.brand, netRate: p.r.basePrice }] as [
+            number,
+            ImportErrorRowData,
+          ],
+      ),
+    );
+    const errorReport = allErrors.length > 0 ? buildImportErrorReportCsv(rowData, allErrors) : undefined;
+
+    if (blocked) {
+      // Strict mode + invalid rows: write NOTHING. Client can re-submit with force=true.
+      return NextResponse.json({
+        success: true,
+        data: {
+          blocked: true,
+          totalRows: rows.length,
+          validRows: commitRowNumbers.length,
+          created: 0,
+          updated: 0,
+          imported: 0,
+          errors: allErrors,
+          errorReport,
+          backupId,
+          backup: productsToBackup,
+        } satisfies CommitResponse & { backup: typeof productsToBackup },
+      });
+    }
+
+    // ── PASS 2: atomic commit of the valid rows. All-or-nothing — if any write
+    //    throws, the whole transaction rolls back and nothing is persisted.
+    const commitSet = new Set(commitRowNumbers);
+    let created = 0;
+    let updated = 0;
+    const responseErrors = [...allErrors];
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (const p of prepared) {
+          if (!commitSet.has(p.rowNum)) continue;
+          const r = p.r;
+          // In-file duplicate (same SKU/name twice): the second row updates the
+          // product the first row just created inside this transaction.
+          const existing = p.existing ?? findCreated(r);
+
+          if (existing) {
+            // ── UPDATE existing product (approval left untouched) ──
+            await tx.product.update({
+              where: { id: existing.id },
+              data: {
+                name: r.name,
+                sku: r.sku ?? existing.sku,
+                categoryId: p.categoryId || existing.categoryId,
+                basePrice: r.basePrice,
+                taxPercent: r.taxPercent,
+                promoPrice: r.promoPrice || null,
+                promoStartTime: r.promoStartTime || null,
+                promoEndTime: r.promoEndTime || null,
+                // Only overwrite a descriptive field when THIS row carries a value.
+                ...(r.hsn ? { hsn: r.hsn } : {}),
+                ...(r.unit ? { unit: r.unit } : {}),
+                ...(r.brand ? { brand: r.brand } : {}),
+                ...(r.imageUrl ? { imageUrl: r.imageUrl } : {}),
+                // Deep-merge metadata section-by-section, taking only non-empty incoming
+                // values, so a partial re-import never wipes fields the row left blank.
+                ...(r.metadata ? { metadata: mergeMetadata((existing as { metadata?: unknown }).metadata, r.metadata) } : {}),
+                // Flat attributes
+                vegNonVeg: ['veg', 'nonveg', 'egg'].includes(r.vegNonVeg as any) ? (r.vegNonVeg as any) : undefined,
+                ...(r.storageType ? { storageType: r.storageType } : {}),
+                ...(r.moq !== undefined ? { minOrderQty: r.moq } : {}),
+                ...(r.aliasName ? { aliasNames: [r.aliasName] } : {}),
+              },
+            });
+
+            if (r.stock !== undefined) {
+              await tx.inventory.upsert({
+                where: { productId: existing.id },
+                update: { qtyAvailable: r.stock },
+                create: { productId: existing.id, vendorId, qtyAvailable: r.stock, lowStockThreshold: 10 },
+              });
+            }
+
+            await updatePriceSlabs(existing.id, vendorId, r, tx);
+            if (p.categoryIds.length > 0) {
+              await syncImportProductCategories(existing.id, p.categoryIds, tx);
+            }
+            updated++;
+          } else {
+            // ── CREATE new product ──
+            const product = await tx.product.create({
+              data: {
+                vendorId,
+                categoryId: p.categoryId,
+                masterProductId: p.masterProductId,
+                name: r.name,
+                slug: uniqueSlug(r.name),
+                sku: p.composedSku,
+                vendorSku: p.vendorSku,
+                hsn: r.hsn || null,
+                unit: r.unit || null,
+                brand: r.brand || null,
+                basePrice: r.basePrice,
+                taxPercent: r.taxPercent,
+                promoPrice: r.promoPrice || null,
+                promoStartTime: r.promoStartTime || null,
+                promoEndTime: r.promoEndTime || null,
+                imageUrl: r.imageUrl || null,
+                approvalStatus: p.approvalStatus,
+                metadata: r.metadata || {},
+                // Flat attributes
+                vegNonVeg: ['veg', 'nonveg', 'egg'].includes(r.vegNonVeg as any) ? (r.vegNonVeg as any) : null,
+                storageType: r.storageType || null,
+                minOrderQty: r.moq || 1,
+                aliasNames: r.aliasName ? [r.aliasName] : [],
+                inventory: {
+                  create: { vendorId, qtyAvailable: r.stock ?? 0, lowStockThreshold: 10 },
+                },
+              },
+            });
+
+            if (p.categoryIds.length > 0) {
+              await syncImportProductCategories(product.id, p.categoryIds, tx);
+            }
+            await updatePriceSlabs(product.id, vendorId, r, tx);
+            // Register so a later duplicate row in the same file updates THIS product.
+            registerCreated(product);
+            created++;
+          }
+        }
+      });
+    } catch (txErr) {
+      // Atomic rollback — nothing was committed.
+      created = 0;
+      updated = 0;
+      responseErrors.push({
+        row: 0,
+        message: txErr instanceof Error ? `Import rolled back: ${txErr.message}` : 'Import rolled back',
+      });
     }
 
     return NextResponse.json({
       success: true,
       data: {
+        blocked: false,
+        totalRows: rows.length,
+        validRows: commitRowNumbers.length,
         created,
         updated,
-        errors: commitErrors,
+        imported: created + updated,
+        errors: responseErrors,
+        errorReport,
         backupId,
         backup: productsToBackup,
       } satisfies CommitResponse & { backup: typeof productsToBackup },
@@ -573,10 +850,16 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
 });
 
 // Replace a product's price slabs from an import row (vendor-scoped).
-async function updatePriceSlabs(productId: string, vendorId: string, row: ParsedProductRow) {
+// Accepts a tx client so it participates in the atomic commit transaction.
+async function updatePriceSlabs(
+  productId: string,
+  vendorId: string,
+  row: ParsedProductRow,
+  db: Prisma.TransactionClient | typeof prisma = prisma,
+) {
   if (row.bulkSlabs.length === 0) return;
-  await prisma.priceSlab.deleteMany({ where: { productId, vendorId } });
-  await prisma.priceSlab.createMany({
+  await db.priceSlab.deleteMany({ where: { productId, vendorId } });
+  await db.priceSlab.createMany({
     data: row.bulkSlabs.map((slab, idx) => ({
       productId,
       vendorId,
@@ -586,4 +869,26 @@ async function updatePriceSlabs(productId: string, vendorId: string, row: Parsed
       sortOrder: idx,
     })),
   });
+}
+
+// Deep-merge nested metadata section-by-section. Only DEFINED, non-empty incoming
+// values overwrite the base — a blank import cell (parsed as undefined/'') preserves
+// whatever the product already had. Keeps the metadata.{accounting,inventory,…} shape.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mergeMetadata(base: unknown, incoming: Record<string, any>): Record<string, any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const b = (base && typeof base === 'object' ? base : {}) as Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: Record<string, any> = { ...b };
+  for (const section of Object.keys(incoming)) {
+    const inc = incoming[section] ?? {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const merged: Record<string, any> = { ...(b[section] ?? {}) };
+    for (const k of Object.keys(inc)) {
+      const v = inc[k];
+      if (v !== undefined && v !== null && v !== '') merged[k] = v;
+    }
+    result[section] = merged;
+  }
+  return result;
 }
