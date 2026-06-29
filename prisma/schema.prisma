@@ -115,6 +115,9 @@ model User {
   // Promo Engine Phase 1 — cashback earned by this user (order-linked + direct grants)
   cashbackEntries        CashbackEntry[]
 
+  productAuditLogs       ProductAuditLog[] @relation("ProductAuditActor")
+  masterProductRevisions MasterProductRevision[] @relation("MasterRevisionActor")
+
   @@index([email])
   @@index([phone])
   @@index([pincode])
@@ -126,6 +129,15 @@ enum ApprovalStatus {
   pending
   approved
   rejected
+  pending_edit
+  under_review
+  needs_changes
+  archived
+}
+
+enum ListingStatus {
+  draft
+  submitted
 }
 
 enum Role {
@@ -169,6 +181,8 @@ model Vendor {
   businessAccountId String @unique @map("business_account_id") @db.Uuid
   businessName  String   @map("business_name") @db.VarChar(255)
   slug          String   @unique @db.VarChar(255)
+  // Short admin-assigned code used as the vendor SKU prefix (e.g. MAN-MANJRSYP123).
+  vendorCode    String?  @unique @map("vendor_code") @db.VarChar(20)
   description   String?  @db.Text
   logoUrl       String?  @map("logo_url") @db.VarChar(512)
   bannerUrl     String?  @map("banner_url") @db.VarChar(512)
@@ -346,11 +360,30 @@ model Category {
   productLinks ProductCategory[]
   brandMasterProducts BrandMasterProduct[]
   masterProducts MasterProduct[]
+  // M2M: a sub-category may belong to multiple parent categories.
+  parentLinks      CategoryCategory[] @relation("SubCategoryParents")
+  subCategoryLinks CategoryCategory[] @relation("ParentSubCategories")
+  masterProductLinks MasterProductCategory[]
 
   @@index([parentId])
   @@index([slug])
   @@index([approvalStatus])
   @@map("categories")
+}
+
+// Sub-category ↔ parent category M2M. `parentId` on Category remains the
+// denormalized primary parent for fast tree queries.
+model CategoryCategory {
+  categoryId    String  @map("category_id") @db.Uuid
+  subCategoryId String  @map("sub_category_id") @db.Uuid
+  isPrimary     Boolean @default(false) @map("is_primary")
+
+  parent      Category @relation("ParentSubCategories", fields: [categoryId], references: [id], onDelete: Cascade)
+  subCategory Category @relation("SubCategoryParents", fields: [subCategoryId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, subCategoryId])
+  @@index([subCategoryId])
+  @@map("category_categories")
 }
 
 model Product {
@@ -370,6 +403,8 @@ model Product {
   packSize        String?  @map("pack_size") @db.VarChar(100)
   unit            String?  @db.VarChar(50)
   sku             String?  @db.VarChar(100)
+  // Raw POS code without vendor prefix; `sku` stores `{vendorCode}-{vendorSku}`.
+  vendorSku       String?  @map("vendor_sku") @db.VarChar(100)
   hsn             String?  @db.VarChar(50)
   fssaiRef        String?  @map("fssai_ref") @db.VarChar(50)
   brand           String?  @db.VarChar(150)
@@ -391,10 +426,14 @@ model Product {
   creditEligible  Boolean        @default(false) @map("credit_eligible")
   isFeatured      Boolean        @default(false) @map("is_featured")
   isActive        Boolean        @default(true) @map("is_active")
+  listingStatus   ListingStatus  @default(submitted) @map("listing_status")
   approvalStatus  ApprovalStatus @default(pending) @map("approval_status")
   approvalNote    String?        @map("approval_note") @db.Text
   approvedBy      String?        @map("approved_by") @db.Uuid
   approvedAt      DateTime?      @map("approved_at") @db.Timestamptz
+  pendingEditPayload Json?       @map("pending_edit_payload")
+  metadata           Json?          @default("{}")
+  archivedAt      DateTime?      @map("archived_at") @db.Timestamptz
   // Embedding for AI-assisted brand mapping (Phase 3). Empty array = not yet embedded.
   // embeddingModel records which provider+model produced the vector so we know when to re-embed.
   embedding       Float[]        @default([]) @map("embedding")
@@ -419,13 +458,16 @@ model Product {
   promoGetRules       Promotion[]     @relation("PromoGetProduct")
   customerPrices      VendorCustomerPrice[]
   comboItems          ComboItem[]
+  auditLogs           ProductAuditLog[]
 
   @@unique([vendorId, slug])
   @@index([vendorId])
   @@index([categoryId])
   @@index([isActive])
   @@index([approvalStatus])
+  @@index([listingStatus])
   @@index([sku])
+  @@index([vendorId, vendorSku])
   @@index([masterProductId])
   @@map("products")
 }
@@ -447,6 +489,41 @@ model ProductCategory {
   @@index([categoryId])
   @@index([productId, isPrimary])
   @@map("product_categories")
+}
+
+// Field-level audit trail for vendor product edits (B2B dispute resolution).
+model ProductAuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  field     String   @db.VarChar(64)
+  oldValue  String?  @map("old_value") @db.Text
+  newValue  String?  @map("new_value") @db.Text
+  changedBy String   @map("changed_by") @db.Uuid
+  changedAt DateTime @default(now()) @map("changed_at") @db.Timestamptz
+  source    String   @db.VarChar(32)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  actor   User    @relation("ProductAuditActor", fields: [changedBy], references: [id])
+
+  @@index([productId, changedAt(sort: Desc)])
+  @@map("product_audit_logs")
+}
+
+// Snapshot of master catalog before admin edit — supports 7-day rollback.
+model MasterProductRevision {
+  id              String   @id @default(uuid()) @db.Uuid
+  masterProductId String   @map("master_product_id") @db.Uuid
+  snapshot        Json
+  categoryIds     String[] @default([]) @map("category_ids") @db.Uuid
+  createdBy       String   @map("created_by") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz
+
+  masterProduct MasterProduct @relation(fields: [masterProductId], references: [id], onDelete: Cascade)
+  actor         User          @relation("MasterRevisionActor", fields: [createdBy], references: [id])
+
+  @@index([masterProductId, createdAt(sort: Desc)])
+  @@map("master_product_revisions")
 }
 
 // ═══ MASTER PRODUCT (Horeca1 canonical SKU) ═══════════
@@ -475,16 +552,35 @@ model MasterProduct {
   suggestedBy    String?        @map("suggested_by") @db.Uuid
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  metadata       Json?    @default("{}")
 
   category            Category             @relation(fields: [categoryId], references: [id])
+  categoryLinks       MasterProductCategory[]
   vendorProducts      Product[]            @relation("MasterToVendorProduct")
   brandMasterProducts BrandMasterProduct[]
+  revisions           MasterProductRevision[]
 
   @@index([categoryId])
   @@index([sku])
   @@index([isActive])
   @@index([approvalStatus])
   @@map("master_products")
+}
+
+// Master catalog item ↔ sub-category M2M (mirrors ProductCategory).
+model MasterProductCategory {
+  masterProductId String   @map("master_product_id") @db.Uuid
+  categoryId      String   @map("category_id") @db.Uuid
+  isPrimary       Boolean  @default(false) @map("is_primary")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  masterProduct MasterProduct @relation(fields: [masterProductId], references: [id], onDelete: Cascade)
+  category      Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([masterProductId, categoryId])
+  @@index([categoryId])
+  @@index([masterProductId, isPrimary])
+  @@map("master_product_categories")
 }
 
 model PriceSlab {
@@ -737,6 +833,13 @@ model OrderItem {
   orderId     String  @map("order_id") @db.Uuid
   productId   String  @map("product_id") @db.Uuid
   productName  String  @map("product_name") @db.VarChar(255)
+  // Snapshotted at order time — invoices/orders use these, not live product fields.
+  productSku   String?  @map("product_sku") @db.VarChar(100)
+  hsn          String?  @db.VarChar(50)
+  brand        String?  @db.VarChar(150)
+  packSize     String?  @map("pack_size") @db.VarChar(100)
+  categoryName String?  @map("category_name") @db.VarChar(255)
+  taxPercent   Decimal? @map("tax_percent") @db.Decimal(5, 2)
   quantity     Int
   fulfilledQty Int     @default(0) @map("fulfilled_qty")
   unitPrice    Decimal @map("unit_price") @db.Decimal(10, 2)
