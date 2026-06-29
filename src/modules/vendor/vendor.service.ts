@@ -5,7 +5,7 @@ import { Errors } from '@/middleware/errorHandler';
 interface ListVendorsInput {
   pincode?: string;
   categoryId?: string;
-  sort?: 'rating' | 'name' | 'min_order_value';
+  sort?: 'rating' | 'name' | 'min_order_value' | 'frequent';
   order?: 'asc' | 'desc';
   cursor?: string;
   limit?: number;
@@ -29,7 +29,11 @@ export class VendorService {
       where,
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      orderBy: { [sort === 'min_order_value' ? 'minOrderValue' : sort]: order },
+      // 'frequent' = most-ordered vendors (by order count); others map to a column.
+      orderBy:
+        sort === 'frequent'
+          ? { orders: { _count: order } }
+          : { [sort === 'min_order_value' ? 'minOrderValue' : sort]: order },
       select: {
         id: true,
         businessName: true,
