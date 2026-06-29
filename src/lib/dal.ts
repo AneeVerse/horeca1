@@ -207,6 +207,7 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
     customerPriceApplied: customerPriceApplied || undefined,
     taxPercent,
     taxableRate: effectivePrice,
+    metadata: p.metadata,
   };
 }
 

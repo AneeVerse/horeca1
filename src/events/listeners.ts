@@ -436,6 +436,95 @@ export function registerEventListeners(): void {
 
   // ProductRejected — sent directly from approval API routes via sendProductRejectedNotifications().
 
+  eventBus.on('ProductEditSubmitted', async (payload) => {
+    try {
+      const admins = await prisma.user.findMany({ where: { role: 'admin' } });
+      await Promise.all(
+        admins.map((admin) =>
+          notifications.send({
+            userId: admin.id,
+            type: 'approval',
+            channel: 'in_app',
+            title: 'Product Edit Pending Review',
+            body: `Material edit pending approval: ${payload.productName}`,
+            referenceId: payload.productId,
+            referenceType: 'product',
+          }),
+        ),
+      );
+    } catch (error) {
+      console.error('[Events] ProductEditSubmitted listener failed:', error);
+    }
+  });
+
+  eventBus.on('ProductEditApproved', async (payload) => {
+    try {
+      const vendor = await prisma.vendor.findUnique({
+        where: { id: payload.vendorId },
+        select: { userId: true },
+      });
+      if (vendor) {
+        await notifications.send({
+          userId: vendor.userId,
+          type: 'approval',
+          channel: 'in_app',
+          title: 'Product Edit Approved',
+          body: `Your edit to '${payload.productName}' has been approved`,
+          referenceId: payload.productId,
+          referenceType: 'product',
+        });
+      }
+    } catch (error) {
+      console.error('[Events] ProductEditApproved listener failed:', error);
+    }
+  });
+
+  eventBus.on('ProductEditRejected', async (payload) => {
+    try {
+      const vendor = await prisma.vendor.findUnique({
+        where: { id: payload.vendorId },
+        select: { userId: true },
+      });
+      if (vendor) {
+        await notifications.send({
+          userId: vendor.userId,
+          type: 'approval',
+          channel: 'in_app',
+          title: 'Product Edit Rejected',
+          body: payload.reason
+            ? `Your edit to '${payload.productName}' was rejected: ${payload.reason}`
+            : `Your edit to '${payload.productName}' was rejected — live listing unchanged`,
+          referenceId: payload.productId,
+          referenceType: 'product',
+        });
+      }
+    } catch (error) {
+      console.error('[Events] ProductEditRejected listener failed:', error);
+    }
+  });
+
+  eventBus.on('MasterProductSyncedToVendor', async (payload) => {
+    try {
+      const vendor = await prisma.vendor.findUnique({
+        where: { id: payload.vendorId },
+        select: { userId: true },
+      });
+      if (vendor) {
+        await notifications.send({
+          userId: vendor.userId,
+          type: 'catalog',
+          channel: 'in_app',
+          title: 'Catalog Item Updated',
+          body: `Admin updated the master catalog entry for '${payload.productName}'. Your listing was synced.`,
+          referenceId: payload.productId,
+          referenceType: 'product',
+        });
+      }
+    } catch (error) {
+      console.error('[Events] MasterProductSyncedToVendor listener failed:', error);
+    }
+  });
+
   // ── Approval: Categories ──────────────────────────────────────
 
   eventBus.on('CategorySuggested', async (payload) => {

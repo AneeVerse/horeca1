@@ -10,7 +10,10 @@
     "worker:notifications": "npx tsx src/workers/notification.worker.ts",
     "worker:reconciliation": "npx tsx src/workers/reconciliation.worker.ts",
     "tunnel": "ssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -L 5433:127.0.0.1:5432 -L 6380:127.0.0.1:6379 root@64.227.187.210 -N",
-    "migrate:prod": "npx prisma migrate deploy"
+    "migrate:prod": "npx prisma migrate deploy",
+    "verify:order-snapshots": "npx tsx scripts/verify-order-snapshots.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
@@ -55,12 +58,14 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
+    "@vitest/coverage-v8": "^4.1.9",
     "babel-plugin-react-compiler": "1.0.0",
     "dotenv": "^17.3.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "prisma": "^7.5.0",
     "tailwindcss": "^4.2.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   }
 }

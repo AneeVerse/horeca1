@@ -56,6 +56,7 @@ export interface Product {
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
+    metadata?: any;
 }
 
 export interface VendorProduct extends Product {

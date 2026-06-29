@@ -138,6 +138,34 @@ export interface ProductRejectedPayload {
   reason?: string;
 }
 
+export interface ProductEditSubmittedPayload {
+  productId: string;
+  vendorId: string;
+  productName: string;
+}
+
+export interface ProductEditApprovedPayload {
+  productId: string;
+  vendorId: string;
+  productName: string;
+  approvedBy: string;
+}
+
+export interface ProductEditRejectedPayload {
+  productId: string;
+  vendorId: string;
+  productName: string;
+  rejectedBy: string;
+  reason?: string;
+}
+
+export interface MasterProductSyncedToVendorPayload {
+  masterProductId: string;
+  productId: string;
+  vendorId: string;
+  productName: string;
+}
+
 export interface CategorySuggestedPayload {
   categoryId: string;
   categoryName: string;
@@ -232,6 +260,10 @@ export interface EventMap {
   ProductSubmitted: ProductSubmittedPayload;
   ProductApproved: ProductApprovedPayload;
   ProductRejected: ProductRejectedPayload;
+  ProductEditSubmitted: ProductEditSubmittedPayload;
+  ProductEditApproved: ProductEditApprovedPayload;
+  ProductEditRejected: ProductEditRejectedPayload;
+  MasterProductSyncedToVendor: MasterProductSyncedToVendorPayload;
   CategorySuggested: CategorySuggestedPayload;
   CategoryApproved: CategoryApprovedPayload;
   CategoryRejected: CategoryRejectedPayload;
