@@ -54,6 +54,7 @@ interface CategoryFormData {
     name: string;
     slug: string;
     parentId: string | null;
+    parentCategoryIds: string[];
     imageUrl: string;
     sortOrder: number;
     isActive: boolean;
@@ -84,6 +85,7 @@ const INITIAL_FORM: CategoryFormData = {
     name: '',
     slug: '',
     parentId: null,
+    parentCategoryIds: [],
     imageUrl: '',
     sortOrder: 0,
     isActive: true,
@@ -260,12 +262,23 @@ export default function CategoriesPage() {
         }
     }, [editIdParam, loading, categories]);
 
-    const openEditModal = (cat: Category) => {
+    const openEditModal = async (cat: Category) => {
         setEditingCategory(cat);
+        let parentCategoryIds: string[] = cat.parentId ? [cat.parentId] : [];
+        try {
+            const res = await fetch(`/api/v1/admin/categories/${cat.id}`);
+            const json = await res.json();
+            if (res.ok && Array.isArray(json.data?.parentCategoryIds)) {
+                parentCategoryIds = json.data.parentCategoryIds;
+            }
+        } catch {
+            // keep fallback from parentId
+        }
         setFormData({
             name: cat.name,
             slug: cat.slug,
             parentId: cat.parentId,
+            parentCategoryIds,
             imageUrl: cat.imageUrl || '',
             sortOrder: cat.sortOrder,
             isActive: cat.isActive,
@@ -305,7 +318,7 @@ export default function CategoriesPage() {
         setFormLoading(true);
         setFormError(null);
 
-        const body = {
+        const body: Record<string, unknown> = {
             name: formData.name.trim(),
             slug: formData.slug.trim(),
             parentId: formData.parentId || null,
@@ -313,6 +326,17 @@ export default function CategoriesPage() {
             sortOrder: formData.sortOrder,
             isActive: formData.isActive,
         };
+
+        if (formData.parentId || formData.parentCategoryIds.length > 0) {
+            const linkedParents =
+                formData.parentCategoryIds.length > 0
+                    ? formData.parentCategoryIds
+                    : formData.parentId
+                      ? [formData.parentId]
+                      : [];
+            body.parentCategoryIds = linkedParents;
+            body.parentId = linkedParents[0] ?? null;
+        }
 
         try {
             const url = editingCategory
@@ -904,12 +928,18 @@ export default function CategoriesPage() {
                             </label>
                             <select
                                 value={formData.parentId || ''}
-                                onChange={(e) =>
+                                onChange={(e) => {
+                                    const nextParent = e.target.value || null;
                                     setFormData((prev) => ({
                                         ...prev,
-                                        parentId: e.target.value || null,
-                                    }))
-                                }
+                                        parentId: nextParent,
+                                        parentCategoryIds: nextParent
+                                            ? prev.parentCategoryIds.includes(nextParent)
+                                                ? prev.parentCategoryIds
+                                                : [nextParent, ...prev.parentCategoryIds.filter((id) => id !== nextParent)]
+                                            : [],
+                                    }));
+                                }}
                                 className="w-full h-[46px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] font-medium outline-none transition-all focus:border-[#299E60]/40 focus:bg-white focus:shadow-sm appearance-none cursor-pointer"
                             >
                                 <option value="">None (Top-level category)</option>
@@ -920,6 +950,50 @@ export default function CategoriesPage() {
                                 ))}
                             </select>
                         </div>
+
+                        {formData.parentId && (
+                            <div>
+                                <label className="block text-[13px] font-bold text-[#181725] mb-2">
+                                    Linked Parent Categories
+                                </label>
+                                <p className="text-[11px] text-[#AEAEAE] mb-2 font-medium">
+                                    A sub-category can appear under multiple parent categories. First checked is primary.
+                                </p>
+                                <div className="space-y-2 max-h-[180px] overflow-y-auto border border-[#EEEEEE] rounded-[10px] p-3 bg-[#F8F9FB]">
+                                    {parentOptions.map((cat) => {
+                                        const checked = formData.parentCategoryIds.includes(cat.id);
+                                        return (
+                                            <label
+                                                key={cat.id}
+                                                className="flex items-center gap-2 text-[13px] font-medium text-[#181725] cursor-pointer"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={checked}
+                                                    onChange={(e) => {
+                                                        setFormData((prev) => {
+                                                            let nextIds = prev.parentCategoryIds;
+                                                            if (e.target.checked) {
+                                                                nextIds = [...nextIds, cat.id];
+                                                            } else {
+                                                                nextIds = nextIds.filter((id) => id !== cat.id);
+                                                            }
+                                                            return {
+                                                                ...prev,
+                                                                parentCategoryIds: nextIds,
+                                                                parentId: nextIds[0] ?? null,
+                                                            };
+                                                        });
+                                                    }}
+                                                    className="rounded border-gray-300 text-[#299E60] focus:ring-[#299E60]/30"
+                                                />
+                                                {cat.name}
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Category Image */}
                         <div>

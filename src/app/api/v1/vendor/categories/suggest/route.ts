@@ -11,6 +11,7 @@ import { errorResponse } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
+import { syncCategoryParentLinks } from '@/modules/catalog/catalog.service';
 
 // Auto-generate slug from name
 function slugify(name: string): string {
@@ -53,6 +54,10 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
         isActive: false,
       },
     });
+
+    if (data.parentId) {
+      await syncCategoryParentLinks(category.id, [data.parentId]);
+    }
 
     emitEvent('CategorySuggested', {
       categoryId: category.id,

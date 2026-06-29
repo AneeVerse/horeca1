@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { parseCategoryImport } from '@/modules/import-export/excel.service';
+import { syncCategoryParentLinks } from '@/modules/catalog/catalog.service';
 import { requirePermission } from '@/lib/permissions/engine';
 
 export const POST = adminOnly(async (req: NextRequest, ctx) => {
@@ -78,6 +79,10 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             approvedAt: new Date(),
           },
         });
+
+        if (parentId) {
+          await syncCategoryParentLinks(cat.id, [parentId]);
+        }
 
         // Add to lookup so subsequent rows can reference this as parent
         slugMap.set(cat.slug, cat.id);

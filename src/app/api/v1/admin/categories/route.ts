@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
+import { syncCategoryParentLinks, getCategoryParentIds } from '@/modules/catalog/catalog.service';
 
 // Auto-generate slug from name: lowercase, replace spaces with hyphens, strip non-alphanumeric
 function slugify(name: string): string {
@@ -105,6 +106,10 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
         approvedAt: new Date(),
       },
     });
+
+    if (data.parentId) {
+      await syncCategoryParentLinks(category.id, [data.parentId]);
+    }
 
     return NextResponse.json({ success: true, data: category }, { status: 201 });
   } catch (error) {

@@ -11,6 +11,7 @@ import { resolveBrandContext, resolveUserId } from '@/lib/resolveBrandId';
 import { requirePermission } from '@/lib/permissions/engine';
 import { errorResponse } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
+import { syncCategoryParentLinks } from '@/modules/catalog/catalog.service';
 import type { AuthContext } from '@/middleware/auth';
 
 function slugify(name: string): string {
@@ -50,6 +51,10 @@ export const POST = brandOnly(async (req: NextRequest, ctx: AuthContext) => {
         isActive: false,
       },
     });
+
+    if (input.parentId) {
+      await syncCategoryParentLinks(category.id, [input.parentId]);
+    }
 
     emitEvent('CategorySuggested', {
       categoryId: category.id,

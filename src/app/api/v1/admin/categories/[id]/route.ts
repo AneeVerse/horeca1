@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
+import { syncCategoryParentLinks, getCategoryParentIds } from '@/modules/catalog/catalog.service';
 
 // Helper: extract the [id] segment from the URL
 function extractId(req: NextRequest): string {
@@ -21,6 +22,7 @@ const updateCategorySchema = z.object({
   name: z.string().min(1).optional(),
   slug: z.string().min(1).optional(),
   parentId: z.string().uuid().nullable().optional(),
+  parentCategoryIds: z.array(z.string().uuid()).optional(),
   imageUrl: z.string().nullable().optional(),
   sortOrder: z.number().int().optional(),
   isActive: z.boolean().optional(),
@@ -48,7 +50,12 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
 
     if (!category) throw Errors.notFound('Category');
 
-    return NextResponse.json({ success: true, data: category });
+    const parentCategoryIds = await getCategoryParentIds(id);
+
+    return NextResponse.json({
+      success: true,
+      data: { ...category, parentCategoryIds },
+    });
   } catch (error) {
     return errorResponse(error);
   }
@@ -102,9 +109,11 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       }
     }
 
+    const { parentCategoryIds, ...patchData } = data;
+
     const category = await prisma.category.update({
       where: { id },
-      data,
+      data: patchData,
       include: {
         _count: {
           select: {
@@ -115,7 +124,20 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       },
     });
 
-    return NextResponse.json({ success: true, data: category });
+    if (parentCategoryIds !== undefined) {
+      await syncCategoryParentLinks(id, parentCategoryIds);
+    } else if (data.parentId !== undefined && data.parentId) {
+      await syncCategoryParentLinks(id, [data.parentId]);
+    } else if (data.parentId === null) {
+      await syncCategoryParentLinks(id, []);
+    }
+
+    const refreshedParentIds = await getCategoryParentIds(id);
+
+    return NextResponse.json({
+      success: true,
+      data: { ...category, parentCategoryIds: refreshedParentIds },
+    });
   } catch (error) {
     return errorResponse(error);
   }
