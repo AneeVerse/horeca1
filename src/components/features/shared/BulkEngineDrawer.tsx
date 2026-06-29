@@ -368,8 +368,8 @@ export default function BulkEngineDrawer({ open, onClose, onComplete, config, al
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-[60] animate-in fade-in duration-200" onClick={submitting ? undefined : onClose} />
-      <div className="fixed inset-y-0 right-0 z-[61] w-full max-w-[520px] bg-[#F8F9FB] shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+      <div className="fixed inset-0 bg-black/40 z-[10010] animate-in fade-in duration-200" onClick={submitting ? undefined : onClose} />
+      <div className="fixed inset-y-0 right-0 z-[10011] w-full max-w-[520px] bg-[#F8F9FB] shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-[#EEEEEE] shrink-0">
