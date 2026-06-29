@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
-import type { OrderStatus, Prisma } from '@prisma/client';
+import { Prisma, type OrderStatus } from '@prisma/client';
 import { emitEvent } from '@/events/emitter';
 import { InventoryService } from '@/modules/inventory/inventory.service';
 import { Errors } from '@/middleware/errorHandler';
@@ -25,6 +25,43 @@ const CREDIT_PAYMENTS = ['credit', 'vendor_credit', 'h1_wallet', 'wallet'];
 const isCreditPayment = (m: string | null | undefined): boolean => !!m && CREDIT_PAYMENTS.includes(m);
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Catalog identity fields snapshotted onto each OrderItem at write time.
+ *  Keep in sync with ORDER_ITEM_SNAPSHOT_FIELDS in order-snapshots.ts */
+type OrderLineSnapshot = {
+  productSku: string | null;
+  hsn: string | null;
+  brand: string | null;
+  packSize: string | null;
+  categoryName: string | null;
+  taxPercent: Prisma.Decimal;
+};
+
+type OrderLineCreate = OrderLineSnapshot & {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number | Prisma.Decimal;
+  totalPrice: number;
+};
+
+function snapshotFromProduct(product: {
+  sku: string | null;
+  hsn: string | null;
+  brand: string | null;
+  packSize: string | null;
+  taxPercent: Prisma.Decimal | number;
+  category?: { name: string | null } | null;
+}): OrderLineSnapshot {
+  return {
+    productSku: product.sku,
+    hsn: product.hsn,
+    brand: product.brand,
+    packSize: product.packSize,
+    categoryName: product.category?.name ?? null,
+    taxPercent: new Prisma.Decimal(product.taxPercent ?? 0),
+  };
+}
 
 interface VendorOrderInput {
   vendorId: string;
@@ -96,7 +133,7 @@ export class OrderService {
       // before any order row can be created with its final totals.
       interface PreparedOrder {
         vo: VendorOrderInput;
-        itemDetails: Array<{ productId: string; productName: string; quantity: number; unitPrice: number; totalPrice: number }>;
+        itemDetails: OrderLineCreate[];
         draftItems: CheckoutDraftItem[];
         subtotal: number;
         promoDiscount: number;
@@ -179,7 +216,18 @@ export class OrderService {
           const product = await tx.product.findUnique({
             where: { id: item.productId },
             // categoryId + brand feed coupon scope matching (Promo Engine Phase 1)
-            select: { id: true, name: true, taxPercent: true, creditEligible: true, categoryId: true, brand: true },
+            select: {
+              id: true,
+              name: true,
+              sku: true,
+              hsn: true,
+              packSize: true,
+              taxPercent: true,
+              creditEligible: true,
+              categoryId: true,
+              category: { select: { name: true } },
+              brand: true,
+            },
           });
           if (!product) throw Errors.notFound('Product');
 
@@ -214,6 +262,7 @@ export class OrderService {
           itemDetails.push({
             productId: item.productId,
             productName: product.name,
+            ...snapshotFromProduct(product),
             quantity: item.quantity,
             unitPrice: grossUnitPrice,
             totalPrice,
@@ -720,7 +769,7 @@ export class OrderService {
 
       let parentSubtotal = 0;
       let childSubtotal = 0;
-      const childItems: Array<{ productId: string; productName: string; quantity: number; unitPrice: Prisma.Decimal; totalPrice: number }> = [];
+      const childItems: OrderLineCreate[] = [];
 
       for (const item of order.items) {
         const moveQty = lines.find((l) => l.itemId === item.id)?.quantity ?? 0;
@@ -728,7 +777,19 @@ export class OrderService {
         const unit = Number(item.unitPrice);
         if (moveQty > 0) {
           const childTotal = Math.round(unit * moveQty * 100) / 100;
-          childItems.push({ productId: item.productId, productName: item.productName, quantity: moveQty, unitPrice: item.unitPrice, totalPrice: childTotal });
+          childItems.push({
+            productId: item.productId,
+            productName: item.productName,
+            productSku: item.productSku,
+            hsn: item.hsn,
+            brand: item.brand,
+            packSize: item.packSize,
+            categoryName: item.categoryName,
+            taxPercent: item.taxPercent ?? new Prisma.Decimal(0),
+            quantity: moveQty,
+            unitPrice: item.unitPrice,
+            totalPrice: childTotal,
+          });
           childSubtotal += childTotal;
         }
         if (keepQty > 0) {
@@ -816,11 +877,29 @@ export class OrderService {
         if (!masterId) throw Errors.badRequest(`"${item.productName}" has no master SKU — cannot reassign.`);
         const newProduct = await tx.product.findFirst({
           where: { vendorId: newVendorId, masterProductId: masterId, isActive: true, approvalStatus: 'approved' },
-          select: { id: true, name: true },
+          select: {
+            id: true,
+            name: true,
+            sku: true,
+            hsn: true,
+            brand: true,
+            packSize: true,
+            taxPercent: true,
+            category: { select: { name: true } },
+          },
         });
         if (!newProduct) throw Errors.badRequest(`Target vendor does not carry "${item.productName}".`);
         const priced = await this.priceLine(tx, newVendorId, newProduct.id, item.quantity, customer);
-        await tx.orderItem.update({ where: { id: item.id }, data: { productId: newProduct.id, productName: newProduct.name, unitPrice: priced.grossUnitPrice, totalPrice: priced.totalPrice } });
+        await tx.orderItem.update({
+          where: { id: item.id },
+          data: {
+            productId: newProduct.id,
+            productName: newProduct.name,
+            ...snapshotFromProduct(newProduct),
+            unitPrice: priced.grossUnitPrice,
+            totalPrice: priced.totalPrice,
+          },
+        });
         subtotal += priced.totalPrice;
         releaseOld.push({ productId: item.productId, quantity: item.quantity });
         reserveNew.push({ productId: newProduct.id, quantity: item.quantity });

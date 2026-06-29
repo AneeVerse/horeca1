@@ -5,25 +5,7 @@
 
 import PDFDocument from 'pdfkit';
 import { prisma } from '@/lib/prisma';
-
-// --------------------------------------------------------------------------
-// Types
-// --------------------------------------------------------------------------
-
-interface InvoiceItem {
-  productName: string;
-  hsn: string | null;
-  category: string;
-  quantity: number;
-  unit: string;        // UoM e.g. "Kg", "Pcs", "Pack"
-  unitPrice: number;   // taxable base price per unit
-  taxPercent: number;
-  preTax: number;       // qty × unitPrice (ex-tax)
-  discount: number;     // 0 — placeholder until promotions wired
-  taxableAmount: number;
-  taxAmount: number;
-  total: number;
-}
+import { buildInvoiceLineItems, type InvoiceItem } from '@/lib/invoice-items';
 
 // --------------------------------------------------------------------------
 // Main export
@@ -64,31 +46,7 @@ export async function generateInvoicePdf(orderId: string): Promise<Buffer> {
   // ordered quantity. The invoice must bill what was actually fulfilled, so for
   // a partial order we use fulfilledQty and drop lines that were not fulfilled
   // at all. Non-partial orders bill the ordered quantity as before.
-  const items: InvoiceItem[] = order.items
-    .map(item => {
-      const unitPrice = Number(item.unitPrice);
-      const qty = order.isPartial ? item.fulfilledQty : item.quantity;
-      const taxPct = Number(item.product.taxPercent ?? 0);
-      const preTax = unitPrice * qty;
-      const discount = 0;
-      const taxableAmount = preTax - discount;
-      const taxAmount = taxableAmount * (taxPct / 100);
-      return {
-        productName: item.productName,
-        hsn: item.product.hsn,
-        category: item.product.category?.name ?? 'Other',
-        quantity: qty,
-        unit: item.product.unit ?? item.product.packSize ?? 'Pcs',
-        unitPrice,
-        taxPercent: taxPct,
-        preTax,
-        discount,
-        taxableAmount,
-        taxAmount,
-        total: taxableAmount + taxAmount,
-      };
-    })
-    .filter(line => line.quantity > 0);
+  const items: InvoiceItem[] = buildInvoiceLineItems(order);
 
   // Group items by category (Hyperpure-style sub-headers)
   const itemsByCategory = new Map<string, InvoiceItem[]>();
