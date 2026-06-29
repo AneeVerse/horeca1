@@ -34,6 +34,7 @@ import {
     Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { resolveVendorCode, formatVendorSku } from '@/lib/sku';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -98,6 +99,7 @@ interface VendorData {
     id: string;
     businessName: string;
     slug: string;
+    vendorCode: string | null;
     logoUrl: string | null;
     description: string | null;
     rating: number;
@@ -215,6 +217,7 @@ export default function VendorDetailsPage() {
     const [savingEdits, setSavingEdits] = useState(false);
 
     const [businessName, setBusinessName] = useState('');
+    const [vendorCode, setVendorCode] = useState('');
     const [description, setDescription] = useState('');
     const [address, setAddress] = useState('');
     const [city, setCity] = useState('');
@@ -331,6 +334,7 @@ export default function VendorDetailsPage() {
     useEffect(() => {
         if (vendor) {
             setBusinessName(vendor.businessName || '');
+            setVendorCode(vendor.vendorCode || '');
             setDescription(vendor.description || '');
             setAddress(vendor.addressLine || '');
             setCity(vendor.city || '');
@@ -377,6 +381,7 @@ export default function VendorDetailsPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     businessName,
+                    vendorCode: vendorCode.trim() || null,
                     description,
                     addressLine: address,
                     city,
@@ -924,6 +929,44 @@ export default function VendorDetailsPage() {
                                                 <span className="text-[13px] font-bold font-mono text-[#374151] block truncate">{truncateId(vendor.id)}</span>
                                                 <CopyButton text={vendor.id} label="Vendor ID" />
                                             </div>
+                                        </div>
+
+                                        {/* Vendor Code (SKU prefix) */}
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1.5">
+                                                Vendor Code
+                                            </label>
+                                            {isEditing ? (
+                                                <div className="space-y-1.5">
+                                                    <input
+                                                        type="text"
+                                                        value={vendorCode}
+                                                        onChange={(e) => setVendorCode(e.target.value.toUpperCase())}
+                                                        placeholder="e.g. MAN"
+                                                        maxLength={20}
+                                                        className="w-full h-[38px] border border-[#D1D5DB] rounded-[8px] px-3 text-[13px] outline-none focus:border-[#299E60] focus:ring-1 focus:ring-[#299E60]/20 font-mono font-bold uppercase tracking-wide"
+                                                    />
+                                                    <p className="text-[11px] text-[#6B7280] leading-relaxed">
+                                                        Short code used as the SKU prefix for this vendor&apos;s products.
+                                                        {vendorCode.trim() ? (
+                                                            <> Example: {formatVendorSku(vendorCode.trim(), 'POS123')}</>
+                                                        ) : (
+                                                            <> Leave blank to use slug-derived code ({resolveVendorCode(vendor)}).</>
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">
+                                                    <span className="text-[13px] font-bold font-mono text-[#374151] block">
+                                                        {vendor.vendorCode || resolveVendorCode(vendor)}
+                                                    </span>
+                                                    {!vendor.vendorCode && (
+                                                        <p className="text-[11px] text-[#9CA3AF] mt-1">
+                                                            Derived from slug — assign a code before the vendor publishes products.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Business Name */}

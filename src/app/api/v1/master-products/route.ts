@@ -47,7 +47,23 @@ export const GET = withRole(['vendor', 'brand', 'admin'], async (req: NextReques
       },
     });
 
-    return NextResponse.json({ success: true, data: masters });
+    // Catalog SKU-first ordering when the query looks like a SKU code.
+    const sorted = search && !exact
+      ? [...masters].sort((a, b) => {
+          const q = search.toUpperCase();
+          const score = (sku: string) => {
+            const upper = sku.toUpperCase();
+            if (upper === q) return 0;
+            if (upper.startsWith(q)) return 1;
+            if (upper.includes(q)) return 2;
+            return 3;
+          };
+          const diff = score(a.sku) - score(b.sku);
+          return diff !== 0 ? diff : a.name.localeCompare(b.name);
+        })
+      : masters;
+
+    return NextResponse.json({ success: true, data: sorted });
   } catch (error) {
     return errorResponse(error);
   }

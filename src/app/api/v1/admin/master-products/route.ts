@@ -9,7 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
-import { assertLeafCategory } from '@/modules/catalog/catalog.service';
+import { assertLeafCategory, syncMasterProductCategories } from '@/modules/catalog/catalog.service';
 import { validateMasterSku } from '@/lib/sku';
 import { syncProductToBrand } from '@/modules/brand/brand.service';
 
@@ -17,6 +17,7 @@ const createSchema = z.object({
   sku: z.string().min(2).max(40),
   name: z.string().min(1),
   categoryId: z.string().uuid(),
+  categoryIds: z.array(z.string().uuid()).min(1).optional(),
   brand: z.string().min(1).max(150),
   uom: z.string().max(50).optional(),
   taxPercent: z.number().min(0).max(100).optional(),
@@ -141,13 +142,14 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
     });
     if (existingSku) throw Errors.conflict(`SKU "${skuCheck.normalized}" is already in use`);
 
-    await assertLeafCategory([data.categoryId]);
+    const resolvedCategoryIds = data.categoryIds?.length ? data.categoryIds : [data.categoryId];
+    await assertLeafCategory(resolvedCategoryIds);
 
     const master = await prisma.masterProduct.create({
       data: {
         sku: skuCheck.normalized,
         name: data.name.trim(),
-        categoryId: data.categoryId,
+        categoryId: resolvedCategoryIds[0],
         brand: data.brand.trim(),
         uom: data.uom ?? null,
         taxPercent: data.taxPercent ?? 0,
@@ -160,6 +162,8 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
         approvedAt: new Date(),
       },
     });
+
+    await syncMasterProductCategories(master.id, resolvedCategoryIds);
 
     syncProductToBrand(
       master.brand,

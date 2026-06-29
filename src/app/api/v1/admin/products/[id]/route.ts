@@ -61,6 +61,7 @@ const updateProductSchema = z.object({
     price: z.number().positive(),
     promoPrice: z.number().positive().optional(),
   })).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 // GET — full product detail with all relations
@@ -190,7 +191,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   }
 });
 
-// DELETE — hard-delete (or tombstone if order/cart/list refs block it).
+// DELETE — hard-delete (blocked when order history exists; tombstone if cart/list refs block it).
 // Tombstone renames the slug so the [vendorId, slug] unique constraint frees up.
 export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
   try {

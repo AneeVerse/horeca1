@@ -29,11 +29,12 @@ const createProductSchema = z.object({
   // primary (mirrored into Product.categoryId). Empty array is allowed for
   // products that don't fit a category cleanly.
   categoryIds: z.array(z.string().uuid()).max(5).optional(),
-  basePrice: z.number().positive(),
+  basePrice: z.number().min(0).optional(),
   originalPrice: z.number().positive().optional(),
   packSize: z.string().optional(),
   unit: z.string().optional(),
   sku: z.string().optional(),
+  vendorSku: z.string().min(1).max(100).optional(),
   hsn: z.string().optional(),
   fssaiRef: z.string().max(50).optional(),
   brand: z.string().optional(),
@@ -61,6 +62,17 @@ const createProductSchema = z.object({
     price: z.number().positive(),
     promoPrice: z.number().positive().optional(),
   })).optional(),
+  listingStatus: z.enum(['draft', 'submitted']).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
+}).superRefine((data, ctx) => {
+  const isDraft = data.listingStatus === 'draft';
+  if (!isDraft && (!data.basePrice || data.basePrice <= 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'A valid base price is required',
+      path: ['basePrice'],
+    });
+  }
 });
 
 // GET — list all vendor products (includes inactive for management)
@@ -98,27 +110,32 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
 
     const body = await req.json();
     const data = createProductSchema.parse(body);
+    const isDraft = data.listingStatus === 'draft';
 
     // Prevent duplicate: check if this vendor already has a product with the same name.
     // Tombstoned rows (slug prefixed with _deleted_) are ignored so re-adding works after delete.
-    const existing = await prisma.product.findFirst({
-      where: {
-        vendorId,
-        name: { equals: data.name, mode: 'insensitive' },
-        slug: { not: { startsWith: '_deleted_' } },
-      },
-      select: { id: true, name: true, approvalStatus: true },
-    });
-    if (existing) {
-      throw Errors.conflict(
-        `You already have a product named "${existing.name}" (${existing.approvalStatus}). Edit the existing product instead.`
-      );
+    // Draft autosaves skip this — the same draft row is PATCHed on subsequent saves.
+    if (!isDraft) {
+      const existing = await prisma.product.findFirst({
+        where: {
+          vendorId,
+          name: { equals: data.name, mode: 'insensitive' },
+          slug: { not: { startsWith: '_deleted_' } },
+        },
+        select: { id: true, name: true, approvalStatus: true },
+      });
+      if (existing) {
+        throw Errors.conflict(
+          `You already have a product named "${existing.name}" (${existing.approvalStatus}). Edit the existing product instead.`
+        );
+      }
     }
 
     const { priceSlabs, basedOnProductId, basedOnBrandMasterProductId, ...productData } = data;
     const catalogService = new CatalogService();
     const product = await catalogService.createProduct(vendorId, {
       ...productData,
+      basePrice: productData.basePrice ?? (isDraft ? 0.01 : productData.basePrice!),
       basedOnProductId,
       basedOnBrandMasterProductId,
     });
@@ -148,8 +165,8 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       },
     });
 
-    // Only notify admins if product needs approval (not auto-approved)
-    if (product.approvalStatus === 'pending') {
+    // Only notify admins if product needs approval (not auto-approved or draft)
+    if (!isDraft && product.approvalStatus === 'pending') {
       emitEvent('ProductSubmitted', {
         productId: product.id,
         vendorId,

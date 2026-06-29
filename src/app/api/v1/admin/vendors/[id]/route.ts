@@ -11,6 +11,8 @@ import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { emitEvent } from '@/events/emitter';
 import { requirePermission } from '@/lib/permissions/engine';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
+import { validateVendorCode } from '@/lib/sku';
+import { Prisma } from '@prisma/client';
 
 // Helper: extract the [id] segment from /api/v1/admin/vendors/{id}
 function extractId(req: NextRequest): string {
@@ -160,6 +162,45 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       allowedFields.deliveryFleet = body.deliveryFleet;
     }
 
+    if (body.vendorCode !== undefined) {
+      const raw = typeof body.vendorCode === 'string' ? body.vendorCode.trim() : '';
+      const vendorWithCode = await prisma.vendor.findUnique({
+        where: { id },
+        select: { vendorCode: true },
+      });
+      const productCount = await prisma.product.count({
+        where: {
+          vendorId: id,
+          slug: { not: { startsWith: '_deleted_' } },
+        },
+      });
+
+      if (productCount > 0 && vendorWithCode?.vendorCode) {
+        if (raw === '') {
+          throw Errors.conflict(
+            'Vendor code cannot be cleared after products exist.',
+          );
+        }
+        const validated = validateVendorCode(raw);
+        if (!validated.ok) {
+          throw Errors.badRequest(validated.message);
+        }
+        if (validated.normalized !== vendorWithCode.vendorCode) {
+          throw Errors.conflict(
+            'Vendor code cannot be changed after products exist. SKUs are permanently prefixed with the assigned code.',
+          );
+        }
+      } else if (raw === '') {
+        allowedFields.vendorCode = null;
+      } else {
+        const validated = validateVendorCode(raw);
+        if (!validated.ok) {
+          throw Errors.badRequest(validated.message);
+        }
+        allowedFields.vendorCode = validated.normalized;
+      }
+    }
+
     const businessAccountUpdate: Record<string, unknown> = {};
     if (body.leadStatus !== undefined) businessAccountUpdate.leadStatus = body.leadStatus;
     if (body.manualTags !== undefined) businessAccountUpdate.manualTags = body.manualTags;
@@ -211,6 +252,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
             id: true,
             businessName: true,
             slug: true,
+            vendorCode: true,
             isVerified: true,
             isActive: true,
             updatedAt: true,
@@ -226,6 +268,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
             id: true,
             businessName: true,
             slug: true,
+            vendorCode: true,
             isVerified: true,
             isActive: true,
             updatedAt: true,
@@ -395,6 +438,14 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
 
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      Array.isArray(error.meta?.target) &&
+      (error.meta.target as string[]).includes('vendor_code')
+    ) {
+      return errorResponse(Errors.conflict('This vendor code is already assigned to another vendor.'));
+    }
     return errorResponse(error);
   }
 });

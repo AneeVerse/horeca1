@@ -4,17 +4,19 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
     Search, Plus, Loader2, Package, Pencil, X,
-    ChevronRight, ChevronLeft, Info, ImageIcon, Settings, DollarSign, Trash2,
+    ChevronRight, ChevronLeft, Info, ImageIcon, Settings as SettingsIcon, DollarSign, Trash2,
     BarChart3, BoxIcon, Tag, Upload, Percent, Star, Wand2,
-    ChevronDown, FileDown, FileSpreadsheet, AlertCircle,
+    ChevronDown, FileDown, FileSpreadsheet, AlertCircle, Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { parseVendorSku, resolveVendorCode } from '@/lib/sku';
 import { toast } from 'sonner';
 import { ImageUpload, MultiImageUpload } from '@/components/ui/ImageUpload';
-import { CategoryMultiPickerById } from '@/components/features/brand/CategoryMultiPickerById';
+import { CategoryHierarchyPicker } from '@/components/features/brand/CategoryHierarchyPicker';
 import { BrandSinglePicker } from '@/components/features/brand/BrandSinglePicker';
 import VendorProductImportModal from '@/components/features/vendor/VendorProductImportModal';
 import VendorBulkEngine from '@/components/features/vendor/VendorBulkEngine';
+import VendorBulkGrid from '@/components/features/vendor/VendorBulkGrid';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -48,10 +50,12 @@ interface VendorProduct {
     category?: { id?: string; name: string; slug: string } | null;
     inventory?: { qtyAvailable: number; qtyReserved: number } | null;
     priceSlabs?: { minQty: number; maxQty?: number | null; price: number }[];
-    approvalStatus?: 'pending' | 'approved' | 'rejected';
+    approvalStatus?: 'pending' | 'approved' | 'rejected' | 'pending_edit';
     approvalNote?: string | null;
+    listingStatus?: 'draft' | 'submitted';
     vegNonVeg?: 'veg' | 'nonveg' | 'egg' | null;
     storageType?: string | null;
+    metadata?: any;
 }
 
 interface Category {
@@ -84,6 +88,8 @@ interface ProductForm {
     packSize: string;
     unit: string;
     sku: string;
+    catalogSku: string;
+    vendorSku: string;
     hsn: string;
     brand: string;
     barcode: string;
@@ -103,6 +109,43 @@ interface ProductForm {
     fssaiRef: string;
     substituteIds: string[];
     priceSlabs: PriceSlabRow[];
+    // Zoho Metadata
+    account: string;
+    accountCode: string;
+    taxable: boolean;
+    exemptionReason: string;
+    taxabilityType: string;
+    productType: string;
+    intraStateTaxName: string;
+    intraStateTaxRate: string;
+    intraStateTaxType: string;
+    interStateTaxName: string;
+    interStateTaxRate: string;
+    interStateTaxType: string;
+    source: string;
+    referenceId: string;
+    lastSync: string;
+    inventoryAccount: string;
+    inventoryAccountCode: string;
+    valuationMethod: string;
+    reorderPoint: string;
+    openingStock: string;
+    itemType: string;
+    sellable: boolean;
+    purchasable: boolean;
+    trackInventory: boolean;
+    packageWeight: string;
+    packageLength: string;
+    packageWidth: string;
+    packageHeight: string;
+    dimensionUnit: string;
+    weightUnit: string;
+    ean: string;
+    isbn: string;
+    variantMapping: string;
+    platformCommission: string;
+    itemStatus: string;
+    activeOnlineStore: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -120,6 +163,8 @@ const EMPTY_FORM: ProductForm = {
     packSize: '',
     unit: '',
     sku: '',
+    catalogSku: '',
+    vendorSku: '',
     hsn: '',
     brand: '',
     barcode: '',
@@ -139,6 +184,42 @@ const EMPTY_FORM: ProductForm = {
     fssaiRef: '',
     substituteIds: [],
     priceSlabs: [],
+    account: '',
+    accountCode: '',
+    taxable: true,
+    exemptionReason: '',
+    taxabilityType: 'taxable',
+    productType: 'goods',
+    intraStateTaxName: '',
+    intraStateTaxRate: '',
+    intraStateTaxType: '',
+    interStateTaxName: '',
+    interStateTaxRate: '',
+    interStateTaxType: '',
+    source: '',
+    referenceId: '',
+    lastSync: '',
+    inventoryAccount: '',
+    inventoryAccountCode: '',
+    valuationMethod: 'FIFO',
+    reorderPoint: '',
+    openingStock: '',
+    itemType: 'standard',
+    sellable: true,
+    purchasable: true,
+    trackInventory: true,
+    packageWeight: '',
+    packageLength: '',
+    packageWidth: '',
+    packageHeight: '',
+    dimensionUnit: 'cm',
+    weightUnit: 'kg',
+    ean: '',
+    isbn: '',
+    variantMapping: '',
+    platformCommission: '',
+    itemStatus: 'Active',
+    activeOnlineStore: true,
 };
 
 const TAX_OPTIONS = ['0', '5', '12', '18', '28'];
@@ -181,6 +262,17 @@ function calcSavingsPercent(base: string, original: string): number | null {
     if (isNaN(b) || isNaN(o) || o <= b) return null;
     return Math.round(((o - b) / o) * 100);
 }
+
+type FormSnapshotMeta = {
+    masterProductId: string | null;
+    basedOnProductId: string | null;
+};
+
+function serializeFormSnapshot(form: ProductForm, meta: FormSnapshotMeta): string {
+    return JSON.stringify({ form, ...meta });
+}
+
+const DRAFT_AUTOSAVE_MS = 2000;
 
 /* ------------------------------------------------------------------ */
 /*  Pagination helper                                                  */
@@ -389,6 +481,7 @@ export default function VendorProductsPage() {
     const [formError, setFormError] = useState('');
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [loadingProduct, setLoadingProduct] = useState(false);
+    const [activeTab, setActiveTab] = useState<'identity' | 'status' | 'pricing' | 'accounting' | 'inventory' | 'packaging' | 'identifiers' | 'attributes' | 'bulk'>('identity');
     const panelRef = useRef<HTMLDivElement>(null);
 
     // Product suggestion state
@@ -412,8 +505,9 @@ export default function VendorProductsPage() {
     const [deleteTarget, setDeleteTarget] = useState<VendorProduct | null>(null);
     const [deleting, setDeleting] = useState(false);
 
-    // Bulk Update Engine — drawer open flag + row selection
+    // Bulk Update — in-browser grid (primary) + Advanced engine drawer + row selection
     const [bulkOpen, setBulkOpen] = useState(false);
+    const [gridOpen, setGridOpen] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     // Bulk import
@@ -425,6 +519,46 @@ export default function VendorProductsPage() {
     // Export dropdown state
     const [exportOpen, setExportOpen] = useState(false);
     const exportRef = useRef<HTMLDivElement>(null);
+    const [vendorCodePreview, setVendorCodePreview] = useState('');
+
+    // Draft autosave + unsaved-changes guard
+    const [draftSaving, setDraftSaving] = useState(false);
+    const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
+    const [auditLogs, setAuditLogs] = useState<Array<{
+        field: string;
+        oldValue: string | null;
+        newValue: string | null;
+        changedAt: string;
+        source: string;
+    }>>([]);
+    const [lastSavedSnapshot, setLastSavedSnapshot] = useState('');
+    const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+    const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const skipDraftAutosaveRef = useRef(false);
+
+    const captureSnapshot = useCallback(
+        () => serializeFormSnapshot(form, { masterProductId, basedOnProductId }),
+        [form, masterProductId, basedOnProductId]
+    );
+
+    const isFormDirty = useCallback(() => {
+        const current = captureSnapshot();
+        const baseline =
+            lastSavedSnapshot !== ''
+                ? lastSavedSnapshot
+                : serializeFormSnapshot(EMPTY_FORM, { masterProductId: null, basedOnProductId: null });
+        return current !== baseline;
+    }, [captureSnapshot, lastSavedSnapshot]);
+
+    const syncSavedSnapshot = useCallback((snapshot?: string) => {
+        setLastSavedSnapshot(snapshot ?? captureSnapshot());
+    }, [captureSnapshot]);
+
+    const canAutosaveDraft = useCallback(() => {
+        if (!isPanelOpen || loadingProduct || saving || draftSaving) return false;
+        if (editingProduct?.listingStatus === 'submitted') return false;
+        return form.name.trim().length > 0;
+    }, [isPanelOpen, loadingProduct, saving, draftSaving, editingProduct?.listingStatus, form.name]);
 
     /* ---- Data fetching ---- */
 
@@ -466,6 +600,17 @@ export default function VendorProductsPage() {
             .then(r => r.json())
             .then(json => { if (json.success) setBrands((json.data?.brands ?? json.data ?? []).map((b: { id: string; name: string }) => ({ id: b.id, name: b.name }))); })
             .catch(console.error);
+        fetch('/api/v1/vendor/settings')
+            .then(r => r.json())
+            .then(json => {
+                if (json.success && json.data?.slug) {
+                    setVendorCodePreview(resolveVendorCode({
+                        vendorCode: json.data.vendorCode as string | null | undefined,
+                        slug: json.data.slug as string,
+                    }));
+                }
+            })
+            .catch(() => {});
     }, [fetchProducts]);
 
     // Reset to page 1 when search or filter changes
@@ -481,7 +626,7 @@ export default function VendorProductsPage() {
             true;
         const matchesApproval =
             approvalFilter === 'all' ? true :
-            approvalFilter === 'pending' ? p.approvalStatus === 'pending' :
+            approvalFilter === 'pending' ? (p.approvalStatus === 'pending' || p.approvalStatus === 'pending_edit') :
             approvalFilter === 'rejected' ? p.approvalStatus === 'rejected' :
             approvalFilter === 'approved' ? p.approvalStatus === 'approved' :
             true;
@@ -574,6 +719,8 @@ export default function VendorProductsPage() {
             name: '',
             slug: '',
             sku: '',
+            catalogSku: '',
+            vendorSku: '',
             brand: '',
             categoryIds: [],
             imageUrl: '',
@@ -607,7 +754,9 @@ export default function VendorProductsPage() {
             ...prev,
             name: m.name,
             slug: slugify(m.name),
-            sku: m.sku,
+            catalogSku: m.sku,
+            vendorSku: '',
+            sku: '',
             brand: m.brand || prev.brand,
             imageUrl: m.imageUrl || prev.imageUrl,
             unit: m.uom || prev.unit,
@@ -698,9 +847,243 @@ export default function VendorProductsPage() {
         return () => document.removeEventListener('mousedown', handleClick);
     }, []);
 
+    /* ---- Draft autosave payload ---- */
+
+    const buildProductBody = useCallback((opts: { isDraft: boolean }) => {
+        const isNewSubmission = !editingProduct && !masterProductId && !basedOnProductId;
+        const parsedBase = form.basePrice ? parseFloat(form.basePrice) : 0;
+
+        const metadata = {
+            accounting: {
+                account: form.account.trim(),
+                accountCode: form.accountCode.trim(),
+                taxable: form.taxable,
+                exemptionReason: form.exemptionReason.trim(),
+                taxabilityType: form.taxabilityType.trim(),
+                intraStateTaxName: form.intraStateTaxName.trim(),
+                intraStateTaxRate: form.intraStateTaxRate ? Number(form.intraStateTaxRate) : undefined,
+                intraStateTaxType: form.intraStateTaxType.trim(),
+                interStateTaxName: form.interStateTaxName.trim(),
+                interStateTaxRate: form.interStateTaxRate ? Number(form.interStateTaxRate) : undefined,
+                interStateTaxType: form.interStateTaxType.trim(),
+                inventoryAccount: form.inventoryAccount.trim(),
+                inventoryAccountCode: form.inventoryAccountCode.trim(),
+                platformCommission: form.platformCommission ? Number(form.platformCommission) : undefined,
+            },
+            inventory: {
+                reorderPoint: form.reorderPoint ? Number(form.reorderPoint) : undefined,
+                openingStock: form.openingStock ? Number(form.openingStock) : undefined,
+                valuationMethod: form.valuationMethod.trim(),
+                trackInventory: form.trackInventory,
+            },
+            packaging: {
+                packageWeight: form.packageWeight ? Number(form.packageWeight) : undefined,
+                packageLength: form.packageLength ? Number(form.packageLength) : undefined,
+                packageWidth: form.packageWidth ? Number(form.packageWidth) : undefined,
+                packageHeight: form.packageHeight ? Number(form.packageHeight) : undefined,
+                dimensionUnit: form.dimensionUnit.trim(),
+                weightUnit: form.weightUnit.trim(),
+            },
+            identifiers: {
+                ean: form.ean.trim(),
+                isbn: form.isbn.trim(),
+            },
+            attributes: {
+                itemType: form.itemType.trim(),
+                productType: form.productType.trim(),
+                source: form.source.trim(),
+                referenceId: form.referenceId.trim(),
+                lastSync: form.lastSync.trim(),
+                sellable: form.sellable,
+                purchasable: form.purchasable,
+                variantMapping: form.variantMapping.trim(),
+                itemStatus: form.itemStatus.trim(),
+                activeOnlineStore: form.activeOnlineStore,
+            }
+        };
+
+        const body: Record<string, unknown> = {
+            name: form.name.trim() || 'Untitled product',
+            slug: form.slug || slugify(form.name.trim() || 'untitled-product'),
+            listingStatus: opts.isDraft ? 'draft' : 'submitted',
+            isActive: !opts.isDraft,
+            packSize: form.packSize || undefined,
+            unit: form.unit || undefined,
+            description: form.description || undefined,
+            imageUrl: form.imageUrl || undefined,
+            creditEligible: form.creditEligible,
+            isFeatured: form.isFeatured,
+            sku: form.sku || undefined,
+            hsn: form.hsn || undefined,
+            fssaiRef: form.fssaiRef || undefined,
+            brand: form.brand || undefined,
+            barcode: form.barcode || undefined,
+            taxPercent: form.taxPercent ? parseFloat(form.taxPercent) : 0,
+            minOrderQty: form.minOrderQty ? parseInt(form.minOrderQty, 10) : 1,
+            tags: form.tags.length > 0 ? form.tags : undefined,
+            aliasNames: form.aliasNames.length > 0 ? form.aliasNames : undefined,
+            substituteIds: form.substituteIds.length > 0 ? form.substituteIds : undefined,
+            shelfLifeDays: form.shelfLifeDays ? parseInt(form.shelfLifeDays, 10) : undefined,
+            countryOfOrigin: form.countryOfOrigin || undefined,
+            vegNonVeg: form.vegNonVeg || undefined,
+            storageType: form.storageType || undefined,
+            images: form.images.filter(Boolean).length > 0 ? form.images.filter(Boolean) : undefined,
+            metadata,
+        };
+
+        if (opts.isDraft) {
+            body.basePrice = parsedBase > 0 ? parsedBase : 0.01;
+        } else {
+            body.basePrice = parsedBase;
+        }
+
+        if (form.originalPrice) {
+            body.originalPrice = parseFloat(form.originalPrice);
+        }
+
+        if (form.categoryIds.length > 0) {
+            body.categoryIds = form.categoryIds;
+            body.categoryId = form.categoryIds[0];
+        } else if (editingProduct && !opts.isDraft) {
+            body.categoryIds = [];
+        }
+
+        const slabs = form.priceSlabs
+            .filter(s => s.minQty && s.price)
+            .map(s => ({
+                minQty: parseInt(s.minQty, 10),
+                maxQty: s.maxQty ? parseInt(s.maxQty, 10) : undefined,
+                price: parseFloat(s.price),
+            }))
+            .sort((a, b) => a.minQty - b.minQty);
+
+        if (slabs.length > 0) {
+            body.priceSlabs = slabs;
+        }
+
+        if (basedOnProductId && !editingProduct) {
+            body.basedOnProductId = basedOnProductId;
+        }
+
+        if (
+            masterProductId &&
+            (!editingProduct ||
+                editingProduct.approvalStatus === 'rejected' ||
+                editingProduct.listingStatus === 'draft')
+        ) {
+            body.masterProductId = masterProductId;
+            if (form.vendorSku.trim()) {
+                body.vendorSku = form.vendorSku.trim();
+            }
+            delete body.sku;
+        }
+
+        if (isNewSubmission && !opts.isDraft) {
+            delete body.sku;
+        }
+
+        if (editingProduct?.approvalStatus === 'approved' && !opts.isDraft) {
+            // Name is editable on vendor listings (past orders keep OrderItem.productName).
+            delete body.slug;
+            delete body.brand;
+            delete body.imageUrl;
+            delete body.images;
+        }
+
+        return body;
+    }, [form, editingProduct, masterProductId, basedOnProductId]);
+
+    const saveDraftRef = useRef<() => Promise<void>>(async () => {});
+
+    const saveDraft = useCallback(async () => {
+        if (!canAutosaveDraft() || skipDraftAutosaveRef.current) return;
+        if (!isFormDirty()) return;
+
+        setDraftSaving(true);
+        try {
+            const body = buildProductBody({ isDraft: true });
+            let res: Response;
+
+            if (editingProduct) {
+                res = await fetch(`/api/v1/vendor/products/${editingProduct.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+            } else {
+                res = await fetch('/api/v1/vendor/products', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+            }
+
+            const json = await res.json();
+            if (!json.success) {
+                setDraftSaveError(json.error?.message ?? 'Couldn\'t save draft — retry');
+                return;
+            }
+            setDraftSaveError(null);
+
+            const p = json.data;
+            syncSavedSnapshot();
+
+            if (!editingProduct) {
+                const cat = categories.find(c => c.id === p.categoryId);
+                const draftProduct: VendorProduct = {
+                    id: p.id,
+                    name: p.name,
+                    slug: p.slug,
+                    basePrice: Number(p.basePrice),
+                    originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
+                    packSize: p.packSize ?? null,
+                    unit: p.unit ?? null,
+                    imageUrl: p.imageUrl ?? null,
+                    isActive: false,
+                    isFeatured: p.isFeatured ?? false,
+                    description: p.description ?? null,
+                    creditEligible: p.creditEligible ?? false,
+                    categoryName: cat?.name ?? '',
+                    categorySlug: cat?.slug ?? '',
+                    in_stock: false,
+                    qty_available: 0,
+                    sku: p.sku ?? null,
+                    approvalStatus: p.approvalStatus ?? 'pending',
+                    listingStatus: 'draft',
+                };
+                setEditingProduct(draftProduct);
+                setProducts(prev => {
+                    if (prev.some(existing => existing.id === p.id)) {
+                        return prev.map(existing =>
+                            existing.id === p.id ? { ...existing, ...draftProduct } : existing
+                        );
+                    }
+                    return [draftProduct, ...prev];
+                });
+            } else {
+                setEditingProduct(prev => prev ? { ...prev, listingStatus: 'draft', isActive: false } : prev);
+                setProducts(prev => prev.map(existing =>
+                    existing.id === p.id
+                        ? { ...existing, name: p.name, basePrice: Number(p.basePrice), listingStatus: 'draft', isActive: false }
+                        : existing
+                ));
+            }
+        } catch {
+            setDraftSaveError('Couldn\'t save draft — check connection and retry');
+        } finally {
+            setDraftSaving(false);
+        }
+    }, [canAutosaveDraft, isFormDirty, buildProductBody, editingProduct, categories, syncSavedSnapshot]);
+
+    useEffect(() => {
+        saveDraftRef.current = saveDraft;
+    }, [saveDraft]);
+
     /* ---- Panel open / close ---- */
 
     const openAddPanel = () => {
+        if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
+        skipDraftAutosaveRef.current = true;
         setEditingProduct(null);
         setForm(EMPTY_FORM);
         setFormError('');
@@ -712,13 +1095,24 @@ export default function VendorProductsPage() {
         setSuggestions([]);
         setMasterSuggestions([]);
         setShowSuggestions(false);
+        setShowCloseConfirm(false);
+        setLastSavedSnapshot('');
+        setAuditLogs([]);
+        setActiveTab('identity');
         setIsPanelOpen(true);
+        Promise.resolve().then(() => {
+            skipDraftAutosaveRef.current = false;
+        });
     };
 
     const openEditPanel = async (product: VendorProduct) => {
+        if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
+        skipDraftAutosaveRef.current = true;
         setEditingProduct(product);
         setFormError('');
         setFieldErrors({});
+        setShowCloseConfirm(false);
+        setActiveTab('identity');
         setIsPanelOpen(true);
         setLoadingProduct(true);
 
@@ -728,10 +1122,15 @@ export default function VendorProductsPage() {
             const json = await res.json();
             const p = json.success ? json.data : product;
 
+            const auditRes = await fetch(`/api/v1/vendor/products/${product.id}/audit`);
+            const auditJson = await auditRes.json();
+            setAuditLogs(auditJson.success ? auditJson.data : []);
+
             setEditingProduct({
                 ...product,
                 approvalStatus: p.approvalStatus ?? product.approvalStatus,
                 approvalNote: p.approvalNote ?? product.approvalNote ?? null,
+                listingStatus: p.listingStatus ?? product.listingStatus ?? 'submitted',
             });
             setMasterProductId(
                 typeof p.masterProductId === 'string' ? p.masterProductId : null
@@ -748,7 +1147,18 @@ export default function VendorProductsPage() {
                 ? linkIds
                 : (fallbackId ? [fallbackId] : []);
 
-            setForm({
+            const masterRow = p.masterProduct as { sku?: string } | null | undefined;
+            const catalogSku = masterRow?.sku ?? '';
+            const { posSku } = parseVendorSku(p.sku ?? '', vendorCodePreview);
+
+            const meta = (p.metadata && typeof p.metadata === 'object' ? p.metadata : {}) as Record<string, any>;
+            const acc = meta.accounting || {};
+            const inv = meta.inventory || {};
+            const pkg = meta.packaging || {};
+            const ids = meta.identifiers || {};
+            const att = meta.attributes || {};
+
+            const formPayload = {
                 name: p.name || '',
                 slug: p.slug || '',
                 categoryIds: editCategoryIds,
@@ -757,6 +1167,8 @@ export default function VendorProductsPage() {
                 packSize: p.packSize || '',
                 unit: p.unit || '',
                 sku: p.sku || '',
+                catalogSku,
+                vendorSku: posSku,
                 hsn: p.hsn || '',
                 fssaiRef: p.fssaiRef || '',
                 brand: p.brand || '',
@@ -767,7 +1179,7 @@ export default function VendorProductsPage() {
                 tags: Array.isArray(p.tags) ? p.tags : [],
                 aliasNames: Array.isArray(p.aliasNames) ? p.aliasNames : [],
                 substituteIds: Array.isArray((p as { substituteIds?: string[] }).substituteIds) ? (p as { substituteIds?: string[] }).substituteIds! : [],
-                vegNonVeg: (p.vegNonVeg as '' | 'veg' | 'nonveg' | 'egg') || '',
+                vegNonVeg: (p.vegNonVeg || '') as '' | 'veg' | 'nonveg' | 'egg',
                 storageType: p.storageType || '',
                 shelfLifeDays: p.shelfLifeDays != null ? String(p.shelfLifeDays) : '',
                 countryOfOrigin: p.countryOfOrigin || '',
@@ -782,7 +1194,54 @@ export default function VendorProductsPage() {
                         price: String(s.price),
                     }))
                     : [],
-            });
+                account: acc.account || '',
+                accountCode: acc.accountCode || '',
+                taxable: acc.taxable ?? true,
+                exemptionReason: acc.exemptionReason || '',
+                taxabilityType: acc.taxabilityType || 'taxable',
+                productType: att.productType || 'goods',
+                intraStateTaxName: acc.intraStateTaxName || '',
+                intraStateTaxRate: acc.intraStateTaxRate != null ? String(acc.intraStateTaxRate) : '',
+                intraStateTaxType: acc.intraStateTaxType || '',
+                interStateTaxName: acc.interStateTaxName || '',
+                interStateTaxRate: acc.interStateTaxRate != null ? String(acc.interStateTaxRate) : '',
+                interStateTaxType: acc.interStateTaxType || '',
+                source: att.source || '',
+                referenceId: att.referenceId || '',
+                lastSync: att.lastSync || '',
+                inventoryAccount: acc.inventoryAccount || '',
+                inventoryAccountCode: acc.inventoryAccountCode || '',
+                valuationMethod: inv.valuationMethod || 'FIFO',
+                reorderPoint: inv.reorderPoint != null ? String(inv.reorderPoint) : '',
+                openingStock: inv.openingStock != null ? String(inv.openingStock) : '',
+                itemType: att.itemType || 'standard',
+                sellable: att.sellable ?? true,
+                purchasable: att.purchasable ?? true,
+                trackInventory: inv.trackInventory ?? true,
+                packageWeight: pkg.packageWeight != null ? String(pkg.packageWeight) : '',
+                packageLength: pkg.packageLength != null ? String(pkg.packageLength) : '',
+                packageWidth: pkg.packageWidth != null ? String(pkg.packageWidth) : '',
+                packageHeight: pkg.packageHeight != null ? String(pkg.packageHeight) : '',
+                dimensionUnit: pkg.dimensionUnit || 'cm',
+                weightUnit: pkg.weightUnit || 'kg',
+                ean: ids.ean || '',
+                isbn: ids.isbn || '',
+                variantMapping: att.variantMapping || '',
+                platformCommission: acc.platformCommission != null ? String(acc.platformCommission) : '',
+                itemStatus: att.itemStatus || 'Active',
+                activeOnlineStore: att.activeOnlineStore ?? true,
+            };
+
+            setForm(formPayload);
+            syncSavedSnapshot(
+                serializeFormSnapshot(
+                    formPayload,
+                    {
+                        masterProductId: typeof p.masterProductId === 'string' ? p.masterProductId : null,
+                        basedOnProductId: null,
+                    }
+                )
+            );
         } catch {
             // Fallback: populate from the product list data. We don't have full
             // categoryLinks here — best-effort resolve from the list's slug.
@@ -790,6 +1249,7 @@ export default function VendorProductsPage() {
                 ? categories.find(c => c.slug === product.category!.slug)
                 : null;
             setForm({
+                ...EMPTY_FORM,
                 name: product.name,
                 slug: product.slug,
                 categoryIds: fallbackMatch ? [fallbackMatch.id] : [],
@@ -797,7 +1257,9 @@ export default function VendorProductsPage() {
                 originalPrice: '',
                 packSize: product.packSize || '',
                 unit: product.unit || '',
-                sku: '',
+                sku: product.sku || '',
+                catalogSku: '',
+                vendorSku: '',
                 hsn: '',
                 fssaiRef: '',
                 brand: '',
@@ -818,13 +1280,25 @@ export default function VendorProductsPage() {
                 substituteIds: [],
                 priceSlabs: [],
             });
+            syncSavedSnapshot();
         } finally {
             setLoadingProduct(false);
+            Promise.resolve().then(() => {
+                skipDraftAutosaveRef.current = false;
+            });
         }
     };
 
-    // Deep link from notifications: /vendor/products?edit={productId}
+    // Deep link: /vendor/products?action=add or ?edit={productId}
     useEffect(() => {
+        const action = searchParams.get('action');
+        if (action === 'add' && !deepLinkHandled.current && !isPanelOpen) {
+            deepLinkHandled.current = true;
+            router.replace('/vendor/products', { scroll: false });
+            openAddPanel();
+            return;
+        }
+
         const editId = searchParams.get('edit');
         if (!editId || deepLinkHandled.current || isPanelOpen) return;
 
@@ -872,10 +1346,37 @@ export default function VendorProductsPage() {
         void openFromDeepLink();
     }, [searchParams, products, loading, isPanelOpen, router]);
 
-    const closePanel = () => {
+    const closePanelImmediate = () => {
+        if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
         setIsPanelOpen(false);
         setEditingProduct(null);
+        setShowCloseConfirm(false);
+        setLastSavedSnapshot('');
+        setDraftSaving(false);
     };
+
+    const requestClosePanel = () => {
+        if (isFormDirty()) {
+            setShowCloseConfirm(true);
+            return;
+        }
+        closePanelImmediate();
+    };
+
+    // Debounced draft autosave while the panel is open (new products + draft listings only).
+    useEffect(() => {
+        if (!canAutosaveDraft() || skipDraftAutosaveRef.current) return;
+        if (!isFormDirty()) return;
+
+        if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
+        draftSaveTimeoutRef.current = setTimeout(() => {
+            void saveDraftRef.current();
+        }, DRAFT_AUTOSAVE_MS);
+
+        return () => {
+            if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
+        };
+    }, [form, masterProductId, basedOnProductId, canAutosaveDraft, isFormDirty, lastSavedSnapshot]);
 
     /* ---- Form field helpers ---- */
 
@@ -895,7 +1396,7 @@ export default function VendorProductsPage() {
 
     // Order we walk fields in to surface the first offender. No tabs here — the
     // whole form is one scroll panel — so we just scroll the field into view.
-    const ERROR_FIELD_ORDER = ['name', 'brand', 'sku', 'categoryIds', 'basePrice'];
+    const ERROR_FIELD_ORDER = ['name', 'brand', 'vendorSku', 'sku', 'categoryIds', 'basePrice'];
 
     // Jump to the first field with an error: scroll it into view inside the
     // panel and focus its input, so the message shows right under the bad field.
@@ -920,6 +1421,7 @@ export default function VendorProductsPage() {
     // renders inline (and we can scroll to it) rather than only in the banner.
     const mapServerErrorToField = (msg: string): string | null => {
         const m = msg.toLowerCase();
+        if (m.includes('pos sku') || m.includes('vendor sku')) return 'vendorSku';
         if (m.includes('sku')) return 'sku';
         if (m.includes('categor')) return 'categoryIds';
         if (m.includes('brand')) return 'brand';
@@ -994,11 +1496,18 @@ export default function VendorProductsPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
         const isNewSubmission = !editingProduct && !masterProductId && !basedOnProductId;
+        const publishingDraft = editingProduct?.listingStatus === 'draft';
         const errors: Record<string, string> = {};
         if (!form.name.trim()) errors.name = 'Product name is required';
         if (!form.basePrice || Number(form.basePrice) <= 0) errors.basePrice = 'A valid base price is required';
-        if (isNewSubmission && form.categoryIds.length === 0) errors.categoryIds = 'Pick at least one category';
+        if ((isNewSubmission || publishingDraft) && form.categoryIds.length === 0) {
+            errors.categoryIds = 'Pick a parent and sub-category';
+        }
+        if (masterProductId && (!editingProduct || editingProduct.approvalStatus === 'rejected' || publishingDraft) && !form.vendorSku.trim()) {
+            errors.vendorSku = 'Your POS SKU is required';
+        }
         if (Object.keys(errors).length > 0) {
             setFormError('');
             setFieldErrors(errors);
@@ -1010,84 +1519,7 @@ export default function VendorProductsPage() {
         setFormError('');
         setFieldErrors({});
         try {
-            const body: Record<string, unknown> = {
-                name: form.name,
-                slug: form.slug || slugify(form.name),
-                basePrice: parseFloat(form.basePrice),
-                packSize: form.packSize || undefined,
-                unit: form.unit || undefined,
-                description: form.description || undefined,
-                imageUrl: form.imageUrl || undefined,
-                creditEligible: form.creditEligible,
-                isFeatured: form.isFeatured,
-                sku: form.sku || undefined,
-                hsn: form.hsn || undefined,
-                fssaiRef: form.fssaiRef || undefined,
-                brand: form.brand || undefined,
-                barcode: form.barcode || undefined,
-                taxPercent: form.taxPercent ? parseFloat(form.taxPercent) : 0,
-                minOrderQty: form.minOrderQty ? parseInt(form.minOrderQty, 10) : 1,
-                tags: form.tags.length > 0 ? form.tags : undefined,
-                aliasNames: form.aliasNames.length > 0 ? form.aliasNames : undefined,
-                substituteIds: form.substituteIds.length > 0 ? form.substituteIds : undefined,
-                shelfLifeDays: form.shelfLifeDays ? parseInt(form.shelfLifeDays, 10) : undefined,
-                countryOfOrigin: form.countryOfOrigin || undefined,
-                vegNonVeg: form.vegNonVeg || undefined,
-                storageType: form.storageType || undefined,
-                images: form.images.filter(Boolean).length > 0 ? form.images.filter(Boolean) : undefined,
-            };
-
-            if (form.originalPrice) {
-                body.originalPrice = parseFloat(form.originalPrice);
-            }
-
-            // Categories — the multi-picker already stores UUIDs, send the array
-            // directly. The backend mirrors the first entry into Product.categoryId
-            // for back-compat with single-category queries. Sending an empty array
-            // clears the category set; omit the field to leave it untouched.
-            if (form.categoryIds.length > 0) {
-                body.categoryIds = form.categoryIds;
-                body.categoryId = form.categoryIds[0];
-            } else if (editingProduct) {
-                // Existing product, user removed all categories — explicitly clear.
-                body.categoryIds = [];
-            }
-
-            // Price slabs: sort by minQty, filter out incomplete rows
-            const slabs = form.priceSlabs
-                .filter(s => s.minQty && s.price)
-                .map(s => ({
-                    minQty: parseInt(s.minQty, 10),
-                    maxQty: s.maxQty ? parseInt(s.maxQty, 10) : undefined,
-                    price: parseFloat(s.price),
-                }))
-                .sort((a, b) => a.minQty - b.minQty);
-
-            if (slabs.length > 0) {
-                body.priceSlabs = slabs;
-            }
-
-            // If based on an existing approved product, include for auto-approval
-            if (basedOnProductId && !editingProduct) {
-                body.basedOnProductId = basedOnProductId;
-            }
-
-            if (masterProductId && (!editingProduct || editingProduct.approvalStatus === 'rejected')) {
-                body.masterProductId = masterProductId;
-            }
-
-            if (isNewSubmission) {
-                delete body.sku;
-            }
-
-            // Don't send locked fields for approved products
-            if (editingProduct?.approvalStatus === 'approved') {
-                delete body.name;
-                delete body.slug;
-                delete body.brand;
-                delete body.imageUrl;
-                delete body.images;
-            }
+            const body = buildProductBody({ isDraft: false });
 
             let res: Response;
             if (editingProduct) {
@@ -1107,7 +1539,8 @@ export default function VendorProductsPage() {
             const json = await res.json();
             if (!json.success) throw new Error(json.error?.message || 'Failed to save product');
 
-            closePanel();
+            syncSavedSnapshot();
+            closePanelImmediate();
 
             const p = json.data;
             if (!editingProduct && p.approvalStatus === 'pending') {
@@ -1150,6 +1583,7 @@ export default function VendorProductsPage() {
                     tags: p.tags ?? null,
                     approvalStatus: p.approvalStatus ?? existing.approvalStatus,
                     approvalNote: p.approvalNote ?? null,
+                    listingStatus: p.listingStatus ?? 'submitted',
                 } : existing));
             } else {
                 // Prepend new product so it appears at the top immediately
@@ -1180,6 +1614,7 @@ export default function VendorProductsPage() {
                     images: p.images ?? null,
                     approvalStatus: p.approvalStatus ?? 'pending',
                     approvalNote: p.approvalNote ?? null,
+                    listingStatus: p.listingStatus ?? 'submitted',
                 };
                 setProducts(prev => [optimistic, ...prev]);
             }
@@ -1402,12 +1837,13 @@ export default function VendorProductsPage() {
                         Import
                     </button>
                     <button
-                        onClick={() => setBulkOpen(true)}
+                        onClick={() => setGridOpen(true)}
                         className="h-[40px] px-3.5 border border-[#EEEEEE] bg-white rounded-[10px] text-[12px] font-bold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-all flex items-center gap-1.5 shrink-0"
                     >
-                        <Wand2 size={13} className="text-[#299E60]" />
+                        <FileSpreadsheet size={13} className="text-[#299E60]" />
                         Bulk Update
                     </button>
+
                     <button
                         onClick={openAddPanel}
                         className="h-[40px] px-4 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 shrink-0"
@@ -1579,7 +2015,8 @@ export default function VendorProductsPage() {
                                                     'bg-[#FFF7E6] text-[#F59E0B]'
                                                 )}>
                                                     {product.approvalStatus === 'approved' ? 'Approved' :
-                                                     product.approvalStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                                                     product.approvalStatus === 'rejected' ? 'Rejected' :
+                                                     product.approvalStatus === 'pending_edit' ? 'Edit Pending' : 'Pending'}
                                                 </span>
                                                 {product.approvalStatus === 'rejected' && (
                                                     <button
@@ -1595,9 +2032,19 @@ export default function VendorProductsPage() {
                                         <td className="px-6 py-4 text-center">
                                             <span className={cn(
                                                 'text-[11px] font-[900] px-2.5 py-1.5 rounded-[6px] uppercase',
-                                                product.isActive ? 'bg-[#EEF8F1] text-[#299E60]' : 'bg-[#FFF0F0] text-[#E74C3C]'
+                                                product.listingStatus === 'draft'
+                                                    ? 'bg-[#F0F4FF] text-[#4F6BED]'
+                                                    : product.isActive
+                                                        ? 'bg-[#EEF8F1] text-[#299E60]'
+                                                        : 'bg-[#FFF0F0] text-[#E74C3C]'
                                             )}>
-                                                {product.isActive ? 'Active' : 'Inactive'}
+                                                {product.listingStatus === 'draft'
+                                                    ? 'Draft'
+                                                    : !product.isActive && product.approvalStatus === 'approved'
+                                                        ? 'Archived'
+                                                    : product.isActive
+                                                        ? 'Active'
+                                                        : 'Inactive'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
@@ -1628,7 +2075,7 @@ export default function VendorProductsPage() {
                                                     onClick={() => toggleActive(product)}
                                                     className="relative inline-flex h-[22px] w-[40px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200"
                                                     style={{ backgroundColor: product.isActive ? '#299E60' : '#D1D5DB' }}
-                                                    title={product.isActive ? 'Deactivate' : 'Activate'}
+                                                    title={product.isActive ? 'Archive (hide from store)' : 'Unarchive'}
                                                 >
                                                     <span
                                                         className="inline-block h-[16px] w-[16px] rounded-full bg-white shadow-sm transition-transform duration-200"
@@ -1737,20 +2184,20 @@ export default function VendorProductsPage() {
                     {/* Backdrop */}
                     <div
                         className="fixed inset-0 z-[10001] bg-black/40 transition-opacity"
-                        onClick={closePanel}
+                        onClick={requestClosePanel}
                     />
 
                     {/* Panel */}
                     <div
                         ref={panelRef}
-                        className="fixed top-0 right-0 z-[10002] h-full w-full max-w-[680px] bg-[#F8F9FA] shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-300"
+                        className="fixed inset-y-0 left-0 z-[10002] h-full w-full bg-[#F8F9FA] shadow-2xl overflow-y-auto animate-in slide-in-from-left duration-300"
                     >
                         {/* Panel Header */}
                         <div className="sticky top-0 z-10 bg-white border-b border-[#EEEEEE] px-6 py-5 flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <button
                                     type="button"
-                                    onClick={closePanel}
+                                    onClick={requestClosePanel}
                                     className="p-2 -ml-2 hover:bg-gray-100 rounded-[8px] transition-colors"
                                 >
                                     <X size={20} className="text-[#7C7C7C]" />
@@ -1759,11 +2206,41 @@ export default function VendorProductsPage() {
                                     <h2 className="text-[20px] font-bold text-[#181725]">
                                         {editingProduct ? 'Edit Product' : 'Add New Product'}
                                     </h2>
-                                    {editingProduct && (
-                                        <p className="text-[12px] text-[#AEAEAE] font-medium mt-0.5">
-                                            ID: {editingProduct.id}
-                                        </p>
-                                    )}
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        {editingProduct && (
+                                            <p className="text-[12px] text-[#AEAEAE] font-medium">
+                                                ID: {editingProduct.id}
+                                            </p>
+                                        )}
+                                        {(editingProduct?.listingStatus === 'draft' || (!editingProduct && draftSaving)) && (
+                                            <span className={cn(
+                                                'inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-[6px]',
+                                                draftSaveError
+                                                    ? 'text-[#E74C3C] bg-[#FFF0F0]'
+                                                    : 'text-[#7C7C7C] bg-[#F5F5F5]',
+                                            )}>
+                                                {draftSaving ? (
+                                                    <>
+                                                        <Loader2 size={10} className="animate-spin" />
+                                                        Saving draft…
+                                                    </>
+                                                ) : draftSaveError ? (
+                                                    <>
+                                                        {draftSaveError}
+                                                        <button
+                                                            type="button"
+                                                            className="underline ml-1"
+                                                            onClick={() => void saveDraftRef.current()}
+                                                        >
+                                                            Retry
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    'Draft saved'
+                                                )}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             <button
@@ -1773,586 +2250,548 @@ export default function VendorProductsPage() {
                                 className="h-[40px] px-5 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm disabled:opacity-50 flex items-center gap-2"
                             >
                                 {saving ? <Loader2 size={14} className="animate-spin" /> : null}
-                                {saving ? 'Saving...' : editingProduct?.approvalStatus === 'rejected' ? 'Resubmit for Review' : editingProduct ? 'Update' : 'Save'}
+                                {saving ? 'Saving...' : editingProduct?.listingStatus === 'draft' ? 'Publish' : editingProduct?.approvalStatus === 'rejected' ? 'Resubmit for Review' : editingProduct ? 'Update' : 'Save'}
                             </button>
                         </div>
 
-                        {/* Panel Body */}
-                        {loadingProduct ? (
-                            <div className="flex items-center justify-center py-32">
-                                <Loader2 className="animate-spin text-[#299E60]" size={32} />
-                            </div>
-                        ) : (
-                            <form onSubmit={handleSubmit} className="p-6 space-y-6">
-
-                                {/* Error */}
-                                {formError && (
-                                    <div className="bg-[#FFF0F0] text-[#E74C3C] text-[13px] font-medium p-3.5 rounded-[10px] flex items-center gap-2">
-                                        <Info size={16} className="shrink-0" />
-                                        {formError}
-                                    </div>
-                                )}
-
-                                {editingProduct?.approvalStatus === 'rejected' && (
-                                    <div className="bg-[#FFF0F0] border border-[#F5C6C6] text-[#C0392B] text-[13px] p-4 rounded-[10px] flex items-start gap-3">
-                                        <AlertCircle size={18} className="shrink-0 mt-0.5" />
-                                        <div className="space-y-1">
-                                            <p className="font-bold text-[#181725]">Product rejected</p>
-                                            <p className="text-[#7C7C7C]">
-                                                {editingProduct.approvalNote?.trim() || 'No reason provided.'}
-                                            </p>
-                                            <p className="text-[12px] text-[#AEAEAE] pt-1">
-                                                Fix the issues below, then resubmit for review. If your product matches an approved catalog SKU, it may be approved automatically.
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {editingProduct?.approvalStatus === 'rejected' && identityFromCatalog && (
-                                    <div className="bg-[#EEF8F1] text-[#299E60] text-[13px] font-medium p-3.5 rounded-[10px] flex items-center gap-2">
-                                        <Info size={16} className="shrink-0" />
-                                        Catalog match selected — this product may be approved automatically when you resubmit.
-                                    </div>
-                                )}
-
-                                {/* Locked fields notice for based-on products */}
-                                {basedOnProductId && (
-                                    <div className="bg-[#FFF8E1] text-[#8B6914] text-[13px] font-medium p-3.5 rounded-[10px] flex items-center gap-2">
-                                        <Info size={16} className="shrink-0" />
-                                        Name, brand, and images are pre-filled from the approved product and cannot be changed.
-                                    </div>
-                                )}
-
-                                {!editingProduct && identityFromCatalog && (
-                                    <div className="bg-[#EEF8F1] text-[#299E60] text-[13px] font-medium p-3.5 rounded-[10px] flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <Info size={16} className="shrink-0" />
-                                            <span className="truncate">
-                                                Matched catalog — instant approval · {form.name}{form.sku ? ` · SKU ${form.sku}` : ''}
-                                            </span>
-                                        </div>
+                        {/* Panel Body with Side Navigation */}
+                        <div className="flex-1 flex overflow-hidden bg-[#F8F9FB]">
+                            {/* Left Sidebar: 9 Groups */}
+                            <div className="w-[240px] bg-white border-r border-[#EEEEEE] overflow-y-auto shrink-0 py-6 px-4 flex flex-col gap-1.5">
+                                {([
+                                    { id: 'identity', label: '1. Identity', icon: Info },
+                                    { id: 'status', label: '2. Status', icon: Clock },
+                                    { id: 'pricing', label: '3. Pricing / Tax', icon: DollarSign },
+                                    { id: 'accounting', label: '4. Accounting', icon: SettingsIcon },
+                                    { id: 'inventory', label: '5. Inventory', icon: BarChart3 },
+                                    { id: 'packaging', label: '6. Packaging', icon: Package },
+                                    { id: 'identifiers', label: '7. Identifiers', icon: Tag },
+                                    { id: 'attributes', label: '8. Attributes', icon: BoxIcon },
+                                    { id: 'bulk', label: '9. Bulk Slabs', icon: Plus },
+                                ] as const).map(tab => {
+                                    const isActive = activeTab === tab.id;
+                                    const Icon = tab.icon;
+                                    return (
                                         <button
+                                            key={tab.id}
                                             type="button"
-                                            onClick={clearCatalogSelection}
-                                            className="shrink-0 text-[11px] font-bold text-[#E74C3C] hover:underline"
+                                            onClick={() => setActiveTab(tab.id)}
+                                            className={cn(
+                                                "flex items-center gap-3 px-4 py-3 rounded-xl text-[13px] font-bold transition-all outline-none text-left",
+                                                isActive
+                                                    ? "bg-[#299E60]/10 text-[#299E60]"
+                                                    : "text-[#7C7C7C] hover:bg-gray-50 hover:text-[#181725]"
+                                            )}
                                         >
-                                            Change
+                                            <Icon size={16} strokeWidth={isActive ? 2.5 : 2} className={cn(isActive ? "text-[#299E60]" : "text-[#AEAEAE]")} />
+                                            {tab.label}
                                         </button>
-                                    </div>
-                                )}
+                                    );
+                                })}
+                            </div>
 
-                                {isNewSubmission && (
-                                    <div className="bg-[#FFF8E1] text-[#8B6914] text-[13px] font-medium p-3.5 rounded-[10px] flex items-start gap-2">
-                                        <Info size={16} className="shrink-0 mt-0.5" />
-                                        <span>
-                                            New products are sent to <strong>admin for approval</strong> before they appear on the marketplace.
-                                            Admin will assign the SKU. If the product already exists in the master catalog, search above for instant listing.
-                                        </span>
-                                    </div>
-                                )}
+                            {/* Right Content Area */}
+                            <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
+                                <form onSubmit={handleSubmit} className="space-y-6 max-w-[900px] w-full pb-12">
+                                    {/* Error */}
+                                    {formError && (
+                                        <div className="bg-[#FFF0F0] text-[#E74C3C] text-[13px] font-medium p-3.5 rounded-[10px] flex items-center gap-2">
+                                            <Info size={16} className="shrink-0" />
+                                            {formError}
+                                        </div>
+                                    )}
 
-                                {/* ======== Section 1: Basic Information ======== */}
-                                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                    <SectionHeader icon={<Info size={16} />} title="Basic Information" />
+                                    {editingProduct?.approvalStatus === 'rejected' && (
+                                        <div className="bg-[#FFF0F0] border border-[#F5C6C6] text-[#C0392B] text-[13px] p-4 rounded-[10px] flex items-start gap-3">
+                                            <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                                            <div className="space-y-1">
+                                                <p className="font-bold text-[#181725]">Product rejected</p>
+                                                <p className="text-[#7C7C7C]">
+                                                    {editingProduct.approvalNote?.trim() || 'No reason provided.'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
 
-                                    <div className="space-y-4">
-                                        {(!editingProduct || editingProduct.approvalStatus === 'rejected') && !identityFromCatalog && (
-                                            <div className="relative" ref={suggestionsRef}>
-                                                <FieldLabel>Search master catalog (optional — instant approval)</FieldLabel>
-                                                <div className="relative">
-                                                    <input
-                                                        type="text"
-                                                        value={catalogSearch}
-                                                        onChange={(e) => handleCatalogSearchChange(e.target.value)}
-                                                        onFocus={() => { if (suggestions.length > 0 || masterSuggestions.length > 0) setShowSuggestions(true); }}
-                                                        className={inputCls}
-                                                        placeholder="e.g., RIC-BAS-001 or Premium Basmati Rice"
-                                                    />
-                                                    {loadingSuggestions && (
-                                                        <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-[#AEAEAE]" />
-                                                    )}
-                                                </div>
+                                    {activeTab === 'identity' && (
+                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                            <SectionHeader icon={<Info size={16} />} title="Identity" />
 
-                                                {noCatalogMatch && catalogSearch.trim().length >= 2 && !loadingSuggestions && (
-                                                    <p className="text-[12px] text-[#7C7C7C] font-medium mt-2">
-                                                        Not in catalog — fill in the form below to submit for admin approval.
-                                                    </p>
-                                                )}
-
-                                                {showSuggestions && (suggestions.length > 0 || masterSuggestions.length > 0 || ownMatches.length > 0) && (
-                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-[#EEEEEE] rounded-[12px] shadow-lg max-h-[320px] overflow-y-auto">
-                                                    {masterSuggestions.length > 0 && (
-                                                        <>
-                                                            <div className="px-4 py-2 border-b border-[#F5F5F5] bg-[#EEF8F1]">
-                                                                <p className="text-[11px] font-bold text-[#299E60] uppercase tracking-wide">
-                                                                    Master Catalog (SKU)
-                                                                </p>
-                                                            </div>
-                                                            {masterSuggestions.map(m => (
-                                                                <button
-                                                                    key={`master-${m.id}`}
-                                                                    type="button"
-                                                                    onClick={() => fillFromMaster(m)}
-                                                                    className="w-full text-left px-4 py-3 hover:bg-[#F8FBF9] transition-colors border-b border-[#F5F5F5] last:border-0 flex items-center gap-3"
-                                                                >
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <p className="text-[13px] font-bold text-[#181725] truncate">{m.name}</p>
-                                                                        <p className="text-[11px] text-[#AEAEAE] font-medium truncate">
-                                                                            SKU: {m.sku}{m.brand ? ` · ${m.brand}` : ''}{m.category?.name ? ` · ${m.category.name}` : ''}
-                                                                        </p>
-                                                                    </div>
-                                                                    <span className="text-[10px] font-bold text-[#299E60] bg-[#EEF8F1] px-2 py-1 rounded-[6px] shrink-0">
-                                                                        MASTER
-                                                                    </span>
-                                                                </button>
-                                                            ))}
-                                                        </>
-                                                    )}
-                                                    {/* Duplicate warning — vendor already has this product */}
-                                                    {ownMatches.length > 0 && (
-                                                        <div className="px-4 py-3 bg-[#FFF8F0] border-b border-[#FFE0B2]">
-                                                            <p className="text-[12px] font-bold text-[#E67E22] mb-1">
-                                                                You already have similar products:
-                                                            </p>
-                                                            {ownMatches.map(m => (
-                                                                <div key={m.id} className="flex items-center gap-2 text-[12px] text-[#B45309]">
-                                                                    <span className="font-medium">{m.name}</span>
-                                                                    <span className={cn(
-                                                                        'px-1.5 py-0.5 rounded text-[10px] font-bold',
-                                                                        m.approvalStatus === 'approved' ? 'bg-[#EEF8F1] text-[#299E60]' :
-                                                                        m.approvalStatus === 'pending' ? 'bg-[#FFF8E1] text-[#F59E0B]' :
-                                                                        'bg-[#FFF0F0] text-[#E74C3C]'
-                                                                    )}>
-                                                                        {m.approvalStatus}
-                                                                    </span>
-                                                                </div>
-                                                            ))}
-                                                            <p className="text-[11px] text-[#B45309] mt-1">
-                                                                Creating a duplicate will be blocked. Edit the existing product instead.
-                                                            </p>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Catalog suggestions */}
-                                                    {suggestions.length > 0 && (
-                                                        <>
-                                                            <div className="px-4 py-2 border-b border-[#F5F5F5]">
-                                                                <p className="text-[11px] font-bold text-[#299E60] uppercase tracking-wide">
-                                                                    Existing Products — Select to auto-fill & auto-approve
-                                                                </p>
-                                                            </div>
-                                                            {suggestions.map(s => (
-                                                                <button
-                                                                    key={s.id}
-                                                                    type="button"
-                                                                    onClick={() => fillFromSuggestion(s)}
-                                                                    className="w-full text-left px-4 py-3 hover:bg-[#F8FBF9] transition-colors border-b border-[#F5F5F5] last:border-0 flex items-center gap-3"
-                                                                >
-                                                                    {s.imageUrl ? (
-                                                                        <img src={s.imageUrl} alt="" className="w-[36px] h-[36px] rounded-[8px] object-cover shrink-0 border border-[#EEEEEE]" />
-                                                                    ) : (
-                                                                        <div className="w-[36px] h-[36px] rounded-[8px] bg-[#F5F5F5] flex items-center justify-center shrink-0">
-                                                                            <Package size={16} className="text-[#AEAEAE]" />
-                                                                        </div>
-                                                                    )}
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <p className="text-[13px] font-bold text-[#181725] truncate">{s.name}</p>
-                                                                        <p className="text-[11px] text-[#AEAEAE] font-medium">
-                                                                            {s.category?.name || 'Uncategorized'}
-                                                                            {s.vendor?.businessName ? ` · ${s.vendor.businessName}` : ''}
-                                                                            {s.brand ? ` · ${s.brand}` : ''}
-                                                                        </p>
-                                                                    </div>
-                                                                    <span className="text-[12px] font-bold text-[#299E60] shrink-0">
-                                                                        ₹{Number(s.basePrice).toLocaleString('en-IN')}
-                                                                    </span>
-                                                                </button>
-                                                            ))}
-                                                        </>
-                                                    )}
+                                            {(!editingProduct || editingProduct.approvalStatus === 'rejected') && !identityFromCatalog && (
+                                                <div className="relative" ref={suggestionsRef}>
+                                                    <FieldLabel>Search master catalog (optional — instant approval)</FieldLabel>
+                                                    <div className="relative">
+                                                        <input
+                                                            type="text"
+                                                            value={catalogSearch}
+                                                            onChange={(e) => handleCatalogSearchChange(e.target.value)}
+                                                            className={inputCls}
+                                                            placeholder="e.g., RIC-BAS-001"
+                                                        />
+                                                    </div>
                                                 </div>
                                             )}
+
+                                            <div id="ff-name">
+                                                <FieldLabel required>Product Name</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={form.name}
+                                                    onChange={(e) => handleProductNameChange(e.target.value)}
+                                                    className={cn(inputCls, fieldErrors.name && 'border-[#E74C3C]')}
+                                                />
                                             </div>
-                                        )}
 
-                                        {identityFromCatalog && !editingProduct ? (
-                                            <>
-                                                <div>
-                                                    <FieldLabel>Product Name</FieldLabel>
-                                                    <input type="text" value={form.name} readOnly className={cn(inputCls, 'bg-[#F5F5F5] cursor-not-allowed')} />
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <FieldLabel>Brand</FieldLabel>
-                                                        <input type="text" value={form.brand} readOnly className={cn(inputCls, 'bg-[#F5F5F5] cursor-not-allowed')} />
-                                                    </div>
-                                                    <div>
-                                                        <FieldLabel>SKU</FieldLabel>
-                                                        <input type="text" value={form.sku} readOnly className={cn(inputCls, 'bg-[#F5F5F5] cursor-not-allowed')} />
-                                                    </div>
-                                                </div>
-                                                {form.categoryIds.length > 0 && (
-                                                    <div>
-                                                        <FieldLabel>Category</FieldLabel>
-                                                        <p className="text-[13px] text-[#181725] font-medium">
-                                                            {form.categoryIds
-                                                                .map(id => categories.find(c => c.id === id)?.name)
-                                                                .filter(Boolean)
-                                                                .join(', ')}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </>
-                                        ) : (
-                                            <>
-                                                <div id="ff-name">
-                                                    <FieldLabel required>Product Name</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={form.name}
-                                                        onChange={(e) => handleProductNameChange(e.target.value)}
-                                                        className={cn(inputCls, fieldErrors.name && 'border-[#E74C3C] focus:border-[#E74C3C]', editingProduct?.approvalStatus === 'approved' && 'bg-[#F5F5F5] text-[#999] cursor-not-allowed')}
-                                                        placeholder="e.g., Premium Basmati Rice 5kg"
-                                                        disabled={!!editingProduct && editingProduct.approvalStatus === 'approved'}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div id="ff-brand">
+                                                    <FieldLabel>Brand</FieldLabel>
+                                                    <BrandSinglePicker
+                                                        value={form.brand}
+                                                        onChange={(val) => updateField('brand', val)}
+                                                        brands={brands}
+                                                        onSuggest={(name) => suggestBrand(name)}
+                                                        suggesting={brandSuggesting}
                                                     />
-                                                    {fieldErrors.name && (
-                                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.name}</p>
-                                                    )}
                                                 </div>
-
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div id="ff-brand">
-                                                         <FieldLabel>Brand</FieldLabel>
-                                                         <BrandSinglePicker
-                                                             value={form.brand}
-                                                             onChange={(val) => updateField('brand', val)}
-                                                             brands={brands}
-                                                             placeholder="Select brand"
-                                                             disabled={!!editingProduct && editingProduct.approvalStatus === 'approved'}
-                                                             onSuggest={isNewSubmission ? (name) => suggestBrand(name) : undefined}
-                                                             suggesting={brandSuggesting}
-                                                         />
-                                                         {fieldErrors.brand && (
-                                                             <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.brand}</p>
-                                                         )}
-                                                    </div>
-                                                    <div>
-                                                        <FieldLabel>HSN Code</FieldLabel>
-                                                        <input
-                                                            type="text"
-                                                            value={form.hsn}
-                                                            onChange={(e) => updateField('hsn', e.target.value)}
-                                                            className={inputCls}
-                                                            placeholder="e.g., 1006"
-                                                        />
-                                                    </div>
-                                                    {editingProduct && (
-                                                        <div id="ff-sku">
-                                                            <FieldLabel>SKU</FieldLabel>
-                                                            <input
-                                                                type="text"
-                                                                value={form.sku}
-                                                                onChange={(e) => updateField('sku', e.target.value)}
-                                                                className={cn(inputCls, fieldErrors.sku && 'border-[#E74C3C] focus:border-[#E74C3C]')}
-                                                                placeholder="e.g., RIC-BAS-001"
-                                                            />
-                                                            {fieldErrors.sku && (
-                                                                <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.sku}</p>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                    {!editingProduct && isNewSubmission && (
-                                                        <div className="col-span-2">
-                                                            <p className="text-[12px] text-[#7C7C7C] font-medium bg-[#FAFAFA] border border-[#EEEEEE] rounded-[10px] px-3.5 py-2.5">
-                                                                SKU is assigned by admin after approval.
-                                                            </p>
-                                                        </div>
-                                                    )}
-                                                    <div>
-                                                        <FieldLabel>FSSAI Reference</FieldLabel>
-                                                        <input
-                                                            type="text"
-                                                            maxLength={50}
-                                                            placeholder="e.g. 10016011000015"
-                                                            value={form.fssaiRef}
-                                                            onChange={e => setForm(f => ({ ...f, fssaiRef: e.target.value }))}
-                                                            className={inputCls}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <FieldLabel>Barcode</FieldLabel>
-                                                        <input
-                                                            type="text"
-                                                            value={form.barcode}
-                                                            onChange={(e) => updateField('barcode', e.target.value)}
-                                                            className={inputCls}
-                                                            placeholder="e.g., 8901234567890"
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div id="ff-categoryIds">
-                                                    <CategoryMultiPickerById
-                                                        value={form.categoryIds}
-                                                        onChange={(ids) => updateField('categoryIds', ids)}
-                                                        max={5}
-                                                        endpoint="/api/v1/vendor/categories/suggest"
-                                                        label="Categories"
-                                                        helper="Pick up to 5 — first one becomes the primary. Customers can find your product under any of these."
-                                                    />
-                                                    {fieldErrors.categoryIds && (
-                                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.categoryIds}</p>
-                                                    )}
-                                                </div>
-
                                                 <div>
                                                     <FieldLabel>Description</FieldLabel>
                                                     <textarea
                                                         value={form.description}
                                                         onChange={(e) => updateField('description', e.target.value)}
-                                                        rows={4}
+                                                        rows={3}
                                                         className={textareaCls}
-                                                        placeholder="Describe the product, its quality, origin, etc."
                                                     />
                                                 </div>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* ======== Section 2: Pricing & Tax ======== */}
-                                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                    <SectionHeader icon={<DollarSign size={16} />} title="Pricing & Tax" />
-
-                                    <div className="space-y-4">
-                                        <div className="overflow-hidden border border-[#EEEEEE] rounded-[12px] bg-[#FAFAFA]">
-                                            <table className="w-full text-left border-collapse text-[13px]">
-                                                <thead>
-                                                    <tr className="bg-[#FAFAFA] border-b border-[#EEEEEE]">
-                                                        <th className="px-5 py-3 font-bold text-[#181725] w-1/3">Price Component</th>
-                                                        <th className="px-5 py-3 font-bold text-[#181725] w-1/3">Amount / Input</th>
-                                                        <th className="px-5 py-3 font-bold text-[#7C7C7C] w-1/3 text-[11px] uppercase tracking-wider">Breakdown</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-[#F5F5F5] bg-white">
-                                                    {/* Row 1: Taxable Rate */}
-                                                    <tr>
-                                                        <td className="px-5 py-4 font-semibold text-[#181725]">
-                                                            Taxable Rate (Amt) <span className="text-[#E74C3C]">*</span>
-                                                            <p className="text-[11px] text-[#AEAEAE] font-normal mt-0.5 font-sans">Base price before tax (ex-GST)</p>
-                                                        </td>
-                                                        <td className="px-5 py-4" id="ff-basePrice">
-                                                            <div className="relative">
-                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">₹</span>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    value={form.basePrice}
-                                                                    onChange={(e) => updateField('basePrice', e.target.value)}
-                                                                    className={cn(inputCls, 'pl-7', fieldErrors.basePrice && 'border-[#E74C3C] focus:border-[#E74C3C]')}
-                                                                    placeholder="0.00"
-                                                                />
-                                                            </div>
-                                                            {fieldErrors.basePrice && (
-                                                                <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.basePrice}</p>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-5 py-4 text-[#7C7C7C] font-medium">
-                                                            {form.basePrice ? `₹${parseFloat(form.basePrice).toFixed(2)} taxable base` : '—'}
-                                                        </td>
-                                                    </tr>
-                                                    {/* Row 2: Tax % */}
-                                                    <tr>
-                                                        <td className="px-5 py-4 font-semibold text-[#181725]">
-                                                            Tax % <span className="text-[#E74C3C]">*</span>
-                                                            <p className="text-[11px] text-[#AEAEAE] font-normal mt-0.5">Applied goods & services tax percent</p>
-                                                        </td>
-                                                        <td className="px-5 py-4">
-                                                            <div className="relative">
-                                                                <input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    max="100"
-                                                                    step="0.01"
-                                                                    value={form.taxPercent}
-                                                                    onChange={(e) => updateField('taxPercent', e.target.value)}
-                                                                    className={cn(inputCls, 'pr-7')}
-                                                                    placeholder="0"
-                                                                />
-                                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">%</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-5 py-4 text-[#7C7C7C] font-medium">
-                                                            {form.basePrice && parseFloat(form.taxPercent) > 0 
-                                                                ? `+ ₹${taxAmount} GST (${form.taxPercent}%)` 
-                                                                : 'No tax applied'}
-                                                        </td>
-                                                    </tr>
-                                                    {/* Row 3: Gross Rate */}
-                                                    <tr className="bg-[#FDFDFD]">
-                                                        <td className="px-5 py-4 font-bold text-[#181725]">
-                                                            Gross Rate <span className="text-[#299E60]">(Customer Price)</span> <span className="text-[#E74C3C]">*</span>
-                                                            <p className="text-[11px] text-[#AEAEAE] font-normal mt-0.5">Final selling price (incl. GST)</p>
-                                                        </td>
-                                                        <td className="px-5 py-4">
-                                                            <div className="relative">
-                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#299E60] font-bold">₹</span>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    value={grossRate || form.originalPrice}
-                                                                    onChange={(e) => {
-                                                                        const newGross = e.target.value;
-                                                                        updateField('originalPrice', newGross);
-                                                                        // Auto-calculate taxable from gross
-                                                                        const taxable = calcTaxableFromGross(newGross, form.taxPercent);
-                                                                        if (taxable) updateField('basePrice', taxable);
-                                                                    }}
-                                                                    className={cn(inputCls, 'pl-7 border-[#299E60]/30 focus:border-[#299E60] font-bold text-[#299E60] bg-[#EEF8F1]/10')}
-                                                                    placeholder="0.00"
-                                                                />
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-5 py-4">
-                                                            <div className="space-y-1">
-                                                                <p className="text-[#181725] font-bold text-[13px]">
-                                                                    {grossRate ? `₹${parseFloat(grossRate).toFixed(2)} total` : '—'}
-                                                                </p>
-                                                                {form.basePrice && parseFloat(form.taxPercent) > 0 && (
-                                                                    <p className="text-[11px] text-[#7C7C7C] font-medium leading-none">
-                                                                        ₹{parseFloat(form.basePrice).toFixed(2)} base + ₹{taxAmount} GST
-                                                                    </p>
-                                                                )}
-                                                                {savings !== null && (
-                                                                    <p className="text-[11px] text-[#299E60] font-bold">
-                                                                        {savings}% savings from MRP
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* ======== Section 3: Bulk Pricing Tiers ======== */}
-                                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                    <div className="flex items-start justify-between mb-5">
-                                        <div>
-                                            <SectionHeader icon={<Tag size={16} />} title="Bulk Pricing Tiers" />
-                                            <p className="text-[12px] text-[#AEAEAE] font-medium -mt-3 ml-[42px]">
-                                                Configure quantity-based pricing tiers
-                                            </p>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={addPriceSlab}
-                                            className="h-[40px] px-5 bg-[#1a365d] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#1a365d]/90 transition-colors flex items-center gap-2 shrink-0"
-                                        >
-                                            <Plus size={14} />
-                                            Add Bulk Tier
-                                        </button>
-                                    </div>
-
-                                    {/* Bulk tiers */}
-                                    <div className="space-y-4">
-                                        {form.priceSlabs.map((slab, index) => (
-                                            <div key={index} className="rounded-[14px] border border-[#EEEEEE] overflow-hidden">
-                                                {/* Tier header */}
-                                                <div className="flex items-center justify-between px-5 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE]">
-                                                    <div className="flex items-center gap-2.5">
-                                                        <span className="w-[28px] h-[28px] rounded-full bg-[#299E60] text-white text-[12px] font-bold flex items-center justify-center">
-                                                            {index + 1}
-                                                        </span>
-                                                        <h4 className="text-[14px] font-bold text-[#181725]">Bulk Tier {index + 1}</h4>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removePriceSlab(index)}
-                                                        className="p-1.5 hover:bg-[#FFF0F0] rounded-[6px] transition-colors text-[#AEAEAE] hover:text-[#E74C3C]"
-                                                    >
-                                                        <Trash2 size={15} />
-                                                    </button>
-                                                </div>
-
-                                                {/* Tier body */}
-                                                <div className="p-5">
-                                                    <div className="grid grid-cols-3 gap-4">
-                                                        <div>
-                                                            <FieldLabel>Min Quantity</FieldLabel>
-                                                            <input
-                                                                type="number"
-                                                                min="1"
-                                                                value={slab.minQty}
-                                                                onChange={(e) => updatePriceSlab(index, 'minQty', e.target.value)}
-                                                                className={inputCls}
-                                                                placeholder="e.g., 10"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <FieldLabel required>Taxable Rate (per Unit)</FieldLabel>
-                                                            <div className="relative">
-                                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] text-[14px]">{'\u20B9'}</span>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    value={slab.price}
-                                                                    onChange={(e) => updatePriceSlab(index, 'price', e.target.value)}
-                                                                    className={cn(inputCls, 'pl-8')}
-                                                                    placeholder="0.00"
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                        <div>
-                                                            <FieldLabel>Price per Unit</FieldLabel>
-                                                            <div className={cn(inputCls, 'flex items-center bg-[#FAFAFA] text-[#7C7C7C]')}>
-                                                                <span className="text-[#AEAEAE] mr-1">{'\u20B9'}</span>
-                                                                {slab.price ? calcGrossRate(slab.price, form.taxPercent) : '0'}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
                                             </div>
-                                        ))}
 
-                                        {form.priceSlabs.length === 0 && (
-                                            <div className="text-center py-8 text-[#AEAEAE]">
-                                                <BarChart3 size={32} className="mx-auto mb-2 text-[#E5E7EB]" />
-                                                <p className="text-[13px] font-medium">No bulk tiers yet. Click &quot;Add Bulk Tier&quot; to add quantity-based pricing.</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* End of Bulk Pricing Tiers */}
-
-                                {/* ======== Section 4: Inventory & Packaging ======== */}
-                                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                    <SectionHeader icon={<BoxIcon size={16} />} title="Inventory & Packaging" />
-
-                                    <div className="space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <FieldLabel>Pack Size</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={form.packSize}
-                                                    onChange={(e) => updateField('packSize', e.target.value)}
-                                                    className={inputCls}
-                                                    placeholder="e.g., 1 kg, 500 ml"
+                                            <div id="ff-categoryIds">
+                                                <CategoryHierarchyPicker
+                                                    value={form.categoryIds}
+                                                    onChange={(ids) => updateField('categoryIds', ids)}
+                                                    label="Categories"
+                                                    endpoint="/api/v1/vendor/categories/suggest"
                                                 />
                                             </div>
-                                            <div>
-                                                <FieldLabel>Unit</FieldLabel>
-                                                <div className="relative">
+
+                                            <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
+                                                <FieldLabel>Media</FieldLabel>
+                                                <ImageUpload
+                                                    value={form.imageUrl}
+                                                    onChange={(url) => updateField('imageUrl', url)}
+                                                    label="Primary Image"
+                                                />
+                                                <MultiImageUpload
+                                                    values={form.images.filter(Boolean)}
+                                                    onChange={(urls) => updateField('images', urls)}
+                                                    label="Additional Images"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'status' && (
+                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                            <SectionHeader icon={<Clock size={16} />} title="Status" />
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Item Status</FieldLabel>
+                                                    <select
+                                                        value={form.itemStatus}
+                                                        onChange={e => updateField('itemStatus', e.target.value)}
+                                                        className={selectCls}
+                                                    >
+                                                        <option value="Active">Active</option>
+                                                        <option value="Inactive">Inactive</option>
+                                                        <option value="Draft">Draft</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Veg / Non-Veg</FieldLabel>
+                                                    <select
+                                                        value={form.vegNonVeg}
+                                                        onChange={e => updateField('vegNonVeg', e.target.value as '' | 'veg' | 'nonveg' | 'egg')}
+                                                        className={selectCls}
+                                                    >
+                                                        <option value="">Not Specified</option>
+                                                        <option value="veg">🟢 Veg</option>
+                                                        <option value="nonveg">🔴 Non-Veg</option>
+                                                        <option value="egg">🟡 Egg</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Storage Type</FieldLabel>
+                                                    <select
+                                                        value={form.storageType}
+                                                        onChange={e => updateField('storageType', e.target.value)}
+                                                        className={selectCls}
+                                                    >
+                                                        <option value="">Not specified</option>
+                                                        <option value="ambient">Ambient (Room Temp)</option>
+                                                        <option value="refrigerated">Refrigerated (2–8°C)</option>
+                                                        <option value="frozen">Frozen (−18°C)</option>
+                                                        <option value="dry">Dry Storage</option>
+                                                        <option value="cool">Cool / Dark (10–15°C)</option>
+                                                    </select>
+                                                </div>
+                                                <div className="flex items-center pt-6">
+                                                    <label className="flex items-center gap-3 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={form.activeOnlineStore}
+                                                            onChange={(e) => updateField('activeOnlineStore', e.target.checked)}
+                                                            className="w-5 h-5 accent-[#299E60]"
+                                                        />
+                                                        <div>
+                                                            <span className="text-[13.5px] font-bold text-[#181725]">Active on Online Store</span>
+                                                            <p className="text-[11px] text-[#AEAEAE]">Show this product in the buyer catalog</p>
+                                                        </div>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'pricing' && (
+                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                            <SectionHeader icon={<DollarSign size={16} />} title="Pricing & Tax" />
+                                            
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel required>Taxable Rate (ex-GST)</FieldLabel>
+                                                    <div className="relative">
+                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">₹</span>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            value={form.basePrice}
+                                                            onChange={e => {
+                                                                const base = e.target.value;
+                                                                updateField('basePrice', base);
+                                                                const tp = parseFloat(form.taxPercent || '0');
+                                                                const b = parseFloat(base);
+                                                                if (!isNaN(b) && !isNaN(tp)) {
+                                                                    updateField('originalPrice', (b * (1 + tp / 100)).toFixed(2));
+                                                                }
+                                                            }}
+                                                            placeholder="0.00"
+                                                            className={cn(inputCls, 'pl-7', fieldErrors.basePrice && 'border-[#E74C3C] focus:border-[#E74C3C]')}
+                                                        />
+                                                    </div>
+                                                    {fieldErrors.basePrice && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.basePrice}</p>}
+                                                </div>
+
+                                                <div>
+                                                    <FieldLabel>Tax % (GST)</FieldLabel>
+                                                    <select
+                                                        value={form.taxPercent}
+                                                        onChange={e => {
+                                                            const tp = e.target.value;
+                                                            updateField('taxPercent', tp);
+                                                            const base = parseFloat(form.basePrice);
+                                                            const percent = parseFloat(tp);
+                                                            if (!isNaN(base) && !isNaN(percent)) {
+                                                                updateField('originalPrice', (base * (1 + percent / 100)).toFixed(2));
+                                                            }
+                                                        }}
+                                                        className={selectCls}
+                                                    >
+                                                        {TAX_OPTIONS.map(t => (
+                                                            <option key={t} value={t}>{t}%</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Gross Rate (incl. GST)</FieldLabel>
+                                                    <div className="relative">
+                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#299E60] font-bold">₹</span>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            value={form.originalPrice}
+                                                            onChange={e => {
+                                                                const gross = e.target.value;
+                                                                updateField('originalPrice', gross);
+                                                                const tp = parseFloat(form.taxPercent || '0');
+                                                                const g = parseFloat(gross);
+                                                                if (!isNaN(g) && !isNaN(tp)) {
+                                                                    updateField('basePrice', (g / (1 + tp / 100)).toFixed(2));
+                                                                }
+                                                            }}
+                                                            placeholder="0.00"
+                                                            className={cn(inputCls, 'pl-7 font-bold text-[#299E60] bg-[#EEF8F1]/10')}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <FieldLabel>Taxability Type</FieldLabel>
+                                                    <select
+                                                        value={form.taxabilityType}
+                                                        onChange={e => updateField('taxabilityType', e.target.value)}
+                                                        className={selectCls}
+                                                    >
+                                                        <option value="taxable">Taxable</option>
+                                                        <option value="exempt">Exempt</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                                <div className="flex items-center">
+                                                    <label className="flex items-center gap-3 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={form.taxable}
+                                                            onChange={(e) => updateField('taxable', e.target.checked)}
+                                                            className="w-5 h-5 accent-[#299E60]"
+                                                        />
+                                                        <div>
+                                                            <span className="text-[13.5px] font-bold text-[#181725]">Taxable Item</span>
+                                                            <p className="text-[11px] text-[#AEAEAE]">Uncheck if item is exempt from all taxes</p>
+                                                        </div>
+                                                    </label>
+                                                </div>
+
+                                                {!form.taxable && (
+                                                    <div>
+                                                        <FieldLabel>Exemption Reason</FieldLabel>
+                                                        <input
+                                                            type="text"
+                                                            value={form.exemptionReason}
+                                                            onChange={e => updateField('exemptionReason', e.target.value)}
+                                                            placeholder="Enter exemption reason"
+                                                            className={inputCls}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'accounting' && (
+                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                            <SectionHeader icon={<SettingsIcon size={16} />} title="Accounting Details" />
+                                            
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Sales Account</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.account}
+                                                        onChange={e => updateField('account', e.target.value)}
+                                                        placeholder="Sales account name"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Sales Account Code</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.accountCode}
+                                                        onChange={e => updateField('accountCode', e.target.value)}
+                                                        placeholder="e.g., 40000"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Inventory Account</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.inventoryAccount}
+                                                        onChange={e => updateField('inventoryAccount', e.target.value)}
+                                                        placeholder="Inventory account name"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Inventory Account Code</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.inventoryAccountCode}
+                                                        onChange={e => updateField('inventoryAccountCode', e.target.value)}
+                                                        placeholder="e.g., 14000"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                                <div>
+                                                    <FieldLabel>Platform Commission %</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={form.platformCommission}
+                                                        onChange={e => updateField('platformCommission', e.target.value)}
+                                                        placeholder="0.00"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
+                                                <h4 className="text-[14px] font-bold text-[#181725]">Tax Group Settings</h4>
+                                                
+                                                <div className="grid grid-cols-3 gap-4">
+                                                    <div>
+                                                        <FieldLabel>Intra-State Tax Name</FieldLabel>
+                                                        <input
+                                                            type="text"
+                                                            value={form.intraStateTaxName}
+                                                            onChange={e => updateField('intraStateTaxName', e.target.value)}
+                                                            placeholder="e.g. SGST+CGST"
+                                                            className={inputCls}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>Intra-State Tax Rate</FieldLabel>
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={form.intraStateTaxRate}
+                                                            onChange={e => updateField('intraStateTaxRate', e.target.value)}
+                                                            placeholder="e.g. 18.00"
+                                                            className={inputCls}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>Intra-State Tax Type</FieldLabel>
+                                                        <input
+                                                            type="text"
+                                                            value={form.intraStateTaxType}
+                                                            onChange={e => updateField('intraStateTaxType', e.target.value)}
+                                                            placeholder="e.g. Tax Group"
+                                                            className={inputCls}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-3 gap-4">
+                                                    <div>
+                                                        <FieldLabel>Inter-State Tax Name</FieldLabel>
+                                                        <input
+                                                            type="text"
+                                                            value={form.interStateTaxName}
+                                                            onChange={e => updateField('interStateTaxName', e.target.value)}
+                                                            placeholder="e.g. IGST"
+                                                            className={inputCls}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>Inter-State Tax Rate</FieldLabel>
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={form.interStateTaxRate}
+                                                            onChange={e => updateField('interStateTaxRate', e.target.value)}
+                                                            placeholder="e.g. 18.00"
+                                                            className={inputCls}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>Inter-State Tax Type</FieldLabel>
+                                                        <input
+                                                            type="text"
+                                                            value={form.interStateTaxType}
+                                                            onChange={e => updateField('interStateTaxType', e.target.value)}
+                                                            placeholder="e.g. Tax"
+                                                            className={inputCls}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'inventory' && (
+                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                            <SectionHeader icon={<BarChart3 size={16} />} title="Inventory Settings" />
+                                            
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Opening Stock</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        value={form.openingStock}
+                                                        onChange={e => updateField('openingStock', e.target.value)}
+                                                        placeholder="0"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Reorder Point</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        value={form.reorderPoint}
+                                                        onChange={e => updateField('reorderPoint', e.target.value)}
+                                                        placeholder="e.g. 10"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                                <div>
+                                                    <FieldLabel>Valuation Method</FieldLabel>
+                                                    <select
+                                                        value={form.valuationMethod}
+                                                        onChange={e => updateField('valuationMethod', e.target.value)}
+                                                        className={selectCls}
+                                                    >
+                                                        <option value="FIFO">First In First Out (FIFO)</option>
+                                                        <option value="LIFO">Last In First Out (LIFO)</option>
+                                                        <option value="WAC">Weighted Average Cost (WAC)</option>
+                                                    </select>
+                                                </div>
+                                                <div className="flex items-center pt-6">
+                                                    <label className="flex items-center gap-3 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={form.trackInventory}
+                                                            onChange={(e) => updateField('trackInventory', e.target.checked)}
+                                                            className="w-5 h-5 accent-[#299E60]"
+                                                        />
+                                                        <div>
+                                                            <span className="text-[13.5px] font-bold text-[#181725]">Track Inventory</span>
+                                                            <p className="text-[11px] text-[#AEAEAE]">Enable stock levels monitoring</p>
+                                                        </div>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'packaging' && (
+                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                            <SectionHeader icon={<Package size={16} />} title="Packaging & Dimensions" />
+                                            
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Pack Size</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.packSize}
+                                                        onChange={e => updateField('packSize', e.target.value)}
+                                                        className={inputCls}
+                                                        placeholder="e.g. 1 kg, 500 ml"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Unit</FieldLabel>
                                                     <select
                                                         value={form.unit}
-                                                        onChange={(e) => updateField('unit', e.target.value)}
+                                                        onChange={e => updateField('unit', e.target.value)}
                                                         className={selectCls}
                                                     >
                                                         <option value="">Select unit</option>
@@ -2360,200 +2799,471 @@ export default function VendorProductsPage() {
                                                             <option key={u} value={u}>{u}</option>
                                                         ))}
                                                     </select>
-                                                    <ChevronRight size={16} className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-[#AEAEAE] pointer-events-none" />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                                <div>
+                                                    <FieldLabel>Package Weight</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={form.packageWeight}
+                                                        onChange={e => updateField('packageWeight', e.target.value)}
+                                                        placeholder="0.00"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Weight Unit</FieldLabel>
+                                                    <select
+                                                        value={form.weightUnit}
+                                                        onChange={e => updateField('weightUnit', e.target.value)}
+                                                        className={selectCls}
+                                                    >
+                                                        <option value="kg">kg</option>
+                                                        <option value="g">g</option>
+                                                        <option value="lbs">lbs</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
+                                                <h4 className="text-[14px] font-bold text-[#181725]">Dimensions</h4>
+                                                <div className="grid grid-cols-4 gap-4">
+                                                    <div>
+                                                        <FieldLabel>Length</FieldLabel>
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={form.packageLength}
+                                                            onChange={e => updateField('packageLength', e.target.value)}
+                                                            placeholder="0.00"
+                                                            className={inputCls}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>Width</FieldLabel>
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={form.packageWidth}
+                                                            onChange={e => updateField('packageWidth', e.target.value)}
+                                                            placeholder="0.00"
+                                                            className={inputCls}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>Height</FieldLabel>
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={form.packageHeight}
+                                                            onChange={e => updateField('packageHeight', e.target.value)}
+                                                            placeholder="0.00"
+                                                            className={inputCls}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <FieldLabel>Dimension Unit</FieldLabel>
+                                                        <select
+                                                            value={form.dimensionUnit}
+                                                            onChange={e => updateField('dimensionUnit', e.target.value)}
+                                                            className={selectCls}
+                                                        >
+                                                            <option value="cm">cm</option>
+                                                            <option value="mm">mm</option>
+                                                            <option value="inch">inch</option>
+                                                        </select>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
+                                    )}
 
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <FieldLabel>Min Order Quantity</FieldLabel>
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    value={form.minOrderQty}
-                                                    onChange={(e) => updateField('minOrderQty', e.target.value)}
-                                                    className={inputCls}
-                                                    placeholder="1"
-                                                />
+                                    {activeTab === 'identifiers' && (
+                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                            <SectionHeader icon={<Tag size={16} />} title="Product Identifiers" />
+                                            
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel required>SKU</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.sku}
+                                                        onChange={e => updateField('sku', e.target.value.toUpperCase())}
+                                                        placeholder="RIC-BAS-001"
+                                                        readOnly={!!masterProductId}
+                                                        className={cn(inputCls, masterProductId && 'bg-[#F8F9FB] cursor-not-allowed')}
+                                                    />
+                                                    {fieldErrors.sku && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.sku}</p>}
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>HSN Code</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.hsn}
+                                                        onChange={e => updateField('hsn', e.target.value)}
+                                                        placeholder="e.g. 1006"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                                <div>
+                                                    <FieldLabel>EAN</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.ean}
+                                                        onChange={e => updateField('ean', e.target.value)}
+                                                        placeholder="European Article Number"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>ISBN</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.isbn}
+                                                        onChange={e => updateField('isbn', e.target.value)}
+                                                        placeholder="International Standard Book No."
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Barcode</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.barcode}
+                                                        onChange={e => updateField('barcode', e.target.value)}
+                                                        placeholder="e.g. 8901234567890"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
+                                    )}
 
-                                {/* ======== Section 5: Media ======== */}
-                                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                    <SectionHeader icon={<ImageIcon size={16} />} title="Media" />
+                                    {activeTab === 'attributes' && (
+                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                            <SectionHeader icon={<BoxIcon size={16} />} title="Product Attributes" />
+                                            
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <FieldLabel>Country of Origin</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.countryOfOrigin}
+                                                        onChange={e => updateField('countryOfOrigin', e.target.value)}
+                                                        placeholder="e.g. India"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>FSSAI Reference</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.fssaiRef}
+                                                        onChange={e => updateField('fssaiRef', e.target.value)}
+                                                        placeholder="FSSAI License Ref"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            </div>
 
-                                    <div className="space-y-5">
-                                        {/* Primary Image */}
-                                        <ImageUpload
-                                            value={form.imageUrl}
-                                            onChange={(url) => updateField('imageUrl', url)}
-                                            folder="products"
-                                            label="Primary Image"
-                                            size="lg"
-                                            disabled={!!basedOnProductId}
-                                        />
-
-                                        {/* Additional Images */}
-                                        <MultiImageUpload
-                                            values={form.images.filter(Boolean)}
-                                            onChange={(urls) => updateField('images', urls)}
-                                            folder="products"
-                                            label="Additional Images"
-                                            max={8}
-                                            disabled={!!basedOnProductId}
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* ======== Section 6: Tags & Settings ======== */}
-                                <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                    <SectionHeader icon={<Settings size={16} />} title="Tags & Settings" />
-
-                                    <div className="space-y-4">
-                                        {/* Tags */}
-                                        <div>
-                                            <FieldLabel>Tags</FieldLabel>
-                                            <TagInput
-                                                tags={form.tags}
-                                                onChange={(tags) => updateField('tags', tags)}
-                                            />
-                                        </div>
-
-                                        {/* Veg / Non-Veg */}
-                                        <div>
-                                            <FieldLabel>Veg / Non-Veg</FieldLabel>
-                                            <div className="flex gap-2">
-                                                {([['', 'Not Set'], ['veg', '🟢 Veg'], ['nonveg', '🔴 Non-Veg'], ['egg', '🟡 Egg']] as ['' | 'veg' | 'nonveg' | 'egg', string][]).map(([v, label]) => (
-                                                    <button
-                                                        key={v}
-                                                        type="button"
-                                                        onClick={() => updateField('vegNonVeg', v)}
-                                                        className={cn(
-                                                            'flex-1 h-[40px] rounded-[10px] text-[12px] font-bold border transition-colors',
-                                                            form.vegNonVeg === v
-                                                                ? 'bg-[#299E60] text-white border-[#299E60]'
-                                                                : 'bg-white text-[#7C7C7C] border-[#EEEEEE] hover:border-[#299E60]/40'
-                                                        )}
+                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                                <div>
+                                                    <FieldLabel>Product Type</FieldLabel>
+                                                    <select
+                                                        value={form.productType}
+                                                        onChange={e => updateField('productType', e.target.value)}
+                                                        className={selectCls}
                                                     >
-                                                        {label}
+                                                        <option value="goods">Goods</option>
+                                                        <option value="services">Services</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Item Type</FieldLabel>
+                                                    <select
+                                                        value={form.itemType}
+                                                        onChange={e => updateField('itemType', e.target.value)}
+                                                        className={selectCls}
+                                                    >
+                                                        <option value="standard">Standard</option>
+                                                        <option value="variant">Variant</option>
+                                                        <option value="kit">Kit</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                                <div>
+                                                    <FieldLabel>Source</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.source}
+                                                        onChange={e => updateField('source', e.target.value)}
+                                                        placeholder="Data source"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Reference ID</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.referenceId}
+                                                        onChange={e => updateField('referenceId', e.target.value)}
+                                                        placeholder="External Ref ID"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Last Sync</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.lastSync}
+                                                        onChange={e => updateField('lastSync', e.target.value)}
+                                                        placeholder="e.g. 2026-06-29"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                                <label className="flex items-center gap-3 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={form.sellable}
+                                                        onChange={(e) => updateField('sellable', e.target.checked)}
+                                                        className="w-5 h-5 accent-[#299E60]"
+                                                    />
+                                                    <div>
+                                                        <span className="text-[13px] font-bold text-[#181725]">Sellable</span>
+                                                    </div>
+                                                </label>
+                                                <label className="flex items-center gap-3 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={form.purchasable}
+                                                        onChange={(e) => updateField('purchasable', e.target.checked)}
+                                                        className="w-5 h-5 accent-[#299E60]"
+                                                    />
+                                                    <div>
+                                                        <span className="text-[13px] font-bold text-[#181725]">Purchasable</span>
+                                                    </div>
+                                                </label>
+                                                <label className="flex items-center gap-3 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={form.isFeatured}
+                                                        onChange={(e) => updateField('isFeatured', e.target.checked)}
+                                                        className="w-5 h-5 accent-[#F59E0B]"
+                                                    />
+                                                    <div>
+                                                        <span className="text-[13px] font-bold text-[#181725]">Featured</span>
+                                                    </div>
+                                                </label>
+                                            </div>
+
+                                            <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
+                                                <div>
+                                                    <FieldLabel>Variant Mapping</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={form.variantMapping}
+                                                        onChange={e => updateField('variantMapping', e.target.value)}
+                                                        placeholder="e.g. size:large, color:red"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                
+                                                <div>
+                                                    <FieldLabel>Substitute Products</FieldLabel>
+                                                    <SubstituteProductPicker
+                                                        selectedIds={form.substituteIds}
+                                                        currentProductId={editingProduct?.id}
+                                                        products={products}
+                                                        onChange={(ids) => updateField('substituteIds', ids)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'bulk' && (
+                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                            <div className="flex items-start justify-between">
+                                                <div>
+                                                    <SectionHeader icon={<Tag size={16} />} title="Bulk Pricing Tiers" />
+                                                    <p className="text-[12px] text-[#AEAEAE] font-medium -mt-3 ml-[42px]">
+                                                        Up to 3 quantity-based discount tiers (taxable rate, ex-GST)
+                                                    </p>
+                                                </div>
+                                                {form.priceSlabs.length < 3 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setForm(prev => ({
+                                                            ...prev,
+                                                            priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '' }],
+                                                        }))}
+                                                        className="h-[32px] px-3.5 bg-[#EEF8F1] hover:bg-[#53B175] text-[#299E60] hover:text-white rounded-[8px] text-[12px] font-bold flex items-center gap-1.5 transition-colors shrink-0"
+                                                    >
+                                                        <Plus size={13} /> Add Bulk Tier
                                                     </button>
+                                                )}
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                {form.priceSlabs.map((slab, index) => (
+                                                    <div key={index} className="rounded-[14px] border border-[#EEEEEE] overflow-hidden">
+                                                        <div className="flex items-center justify-between px-5 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE]">
+                                                            <div className="flex items-center gap-2.5">
+                                                                <span className="w-[28px] h-[28px] rounded-full bg-[#299E60] text-white text-[12px] font-bold flex items-center justify-center">
+                                                                    {index + 1}
+                                                                </span>
+                                                                <h4 className="text-[14px] font-bold text-[#181725]">Bulk Tier {index + 1}</h4>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setForm(prev => ({
+                                                                    ...prev,
+                                                                    priceSlabs: prev.priceSlabs.filter((_, idx) => idx !== index),
+                                                                }))}
+                                                                className="p-1.5 hover:bg-[#FFF0F0] rounded-[6px] transition-colors text-[#AEAEAE] hover:text-[#E74C3C]"
+                                                            >
+                                                                <Trash2 size={15} />
+                                                            </button>
+                                                        </div>
+
+                                                        <div className="p-5">
+                                                            <div className="grid grid-cols-3 gap-4">
+                                                                <div>
+                                                                    <FieldLabel>Min Quantity</FieldLabel>
+                                                                    <input
+                                                                        type="number"
+                                                                        min="1"
+                                                                        value={slab.minQty}
+                                                                        onChange={e => setForm(prev => ({
+                                                                            ...prev,
+                                                                            priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, minQty: e.target.value } : s),
+                                                                        }))}
+                                                                        className={inputCls}
+                                                                        placeholder="e.g. 10"
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <FieldLabel>Max Quantity</FieldLabel>
+                                                                    <input
+                                                                        type="number"
+                                                                        min="1"
+                                                                        value={slab.maxQty}
+                                                                        onChange={e => setForm(prev => ({
+                                                                            ...prev,
+                                                                            priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, maxQty: e.target.value } : s),
+                                                                        }))}
+                                                                        className={inputCls}
+                                                                        placeholder="(optional)"
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <FieldLabel required>Taxable Rate (per Unit)</FieldLabel>
+                                                                    <div className="relative">
+                                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] text-[14px]">₹</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            min="0"
+                                                                            value={slab.price}
+                                                                            onChange={e => setForm(prev => ({
+                                                                                ...prev,
+                                                                                priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, price: e.target.value } : s),
+                                                                            }))}
+                                                                            className={cn(inputCls, 'pl-8')}
+                                                                            placeholder="0.00"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 ))}
+
+                                                {form.priceSlabs.length === 0 && (
+                                                    <div className="text-center py-8 text-[#AEAEAE]">
+                                                        <BarChart3 size={32} className="mx-auto mb-2 text-[#E5E7EB]" />
+                                                        <p className="text-[13px] font-medium">No bulk tiers yet. Click &quot;Add Bulk Tier&quot; to add quantity-based pricing.</p>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
+                                    )}
 
-                                        {/* Storage Type */}
-                                        <div>
-                                            <FieldLabel>Storage Type</FieldLabel>
-                                            <select
-                                                value={form.storageType}
-                                                onChange={(e) => updateField('storageType', e.target.value)}
-                                                className={selectCls}
-                                            >
-                                                <option value="">Not specified</option>
-                                                <option value="ambient">Ambient (Room Temp)</option>
-                                                <option value="refrigerated">Refrigerated (2–8°C)</option>
-                                                <option value="frozen">Frozen (−18°C)</option>
-                                                <option value="dry">Dry Storage</option>
-                                                <option value="cool">Cool / Dark (10–15°C)</option>
-                                            </select>
+                                    {editingProduct && auditLogs.length > 0 && (
+                                        <div className="border border-[#EEEEEE] rounded-[12px] p-4 space-y-2">
+                                            <h3 className="text-[13px] font-bold text-[#181725]">Change history</h3>
                                         </div>
+                                    )}
 
-                                        {/* Alias Names */}
-                                        <div>
-                                            <FieldLabel>Alias / Search Names</FieldLabel>
-                                            <TagInput
-                                                tags={form.aliasNames}
-                                                onChange={(names) => updateField('aliasNames', names)}
-                                            />
-                                            <p className="text-[11px] text-[#AEAEAE] font-medium mt-1">Alternate names buyers may search by (e.g. local language variants)</p>
-                                        </div>
-
-                                        {/* Shelf Life & Country */}
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <FieldLabel>Shelf Life (days)</FieldLabel>
-                                                <input
-                                                    type="number"
-                                                    min={0}
-                                                    value={form.shelfLifeDays}
-                                                    onChange={(e) => updateField('shelfLifeDays', e.target.value)}
-                                                    className={inputCls}
-                                                    placeholder="e.g. 180"
-                                                />
-                                            </div>
-                                            <div>
-                                                <FieldLabel>Country of Origin</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={form.countryOfOrigin}
-                                                    onChange={(e) => updateField('countryOfOrigin', e.target.value)}
-                                                    className={inputCls}
-                                                    placeholder="e.g. India"
-                                                    maxLength={100}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Credit Eligible */}
-                                        <label className="flex items-center gap-3 cursor-pointer py-1">
-                                            <input
-                                                type="checkbox"
-                                                checked={form.creditEligible}
-                                                onChange={(e) => updateField('creditEligible', e.target.checked)}
-                                                className="w-5 h-5 accent-[#299E60] shrink-0"
-                                            />
-                                            <div>
-                                                <span className="text-[14px] font-bold text-[#181725]">Credit Eligible</span>
-                                                <p className="text-[11px] text-[#AEAEAE] font-medium">Allow buyers to purchase this product on credit terms</p>
-                                            </div>
-                                        </label>
-
-                                        {/* Featured Product */}
-                                        <label className="flex items-center gap-3 cursor-pointer py-1">
-                                            <input type="checkbox" checked={form.isFeatured} onChange={(e) => updateField('isFeatured', e.target.checked)} className="w-5 h-5 accent-[#F59E0B] shrink-0" />
-                                            <div>
-                                                <span className="text-[14px] font-bold text-[#181725]">Featured Product</span>
-                                                <p className="text-[11px] text-[#AEAEAE] font-medium">Highlighted in your store&apos;s featured section and search results</p>
-                                            </div>
-                                        </label>
-
-                                        {/* Substitute Products */}
-                                        <div>
-                                            <FieldLabel>Substitute Products</FieldLabel>
-                                            <SubstituteProductPicker
-                                                selectedIds={form.substituteIds}
-                                                currentProductId={editingProduct?.id}
-                                                products={products}
-                                                onChange={(ids) => updateField('substituteIds', ids)}
-                                            />
-                                            <p className="text-[11px] text-[#AEAEAE] font-medium mt-1">Products shown to buyers when this item is out of stock</p>
-                                        </div>
+                                    <div className="flex items-center gap-3 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={requestClosePanel}
+                                            className="flex-1 h-[48px] border border-[#EEEEEE] bg-white rounded-[12px] text-[14px] font-bold text-[#7C7C7C] hover:bg-gray-50 transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={saving}
+                                            className="flex-1 h-[48px] bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center justify-center gap-2"
+                                        >
+                                            {saving ? 'Saving...' : 'Update Product'}
+                                        </button>
                                     </div>
-                                </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
 
-                                {/* ======== Bottom Actions ======== */}
-                                <div className="flex items-center gap-3 pt-2 pb-8">
-                                    <button
-                                        type="button"
-                                        onClick={closePanel}
-                                        className="flex-1 h-[48px] border border-[#EEEEEE] bg-white rounded-[12px] text-[14px] font-bold text-[#7C7C7C] hover:bg-gray-50 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={saving}
-                                        className="flex-1 h-[48px] bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
-                                    >
-                                        {saving && <Loader2 size={16} className="animate-spin" />}
-                                        {saving ? 'Saving...' : editingProduct?.approvalStatus === 'rejected' ? 'Resubmit for Review' : editingProduct ? 'Update Product' : isNewSubmission ? 'Submit for Approval' : 'Add Product'}
-                                    </button>
+            {/* Unsaved changes confirmation */}
+            {showCloseConfirm && (
+                <>
+                    <div className="fixed inset-0 bg-black/40 z-[10003]" onClick={() => setShowCloseConfirm(false)} />
+                    <div className="fixed inset-0 z-[10004] flex items-center justify-center p-4">
+                        <div className="bg-white rounded-[16px] shadow-xl max-w-[420px] w-full p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-[40px] h-[40px] rounded-full bg-[#FFF7E6] flex items-center justify-center shrink-0">
+                                    <AlertCircle size={20} className="text-[#F59E0B]" />
                                 </div>
-                            </form>
-                        )}
+                                <h3 className="text-[18px] font-bold text-[#181725]">Unsaved changes</h3>
+                            </div>
+                            <p className="text-[14px] text-[#7C7C7C] mb-6">
+                                You have changes that haven&apos;t been saved yet. Discard them and close the form?
+                            </p>
+                            <div className="flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCloseConfirm(false)}
+                                    className="flex-1 h-[44px] border border-[#EEEEEE] rounded-[10px] text-[14px] font-bold text-[#181725] hover:bg-[#F8F9FB] transition-colors"
+                                >
+                                    Keep editing
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={closePanelImmediate}
+                                    className="flex-1 h-[44px] bg-[#E74C3C] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#d44234] transition-colors"
+                                >
+                                    Discard
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </>
             )}
@@ -2608,6 +3318,16 @@ export default function VendorProductsPage() {
                 products={products}
                 selectedIds={Array.from(selectedIds)}
                 onComplete={() => { fetchProducts(false); setSelectedIds(new Set()); }}
+            />
+
+            <VendorBulkGrid
+                open={gridOpen}
+                onClose={() => setGridOpen(false)}
+                products={products}
+                onComplete={() => fetchProducts(false)}
+                categories={categories}
+                brands={brands}
+                onOpenAdvanced={() => setBulkOpen(true)}
             />
 
             {/* Floating selection action bar */}

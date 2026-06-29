@@ -60,6 +60,7 @@ const createProductSchema = z.object({
     price: z.number().positive(),
     promoPrice: z.number().positive().optional(),
   })).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 // GET — list catalog products (deduplicated by name)

@@ -114,24 +114,28 @@ export default function ApprovalsPage() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [pendingVRes, approvedVRes, productsRes, mastersRes, categoriesRes, brandsRes, summaryRes] = await Promise.all([
+            const [pendingVRes, approvedVRes, productsRes, editProductsRes, mastersRes, categoriesRes, brandsRes, summaryRes] = await Promise.all([
                 fetch('/api/v1/admin/vendors?verified=false&limit=50'),
                 fetch('/api/v1/admin/vendors?verified=true&limit=50'),
                 fetch('/api/v1/admin/products?approvalStatus=pending&limit=50'),
+                fetch('/api/v1/admin/products?approvalStatus=pending_edit&limit=50'),
                 fetch('/api/v1/admin/master-products?approvalStatus=pending&limit=50'),
                 fetch('/api/v1/admin/categories?approvalStatus=pending'),
                 fetch('/api/v1/admin/brands?status=pending'),
                 fetch('/api/v1/admin/approvals/summary'),
             ]);
 
-            const [pv, av, pr, mr, cat, br, sum] = await Promise.all([
-                pendingVRes.json(), approvedVRes.json(), productsRes.json(), mastersRes.json(), categoriesRes.json(), brandsRes.json(), summaryRes.json(),
+            const [pv, av, pr, er, mr, cat, br, sum] = await Promise.all([
+                pendingVRes.json(), approvedVRes.json(), productsRes.json(), editProductsRes.json(), mastersRes.json(), categoriesRes.json(), brandsRes.json(), summaryRes.json(),
             ]);
 
             if (pv.success) setPendingVendors(pv.data.vendors);
             if (av.success) setApprovedVendors(av.data.vendors);
             const vendorPending: PendingProduct[] = pr.success
                 ? (pr.data.products || []).map((p: PendingProduct) => ({ ...p, kind: 'vendor' as const }))
+                : [];
+            const vendorEditPending: PendingProduct[] = er.success
+                ? (er.data.products || []).map((p: PendingProduct) => ({ ...p, kind: 'vendor' as const }))
                 : [];
             const masterPending: PendingProduct[] = mr.success
                 ? (mr.data.masterProducts || []).map((m: {
@@ -153,7 +157,7 @@ export default function ApprovalsPage() {
                     kind: 'master' as const,
                 }))
                 : [];
-            setPendingProducts([...masterPending, ...vendorPending]);
+            setPendingProducts([...masterPending, ...vendorPending, ...vendorEditPending]);
             if (cat.success) setPendingCategories(cat.data || []);
             if (br.success) setPendingBrands(br.data || []);
             if (sum.success) setSummary(sum.data);

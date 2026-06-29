@@ -25,6 +25,7 @@ const updateProductSchema = z.object({
   packSize: z.string().optional(),
   unit: z.string().optional(),
   sku: z.string().optional(),
+  vendorSku: z.string().min(1).max(100).optional(),
   hsn: z.string().optional(),
   fssaiRef: z.string().max(50).optional(),
   brand: z.string().optional(),
@@ -52,6 +53,8 @@ const updateProductSchema = z.object({
     price: z.number().positive(),
     promoPrice: z.number().positive().optional(),
   })).optional(),
+  listingStatus: z.enum(['draft', 'submitted']).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 // Helper: extract the [id] segment from /api/v1/vendor/products/{id}
@@ -73,7 +76,7 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
     const { priceSlabs, ...productData } = data;
 
     const catalogService = new CatalogService();
-    const updated = await catalogService.updateProduct(productId, vendorId, productData);
+    const updated = await catalogService.updateProduct(productId, vendorId, productData, ctx.userId);
 
     // Replace price slabs if provided
     if (priceSlabs !== undefined) {
@@ -140,7 +143,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   }
 });
 
-// DELETE — hard-delete the product (or tombstone if it has order/cart history).
+// DELETE — hard-delete the product (blocked when order history exists; tombstone if cart/list refs block it).
 // Either way, the [vendorId, slug] unique constraint frees up so the same name
 // can be re-added immediately.
 export const DELETE = vendorOnly(async (req: NextRequest, ctx) => {

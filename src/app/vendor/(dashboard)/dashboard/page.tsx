@@ -59,11 +59,6 @@ interface RecentOrder {
     _count: { items: number };
 }
 
-interface Category {
-    id: string;
-    name: string;
-}
-
 interface Product {
     id: string;
     name: string;
@@ -322,242 +317,7 @@ function SetupBanner() {
 
 // ─── Smart Action Modals ─────────────────────────────────────────────────────────
 
-// 1. Add Product Modal
-function AddProductModal({
-    isOpen,
-    onClose,
-    categories,
-    onSuccess,
-}: {
-    isOpen: boolean;
-    onClose: () => void;
-    categories: Category[];
-    onSuccess: () => void;
-}) {
-    const [name, setName] = useState('');
-    const [basePrice, setBasePrice] = useState('');
-    const [originalPrice, setOriginalPrice] = useState('');
-    const [categoryId, setCategoryId] = useState('');
-    const [sku, setSku] = useState('');
-    const [brand, setBrand] = useState('');
-    const [unit, setUnit] = useState('box');
-    const [packSize, setPackSize] = useState('');
-    const [taxPercent, setTaxPercent] = useState('18');
-    const [description, setDescription] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    if (!isOpen) return null;
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!name || !basePrice || !categoryId) {
-            toast.error('Product Name, Base Price, and Category are required');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-            const response = await fetch('/api/v1/vendor/products', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name,
-                    slug,
-                    basePrice: parseFloat(basePrice),
-                    originalPrice: originalPrice ? parseFloat(originalPrice) : undefined,
-                    categoryId,
-                    categoryIds: [categoryId],
-                    sku: sku || undefined,
-                    brand: brand || undefined,
-                    unit,
-                    packSize: packSize || undefined,
-                    taxPercent: parseFloat(taxPercent),
-                    description: description || undefined,
-                }),
-            });
-
-            const json = await response.json();
-            if (json.success) {
-                toast.success('Product added successfully!');
-                onSuccess();
-                onClose();
-                // Reset form
-                setName('');
-                setBasePrice('');
-                setOriginalPrice('');
-                setCategoryId('');
-                setSku('');
-                setBrand('');
-                setUnit('box');
-                setPackSize('');
-                setDescription('');
-            } else {
-                toast.error(json.error?.message || 'Failed to add product');
-            }
-        } catch (err) {
-            toast.error('An error occurred while adding the product');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden flex flex-col">
-                <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                    <div>
-                        <h3 className="text-[18px] font-bold text-gray-900">Add New Product</h3>
-                        <p className="text-[12px] text-gray-500">Insert a new product into your catalog and initialize its stock record.</p>
-                    </div>
-                    <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
-                        <X size={20} />
-                    </button>
-                </div>
-                <form onSubmit={handleSubmit} className="p-6 space-y-4 flex-1">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-[13px] font-bold text-gray-700 mb-1">Product Name *</label>
-                            <input
-                                type="text"
-                                placeholder="e.g. Premium Basmati Rice"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                className="w-full h-10 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-[13px] font-bold text-gray-700 mb-1">Category *</label>
-                            <select
-                                value={categoryId}
-                                onChange={(e) => setCategoryId(e.target.value)}
-                                className="w-full h-10 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
-                                required
-                            >
-                                <option value="">Select Category</option>
-                                {categories.map((cat) => (
-                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-[13px] font-bold text-gray-700 mb-1">Base Price (Taxable) *</label>
-                            <input
-                                type="number"
-                                step="0.01"
-                                placeholder="₹ Price before GST"
-                                value={basePrice}
-                                onChange={(e) => setBasePrice(e.target.value)}
-                                className="w-full h-10 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-[13px] font-bold text-gray-700 mb-1">Original Price (MRP)</label>
-                            <input
-                                type="number"
-                                step="0.01"
-                                placeholder="₹ Strikethrough price"
-                                value={originalPrice}
-                                onChange={(e) => setOriginalPrice(e.target.value)}
-                                className="w-full h-10 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-[13px] font-bold text-gray-700 mb-1">Brand</label>
-                            <input
-                                type="text"
-                                placeholder="e.g. Daawat"
-                                value={brand}
-                                onChange={(e) => setBrand(e.target.value)}
-                                className="w-full h-10 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-[13px] font-bold text-gray-700 mb-1">SKU Code</label>
-                            <input
-                                type="text"
-                                placeholder="e.g. DWT-RCE-5KG"
-                                value={sku}
-                                onChange={(e) => setSku(e.target.value)}
-                                className="w-full h-10 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-[13px] font-bold text-gray-700 mb-1">Unit</label>
-                            <select
-                                value={unit}
-                                onChange={(e) => setUnit(e.target.value)}
-                                className="w-full h-10 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
-                            >
-                                <option value="kg">kg (Kilogram)</option>
-                                <option value="g">g (Gram)</option>
-                                <option value="pcs">pcs (Pieces)</option>
-                                <option value="box">box (Box)</option>
-                                <option value="pack">pack (Pack)</option>
-                                <option value="litre">litre (Litre)</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-[13px] font-bold text-gray-700 mb-1">Pack Size</label>
-                            <input
-                                type="text"
-                                placeholder="e.g. 5kg x 4 bags"
-                                value={packSize}
-                                onChange={(e) => setPackSize(e.target.value)}
-                                className="w-full h-10 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-[13px] font-bold text-gray-700 mb-1">Tax Percent (GST %)</label>
-                            <select
-                                value={taxPercent}
-                                onChange={(e) => setTaxPercent(e.target.value)}
-                                className="w-full h-10 px-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
-                            >
-                                <option value="0">0%</option>
-                                <option value="5">5%</option>
-                                <option value="12">12%</option>
-                                <option value="18">18%</option>
-                                <option value="28">28%</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-[13px] font-bold text-gray-700 mb-1">Product Description</label>
-                        <textarea
-                            placeholder="Detailed product details, storage info, ingredients..."
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            rows={3}
-                            className="w-full p-3 rounded-xl border border-gray-200 text-[13px] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium resize-none"
-                        />
-                    </div>
-                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="h-10 px-4 rounded-xl border border-gray-200 text-[13px] font-bold text-gray-500 hover:bg-gray-50 transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="h-10 px-5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold hover:bg-emerald-700 transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-60"
-                        >
-                            {loading && <Loader2 size={14} className="animate-spin" />}
-                            Create Product
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-}
-
-// 2. Upload Inventory Modal
+// 1. Upload Inventory Modal
 function UploadInventoryModal({
     isOpen,
     onClose,
@@ -2812,12 +2572,10 @@ export default function VendorDashboardPage() {
     monthStartIST.setTime(monthStartIST.getTime() - 5.5 * 60 * 60 * 1000);
 
     // Auxiliary modal states
-    const [categories, setCategories] = useState<Category[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [dbCustomers, setDbCustomers] = useState<Customer[]>([]);
 
     // Modals visibility states
-    const [isAddProductOpen, setIsAddProductOpen] = useState(false);
     const [isUploadInventoryOpen, setIsUploadInventoryOpen] = useState(false);
     const [isCreateSchemeOpen, setIsCreateSchemeOpen] = useState(false);
     const [isPushOfferOpen, setIsPushOfferOpen] = useState(false);
@@ -2898,34 +2656,6 @@ export default function VendorDashboardPage() {
 
     // Load auxiliary lists to supply modal dropdown selectors
     useEffect(() => {
-        // Fetch categories list
-        fetch('/api/v1/vendor/categories')
-            .then((r) => r.json())
-            .then((res) => {
-                if (res.success && res.data) {
-                    setCategories(res.data);
-                } else {
-                    // Standard fallback categories
-                    setCategories([
-                        { id: 'c-1', name: 'Fresh Fruits & Vegetables' },
-                        { id: 'c-2', name: 'Grocery & Staples' },
-                        { id: 'c-3', name: 'Dairy & Eggs' },
-                        { id: 'c-4', name: 'Beverages & Soft Drinks' },
-                        { id: 'c-5', name: 'Meat, Seafood & Poultry' },
-                        { id: 'c-6', name: 'Baking Supplies' },
-                    ]);
-                }
-            })
-            .catch(() => {
-                setCategories([
-                    { id: 'c-1', name: 'Fresh Fruits & Vegetables' },
-                    { id: 'c-2', name: 'Grocery & Staples' },
-                    { id: 'c-3', name: 'Dairy & Eggs' },
-                    { id: 'c-4', name: 'Beverages & Soft Drinks' },
-                    { id: 'c-5', name: 'Meat, Seafood & Poultry' },
-                ]);
-            });
-
         // Fetch products list (needed for promo buy/get selectors)
         fetch('/api/v1/vendor/products?limit=100')
             .then((r) => r.json())
@@ -3087,15 +2817,15 @@ export default function VendorDashboardPage() {
                             Smart Executive Actions
                         </h3>
                         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5">
-                            <button
-                                onClick={() => setIsAddProductOpen(true)}
+                            <Link
+                                href="/vendor/products?action=add"
                                 className="flex flex-col items-center justify-center p-4 bg-emerald-50/20 border border-emerald-100 rounded-2xl hover:bg-emerald-50 hover:shadow-sm hover:-translate-y-0.5 transition-all text-center group"
                             >
                                 <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                                     <PlusCircle size={18} />
                                 </div>
                                 <span className="text-[12px] font-bold text-emerald-700">Add Products</span>
-                            </button>
+                            </Link>
                             <button
                                 onClick={() => setIsUploadInventoryOpen(true)}
                                 className="flex flex-col items-center justify-center p-4 bg-blue-50/20 border border-blue-100 rounded-2xl hover:bg-blue-50 hover:shadow-sm hover:-translate-y-0.5 transition-all text-center group"
@@ -3577,13 +3307,6 @@ export default function VendorDashboardPage() {
             )}
 
             {/* Modals Mounting Deck */}
-            <AddProductModal
-                isOpen={isAddProductOpen}
-                onClose={() => setIsAddProductOpen(false)}
-                categories={categories}
-                onSuccess={() => fetchDashboard()}
-            />
-
             <UploadInventoryModal
                 isOpen={isUploadInventoryOpen}
                 onClose={() => setIsUploadInventoryOpen(false)}

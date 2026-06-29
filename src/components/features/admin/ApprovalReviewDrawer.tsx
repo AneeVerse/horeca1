@@ -68,6 +68,7 @@ interface VendorProductDetail {
     id: string;
     name: string;
     sku: string | null;
+    vendorSku: string | null;
     brand: string | null;
     basePrice: number;
     imageUrl: string | null;
@@ -75,6 +76,8 @@ interface VendorProductDetail {
     category: { id: string; name: string } | null;
     vendor: { businessName: string } | null;
     inventory: { qtyAvailable: number } | null;
+    masterProduct: { id: string; sku: string; name: string } | null;
+    pendingEditPayload?: Record<string, unknown> | null;
 }
 
 interface CategoryDetail {
@@ -111,8 +114,12 @@ interface ParentCategoryOption {
 const inputCls =
     'w-full h-[42px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 font-medium';
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
-    return <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">{children}</label>;
+function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+    return (
+        <label className="block text-[12px] font-bold text-[#7C7C7C] uppercase tracking-wide mb-1.5">
+            {children}{required && <span className="text-[#E74C3C] ml-0.5">*</span>}
+        </label>
+    );
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -162,8 +169,10 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
 
     // Edit form state
     const [vendorForm, setVendorForm] = useState({ businessName: '', fullName: '', email: '', phone: '' });
-    const [masterForm, setMasterForm] = useState({ name: '', brand: '', categoryId: '', categoryName: '', imageUrl: '' });
+    const [masterForm, setMasterForm] = useState({ name: '', brand: '', sku: '', categoryId: '', categoryName: '', imageUrl: '' });
     const [productForm, setProductForm] = useState({ name: '', brand: '', basePrice: '', categoryId: '', categoryName: '', imageUrl: '' });
+    const [catalogSkuInput, setCatalogSkuInput] = useState('');
+    const [linkMasterId, setLinkMasterId] = useState('');
     const [categoryForm, setCategoryForm] = useState({ name: '', slug: '', parentId: '', imageUrl: '', isActive: true });
     const [brandForm, setBrandForm] = useState({ name: '', tagline: '', logoUrl: '' });
 
@@ -177,6 +186,8 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
         setVendorProduct(null);
         setCategory(null);
         setBrand(null);
+        setCatalogSkuInput('');
+        setLinkMasterId('');
         setTitle('');
         setStatusLabel('');
         setIsApproved(false);
@@ -218,6 +229,7 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
                 setMasterForm({
                     name: p.name,
                     brand: p.brand ?? '',
+                    sku: p.sku,
                     categoryId: p.category?.id ?? '',
                     categoryName: p.category?.name ?? '',
                     imageUrl: p.imageUrl ?? '',
@@ -245,6 +257,8 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
                     categoryName: p.category?.name ?? '',
                     imageUrl: p.imageUrl ?? '',
                 });
+                setCatalogSkuInput(p.masterProduct?.sku ?? '');
+                setLinkMasterId(p.masterProduct?.id ?? '');
                 const bRes = await fetch('/api/v1/brands?limit=100');
                 const bJson = await bRes.json();
                 if (bJson.success) {
@@ -336,6 +350,9 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
                     imageUrl: masterForm.imageUrl.trim() || null,
                 };
                 if (masterForm.categoryId) body.categoryId = masterForm.categoryId;
+                if (masterProduct.approvalStatus === 'pending' && masterForm.sku.trim()) {
+                    body.sku = masterForm.sku.trim();
+                }
                 const res = await fetch(`/api/v1/admin/master-products/${masterProduct.id}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
@@ -413,13 +430,37 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
                 toast.success(`${vendor.businessName} approved`);
                 onComplete();
             } else if (target.type === 'product') {
+                if (target.kind === 'vendor' && vendorProduct?.approvalStatus === 'pending') {
+                    const hasMaster =
+                        !!linkMasterId ||
+                        !!vendorProduct.masterProduct?.id;
+                    if (!hasMaster && !catalogSkuInput.trim()) {
+                        toast.error('Assign a catalog SKU before approving this vendor listing.');
+                        return;
+                    }
+                }
+                if (target.kind === 'master' && masterProduct?.approvalStatus === 'pending' && !masterForm.sku.trim()) {
+                    toast.error('Enter a catalog SKU before approving this master item.');
+                    return;
+                }
+
+                const approvalBody: Record<string, unknown> = { action: 'approve' };
+                if (target.kind === 'vendor') {
+                    if (linkMasterId) {
+                        approvalBody.masterProductId = linkMasterId;
+                    } else if (catalogSkuInput.trim()) {
+                        approvalBody.catalogSku = catalogSkuInput.trim().toUpperCase();
+                    }
+                } else if (target.kind === 'master' && masterForm.sku.trim()) {
+                    approvalBody.catalogSku = masterForm.sku.trim().toUpperCase();
+                }
                 const url = target.kind === 'master'
                     ? `/api/v1/admin/master-products/${target.id}/approval`
                     : `/api/v1/admin/products/${target.id}/approval`;
                 const res = await fetch(url, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'approve' }),
+                    body: JSON.stringify(approvalBody),
                 });
                 const json = await res.json();
                 if (!res.ok || !json.success) throw new Error(json.error?.message || 'Could not approve product');
@@ -553,7 +594,7 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
 
     const canReject = target && (
         (target.type === 'vendor' && vendor && !vendor.isVerified) ||
-        (target.type === 'product' && !isApproved) ||
+        (target.type === 'product' && (!isApproved || vendorProduct?.approvalStatus === 'pending_edit')) ||
         (target.type === 'category' && category && category.approvalStatus === 'pending') ||
         (target.type === 'brand' && brand && brand.approvalStatus === 'pending')
     );
@@ -660,7 +701,16 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
                         </div>
                         <div>
                             <FieldLabel>SKU</FieldLabel>
-                            <input className={cn(inputCls, 'bg-[#F8F9FB] cursor-not-allowed')} value={masterProduct.sku} readOnly />
+                            {masterProduct.approvalStatus === 'pending' ? (
+                                <input
+                                    className={inputCls}
+                                    value={masterForm.sku}
+                                    onChange={(e) => setMasterForm((f) => ({ ...f, sku: e.target.value.toUpperCase() }))}
+                                    placeholder="e.g., RIC-BAS-001"
+                                />
+                            ) : (
+                                <input className={cn(inputCls, 'bg-[#F8F9FB] cursor-not-allowed')} value={masterProduct.sku} readOnly />
+                            )}
                         </div>
                         <div>
                             <FieldLabel>Brand</FieldLabel>
@@ -699,6 +749,20 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
                         <DetailRow label="Type" value="Master Catalog" />
                         <DetailRow label="Status" value={masterProduct.approvalStatus} />
                     </div>
+                    {masterProduct.approvalStatus === 'pending' && (
+                        <div>
+                            <FieldLabel required>Catalog SKU</FieldLabel>
+                            <input
+                                className={inputCls}
+                                value={masterForm.sku}
+                                onChange={(e) => setMasterForm((f) => ({ ...f, sku: e.target.value.toUpperCase() }))}
+                                placeholder="e.g., RIC-BAS-001"
+                            />
+                            <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
+                                Admin-assigned global catalog identifier. Required before approval.
+                            </p>
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -751,9 +815,39 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
                         <DetailRow label="Brand" value={vendorProduct.brand} />
                         <DetailRow label="Category" value={vendorProduct.category?.name} />
                         <DetailRow label="Price" value={`₹${Number(vendorProduct.basePrice).toLocaleString('en-IN')}`} />
+                        <DetailRow label="POS SKU" value={vendorProduct.vendorSku ?? vendorProduct.sku} />
+                        <DetailRow label="Catalog SKU" value={vendorProduct.masterProduct?.sku} />
                         <DetailRow label="Stock" value={vendorProduct.inventory ? String(vendorProduct.inventory.qtyAvailable) : '—'} />
                         <DetailRow label="Status" value={vendorProduct.approvalStatus} />
                     </div>
+                    {vendorProduct.approvalStatus === 'pending_edit' && vendorProduct.pendingEditPayload && (
+                        <div className="space-y-2 pt-2 border-t border-[#F5F5F5] bg-[#FFF8E1] rounded-[10px] p-4">
+                            <p className="text-[12px] font-bold text-[#8B6914] uppercase">Queued material changes</p>
+                            <pre className="text-[12px] text-[#181725] whitespace-pre-wrap font-mono">
+                                {JSON.stringify(vendorProduct.pendingEditPayload, null, 2)}
+                            </pre>
+                            <p className="text-[11px] text-[#AEAEAE]">Live listing unchanged until you approve this edit.</p>
+                        </div>
+                    )}
+                    {vendorProduct.approvalStatus === 'pending' && !vendorProduct.masterProduct && (
+                        <div className="space-y-3 pt-2 border-t border-[#F5F5F5]">
+                            <div>
+                                <FieldLabel required>Assign Catalog SKU</FieldLabel>
+                                <input
+                                    className={inputCls}
+                                    value={catalogSkuInput}
+                                    onChange={(e) => {
+                                        setCatalogSkuInput(e.target.value.toUpperCase());
+                                        setLinkMasterId('');
+                                    }}
+                                    placeholder="e.g., RIC-BAS-001"
+                                />
+                                <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
+                                    Creates or links the global master catalog item. Required to approve this listing.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }

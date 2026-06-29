@@ -9,8 +9,14 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
-import { assertLeafCategory } from '@/modules/catalog/catalog.service';
+import { assertLeafCategory, syncMasterProductCategories } from '@/modules/catalog/catalog.service';
+import {
+  countLinkedVendorProducts,
+  saveMasterProductRevision,
+  syncMasterFieldsToVendorListings,
+} from '@/modules/catalog/master-sync.service';
 import { syncProductToBrand } from '@/modules/brand/brand.service';
+import { validateMasterSku } from '@/lib/sku';
 
 export const GET = adminOnly(async (req: NextRequest) => {
   try {
@@ -38,8 +44,10 @@ function extractId(req: NextRequest): string {
 }
 
 const updateSchema = z.object({
+  sku: z.string().min(2).max(40).optional(),
   name: z.string().min(1).optional(),
   categoryId: z.string().uuid().optional(),
+  categoryIds: z.array(z.string().uuid()).min(1).optional(),
   brand: z.string().min(1).max(150).optional(),
   uom: z.string().max(50).nullable().optional(),
   taxPercent: z.number().min(0).max(100).optional(),
@@ -48,6 +56,8 @@ const updateSchema = z.object({
   aliasNames: z.array(z.string()).optional(),
   searchKeywords: z.array(z.string()).optional(),
   isActive: z.boolean().optional(),
+  /** Required when linked vendor count > 10 */
+  confirmLinkedSync: z.boolean().optional(),
 });
 
 export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
@@ -56,12 +66,84 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     const id = extractId(req);
     const data = updateSchema.parse(await req.json());
 
-    if (data.categoryId) await assertLeafCategory([data.categoryId]);
+    const current = await prisma.masterProduct.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        approvalStatus: true,
+        sku: true,
+        name: true,
+        brand: true,
+        categoryId: true,
+        taxPercent: true,
+        imageUrl: true,
+        images: true,
+      },
+    });
+    if (!current) throw Errors.notFound('Master product not found');
 
-    const updateData: Prisma.MasterProductUpdateInput = { ...data };
+    const linkedCount = await countLinkedVendorProducts(id);
+    const syncableFields = ['name', 'brand', 'categoryId', 'categoryIds', 'taxPercent', 'imageUrl', 'images'] as const;
+    const touchesSyncFields = syncableFields.some((f) => data[f as keyof typeof data] !== undefined);
+    if (linkedCount > 10 && touchesSyncFields && !data.confirmLinkedSync) {
+      throw Errors.badRequest(
+        `This master item is linked to ${linkedCount} vendor listings. Set confirmLinkedSync: true to proceed.`,
+      );
+    }
+
+    const { categoryIds, categoryId: _omitCategoryId, sku: rawSku, confirmLinkedSync: _confirm, ...rest } = data;
+    const resolvedCategoryIds = categoryIds?.length
+      ? categoryIds
+      : data.categoryId
+        ? [data.categoryId]
+        : undefined;
+
+    if (resolvedCategoryIds) await assertLeafCategory(resolvedCategoryIds);
+
+    const updateData: Prisma.MasterProductUpdateInput = { ...rest };
     if (data.brand !== undefined) updateData.brand = data.brand.trim();
+    if (resolvedCategoryIds) {
+      updateData.category = { connect: { id: resolvedCategoryIds[0] } };
+    }
+
+    if (rawSku !== undefined) {
+      if (current.approvalStatus !== 'pending') {
+        throw Errors.badRequest('Catalog SKU is immutable after approval. Create a new master item to change SKU.');
+      }
+      const skuCheck = validateMasterSku(rawSku);
+      if (!skuCheck.ok) throw Errors.badRequest(skuCheck.message);
+      const taken = await prisma.masterProduct.findFirst({
+        where: {
+          sku: { equals: skuCheck.normalized, mode: 'insensitive' },
+          id: { not: id },
+        },
+        select: { id: true },
+      });
+      if (taken) throw Errors.conflict(`SKU "${skuCheck.normalized}" is already in use`);
+      updateData.sku = skuCheck.normalized;
+    }
+
+    if (touchesSyncFields && linkedCount > 0) {
+      await saveMasterProductRevision(id, ctx.userId);
+    }
 
     const updated = await prisma.masterProduct.update({ where: { id }, data: updateData });
+
+    if (resolvedCategoryIds) {
+      await syncMasterProductCategories(id, resolvedCategoryIds);
+    }
+
+    if (touchesSyncFields && linkedCount > 0) {
+      await syncMasterFieldsToVendorListings(id, ctx.userId, {
+        name: updated.name,
+        brand: updated.brand,
+        categoryId: updated.categoryId,
+        categoryIds: resolvedCategoryIds,
+        taxPercent: updated.taxPercent,
+        imageUrl: updated.imageUrl,
+        images: updated.images,
+      });
+    }
 
     // Sync to brand catalog in background
     syncProductToBrand(
@@ -90,6 +172,13 @@ export const DELETE = adminOnly(async (req: NextRequest, ctx) => {
       throw Errors.conflict(
         `Cannot delete — ${linked} vendor product(s) are mapped to this master SKU. Reassign or remove them first.`,
       );
+    }
+
+    const orderHistory = await prisma.orderItem.count({
+      where: { product: { masterProductId: id } },
+    });
+    if (orderHistory > 0) {
+      throw Errors.conflict('Cannot delete: this master SKU has order history.');
     }
 
     await prisma.masterProduct.delete({ where: { id } });

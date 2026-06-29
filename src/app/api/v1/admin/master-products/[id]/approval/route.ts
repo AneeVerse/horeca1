@@ -11,6 +11,7 @@ import { requirePermission } from '@/lib/permissions/engine';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
 import { syncProductToBrand } from '@/modules/brand/brand.service';
 import { sendProductRejectedNotifications } from '@/lib/productRejectionNotifications';
+import { validateMasterSku } from '@/lib/sku';
 
 function extractId(req: NextRequest): string {
   const segments = new URL(req.url).pathname.split('/');
@@ -25,6 +26,8 @@ const approvalSchema = z
   .object({
     action: z.enum(['approve', 'reject']),
     note: z.string().optional(),
+    /** Finalize catalog SKU on approve (optional when SKU was set at submission). */
+    catalogSku: z.string().min(2).max(40).optional(),
   })
   .refine((d) => d.action !== 'reject' || (d.note?.trim().length ?? 0) > 0, {
     message: 'Rejection reason is required',
@@ -35,7 +38,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
   try {
     requirePermission(ctx, 'products.approve');
     const id = extractId(req);
-    const { action, note } = approvalSchema.parse(await req.json());
+    const { action, note, catalogSku } = approvalSchema.parse(await req.json());
 
     const existing = await prisma.masterProduct.findUnique({
       where: { id },
@@ -44,9 +47,25 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     if (!existing) throw Errors.notFound('Master product');
 
     if (action === 'approve') {
+      let finalSku = existing.sku;
+      if (catalogSku?.trim()) {
+        const skuCheck = validateMasterSku(catalogSku);
+        if (!skuCheck.ok) throw Errors.badRequest(skuCheck.message);
+        const taken = await prisma.masterProduct.findFirst({
+          where: {
+            sku: { equals: skuCheck.normalized, mode: 'insensitive' },
+            id: { not: id },
+          },
+          select: { id: true },
+        });
+        if (taken) throw Errors.conflict(`SKU "${skuCheck.normalized}" is already in use`);
+        finalSku = skuCheck.normalized;
+      }
+
       const master = await prisma.masterProduct.update({
         where: { id },
         data: {
+          sku: finalSku,
           approvalStatus: 'approved',
           approvedBy: ctx.userId,
           approvedAt: new Date(),

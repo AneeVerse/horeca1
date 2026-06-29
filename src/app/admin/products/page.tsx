@@ -35,7 +35,7 @@ import { ImageUpload, MultiImageUpload } from '@/components/ui/ImageUpload';
 import ProductImportModal from '@/components/features/admin/ProductImportModal';
 import AdminBulkEngine from '@/components/features/admin/AdminBulkEngine';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
-import { CategoryMultiPickerById } from '@/components/features/brand/CategoryMultiPickerById';
+import { CategoryHierarchyPicker } from '@/components/features/brand/CategoryHierarchyPicker';
 import { BrandSinglePicker } from '@/components/features/brand/BrandSinglePicker';
 import { validateMasterSku } from '@/lib/sku';
 import { toast } from 'sonner';
@@ -109,7 +109,7 @@ interface ProductFormData {
     brand: string;
     // Unified multi-category — first entry is the primary (mirrored into
     // Product.categoryId on the server). Matches the vendor product form so
-    // both surfaces share CategoryMultiPickerById and behave identically.
+    // both surfaces share CategoryHierarchyPicker and behave identically.
     categoryIds: string[];
     description: string;
     basePrice: string;
@@ -133,6 +133,43 @@ interface ProductFormData {
     countryOfOrigin: string;
     substituteIds: string[];
     isFeatured: boolean;
+    // Zoho Metadata
+    account: string;
+    accountCode: string;
+    taxable: boolean;
+    exemptionReason: string;
+    taxabilityType: string;
+    productType: string;
+    intraStateTaxName: string;
+    intraStateTaxRate: string;
+    intraStateTaxType: string;
+    interStateTaxName: string;
+    interStateTaxRate: string;
+    interStateTaxType: string;
+    source: string;
+    referenceId: string;
+    lastSync: string;
+    inventoryAccount: string;
+    inventoryAccountCode: string;
+    valuationMethod: string;
+    reorderPoint: string;
+    openingStock: string;
+    itemType: string;
+    sellable: boolean;
+    purchasable: boolean;
+    trackInventory: boolean;
+    packageWeight: string;
+    packageLength: string;
+    packageWidth: string;
+    packageHeight: string;
+    dimensionUnit: string;
+    weightUnit: string;
+    ean: string;
+    isbn: string;
+    variantMapping: string;
+    platformCommission: string;
+    itemStatus: string;
+    activeOnlineStore: boolean;
 }
 
 // Same enum-like constants used by vendor form. GST slabs are government-fixed,
@@ -180,6 +217,42 @@ const EMPTY_FORM: ProductFormData = {
     countryOfOrigin: '',
     substituteIds: [],
     isFeatured: false,
+    account: '',
+    accountCode: '',
+    taxable: true,
+    exemptionReason: '',
+    taxabilityType: 'taxable',
+    productType: 'goods',
+    intraStateTaxName: '',
+    intraStateTaxRate: '',
+    intraStateTaxType: '',
+    interStateTaxName: '',
+    interStateTaxRate: '',
+    interStateTaxType: '',
+    source: '',
+    referenceId: '',
+    lastSync: '',
+    inventoryAccount: '',
+    inventoryAccountCode: '',
+    valuationMethod: 'FIFO',
+    reorderPoint: '',
+    openingStock: '',
+    itemType: 'standard',
+    sellable: true,
+    purchasable: true,
+    trackInventory: true,
+    packageWeight: '',
+    packageLength: '',
+    packageWidth: '',
+    packageHeight: '',
+    dimensionUnit: 'cm',
+    weightUnit: 'kg',
+    ean: '',
+    isbn: '',
+    variantMapping: '',
+    platformCommission: '',
+    itemStatus: 'Active',
+    activeOnlineStore: true,
 };
 
 // ---------------------------------------------------------------------------
@@ -333,6 +406,7 @@ export default function ProductsPage() {
     const [vendors, setVendors] = useState<Vendor[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [brands, setBrands] = useState<BrandOption[]>([]);
+    const [brandSuggesting, setBrandSuggesting] = useState(false);
 
     // Loading state
     const [loading, setLoading] = useState(true);
@@ -359,7 +433,7 @@ export default function ProductsPage() {
 
     // Panel / Modal state
     const [panelOpen, setPanelOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<'general' | 'pricing' | 'advanced'>('general');
+    const [activeTab, setActiveTab] = useState<'identity' | 'status' | 'pricing' | 'accounting' | 'inventory' | 'packaging' | 'identifiers' | 'attributes' | 'bulk'>('identity');
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [formData, setFormData] = useState<ProductFormData>(EMPTY_FORM);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -782,7 +856,7 @@ export default function ProductsPage() {
         setEditingProduct(null);
         setFormData(EMPTY_FORM);
         setFormErrors({});
-        setActiveTab('general');
+        setActiveTab('identity');
         setPanelOpen(true);
     };
 
@@ -801,7 +875,7 @@ export default function ProductsPage() {
         setPanelOpen(true);
         setLoadingProduct(true);
         setFormErrors({});
-        setActiveTab('general');
+        setActiveTab('identity');
 
         try {
             const isMaster = product.isMasterRow;
@@ -811,6 +885,13 @@ export default function ProductsPage() {
             );
             const json = await res.json();
             const p = json.success ? json.data : product;
+
+            const meta = (p.metadata && typeof p.metadata === 'object' ? p.metadata : {}) as Record<string, any>;
+            const acc = meta.accounting || {};
+            const inv = meta.inventory || {};
+            const pkg = meta.packaging || {};
+            const ids = meta.identifiers || {};
+            const att = meta.attributes || {};
 
             if (isMaster) {
                 setFormData({
@@ -823,6 +904,42 @@ export default function ProductsPage() {
                     imageUrl: p.imageUrl ?? '',
                     unit: p.uom ?? 'piece',
                     images: Array.isArray(p.images) ? p.images.filter(Boolean) : [],
+                    account: acc.account || '',
+                    accountCode: acc.accountCode || '',
+                    taxable: acc.taxable ?? true,
+                    exemptionReason: acc.exemptionReason || '',
+                    taxabilityType: acc.taxabilityType || 'taxable',
+                    productType: att.productType || 'goods',
+                    intraStateTaxName: acc.intraStateTaxName || '',
+                    intraStateTaxRate: acc.intraStateTaxRate != null ? String(acc.intraStateTaxRate) : '',
+                    intraStateTaxType: acc.intraStateTaxType || '',
+                    interStateTaxName: acc.interStateTaxName || '',
+                    interStateTaxRate: acc.interStateTaxRate != null ? String(acc.interStateTaxRate) : '',
+                    interStateTaxType: acc.interStateTaxType || '',
+                    source: att.source || '',
+                    referenceId: att.referenceId || '',
+                    lastSync: att.lastSync || '',
+                    inventoryAccount: acc.inventoryAccount || '',
+                    inventoryAccountCode: acc.inventoryAccountCode || '',
+                    valuationMethod: inv.valuationMethod || 'FIFO',
+                    reorderPoint: inv.reorderPoint != null ? String(inv.reorderPoint) : '',
+                    openingStock: inv.openingStock != null ? String(inv.openingStock) : '',
+                    itemType: att.itemType || 'standard',
+                    sellable: att.sellable ?? true,
+                    purchasable: att.purchasable ?? true,
+                    trackInventory: inv.trackInventory ?? true,
+                    packageWeight: pkg.packageWeight != null ? String(pkg.packageWeight) : '',
+                    packageLength: pkg.packageLength != null ? String(pkg.packageLength) : '',
+                    packageWidth: pkg.packageWidth != null ? String(pkg.packageWidth) : '',
+                    packageHeight: pkg.packageHeight != null ? String(pkg.packageHeight) : '',
+                    dimensionUnit: pkg.dimensionUnit || 'cm',
+                    weightUnit: pkg.weightUnit || 'kg',
+                    ean: ids.ean || '',
+                    isbn: ids.isbn || '',
+                    variantMapping: att.variantMapping || '',
+                    platformCommission: acc.platformCommission != null ? String(acc.platformCommission) : '',
+                    itemStatus: att.itemStatus || 'Active',
+                    activeOnlineStore: att.activeOnlineStore ?? true,
                 });
                 return;
             }
@@ -869,6 +986,42 @@ export default function ProductsPage() {
                         price: String(s.price),
                     }))
                     : [],
+                account: acc.account || '',
+                accountCode: acc.accountCode || '',
+                taxable: acc.taxable ?? true,
+                exemptionReason: acc.exemptionReason || '',
+                taxabilityType: acc.taxabilityType || 'taxable',
+                productType: att.productType || 'goods',
+                intraStateTaxName: acc.intraStateTaxName || '',
+                intraStateTaxRate: acc.intraStateTaxRate != null ? String(acc.intraStateTaxRate) : '',
+                intraStateTaxType: acc.intraStateTaxType || '',
+                interStateTaxName: acc.interStateTaxName || '',
+                interStateTaxRate: acc.interStateTaxRate != null ? String(acc.interStateTaxRate) : '',
+                interStateTaxType: acc.interStateTaxType || '',
+                source: att.source || '',
+                referenceId: att.referenceId || '',
+                lastSync: att.lastSync || '',
+                inventoryAccount: acc.inventoryAccount || '',
+                inventoryAccountCode: acc.inventoryAccountCode || '',
+                valuationMethod: inv.valuationMethod || 'FIFO',
+                reorderPoint: inv.reorderPoint != null ? String(inv.reorderPoint) : '',
+                openingStock: inv.openingStock != null ? String(inv.openingStock) : '',
+                itemType: att.itemType || 'standard',
+                sellable: att.sellable ?? true,
+                purchasable: att.purchasable ?? true,
+                trackInventory: inv.trackInventory ?? true,
+                packageWeight: pkg.packageWeight != null ? String(pkg.packageWeight) : '',
+                packageLength: pkg.packageLength != null ? String(pkg.packageLength) : '',
+                packageWidth: pkg.packageWidth != null ? String(pkg.packageWidth) : '',
+                packageHeight: pkg.packageHeight != null ? String(pkg.packageHeight) : '',
+                dimensionUnit: pkg.dimensionUnit || 'cm',
+                weightUnit: pkg.weightUnit || 'kg',
+                ean: ids.ean || '',
+                isbn: ids.isbn || '',
+                variantMapping: att.variantMapping || '',
+                platformCommission: acc.platformCommission != null ? String(acc.platformCommission) : '',
+                itemStatus: att.itemStatus || 'Active',
+                activeOnlineStore: att.activeOnlineStore ?? true,
             });
         } catch (err) {
             console.error('Failed to fetch product details:', err);
@@ -909,7 +1062,7 @@ export default function ProductsPage() {
             setEditingProduct(null);
             setFormData(EMPTY_FORM);
             setFormErrors({});
-            setActiveTab('general');
+            setActiveTab('identity');
         }, 300);
     };
 
@@ -943,6 +1096,55 @@ export default function ProductsPage() {
         if (!validateForm()) return;
         setSaving(true);
         try {
+            const metadata = {
+                accounting: {
+                    account: formData.account.trim(),
+                    accountCode: formData.accountCode.trim(),
+                    taxable: formData.taxable,
+                    exemptionReason: formData.exemptionReason.trim(),
+                    taxabilityType: formData.taxabilityType.trim(),
+                    intraStateTaxName: formData.intraStateTaxName.trim(),
+                    intraStateTaxRate: formData.intraStateTaxRate ? Number(formData.intraStateTaxRate) : undefined,
+                    intraStateTaxType: formData.intraStateTaxType.trim(),
+                    interStateTaxName: formData.interStateTaxName.trim(),
+                    interStateTaxRate: formData.interStateTaxRate ? Number(formData.interStateTaxRate) : undefined,
+                    interStateTaxType: formData.interStateTaxType.trim(),
+                    inventoryAccount: formData.inventoryAccount.trim(),
+                    inventoryAccountCode: formData.inventoryAccountCode.trim(),
+                    platformCommission: formData.platformCommission ? Number(formData.platformCommission) : undefined,
+                },
+                inventory: {
+                    reorderPoint: formData.reorderPoint ? Number(formData.reorderPoint) : undefined,
+                    openingStock: formData.openingStock ? Number(formData.openingStock) : undefined,
+                    valuationMethod: formData.valuationMethod.trim(),
+                    trackInventory: formData.trackInventory,
+                },
+                packaging: {
+                    packageWeight: formData.packageWeight ? Number(formData.packageWeight) : undefined,
+                    packageLength: formData.packageLength ? Number(formData.packageLength) : undefined,
+                    packageWidth: formData.packageWidth ? Number(formData.packageWidth) : undefined,
+                    packageHeight: formData.packageHeight ? Number(formData.packageHeight) : undefined,
+                    dimensionUnit: formData.dimensionUnit.trim(),
+                    weightUnit: formData.weightUnit.trim(),
+                },
+                identifiers: {
+                    ean: formData.ean.trim(),
+                    isbn: formData.isbn.trim(),
+                },
+                attributes: {
+                    itemType: formData.itemType.trim(),
+                    productType: formData.productType.trim(),
+                    source: formData.source.trim(),
+                    referenceId: formData.referenceId.trim(),
+                    lastSync: formData.lastSync.trim(),
+                    sellable: formData.sellable,
+                    purchasable: formData.purchasable,
+                    variantMapping: formData.variantMapping.trim(),
+                    itemStatus: formData.itemStatus.trim(),
+                    activeOnlineStore: formData.activeOnlineStore,
+                }
+            };
+
             const isMasterEdit = !!editingProduct?.isMasterRow;
             const isMasterCreate = !editingProduct && !formData.vendorId;
 
@@ -951,6 +1153,7 @@ export default function ProductsPage() {
                     name: formData.name.trim(),
                     brand: formData.brand.trim(),
                     categoryId: formData.categoryIds[0],
+                    metadata,
                 };
                 if (formData.imageUrl) masterPayload.imageUrl = formData.imageUrl;
                 const additionalImages = formData.images.filter(Boolean);
@@ -987,6 +1190,7 @@ export default function ProductsPage() {
                 taxPercent: Number(formData.taxPercent) || 0,
                 minOrderQty: Number(formData.minOrderQty) || 1,
                 creditEligible: formData.creditEligible,
+                metadata,
             };
             if (formData.vendorId) payload.vendorId = formData.vendorId;
             if (formData.imageUrl) payload.imageUrl = formData.imageUrl;
@@ -1113,10 +1317,41 @@ export default function ProductsPage() {
         }
     };
 
+    // Inline "add new brand" — admin creates an approved brand label instantly.
+    const suggestBrand = async (name: string) => {
+        const trimmed = name.trim();
+        if (trimmed.length < 2 || brandSuggesting) return;
+        if (brands.some(b => b.name.toLowerCase() === trimmed.toLowerCase())) {
+            updateField('brand', trimmed);
+            return;
+        }
+        setBrandSuggesting(true);
+        try {
+            const res = await fetch('/api/v1/admin/brands/quick-add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: trimmed }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Failed to add brand');
+            setBrands(prev =>
+                prev.some(b => b.id === json.data.id) ? prev : [...prev, { id: json.data.id, name: json.data.name }],
+            );
+            updateField('brand', json.data.name);
+            toast.success(
+                json.alreadyExists ? `Using existing brand "${json.data.name}"` : `Added brand "${json.data.name}"`,
+            );
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Failed to add brand');
+        } finally {
+            setBrandSuggesting(false);
+        }
+    };
+
     // Which tab each errorable field lives on, plus the order we walk them to
     // find the first offender. Keeps error feedback next to the bad field.
     const ERROR_FIELD_TAB = {
-        name: 'general', brand: 'general', sku: 'general', categoryIds: 'general', basePrice: 'pricing',
+        name: 'identity', brand: 'identity', sku: 'identifiers', categoryIds: 'identity', basePrice: 'pricing',
     } as const;
     const ERROR_FIELD_ORDER: Array<keyof typeof ERROR_FIELD_TAB> = ['name', 'brand', 'sku', 'categoryIds', 'basePrice'];
 
@@ -1744,8 +1979,8 @@ export default function ProductsPage() {
             {/* Panel */}
             <div
                 className={cn(
-                    'fixed top-0 right-0 h-full w-full max-w-[680px] bg-white z-[70] shadow-2xl transition-transform duration-300 ease-in-out flex flex-col',
-                    panelOpen ? 'translate-x-0' : 'translate-x-full',
+                    'fixed top-0 left-0 h-full w-full bg-white z-[70] shadow-2xl transition-transform duration-300 ease-in-out flex flex-col',
+                    panelOpen ? 'translate-x-0' : '-translate-x-full',
                 )}
             >
                 {/* Panel Header */}
@@ -1761,359 +1996,111 @@ export default function ProductsPage() {
                     </button>
                 </div>
 
-                {/* Tab Bar */}
-                <div className="flex bg-white border-b border-[#EEEEEE] px-8 py-0.5 gap-6 shrink-0 z-10 sticky top-0">
-                    {(['general', 'pricing', 'advanced'] as const).map(tab => {
-                        const isActive = activeTab === tab;
-                        const labels = {
-                            general: { label: 'General Info', icon: Info, color: 'text-[#299E60]', bg: 'bg-[#EEF8F1]' },
-                            pricing: { label: 'Pricing & Stock', icon: DollarSign, color: 'text-[#3B82F6]', bg: 'bg-[#EFF6FF]' },
-                            advanced: { label: 'Advanced Settings', icon: SettingsIcon, color: 'text-[#F59E0B]', bg: 'bg-[#FFF7E6]' },
-                        };
-                        const cfg = labels[tab];
-                        return (
-                            <button
-                                key={tab}
-                                type="button"
-                                onClick={() => setActiveTab(tab)}
-                                className={cn(
-                                    "flex items-center gap-2 py-3.5 text-[13px] font-extrabold border-b-2 transition-all relative outline-none",
-                                    isActive 
-                                        ? "border-[#299E60] text-[#181725]" 
-                                        : "border-transparent text-[#AEAEAE] hover:text-[#7C7C7C]"
+                {/* Panel Body with Side Navigation */}
+                <div className="flex-1 flex overflow-hidden bg-[#F8F9FB]">
+                    {/* Left Sidebar: 9 Groups */}
+                    <div className="w-[240px] bg-white border-r border-[#EEEEEE] overflow-y-auto shrink-0 py-6 px-4 flex flex-col gap-1.5">
+                        {[
+                            { id: 'identity', label: '1. Identity', icon: Info },
+                            { id: 'status', label: '2. Status', icon: Clock },
+                            { id: 'pricing', label: '3. Pricing / Tax', icon: DollarSign },
+                            { id: 'accounting', label: '4. Accounting', icon: SettingsIcon },
+                            { id: 'inventory', label: '5. Inventory', icon: BarChart3 },
+                            { id: 'packaging', label: '6. Packaging', icon: Package },
+                            { id: 'identifiers', label: '7. Identifiers', icon: Tag },
+                            { id: 'attributes', label: '8. Attributes', icon: BoxIcon },
+                            { id: 'bulk', label: '9. Bulk Slabs', icon: Plus },
+                        ].map(tab => {
+                            const isActive = activeTab === tab.id;
+                            const Icon = tab.icon;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    type="button"
+                                    onClick={() => setActiveTab(tab.id as any)}
+                                    className={cn(
+                                        "flex items-center gap-3 px-4 py-3 rounded-xl text-[13px] font-bold transition-all outline-none text-left",
+                                        isActive
+                                            ? "bg-[#299E60]/10 text-[#299E60]"
+                                            : "text-[#7C7C7C] hover:bg-gray-50 hover:text-[#181725]"
+                                    )}
+                                >
+                                    <Icon size={16} strokeWidth={isActive ? 2.5 : 2} className={cn(isActive ? "text-[#299E60]" : "text-[#AEAEAE]")} />
+                                    {tab.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Right Content Area */}
+                    <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
+                        {loadingProduct ? (
+                            <div className="flex items-center justify-center py-32">
+                                <Loader2 className="animate-spin text-[#299E60]" size={32} />
+                            </div>
+                        ) : (
+                            <>
+                                {formErrors._server && (
+                                    <div className="flex items-center gap-3 bg-[#FFF0F0] border border-[#E74C3C]/20 text-[#E74C3C] rounded-[12px] px-5 py-4 text-[13px] font-semibold">
+                                        <AlertTriangle size={18} />
+                                        {formErrors._server}
+                                    </div>
                                 )}
-                            >
-                                <div className={cn("w-6 h-6 rounded-[6px] flex items-center justify-center transition-colors", isActive ? cfg.bg + " " + cfg.color : "bg-gray-100 text-[#AEAEAE]")}>
-                                    <cfg.icon size={13} strokeWidth={2.5} />
-                                </div>
-                                {cfg.label}
-                            </button>
-                        );
-                    })}
-                </div>
 
-                {/* Panel Body */}
-                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 bg-[#F8F9FB]">
-                    {loadingProduct ? (
-                        <div className="flex items-center justify-center py-32">
-                            <Loader2 className="animate-spin text-[#299E60]" size={32} />
-                        </div>
-                    ) : (
-                        <>
-                            {formErrors._server && (
-                                <div className="flex items-center gap-3 bg-[#FFF0F0] border border-[#E74C3C]/20 text-[#E74C3C] rounded-[12px] px-5 py-4 text-[13px] font-semibold">
-                                    <AlertTriangle size={18} />
-                                    {formErrors._server}
-                                </div>
-                            )}
+                                {activeTab === 'identity' && (
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                        <SectionHeader icon={<Info size={16} />} title="Identity" />
+                                        <div>
+                                            <FieldLabel required>Product Name</FieldLabel>
+                                            <input
+                                                type="text"
+                                                value={formData.name}
+                                                onChange={e => updateField('name', e.target.value)}
+                                                placeholder="Enter product name"
+                                                className={cn(inputCls, formErrors.name && 'border-[#E74C3C] focus:border-[#E74C3C]')}
+                                            />
+                                            {formErrors.name && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.name}</p>}
+                                        </div>
 
-                            {activeTab === 'general' && (
-                                <>
-                                    {/* ======== Section 1: Basic Information ======== */}
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                        <SectionHeader icon={<Info size={16} />} title="Basic Information" />
-                                        <div className="space-y-4">
-                                            {/* Product Name */}
-                                            <div id="ff-name">
-                                                <FieldLabel required>Product Name</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={formData.name}
-                                                    onChange={e => updateField('name', e.target.value)}
-                                                    placeholder="Enter product name"
-                                                    className={cn(
-                                                        inputCls,
-                                                        formErrors.name && 'border-[#E74C3C] focus:border-[#E74C3C]',
-                                                    )}
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel required>Brand</FieldLabel>
+                                                <BrandSinglePicker
+                                                    value={formData.brand}
+                                                    onChange={val => updateField('brand', val)}
+                                                    brands={brands}
+                                                    placeholder="Select brand"
+                                                    hasError={!!formErrors.brand}
+                                                    onSuggest={(name) => suggestBrand(name)}
+                                                    suggesting={brandSuggesting}
                                                 />
-                                                {formErrors.name && (
-                                                    <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.name}</p>
-                                                )}
+                                                {formErrors.brand && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.brand}</p>}
                                             </div>
-
-                                            {/* Brand, HSN, SKU, Barcode — 2-column grid */}
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div id="ff-brand">
-                                                    <FieldLabel required>Brand</FieldLabel>
-                                                    <BrandSinglePicker
-                                                        value={formData.brand}
-                                                        onChange={val => updateField('brand', val)}
-                                                        brands={brands}
-                                                        placeholder="Select brand"
-                                                        hasError={!!formErrors.brand}
-                                                    />
-                                                    {formErrors.brand && (
-                                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.brand}</p>
-                                                    )}
-                                                    {brands.length === 0 && (
-                                                        <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
-                                                            No brands yet — add one in <Link href="/admin/brands" className="text-[#299E60] font-bold hover:underline">Brands</Link>
-                                                        </p>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <FieldLabel>HSN Code</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.hsn}
-                                                        onChange={e => updateField('hsn', e.target.value)}
-                                                        placeholder="e.g., 1006"
-                                                        className={inputCls}
-                                                    />
-                                                </div>
-                                                <div id="ff-sku">
-                                                    <FieldLabel required>SKU</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.sku}
-                                                        onChange={e => updateField('sku', e.target.value.toUpperCase())}
-                                                        placeholder="e.g., RIC-BAS-001"
-                                                        readOnly={!!editingProduct?.isMasterRow}
-                                                        className={cn(inputCls, editingProduct?.isMasterRow && 'bg-[#F8F9FB] cursor-not-allowed')}
-                                                    />
-                                                    {formErrors.sku && (
-                                                        <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.sku}</p>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <FieldLabel>Barcode</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.barcode}
-                                                        onChange={e => updateField('barcode', e.target.value)}
-                                                        placeholder="e.g., 8901234567890"
-                                                        className={inputCls}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {/* Categories — multi-select */}
-                                            <div id="ff-categoryIds">
-                                                <CategoryMultiPickerById
-                                                    value={formData.categoryIds}
-                                                    onChange={(ids) => setFormData(prev => ({ ...prev, categoryIds: ids }))}
-                                                    max={5}
-                                                    disableSuggest
-                                                    label="Categories"
-                                                    helper="Pick up to 5 — first chip is the primary. Customers can find this product under any of these categories."
-                                                />
-                                                {formErrors.categoryIds && (
-                                                    <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.categoryIds}</p>
-                                                )}
-                                            </div>
-
-                                            {/* Description */}
                                             <div>
                                                 <FieldLabel>Description</FieldLabel>
                                                 <textarea
                                                     value={formData.description}
                                                     onChange={e => updateField('description', e.target.value)}
-                                                    rows={4}
+                                                    rows={3}
                                                     className={textareaCls}
-                                                    placeholder="Describe the product, its quality, origin, etc."
+                                                    placeholder="Enter product description"
                                                 />
                                             </div>
                                         </div>
-                                    </div>
 
-                                    {/* ======== Section 6: Media ======== */}
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                        <SectionHeader icon={<ImageIcon size={16} />} title="Media" />
-                                        <div className="space-y-5">
-                                            {/* Primary Image */}
-                                            <ImageUpload
-                                                value={formData.imageUrl}
-                                                onChange={(url) => updateField('imageUrl', url)}
-                                                folder="products"
-                                                label="Primary Image"
-                                                size="lg"
-                                            />
-
-                                            {/* Additional Images */}
-                                            <MultiImageUpload
-                                                values={formData.images.filter(Boolean)}
-                                                onChange={(urls) => setFormData(prev => ({ ...prev, images: urls }))}
-                                                folder="products"
-                                                label="Additional Images"
-                                                max={8}
-                                            />
-                                        </div>
-                                    </div>
-                                </>
-                            )}
-
-                            {activeTab === 'pricing' && (
-                                <>
-                                    {/* ======== Section 2: Pricing & Tax ======== */}
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                        <SectionHeader icon={<DollarSign size={16} />} title="Pricing & Tax" />
-                                        <div className="space-y-4">
-                                            <div className="overflow-hidden border border-[#EEEEEE] rounded-[12px] bg-[#FAFAFA]">
-                                                <table className="w-full text-left border-collapse text-[13px]">
-                                                    <thead>
-                                                        <tr className="bg-[#FAFAFA] border-b border-[#EEEEEE]">
-                                                            <th className="px-5 py-3 font-bold text-[#181725] w-1/3">Price Component</th>
-                                                            <th className="px-5 py-3 font-bold text-[#181725] w-1/3">Amount / Input</th>
-                                                            <th className="px-5 py-3 font-bold text-[#7C7C7C] w-1/3 text-[11px] uppercase tracking-wider">Breakdown</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-[#F5F5F5] bg-white">
-                                                        {/* Row 1: Taxable Rate */}
-                                                        <tr>
-                                                            <td className="px-5 py-4 font-semibold text-[#181725]">
-                                                                Taxable Rate (Amt) <span className="text-[#E74C3C]">*</span>
-                                                                <p className="text-[11px] text-[#AEAEAE] font-normal mt-0.5 font-sans">Base price before tax (ex-GST)</p>
-                                                            </td>
-                                                            <td className="px-5 py-4" id="ff-basePrice">
-                                                                <div className="relative">
-                                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">₹</span>
-                                                                    <input
-                                                                        type="number"
-                                                                        min="0"
-                                                                        step="0.01"
-                                                                        value={formData.basePrice}
-                                                                        onChange={e => updateField('basePrice', e.target.value)}
-                                                                        placeholder="0.00"
-                                                                        className={cn(
-                                                                            inputCls,
-                                                                            'pl-7',
-                                                                            formErrors.basePrice && 'border-[#E74C3C] focus:border-[#E74C3C]',
-                                                                        )}
-                                                                    />
-                                                                </div>
-                                                                {formErrors.basePrice && (
-                                                                    <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.basePrice}</p>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-5 py-4 text-[#7C7C7C] font-medium">
-                                                                {formData.basePrice ? `₹${parseFloat(formData.basePrice).toFixed(2)} taxable base` : '—'}
-                                                            </td>
-                                                        </tr>
-                                                        {/* Row 2: Tax % */}
-                                                        <tr>
-                                                            <td className="px-5 py-4 font-semibold text-[#181725]">
-                                                                Tax % (GST) <span className="text-[#E74C3C]">*</span>
-                                                                <p className="text-[11px] text-[#AEAEAE] font-normal mt-0.5">Applied goods & services tax percent</p>
-                                                            </td>
-                                                            <td className="px-5 py-4">
-                                                                <select
-                                                                    value={formData.taxPercent}
-                                                                    onChange={e => updateField('taxPercent', e.target.value)}
-                                                                    className={cn(selectCls, 'cursor-pointer')}
-                                                                >
-                                                                    {TAX_OPTIONS.map(t => (
-                                                                        <option key={t} value={t}>{t}%</option>
-                                                                    ))}
-                                                                </select>
-                                                            </td>
-                                                            <td className="px-5 py-4 text-[#7C7C7C] font-medium">
-                                                                {formData.basePrice && parseFloat(formData.taxPercent || '0') > 0
-                                                                    ? `+ ₹${(parseFloat(formData.basePrice) * parseFloat(formData.taxPercent || '0') / 100).toFixed(2)} GST (${formData.taxPercent}%)`
-                                                                    : 'No tax applied'}
-                                                            </td>
-                                                        </tr>
-                                                        {/* Row 3: Gross Rate */}
-                                                        <tr className="bg-[#FDFDFD]">
-                                                            <td className="px-5 py-4 font-bold text-[#181725]">
-                                                                Gross Rate (Customer Price) <span className="text-[#E74C3C]">*</span>
-                                                                <p className="text-[11px] text-[#AEAEAE] font-normal mt-0.5">Final selling price (incl. GST)</p>
-                                                            </td>
-                                                            <td className="px-5 py-4">
-                                                                <div className="relative">
-                                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#299E60] font-bold">₹</span>
-                                                                    <input
-                                                                        type="number"
-                                                                        min="0"
-                                                                        step="0.01"
-                                                                        value={formData.basePrice && formData.taxPercent
-                                                                            ? (parseFloat(formData.basePrice) * (1 + parseFloat(formData.taxPercent || '0') / 100)).toFixed(2)
-                                                                            : formData.originalPrice || ''}
-                                                                        onChange={e => {
-                                                                            const gross = e.target.value;
-                                                                            updateField('originalPrice', gross);
-                                                                            const tp = parseFloat(formData.taxPercent || '0');
-                                                                            const g = parseFloat(gross);
-                                                                            if (!isNaN(g) && !isNaN(tp)) {
-                                                                                updateField('basePrice', (g / (1 + tp / 100)).toFixed(2));
-                                                                            }
-                                                                        }}
-                                                                        placeholder="0.00"
-                                                                        className={cn(inputCls, 'pl-7 border-[#299E60]/30 focus:border-[#299E60] font-bold text-[#299E60] bg-[#EEF8F1]/10')}
-                                                                    />
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-5 py-4">
-                                                                <div className="space-y-1">
-                                                                    <p className="text-[#181725] font-bold text-[13px]">
-                                                                        {formData.basePrice && formData.taxPercent
-                                                                            ? `₹${(parseFloat(formData.basePrice) * (1 + parseFloat(formData.taxPercent || '0') / 100)).toFixed(2)} total`
-                                                                            : formData.originalPrice
-                                                                                ? `₹${parseFloat(formData.originalPrice).toFixed(2)} total`
-                                                                                : '—'}
-                                                                    </p>
-                                                                    {formData.basePrice && parseFloat(formData.taxPercent || '0') > 0 && (
-                                                                        <p className="text-[11px] text-[#7C7C7C] font-medium leading-none">
-                                                                            ₹{parseFloat(formData.basePrice).toFixed(2)} base + ₹{(parseFloat(formData.basePrice) * parseFloat(formData.taxPercent || '0') / 100).toFixed(2)} GST
-                                                                        </p>
-                                                                    )}
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* ======== Section 5: Inventory & Packaging ======== */}
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                        <SectionHeader icon={<BoxIcon size={16} />} title="Inventory & Packaging" />
-                                        <div className="space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <FieldLabel>Pack Size</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.packSize}
-                                                        onChange={e => updateField('packSize', e.target.value)}
-                                                        className={inputCls}
-                                                        placeholder="e.g., 1 kg, 500 ml"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <FieldLabel>Unit</FieldLabel>
-                                                    <select
-                                                        value={formData.unit}
-                                                        onChange={e => updateField('unit', e.target.value)}
-                                                        className={cn(selectCls, 'cursor-pointer')}
-                                                    >
-                                                        <option value="">Select unit</option>
-                                                        {UNIT_OPTIONS.map(u => (
-                                                            <option key={u} value={u}>{u}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <FieldLabel>Min Order Quantity</FieldLabel>
-                                                    <input
-                                                        type="number"
-                                                        min="1"
-                                                        value={formData.minOrderQty}
-                                                        onChange={e => updateField('minOrderQty', e.target.value)}
-                                                        className={inputCls}
-                                                        placeholder="1"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* ======== Section 4: Vendor Assignment ======== */}
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                        <SectionHeader icon={<SettingsIcon size={16} />} title="Vendor Assignment" />
                                         <div>
+                                            <CategoryHierarchyPicker
+                                                value={formData.categoryIds}
+                                                onChange={(ids) => setFormData(prev => ({ ...prev, categoryIds: ids }))}
+                                                maxAdditional={4}
+                                                endpoint="/api/v1/admin/categories"
+                                                label="Categories"
+                                                helper="Pick a parent category, then a sub-category. Add more sub-categories if needed."
+                                            />
+                                            {formErrors.categoryIds && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.categoryIds}</p>}
+                                        </div>
+
+                                        <div className="pt-4 border-t border-[#EEEEEE]">
                                             <FieldLabel>
                                                 Vendor <span className="text-[11px] font-medium text-[#AEAEAE]">(optional — leave empty for catalog product)</span>
                                             </FieldLabel>
@@ -2127,256 +2114,721 @@ export default function ProductsPage() {
                                                     <option key={v.id} value={v.id}>{v.businessName}</option>
                                                 ))}
                                             </select>
-                                            <p className="text-[11px] text-[#AEAEAE] font-medium mt-1.5">
-                                                Catalog products are auto-approved and any vendor can adopt them.
-                                            </p>
+                                        </div>
+
+                                        <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
+                                            <FieldLabel>Media</FieldLabel>
+                                            <ImageUpload
+                                                value={formData.imageUrl}
+                                                onChange={(url) => updateField('imageUrl', url)}
+                                                folder="products"
+                                                label="Primary Image"
+                                                size="lg"
+                                            />
+                                            <MultiImageUpload
+                                                values={formData.images.filter(Boolean)}
+                                                onChange={(urls) => setFormData(prev => ({ ...prev, images: urls }))}
+                                                folder="products"
+                                                label="Additional Images"
+                                                max={8}
+                                            />
                                         </div>
                                     </div>
+                                )}
 
-                                    {/* ======== Section 3: Bulk Pricing Tiers ======== */}
-                                    {formData.vendorId && (
-                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                            <div className="flex items-start justify-between mb-5">
-                                                <div>
-                                                    <SectionHeader icon={<Tag size={16} />} title="Bulk Pricing Tiers" />
-                                                    <p className="text-[12px] text-[#AEAEAE] font-medium -mt-3 ml-[42px]">
-                                                        Up to 3 quantity-based discount tiers (taxable rate, ex-GST)
-                                                    </p>
-                                                </div>
-                                                {formData.priceSlabs.length < 3 && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setFormData(prev => ({
-                                                            ...prev,
-                                                            priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '' }],
-                                                        }))}
-                                                        className="h-[40px] px-5 bg-[#1a365d] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#1a365d]/90 transition-colors flex items-center gap-2 shrink-0"
-                                                    >
-                                                        <Plus size={14} />
-                                                        Add Bulk Tier
-                                                    </button>
-                                                )}
-                                            </div>
-
-                                            <div className="space-y-4">
-                                                {formData.priceSlabs.map((slab, index) => (
-                                                    <div key={index} className="rounded-[14px] border border-[#EEEEEE] overflow-hidden">
-                                                        <div className="flex items-center justify-between px-5 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE]">
-                                                            <div className="flex items-center gap-2.5">
-                                                                <span className="w-[28px] h-[28px] rounded-full bg-[#299E60] text-white text-[12px] font-bold flex items-center justify-center">
-                                                                    {index + 1}
-                                                                </span>
-                                                                <h4 className="text-[14px] font-bold text-[#181725]">Bulk Tier {index + 1}</h4>
-                                                            </div>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setFormData(prev => ({
-                                                                    ...prev,
-                                                                    priceSlabs: prev.priceSlabs.filter((_, idx) => idx !== index),
-                                                                }))}
-                                                                className="p-1.5 hover:bg-[#FFF0F0] rounded-[6px] transition-colors text-[#AEAEAE] hover:text-[#E74C3C]"
-                                                            >
-                                                                <Trash2 size={15} />
-                                                            </button>
-                                                        </div>
-
-                                                        <div className="p-5">
-                                                            <div className="grid grid-cols-3 gap-4">
-                                                                <div>
-                                                                    <FieldLabel>Min Quantity</FieldLabel>
-                                                                    <input
-                                                                        type="number"
-                                                                        min="1"
-                                                                        value={slab.minQty}
-                                                                        onChange={e => setFormData(prev => ({
-                                                                            ...prev,
-                                                                            priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, minQty: e.target.value } : s),
-                                                                        }))}
-                                                                        className={inputCls}
-                                                                        placeholder="e.g., 10"
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <FieldLabel>Max Quantity</FieldLabel>
-                                                                    <input
-                                                                        type="number"
-                                                                        min="1"
-                                                                        value={slab.maxQty}
-                                                                        onChange={e => setFormData(prev => ({
-                                                                            ...prev,
-                                                                            priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, maxQty: e.target.value } : s),
-                                                                        }))}
-                                                                        className={inputCls}
-                                                                        placeholder="(optional)"
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <FieldLabel required>Taxable Rate (per Unit)</FieldLabel>
-                                                                    <div className="relative">
-                                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] text-[14px]">{'\u20B9'}</span>
-                                                                        <input
-                                                                            type="number"
-                                                                            step="0.01"
-                                                                            min="0"
-                                                                            value={slab.price}
-                                                                            onChange={e => setFormData(prev => ({
-                                                                                ...prev,
-                                                                                priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, price: e.target.value } : s),
-                                                                            }))}
-                                                                            className={cn(inputCls, 'pl-8')}
-                                                                            placeholder="0.00"
-                                                                        />
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-
-                                                {formData.priceSlabs.length === 0 && (
-                                                    <div className="text-center py-8 text-[#AEAEAE]">
-                                                        <BarChart3 size={32} className="mx-auto mb-2 text-[#E5E7EB]" />
-                                                        <p className="text-[13px] font-medium">No bulk tiers yet. Click &quot;Add Bulk Tier&quot; to add quantity-based pricing.</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-
-                            {activeTab === 'advanced' && (
-                                <>
-                                    {/* ======== Section 7: Tags & Settings ======== */}
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6">
-                                        <SectionHeader icon={<SettingsIcon size={16} />} title="Tags & Settings" />
-                                        <div className="space-y-4">
-                                            {/* Tags */}
+                                {activeTab === 'status' && (
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                        <SectionHeader icon={<Clock size={16} />} title="Status" />
+                                        <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <FieldLabel>Tags</FieldLabel>
-                                                <TagInput
-                                                    tags={formData.tags}
-                                                    onChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
-                                                />
+                                                <FieldLabel>Item Status</FieldLabel>
+                                                <select
+                                                    value={formData.itemStatus}
+                                                    onChange={e => updateField('itemStatus', e.target.value)}
+                                                    className={selectCls}
+                                                >
+                                                    <option value="Active">Active</option>
+                                                    <option value="Inactive">Inactive</option>
+                                                    <option value="Draft">Draft</option>
+                                                </select>
                                             </div>
-
-                                            {/* Credit Eligible & Featured Product */}
-                                            <div className="grid grid-cols-2 gap-4 bg-[#F8F9FB] p-4 rounded-[12px] border border-[#EEEEEE]">
-                                                <label className="flex items-start gap-3 cursor-pointer py-1">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={formData.creditEligible}
-                                                        onChange={(e) => updateField('creditEligible', e.target.checked)}
-                                                        className="w-5 h-5 accent-[#299E60] shrink-0 mt-0.5"
-                                                    />
-                                                    <div>
-                                                        <span className="text-[13.5px] font-bold text-[#181725]">Credit Eligible</span>
-                                                        <p className="text-[11px] text-[#AEAEAE] font-medium leading-tight mt-0.5">Allow buyers to purchase on credit</p>
-                                                    </div>
-                                                </label>
-                                                <label className="flex items-start gap-3 cursor-pointer py-1">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={formData.isFeatured}
-                                                        onChange={(e) => updateField('isFeatured', e.target.checked)}
-                                                        className="w-5 h-5 accent-[#F59E0B] shrink-0 mt-0.5"
-                                                    />
-                                                    <div>
-                                                        <span className="text-[13.5px] font-bold text-[#181725]">Featured Product</span>
-                                                        <p className="text-[11px] text-[#AEAEAE] font-medium leading-tight mt-0.5">Highlight product in catalogs</p>
-                                                    </div>
-                                                </label>
-                                            </div>
-
-                                            {/* Veg / Non-Veg */}
                                             <div>
                                                 <FieldLabel>Veg / Non-Veg</FieldLabel>
-                                                <div className="flex gap-2">
-                                                    {([['', 'Not Set'], ['veg', '🟢 Veg'], ['nonveg', '🔴 Non-Veg'], ['egg', '🟡 Egg']] as ['' | 'veg' | 'nonveg' | 'egg', string][]).map(([v, label]) => (
-                                                        <button
-                                                            key={v}
-                                                            type="button"
-                                                            onClick={() => updateField('vegNonVeg', v)}
-                                                            className={cn(
-                                                                'flex-1 h-[40px] rounded-[10px] text-[12px] font-bold border transition-colors',
-                                                                formData.vegNonVeg === v
-                                                                    ? 'bg-[#299E60] text-white border-[#299E60]'
-                                                                    : 'bg-white text-[#7C7C7C] border-[#EEEEEE] hover:border-[#299E60]/40'
-                                                            )}
-                                                        >
-                                                            {label}
-                                                        </button>
-                                                    ))}
-                                                </div>
+                                                <select
+                                                    value={formData.vegNonVeg}
+                                                    onChange={e => updateField('vegNonVeg', e.target.value)}
+                                                    className={selectCls}
+                                                >
+                                                    <option value="">Not Specified</option>
+                                                    <option value="veg">🟢 Veg</option>
+                                                    <option value="nonveg">🔴 Non-Veg</option>
+                                                    <option value="egg">🟡 Egg</option>
+                                                </select>
                                             </div>
+                                        </div>
 
-                                            {/* Storage Type & FSSAI */}
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <FieldLabel>Storage Type</FieldLabel>
-                                                    <select
-                                                        value={formData.storageType}
-                                                        onChange={(e) => updateField('storageType', e.target.value)}
-                                                        className={selectCls}
-                                                    >
-                                                        <option value="">Not specified</option>
-                                                        <option value="ambient">Ambient (Room Temp)</option>
-                                                        <option value="refrigerated">Refrigerated (2–8°C)</option>
-                                                        <option value="frozen">Frozen (−18°C)</option>
-                                                        <option value="dry">Dry Storage</option>
-                                                        <option value="cool">Cool / Dark (10–15°C)</option>
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <FieldLabel>FSSAI Reference</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        maxLength={50}
-                                                        placeholder="e.g. 10016011000015"
-                                                        value={formData.fssaiRef}
-                                                        onChange={e => updateField('fssaiRef', e.target.value)}
-                                                        className={inputCls}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {/* Alias / Search Names */}
+                                        <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <FieldLabel>Alias / Search Names</FieldLabel>
-                                                <TagInput
-                                                    tags={formData.aliasNames}
-                                                    onChange={(names) => setFormData(prev => ({ ...prev, aliasNames: names }))}
-                                                />
-                                                <p className="text-[11px] text-[#AEAEAE] font-medium mt-1">Alternate search keywords</p>
+                                                <FieldLabel>Storage Type</FieldLabel>
+                                                <select
+                                                    value={formData.storageType}
+                                                    onChange={e => updateField('storageType', e.target.value)}
+                                                    className={selectCls}
+                                                >
+                                                    <option value="">Not specified</option>
+                                                    <option value="ambient">Ambient (Room Temp)</option>
+                                                    <option value="refrigerated">Refrigerated (2–8°C)</option>
+                                                    <option value="frozen">Frozen (−18°C)</option>
+                                                    <option value="dry">Dry Storage</option>
+                                                    <option value="cool">Cool / Dark (10–15°C)</option>
+                                                </select>
                                             </div>
+                                            <div className="flex items-center pt-6">
+                                                <label className="flex items-center gap-3 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.activeOnlineStore}
+                                                        onChange={(e) => updateField('activeOnlineStore', e.target.checked)}
+                                                        className="w-5 h-5 accent-[#299E60]"
+                                                    />
+                                                    <div>
+                                                        <span className="text-[13.5px] font-bold text-[#181725]">Active on Online Store</span>
+                                                        <p className="text-[11px] text-[#AEAEAE]">Show this product in the buyer catalog</p>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
-                                            {/* Shelf Life & Country of Origin */}
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <FieldLabel>Shelf Life (days)</FieldLabel>
+                                {activeTab === 'pricing' && (
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                        <SectionHeader icon={<DollarSign size={16} />} title="Pricing & Tax" />
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel required>Taxable Rate (ex-GST)</FieldLabel>
+                                                <div className="relative">
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">₹</span>
                                                     <input
                                                         type="number"
-                                                        min={0}
-                                                        value={formData.shelfLifeDays}
-                                                        onChange={(e) => updateField('shelfLifeDays', e.target.value)}
-                                                        className={inputCls}
-                                                        placeholder="e.g. 180"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={formData.basePrice}
+                                                        onChange={e => {
+                                                            const base = e.target.value;
+                                                            updateField('basePrice', base);
+                                                            const tp = parseFloat(formData.taxPercent || '0');
+                                                            const b = parseFloat(base);
+                                                            if (!isNaN(b) && !isNaN(tp)) {
+                                                                updateField('originalPrice', (b * (1 + tp / 100)).toFixed(2));
+                                                            }
+                                                        }}
+                                                        placeholder="0.00"
+                                                        className={cn(inputCls, 'pl-7', formErrors.basePrice && 'border-[#E74C3C] focus:border-[#E74C3C]')}
                                                     />
                                                 </div>
-                                                <div>
-                                                    <FieldLabel>Country of Origin</FieldLabel>
+                                                {formErrors.basePrice && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.basePrice}</p>}
+                                            </div>
+
+                                            <div>
+                                                <FieldLabel>Tax % (GST)</FieldLabel>
+                                                <select
+                                                    value={formData.taxPercent}
+                                                    onChange={e => {
+                                                        const tp = e.target.value;
+                                                        updateField('taxPercent', tp);
+                                                        const base = parseFloat(formData.basePrice);
+                                                        const percent = parseFloat(tp);
+                                                        if (!isNaN(base) && !isNaN(percent)) {
+                                                            updateField('originalPrice', (base * (1 + percent / 100)).toFixed(2));
+                                                        }
+                                                    }}
+                                                    className={selectCls}
+                                                >
+                                                    {TAX_OPTIONS.map(t => (
+                                                        <option key={t} value={t}>{t}%</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel>Gross Rate (incl. GST)</FieldLabel>
+                                                <div className="relative">
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#299E60] font-bold">₹</span>
                                                     <input
-                                                        type="text"
-                                                        value={formData.countryOfOrigin}
-                                                        onChange={(e) => updateField('countryOfOrigin', e.target.value)}
-                                                        className={inputCls}
-                                                        placeholder="e.g. India"
-                                                        maxLength={100}
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={formData.originalPrice}
+                                                        onChange={e => {
+                                                            const gross = e.target.value;
+                                                            updateField('originalPrice', gross);
+                                                            const tp = parseFloat(formData.taxPercent || '0');
+                                                            const g = parseFloat(gross);
+                                                            if (!isNaN(g) && !isNaN(tp)) {
+                                                                updateField('basePrice', (g / (1 + tp / 100)).toFixed(2));
+                                                            }
+                                                        }}
+                                                        placeholder="0.00"
+                                                        className={cn(inputCls, 'pl-7 font-bold text-[#299E60] bg-[#EEF8F1]/10')}
                                                     />
                                                 </div>
                                             </div>
 
-                                            {/* Substitute Products */}
+                                            <div>
+                                                <FieldLabel>Taxability Type</FieldLabel>
+                                                <select
+                                                    value={formData.taxabilityType}
+                                                    onChange={e => updateField('taxabilityType', e.target.value)}
+                                                    className={selectCls}
+                                                >
+                                                    <option value="taxable">Taxable</option>
+                                                    <option value="exempt">Exempt</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                            <div className="flex items-center">
+                                                <label className="flex items-center gap-3 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.taxable}
+                                                        onChange={(e) => updateField('taxable', e.target.checked)}
+                                                        className="w-5 h-5 accent-[#299E60]"
+                                                    />
+                                                    <div>
+                                                        <span className="text-[13.5px] font-bold text-[#181725]">Taxable Item</span>
+                                                        <p className="text-[11px] text-[#AEAEAE]">Uncheck if item is exempt from all taxes</p>
+                                                    </div>
+                                                </label>
+                                            </div>
+
+                                            {!formData.taxable && (
+                                                <div>
+                                                    <FieldLabel>Exemption Reason</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.exemptionReason}
+                                                        onChange={e => updateField('exemptionReason', e.target.value)}
+                                                        placeholder="Enter exemption reason"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'accounting' && (
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                        <SectionHeader icon={<SettingsIcon size={16} />} title="Accounting Details" />
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel>Sales Account</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.account}
+                                                    onChange={e => updateField('account', e.target.value)}
+                                                    placeholder="Sales account name"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                            <div>
+                                                <FieldLabel>Sales Account Code</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.accountCode}
+                                                    onChange={e => updateField('accountCode', e.target.value)}
+                                                    placeholder="e.g., 40000"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel>Inventory Account</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.inventoryAccount}
+                                                    onChange={e => updateField('inventoryAccount', e.target.value)}
+                                                    placeholder="Inventory account name"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                            <div>
+                                                <FieldLabel>Inventory Account Code</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.inventoryAccountCode}
+                                                    onChange={e => updateField('inventoryAccountCode', e.target.value)}
+                                                    placeholder="e.g., 14000"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                            <div>
+                                                <FieldLabel>Platform Commission %</FieldLabel>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={formData.platformCommission}
+                                                    onChange={e => updateField('platformCommission', e.target.value)}
+                                                    placeholder="0.00"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
+                                            <h4 className="text-[14px] font-bold text-[#181725]">Tax Group Settings</h4>
+                                            
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <div>
+                                                    <FieldLabel>Intra-State Tax Name</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.intraStateTaxName}
+                                                        onChange={e => updateField('intraStateTaxName', e.target.value)}
+                                                        placeholder="e.g. SGST+CGST"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Intra-State Tax Rate</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={formData.intraStateTaxRate}
+                                                        onChange={e => updateField('intraStateTaxRate', e.target.value)}
+                                                        placeholder="e.g. 18.00"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Intra-State Tax Type</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.intraStateTaxType}
+                                                        onChange={e => updateField('intraStateTaxType', e.target.value)}
+                                                        placeholder="e.g. Tax Group"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <div>
+                                                    <FieldLabel>Inter-State Tax Name</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.interStateTaxName}
+                                                        onChange={e => updateField('interStateTaxName', e.target.value)}
+                                                        placeholder="e.g. IGST"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Inter-State Tax Rate</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={formData.interStateTaxRate}
+                                                        onChange={e => updateField('interStateTaxRate', e.target.value)}
+                                                        placeholder="e.g. 18.00"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Inter-State Tax Type</FieldLabel>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.interStateTaxType}
+                                                        onChange={e => updateField('interStateTaxType', e.target.value)}
+                                                        placeholder="e.g. Tax"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'inventory' && (
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                        <SectionHeader icon={<BarChart3 size={16} />} title="Inventory Settings" />
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel>Opening Stock</FieldLabel>
+                                                <input
+                                                    type="number"
+                                                    value={formData.openingStock}
+                                                    onChange={e => updateField('openingStock', e.target.value)}
+                                                    placeholder="0"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                            <div>
+                                                <FieldLabel>Reorder Point</FieldLabel>
+                                                <input
+                                                    type="number"
+                                                    value={formData.reorderPoint}
+                                                    onChange={e => updateField('reorderPoint', e.target.value)}
+                                                    placeholder="e.g. 10"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                            <div>
+                                                <FieldLabel>Valuation Method</FieldLabel>
+                                                <select
+                                                    value={formData.valuationMethod}
+                                                    onChange={e => updateField('valuationMethod', e.target.value)}
+                                                    className={selectCls}
+                                                >
+                                                    <option value="FIFO">First In First Out (FIFO)</option>
+                                                    <option value="LIFO">Last In First Out (LIFO)</option>
+                                                    <option value="WAC">Weighted Average Cost (WAC)</option>
+                                                </select>
+                                            </div>
+                                            <div className="flex items-center pt-6">
+                                                <label className="flex items-center gap-3 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.trackInventory}
+                                                        onChange={(e) => updateField('trackInventory', e.target.checked)}
+                                                        className="w-5 h-5 accent-[#299E60]"
+                                                    />
+                                                    <div>
+                                                        <span className="text-[13.5px] font-bold text-[#181725]">Track Inventory</span>
+                                                        <p className="text-[11px] text-[#AEAEAE]">Enable stock levels monitoring</p>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'packaging' && (
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                        <SectionHeader icon={<Package size={16} />} title="Packaging & Dimensions" />
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel>Pack Size</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.packSize}
+                                                    onChange={e => updateField('packSize', e.target.value)}
+                                                    className={inputCls}
+                                                    placeholder="e.g. 1 kg, 500 ml"
+                                                />
+                                            </div>
+                                            <div>
+                                                <FieldLabel>Unit</FieldLabel>
+                                                <select
+                                                    value={formData.unit}
+                                                    onChange={e => updateField('unit', e.target.value)}
+                                                    className={selectCls}
+                                                >
+                                                    <option value="">Select unit</option>
+                                                    {UNIT_OPTIONS.map(u => (
+                                                        <option key={u} value={u}>{u}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                            <div>
+                                                <FieldLabel>Package Weight</FieldLabel>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={formData.packageWeight}
+                                                    onChange={e => updateField('packageWeight', e.target.value)}
+                                                    placeholder="0.00"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                            <div>
+                                                <FieldLabel>Weight Unit</FieldLabel>
+                                                <select
+                                                    value={formData.weightUnit}
+                                                    onChange={e => updateField('weightUnit', e.target.value)}
+                                                    className={selectCls}
+                                                >
+                                                    <option value="kg">kg</option>
+                                                    <option value="g">g</option>
+                                                    <option value="lbs">lbs</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
+                                            <h4 className="text-[14px] font-bold text-[#181725]">Dimensions</h4>
+                                            <div className="grid grid-cols-4 gap-4">
+                                                <div>
+                                                    <FieldLabel>Length</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={formData.packageLength}
+                                                        onChange={e => updateField('packageLength', e.target.value)}
+                                                        placeholder="0.00"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Width</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={formData.packageWidth}
+                                                        onChange={e => updateField('packageWidth', e.target.value)}
+                                                        placeholder="0.00"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Height</FieldLabel>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={formData.packageHeight}
+                                                        onChange={e => updateField('packageHeight', e.target.value)}
+                                                        placeholder="0.00"
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <FieldLabel>Dimension Unit</FieldLabel>
+                                                    <select
+                                                        value={formData.dimensionUnit}
+                                                        onChange={e => updateField('dimensionUnit', e.target.value)}
+                                                        className={selectCls}
+                                                    >
+                                                        <option value="cm">cm</option>
+                                                        <option value="mm">mm</option>
+                                                        <option value="inch">inch</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'identifiers' && (
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                        <SectionHeader icon={<Tag size={16} />} title="Product Identifiers" />
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel required>SKU</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.sku}
+                                                    onChange={e => updateField('sku', e.target.value.toUpperCase())}
+                                                    placeholder="RIC-BAS-001"
+                                                    readOnly={!!editingProduct?.isMasterRow}
+                                                    className={cn(inputCls, editingProduct?.isMasterRow && 'bg-[#F8F9FB] cursor-not-allowed')}
+                                                />
+                                                {formErrors.sku && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.sku}</p>}
+                                            </div>
+                                            <div>
+                                                <FieldLabel>HSN Code</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.hsn}
+                                                    onChange={e => updateField('hsn', e.target.value)}
+                                                    placeholder="e.g. 1006"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                            <div>
+                                                <FieldLabel>EAN</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.ean}
+                                                    onChange={e => updateField('ean', e.target.value)}
+                                                    placeholder="European Article Number"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                            <div>
+                                                <FieldLabel>ISBN</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.isbn}
+                                                    onChange={e => updateField('isbn', e.target.value)}
+                                                    placeholder="International Standard Book No."
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel>Barcode</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.barcode}
+                                                    onChange={e => updateField('barcode', e.target.value)}
+                                                    placeholder="e.g. 8901234567890"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'attributes' && (
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                        <SectionHeader icon={<BoxIcon size={16} />} title="Product Attributes" />
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel>Country of Origin</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.countryOfOrigin}
+                                                    onChange={e => updateField('countryOfOrigin', e.target.value)}
+                                                    placeholder="e.g. India"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                            <div>
+                                                <FieldLabel>FSSAI Reference</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.fssaiRef}
+                                                    onChange={e => updateField('fssaiRef', e.target.value)}
+                                                    placeholder="FSSAI License Ref"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                            <div>
+                                                <FieldLabel>Product Type</FieldLabel>
+                                                <select
+                                                    value={formData.productType}
+                                                    onChange={e => updateField('productType', e.target.value)}
+                                                    className={selectCls}
+                                                >
+                                                    <option value="goods">Goods</option>
+                                                    <option value="services">Services</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <FieldLabel>Item Type</FieldLabel>
+                                                <select
+                                                    value={formData.itemType}
+                                                    onChange={e => updateField('itemType', e.target.value)}
+                                                    className={selectCls}
+                                                >
+                                                    <option value="standard">Standard</option>
+                                                    <option value="variant">Variant</option>
+                                                    <option value="kit">Kit</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                            <div>
+                                                <FieldLabel>Source</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.source}
+                                                    onChange={e => updateField('source', e.target.value)}
+                                                    placeholder="Data source"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                            <div>
+                                                <FieldLabel>Reference ID</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.referenceId}
+                                                    onChange={e => updateField('referenceId', e.target.value)}
+                                                    placeholder="External Ref ID"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                            <div>
+                                                <FieldLabel>Last Sync</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.lastSync}
+                                                    onChange={e => updateField('lastSync', e.target.value)}
+                                                    placeholder="e.g. 2026-06-29"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                            <label className="flex items-center gap-3 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formData.sellable}
+                                                    onChange={(e) => updateField('sellable', e.target.checked)}
+                                                    className="w-5 h-5 accent-[#299E60]"
+                                                />
+                                                <div>
+                                                    <span className="text-[13px] font-bold text-[#181725]">Sellable</span>
+                                                </div>
+                                            </label>
+                                            <label className="flex items-center gap-3 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formData.purchasable}
+                                                    onChange={(e) => updateField('purchasable', e.target.checked)}
+                                                    className="w-5 h-5 accent-[#299E60]"
+                                                />
+                                                <div>
+                                                    <span className="text-[13px] font-bold text-[#181725]">Purchasable</span>
+                                                </div>
+                                            </label>
+                                            <label className="flex items-center gap-3 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formData.isFeatured}
+                                                    onChange={(e) => updateField('isFeatured', e.target.checked)}
+                                                    className="w-5 h-5 accent-[#F59E0B]"
+                                                />
+                                                <div>
+                                                    <span className="text-[13px] font-bold text-[#181725]">Featured</span>
+                                                </div>
+                                            </label>
+                                        </div>
+
+                                        <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
+                                            <div>
+                                                <FieldLabel>Variant Mapping</FieldLabel>
+                                                <input
+                                                    type="text"
+                                                    value={formData.variantMapping}
+                                                    onChange={e => updateField('variantMapping', e.target.value)}
+                                                    placeholder="e.g. size:large, color:red"
+                                                    className={inputCls}
+                                                />
+                                            </div>
+                                            
                                             <div>
                                                 <FieldLabel>Substitute Products</FieldLabel>
                                                 <SubstituteProductPicker
@@ -2385,14 +2837,122 @@ export default function ProductsPage() {
                                                     products={products}
                                                     onChange={(ids) => setFormData(prev => ({ ...prev, substituteIds: ids }))}
                                                 />
-                                                <p className="text-[11px] text-[#AEAEAE] font-medium mt-1">Shown when this item is out of stock</p>
                                             </div>
                                         </div>
                                     </div>
-                                </>
-                            )}
-                        </>
-                    )}
+                                )}
+
+                                {activeTab === 'bulk' && (
+                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <SectionHeader icon={<Tag size={16} />} title="Bulk Pricing Tiers" />
+                                                <p className="text-[12px] text-[#AEAEAE] font-medium -mt-3 ml-[42px]">
+                                                    Up to 3 quantity-based discount tiers (taxable rate, ex-GST)
+                                                </p>
+                                            </div>
+                                            {formData.priceSlabs.length < 3 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData(prev => ({
+                                                        ...prev,
+                                                        priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '' }],
+                                                    }))}
+                                                    className="h-[40px] px-5 bg-[#1a365d] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#1a365d]/90 transition-colors flex items-center gap-2 shrink-0"
+                                                >
+                                                    <Plus size={14} />
+                                                    Add Bulk Tier
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            {formData.priceSlabs.map((slab, index) => (
+                                                <div key={index} className="rounded-[14px] border border-[#EEEEEE] overflow-hidden">
+                                                    <div className="flex items-center justify-between px-5 py-3 bg-[#FAFAFA] border-b border-[#EEEEEE]">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <span className="w-[28px] h-[28px] rounded-full bg-[#299E60] text-white text-[12px] font-bold flex items-center justify-center">
+                                                                {index + 1}
+                                                            </span>
+                                                            <h4 className="text-[14px] font-bold text-[#181725]">Bulk Tier {index + 1}</h4>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setFormData(prev => ({
+                                                                ...prev,
+                                                                priceSlabs: prev.priceSlabs.filter((_, idx) => idx !== index),
+                                                            }))}
+                                                            className="p-1.5 hover:bg-[#FFF0F0] rounded-[6px] transition-colors text-[#AEAEAE] hover:text-[#E74C3C]"
+                                                        >
+                                                            <Trash2 size={15} />
+                                                        </button>
+                                                    </div>
+
+                                                    <div className="p-5">
+                                                        <div className="grid grid-cols-3 gap-4">
+                                                            <div>
+                                                                <FieldLabel>Min Quantity</FieldLabel>
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    value={slab.minQty}
+                                                                    onChange={e => setFormData(prev => ({
+                                                                        ...prev,
+                                                                        priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, minQty: e.target.value } : s),
+                                                                    }))}
+                                                                    className={inputCls}
+                                                                    placeholder="e.g. 10"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <FieldLabel>Max Quantity</FieldLabel>
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    value={slab.maxQty}
+                                                                    onChange={e => setFormData(prev => ({
+                                                                        ...prev,
+                                                                        priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, maxQty: e.target.value } : s),
+                                                                    }))}
+                                                                    className={inputCls}
+                                                                    placeholder="(optional)"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <FieldLabel required>Taxable Rate (per Unit)</FieldLabel>
+                                                                <div className="relative">
+                                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] text-[14px]">{'\u20B9'}</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        min="0"
+                                                                        value={slab.price}
+                                                                        onChange={e => setFormData(prev => ({
+                                                                            ...prev,
+                                                                            priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, price: e.target.value } : s),
+                                                                        }))}
+                                                                        className={cn(inputCls, 'pl-8')}
+                                                                        placeholder="0.00"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+
+                                            {formData.priceSlabs.length === 0 && (
+                                                <div className="text-center py-8 text-[#AEAEAE]">
+                                                    <BarChart3 size={32} className="mx-auto mb-2 text-[#E5E7EB]" />
+                                                    <p className="text-[13px] font-medium">No bulk tiers yet. Click &quot;Add Bulk Tier&quot; to add quantity-based pricing.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
                 </div>
 
                 {/* Panel Footer */}
@@ -2437,6 +2997,7 @@ export default function ProductsPage() {
                 vendors={vendors}
                 onComplete={() => { handleImportComplete(); setSelectedIds(new Set()); }}
             />
+
 
             {/* Floating selection action bar */}
             {selectedIds.size > 0 && !bulkUpdateOpen && (

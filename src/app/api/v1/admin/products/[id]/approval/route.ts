@@ -13,6 +13,12 @@ import { requirePermission } from '@/lib/permissions/engine';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
 import { syncProductToBrand } from '@/modules/brand/brand.service';
 import { sendProductRejectedNotifications } from '@/lib/productRejectionNotifications';
+import {
+  applyMasterLinkToVendorProduct,
+  resolveMasterForVendorApproval,
+  CatalogService,
+} from '@/modules/catalog/catalog.service';
+import { transitionProductApproval } from '@/modules/catalog/approval-state.service';
 
 // Helper: extract the [id] segment from /api/v1/admin/products/{id}/approval
 function extractId(req: NextRequest): string {
@@ -25,6 +31,10 @@ const approvalSchema = z
   .object({
     action: z.enum(['approve', 'reject']),
     note: z.string().optional(),
+    /** Admin-entered catalog SKU when approving a vendor listing without a master link. */
+    catalogSku: z.string().min(2).max(40).optional(),
+    /** Link to an existing approved master instead of creating one. */
+    masterProductId: z.string().uuid().optional(),
   })
   .refine((d) => d.action !== 'reject' || (d.note?.trim().length ?? 0) > 0, {
     message: 'Rejection reason is required',
@@ -37,14 +47,60 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     requirePermission(ctx, 'products.approve');
     const id = extractId(req);
     const body = await req.json();
-    const { action, note } = approvalSchema.parse(body);
+    const { action, note, catalogSku, masterProductId } = approvalSchema.parse(body);
 
     // Verify product exists
     const existing = await prisma.product.findUnique({
       where: { id },
-      select: { id: true, vendorId: true, name: true },
+      select: {
+        id: true,
+        vendorId: true,
+        name: true,
+        brand: true,
+        categoryId: true,
+        imageUrl: true,
+        unit: true,
+        packSize: true,
+        vendorSku: true,
+        sku: true,
+        masterProductId: true,
+        categoryLinks: { select: { categoryId: true } },
+      },
     });
     if (!existing) throw Errors.notFound('Product');
+    if (!existing.vendorId) throw Errors.badRequest('Catalog-only products use the master product approval flow.');
+
+    const currentProduct = await prisma.product.findUnique({
+      where: { id },
+      select: { approvalStatus: true },
+    });
+
+    // Pending material edit — approve/reject the queued changes only
+    if (currentProduct?.approvalStatus === 'pending_edit') {
+      const catalogService = new CatalogService();
+      if (action === 'approve') {
+        await catalogService.applyPendingProductEdit(id, ctx.userId);
+        const product = await prisma.product.findUnique({ where: { id } });
+        logAction(ctx, req, {
+          action: AUDIT_ACTIONS.productApprove,
+          entity: 'Product',
+          entityId: id,
+          after: { approvalStatus: 'approved', pendingEdit: 'applied' },
+          metadata: { vendorId: existing.vendorId, productName: existing.name },
+        });
+        return NextResponse.json({ success: true, data: product });
+      }
+      await catalogService.rejectPendingProductEdit(id, ctx.userId, note);
+      const product = await prisma.product.findUnique({ where: { id } });
+      logAction(ctx, req, {
+        action: AUDIT_ACTIONS.productReject,
+        entity: 'Product',
+        entityId: id,
+        after: { approvalStatus: 'approved', pendingEdit: 'rejected' },
+        metadata: { vendorId: existing.vendorId, productName: existing.name },
+      });
+      return NextResponse.json({ success: true, data: product });
+    }
 
     if (action === 'approve') {
       // Gate: a product can only be approved once its brand AND category are
@@ -91,14 +147,31 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
         );
       }
 
-      const product = await prisma.product.update({
-        where: { id },
+      const categoryIds =
+        existing.categoryLinks.length > 0
+          ? existing.categoryLinks.map((c) => c.categoryId)
+          : existing.categoryId
+            ? [existing.categoryId]
+            : [];
+
+      const resolvedMasterId = await resolveMasterForVendorApproval({
+        product: { ...existing, vendorId: existing.vendorId },
+        adminUserId: ctx.userId,
+        catalogSku,
+        masterProductId,
+        categoryIds,
+      });
+
+      await applyMasterLinkToVendorProduct(id, existing.vendorId, resolvedMasterId);
+
+      const product = await transitionProductApproval(id, 'approved', ctx.userId, {
         data: {
-          approvalStatus: 'approved',
           approvedBy: ctx.userId,
           approvedAt: new Date(),
           approvalNote: note ?? null,
+          masterProductId: resolvedMasterId,
         },
+        source: 'admin_edit',
       });
 
       if (existing.vendorId) {
@@ -134,14 +207,13 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     }
 
     // action === 'reject'
-    const product = await prisma.product.update({
-      where: { id },
+    const product = await transitionProductApproval(id, 'rejected', ctx.userId, {
       data: {
-        approvalStatus: 'rejected',
         approvedBy: ctx.userId,
         approvedAt: new Date(),
         approvalNote: note ?? null,
       },
+      source: 'admin_edit',
     });
 
     await sendProductRejectedNotifications({
