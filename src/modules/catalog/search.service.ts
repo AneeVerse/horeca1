@@ -52,6 +52,7 @@ export class SearchService {
       OR: [
         { name: { contains: query, mode: 'insensitive' } },
         { sku: { contains: query, mode: 'insensitive' } },
+        { vendorSku: { contains: query, mode: 'insensitive' } },
         { brand: { contains: query, mode: 'insensitive' } },
         { category: { name: { contains: query, mode: 'insensitive' } } },
         { vendor: { businessName: { contains: query, mode: 'insensitive' } } },

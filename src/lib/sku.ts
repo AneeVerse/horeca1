@@ -42,3 +42,75 @@ export async function nextMasterSku(db: Db): Promise<string> {
   const next = lastNum ? parseInt(lastNum, 10) + 1 : 1;
   return formatMasterSku(next);
 }
+
+// Vendor listing SKU: `{vendorCode}-{posSku}` (e.g. MAN-MANJRSYP123).
+export const VENDOR_SKU_SEPARATOR = '-';
+
+/** Short code until admin assigns `Vendor.vendorCode` (Phase 2). */
+export function deriveVendorCodeFromSlug(slug: string): string {
+  const segment = slug.split('-').find((s) => s.length > 0) ?? slug;
+  return segment.slice(0, 20).toUpperCase();
+}
+
+/** Valid admin-assigned vendor code: 2–20 chars, alphanumeric + hyphens/underscores. */
+export const VENDOR_CODE_PATTERN = /^[A-Z0-9][A-Z0-9_-]{0,19}$/;
+
+export function normalizeVendorCode(raw: string): string {
+  return raw.trim().toUpperCase();
+}
+
+export function validateVendorCode(
+  code: string,
+): { ok: true; normalized: string } | { ok: false; message: string } {
+  const normalized = normalizeVendorCode(code);
+  if (normalized.length < 2 || normalized.length > 20) {
+    return { ok: false, message: 'Vendor code must be 2–20 characters' };
+  }
+  if (!VENDOR_CODE_PATTERN.test(normalized)) {
+    return {
+      ok: false,
+      message: 'Vendor code may only contain letters, numbers, hyphens, and underscores',
+    };
+  }
+  return { ok: true, normalized };
+}
+
+export function resolveVendorCode(vendor: { vendorCode?: string | null; slug: string }): string {
+  const explicit = vendor.vendorCode?.trim();
+  if (explicit) return explicit.toUpperCase();
+  return deriveVendorCodeFromSlug(vendor.slug);
+}
+
+export function formatVendorSku(vendorCode: string, posSku: string): string {
+  const code = vendorCode.trim().toUpperCase();
+  const pos = posSku.trim();
+  if (!code || !pos) {
+    throw new Error('vendorCode and posSku are required');
+  }
+  return `${code}${VENDOR_SKU_SEPARATOR}${pos}`;
+}
+
+export function parseVendorSku(
+  full: string,
+  vendorCode?: string,
+): { vendorCode: string; posSku: string } {
+  const trimmed = full.trim();
+  if (!trimmed) return { vendorCode: vendorCode?.toUpperCase() ?? '', posSku: '' };
+
+  if (vendorCode) {
+    const prefix = `${vendorCode.toUpperCase()}${VENDOR_SKU_SEPARATOR}`;
+    if (trimmed.toUpperCase().startsWith(prefix)) {
+      return { vendorCode: vendorCode.toUpperCase(), posSku: trimmed.slice(prefix.length) };
+    }
+  }
+
+  const sepIdx = trimmed.indexOf(VENDOR_SKU_SEPARATOR);
+  if (sepIdx > 0) {
+    return {
+      vendorCode: trimmed.slice(0, sepIdx).toUpperCase(),
+      posSku: trimmed.slice(sepIdx + 1),
+    };
+  }
+
+  return { vendorCode: vendorCode?.toUpperCase() ?? '', posSku: trimmed };
+}

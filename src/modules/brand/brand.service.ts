@@ -1,3 +1,4 @@
+import type { ApprovalStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/events/emitter';
 import { Errors } from '@/middleware/errorHandler';
@@ -991,7 +992,7 @@ export async function syncProductToBrand(
 export interface ResolvedBrand {
   id: string;
   name: string;
-  approvalStatus: 'pending' | 'approved' | 'rejected';
+  approvalStatus: ApprovalStatus;
   created: boolean;
 }
 
