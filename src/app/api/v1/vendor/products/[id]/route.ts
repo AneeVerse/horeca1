@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
-import { CatalogService } from '@/modules/catalog/catalog.service';
+import { CatalogService, getCategoryPickerMeta } from '@/modules/catalog/catalog.service';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
 import { syncProductToBrand } from '@/modules/brand/brand.service';
@@ -137,7 +137,18 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     });
     if (!product) throw Errors.notFound('Product');
 
-    return NextResponse.json({ success: true, data: product });
+    const rawCategoryIds =
+      product.categoryLinks.length > 0
+        ? product.categoryLinks.map((l) => l.categoryId)
+        : product.categoryId
+          ? [product.categoryId]
+          : [];
+    const { categoryIds, categoryLeafMissing } = await getCategoryPickerMeta(rawCategoryIds);
+
+    return NextResponse.json({
+      success: true,
+      data: { ...product, categoryIds, categoryLeafMissing },
+    });
   } catch (error) {
     return errorResponse(error);
   }

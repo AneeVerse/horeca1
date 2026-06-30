@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withRole } from '@/middleware/rbac';
 import { errorResponse } from '@/middleware/errorHandler';
+import { getCategoryPickerMeta } from '@/modules/catalog/catalog.service';
 
 export const GET = withRole(['vendor', 'brand', 'admin'], async (req: NextRequest) => {
   try {
@@ -42,14 +43,32 @@ export const GET = withRole(['vendor', 'brand', 'admin'], async (req: NextReques
       orderBy: { name: 'asc' },
       select: {
         id: true, sku: true, name: true, brand: true, uom: true,
-        taxPercent: true, imageUrl: true, images: true, categoryId: true,
+        taxPercent: true, imageUrl: true, images: true, categoryId: true, metadata: true,
         category: { select: { id: true, name: true } },
+        categoryLinks: {
+          select: { categoryId: true, isPrimary: true },
+          orderBy: [{ isPrimary: 'desc' }, { categoryId: 'asc' }],
+        },
       },
     });
 
+    const withCategories = await Promise.all(
+      masters.map(async (m) => {
+        const rawIds =
+          m.categoryLinks.length > 0
+            ? m.categoryLinks.map((l) => l.categoryId)
+            : m.categoryId
+              ? [m.categoryId]
+              : [];
+        const { categoryIds, categoryLeafMissing } = await getCategoryPickerMeta(rawIds);
+        const { categoryLinks: _links, ...rest } = m;
+        return { ...rest, categoryIds, categoryLeafMissing };
+      }),
+    );
+
     // Catalog SKU-first ordering when the query looks like a SKU code.
     const sorted = search && !exact
-      ? [...masters].sort((a, b) => {
+      ? [...withCategories].sort((a, b) => {
           const q = search.toUpperCase();
           const score = (sku: string) => {
             const upper = sku.toUpperCase();
@@ -61,7 +80,7 @@ export const GET = withRole(['vendor', 'brand', 'admin'], async (req: NextReques
           const diff = score(a.sku) - score(b.sku);
           return diff !== 0 ? diff : a.name.localeCompare(b.name);
         })
-      : masters;
+      : withCategories;
 
     return NextResponse.json({ success: true, data: sorted });
   } catch (error) {

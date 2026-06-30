@@ -17,6 +17,7 @@ import { BrandSinglePicker } from '@/components/features/brand/BrandSinglePicker
 import VendorProductImportModal from '@/components/features/vendor/VendorProductImportModal';
 import VendorBulkEngine from '@/components/features/vendor/VendorBulkEngine';
 import VendorBulkGrid from '@/components/features/vendor/VendorBulkGrid';
+import { PRODUCT_FORM_TABS, type ProductFormTabId } from '@/components/features/shared/productFormTabs';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -481,7 +482,7 @@ export default function VendorProductsPage() {
     const [formError, setFormError] = useState('');
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [loadingProduct, setLoadingProduct] = useState(false);
-    const [activeTab, setActiveTab] = useState<'identity' | 'status' | 'pricing' | 'accounting' | 'inventory' | 'packaging' | 'identifiers' | 'attributes' | 'bulk'>('identity');
+    const [activeTab, setActiveTab] = useState<ProductFormTabId>('identity');
     const panelRef = useRef<HTMLDivElement>(null);
 
     // Product suggestion state
@@ -495,8 +496,15 @@ export default function VendorProductsPage() {
     const [noCatalogMatch, setNoCatalogMatch] = useState(false);
     const [masterSuggestions, setMasterSuggestions] = useState<Array<{
         id: string; sku: string; name: string; brand: string | null; imageUrl: string | null;
-        category: { id: string; name: string } | null; uom: string | null;
+        category: { id: string; name: string } | null;
+        categoryIds?: string[];
+        categoryLeafMissing?: boolean;
+        uom: string | null;
+        taxPercent?: number | string;
+        images?: string[];
     }>>([]);
+    const [categoryPickerKey, setCategoryPickerKey] = useState(0);
+    const [masterCategoryLeafMissing, setMasterCategoryLeafMissing] = useState(false);
     const [brandSuggesting, setBrandSuggesting] = useState(false);
     const suggestionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -557,8 +565,12 @@ export default function VendorProductsPage() {
     const canAutosaveDraft = useCallback(() => {
         if (!isPanelOpen || loadingProduct || saving || draftSaving) return false;
         if (editingProduct?.listingStatus === 'submitted') return false;
-        return form.name.trim().length > 0;
-    }, [isPanelOpen, loadingProduct, saving, draftSaving, editingProduct?.listingStatus, form.name]);
+        if (!form.name.trim()) return false;
+        // Only autosave existing drafts with partial data; new products need a price
+        // so picking a master catalog item doesn't immediately flip Add → Edit draft.
+        if (editingProduct?.listingStatus === 'draft') return true;
+        return !!(form.basePrice && Number(form.basePrice) > 0);
+    }, [isPanelOpen, loadingProduct, saving, draftSaving, editingProduct?.listingStatus, form.name, form.basePrice]);
 
     /* ---- Data fetching ---- */
 
@@ -674,24 +686,16 @@ export default function VendorProductsPage() {
             ]);
             const json = await res.json();
             const masterJson = await masterRes.json();
-            if (json.success) {
-                const s = json.data.suggestions || [];
-                const own = json.data.ownMatches || [];
-                const masters = masterJson.success ? (masterJson.data || []) : [];
-                setSuggestions(s);
-                setMasterSuggestions(masters);
-                setOwnMatches(own);
-                if (s.length > 0 || own.length > 0 || masters.length > 0) {
-                    setShowSuggestions(true);
-                    setNoCatalogMatch(false);
-                } else {
-                    setShowSuggestions(false);
-                    setNoCatalogMatch(true);
-                }
+            const s = json.success ? (json.data.suggestions || []) : [];
+            const own = json.success ? (json.data.ownMatches || []) : [];
+            const masters = masterJson.success ? (masterJson.data || []) : [];
+            setSuggestions(s);
+            setMasterSuggestions(masters);
+            setOwnMatches(own);
+            if (s.length > 0 || own.length > 0 || masters.length > 0) {
+                setShowSuggestions(true);
+                setNoCatalogMatch(false);
             } else {
-                setSuggestions([]);
-                setMasterSuggestions([]);
-                setOwnMatches([]);
                 setShowSuggestions(false);
                 setNoCatalogMatch(true);
             }
@@ -707,6 +711,7 @@ export default function VendorProductsPage() {
 
     const clearCatalogSelection = () => {
         setMasterProductId(null);
+        setMasterCategoryLeafMissing(false);
         setBasedOnProductId(null);
         setCatalogSearch('');
         setNoCatalogMatch(false);
@@ -742,14 +747,26 @@ export default function VendorProductsPage() {
 
     const fillFromMaster = (m: {
         id: string; sku: string; name: string; brand: string | null; imageUrl: string | null;
-        category: { id: string; name: string } | null; uom: string | null;
+        category: { id: string; name: string } | null;
+        categoryIds?: string[];
+        categoryLeafMissing?: boolean;
+        uom: string | null;
+        taxPercent?: number | string;
+        images?: string[];
     }) => {
+        skipDraftAutosaveRef.current = true;
         setMasterProductId(m.id);
+        setMasterCategoryLeafMissing(!!m.categoryLeafMissing);
         setBasedOnProductId(null);
         setCatalogSearch(`${m.sku} — ${m.name}`);
         setNoCatalogMatch(false);
         setShowSuggestions(false);
         setMasterSuggestions([]);
+        const categoryIds = m.categoryIds?.length
+            ? m.categoryIds
+            : m.category?.id
+                ? [m.category.id]
+                : [];
         setForm(prev => ({
             ...prev,
             name: m.name,
@@ -759,9 +776,14 @@ export default function VendorProductsPage() {
             sku: '',
             brand: m.brand || prev.brand,
             imageUrl: m.imageUrl || prev.imageUrl,
+            images: m.images?.length ? m.images : prev.images,
             unit: m.uom || prev.unit,
-            categoryIds: m.category?.id ? [m.category.id] : prev.categoryIds,
+            taxPercent: m.taxPercent != null ? String(m.taxPercent) : prev.taxPercent,
+            categoryIds,
         }));
+        setTimeout(() => {
+            skipDraftAutosaveRef.current = false;
+        }, 500);
     };
 
     const suggestBrand = async (nameOverride?: string) => {
@@ -795,6 +817,7 @@ export default function VendorProductsPage() {
     const fillFromSuggestion = (s: ProductSuggestion) => {
         setBasedOnProductId(s.id);
         setMasterProductId(null);
+        setMasterCategoryLeafMissing(false);
         setCatalogSearch(s.sku ? `${s.sku} — ${s.name}` : s.name);
         setNoCatalogMatch(false);
         setShowSuggestions(false);
@@ -1090,6 +1113,7 @@ export default function VendorProductsPage() {
         setFieldErrors({});
         setBasedOnProductId(null);
         setMasterProductId(null);
+        setMasterCategoryLeafMissing(false);
         setCatalogSearch('');
         setNoCatalogMatch(false);
         setSuggestions([]);
@@ -1099,6 +1123,7 @@ export default function VendorProductsPage() {
         setLastSavedSnapshot('');
         setAuditLogs([]);
         setActiveTab('identity');
+        setCategoryPickerKey((k) => k + 1);
         setIsPanelOpen(true);
         Promise.resolve().then(() => {
             skipDraftAutosaveRef.current = false;
@@ -1109,10 +1134,14 @@ export default function VendorProductsPage() {
         if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
         skipDraftAutosaveRef.current = true;
         setEditingProduct(product);
+        setForm(EMPTY_FORM);
         setFormError('');
         setFieldErrors({});
         setShowCloseConfirm(false);
         setActiveTab('identity');
+        setMasterProductId(null);
+        setMasterCategoryLeafMissing(false);
+        setCatalogSearch('');
         setIsPanelOpen(true);
         setLoadingProduct(true);
 
@@ -1135,17 +1164,17 @@ export default function VendorProductsPage() {
             setMasterProductId(
                 typeof p.masterProductId === 'string' ? p.masterProductId : null
             );
+            setMasterCategoryLeafMissing(!!p.categoryLeafMissing);
             setBasedOnProductId(null);
-            // Pre-fill multi-category: prefer the categoryLinks join rows (full set,
-            // primary-first), fall back to the legacy single Product.categoryId for
-            // older rows that haven't been migrated to the join table yet.
             const linkIds: string[] = Array.isArray(p.categoryLinks)
                 ? (p.categoryLinks as Array<{ categoryId: string }>).map(l => l.categoryId)
                 : [];
             const fallbackId: string | null = p.category?.id ?? null;
-            const editCategoryIds = linkIds.length > 0
-                ? linkIds
-                : (fallbackId ? [fallbackId] : []);
+            const editCategoryIds = Array.isArray(p.categoryIds) && p.categoryIds.length > 0
+                ? p.categoryIds as string[]
+                : linkIds.length > 0
+                    ? linkIds
+                    : (fallbackId ? [fallbackId] : []);
 
             const masterRow = p.masterProduct as { sku?: string } | null | undefined;
             const catalogSku = masterRow?.sku ?? '';
@@ -1233,6 +1262,7 @@ export default function VendorProductsPage() {
             };
 
             setForm(formPayload);
+            setCategoryPickerKey((k) => k + 1);
             syncSavedSnapshot(
                 serializeFormSnapshot(
                     formPayload,
@@ -1280,6 +1310,7 @@ export default function VendorProductsPage() {
                 substituteIds: [],
                 priceSlabs: [],
             });
+            setCategoryPickerKey((k) => k + 1);
             syncSavedSnapshot();
         } finally {
             setLoadingProduct(false);
@@ -1394,32 +1425,35 @@ export default function VendorProductsPage() {
         });
     };
 
-    // Order we walk fields in to surface the first offender. No tabs here — the
-    // whole form is one scroll panel — so we just scroll the field into view.
-    const ERROR_FIELD_ORDER = ['name', 'brand', 'vendorSku', 'sku', 'categoryIds', 'basePrice'];
+    // Which tab each errorable field lives on, plus the order we walk them to
+    // find the first offender.
+    const ERROR_FIELD_TAB = {
+        name: 'identity',
+        brand: 'identity',
+        vendorSku: 'identity',
+        sku: 'identifiers',
+        categoryIds: 'identity',
+        basePrice: 'pricing',
+    } as const;
+    const ERROR_FIELD_ORDER: Array<keyof typeof ERROR_FIELD_TAB> = ['name', 'categoryIds', 'vendorSku', 'brand', 'basePrice'];
 
-    // Jump to the first field with an error: scroll it into view inside the
-    // panel and focus its input, so the message shows right under the bad field.
+    // Jump to the first field with an error: open its tab, scroll it into view,
+    // and focus its input so the message shows right under the offending field.
     const focusFirstError = (errors: Record<string, string>) => {
         const field = ERROR_FIELD_ORDER.find(f => errors[f]);
-        if (!field) {
-            panelRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
-        }
+        if (!field) return;
+        setActiveTab(ERROR_FIELD_TAB[field]);
         setTimeout(() => {
             const el = document.getElementById(`ff-${field}`);
-            if (!el) {
-                panelRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                return;
-            }
+            if (!el) return;
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            el.querySelector<HTMLElement>('input, textarea, select')?.focus({ preventScroll: true });
-        }, 50);
+            el.querySelector<HTMLElement>('input, textarea, select, button')?.focus({ preventScroll: true });
+        }, 60);
     };
 
     // Best-effort: route a server error message to the field it's about so it
     // renders inline (and we can scroll to it) rather than only in the banner.
-    const mapServerErrorToField = (msg: string): string | null => {
+    const mapServerErrorToField = (msg: string): keyof typeof ERROR_FIELD_TAB | null => {
         const m = msg.toLowerCase();
         if (m.includes('pos sku') || m.includes('vendor sku')) return 'vendorSku';
         if (m.includes('sku')) return 'sku';
@@ -1502,16 +1536,22 @@ export default function VendorProductsPage() {
         const errors: Record<string, string> = {};
         if (!form.name.trim()) errors.name = 'Product name is required';
         if (!form.basePrice || Number(form.basePrice) <= 0) errors.basePrice = 'A valid base price is required';
-        if ((isNewSubmission || publishingDraft) && form.categoryIds.length === 0) {
+        const needsCategory =
+            (isNewSubmission || publishingDraft) &&
+            !masterProductId &&
+            !basedOnProductId;
+        if (needsCategory && form.categoryIds.length === 0) {
             errors.categoryIds = 'Pick a parent and sub-category';
         }
         if (masterProductId && (!editingProduct || editingProduct.approvalStatus === 'rejected' || publishingDraft) && !form.vendorSku.trim()) {
-            errors.vendorSku = 'Your POS SKU is required';
+            errors.vendorSku = 'Your POS SKU is required when listing a catalog item';
         }
         if (Object.keys(errors).length > 0) {
             setFormError('');
             setFieldErrors(errors);
             focusFirstError(errors);
+            const firstMsg = ERROR_FIELD_ORDER.map((f) => errors[f]).find(Boolean);
+            if (firstMsg) toast.error(firstMsg);
             return;
         }
 
@@ -2183,74 +2223,63 @@ export default function VendorProductsPage() {
                 <>
                     {/* Backdrop */}
                     <div
-                        className="fixed inset-0 z-[10001] bg-black/40 transition-opacity"
+                        className="fixed inset-0 z-[60] bg-black/40 transition-opacity"
                         onClick={requestClosePanel}
                     />
 
                     {/* Panel */}
                     <div
                         ref={panelRef}
-                        className="fixed inset-y-0 left-0 z-[10002] h-full w-full bg-[#F8F9FA] shadow-2xl overflow-y-auto animate-in slide-in-from-left duration-300"
+                        className="fixed top-0 left-0 h-full w-full bg-white z-[70] shadow-2xl flex flex-col animate-in slide-in-from-left duration-300"
                     >
                         {/* Panel Header */}
-                        <div className="sticky top-0 z-10 bg-white border-b border-[#EEEEEE] px-6 py-5 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <button
-                                    type="button"
-                                    onClick={requestClosePanel}
-                                    className="p-2 -ml-2 hover:bg-gray-100 rounded-[8px] transition-colors"
-                                >
-                                    <X size={20} className="text-[#7C7C7C]" />
-                                </button>
-                                <div>
-                                    <h2 className="text-[20px] font-bold text-[#181725]">
-                                        {editingProduct ? 'Edit Product' : 'Add New Product'}
-                                    </h2>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                        {editingProduct && (
-                                            <p className="text-[12px] text-[#AEAEAE] font-medium">
-                                                ID: {editingProduct.id}
-                                            </p>
-                                        )}
-                                        {(editingProduct?.listingStatus === 'draft' || (!editingProduct && draftSaving)) && (
-                                            <span className={cn(
-                                                'inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-[6px]',
-                                                draftSaveError
-                                                    ? 'text-[#E74C3C] bg-[#FFF0F0]'
-                                                    : 'text-[#7C7C7C] bg-[#F5F5F5]',
-                                            )}>
-                                                {draftSaving ? (
-                                                    <>
-                                                        <Loader2 size={10} className="animate-spin" />
-                                                        Saving draft…
-                                                    </>
-                                                ) : draftSaveError ? (
-                                                    <>
-                                                        {draftSaveError}
-                                                        <button
-                                                            type="button"
-                                                            className="underline ml-1"
-                                                            onClick={() => void saveDraftRef.current()}
-                                                        >
-                                                            Retry
-                                                        </button>
-                                                    </>
-                                                ) : (
-                                                    'Draft saved'
-                                                )}
-                                            </span>
-                                        )}
-                                    </div>
+                        <div className="flex items-center justify-between px-8 py-6 border-b border-[#EEEEEE] shrink-0">
+                            <div>
+                                <h2 className="text-[22px] font-[900] text-[#181725]">
+                                    {editingProduct ? 'Edit Product' : 'Add Product'}
+                                </h2>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                    {editingProduct && (
+                                        <p className="text-[12px] text-[#AEAEAE] font-medium">
+                                            ID: {editingProduct.id}
+                                        </p>
+                                    )}
+                                    {(draftSaving || draftSaveError || editingProduct?.listingStatus === 'draft') && (
+                                        <span className={cn(
+                                            'inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-[6px]',
+                                            draftSaveError
+                                                ? 'text-[#E74C3C] bg-[#FFF0F0]'
+                                                : 'text-[#7C7C7C] bg-[#F5F5F5]',
+                                        )}>
+                                            {draftSaving ? (
+                                                <>
+                                                    <Loader2 size={10} className="animate-spin" />
+                                                    Saving draft…
+                                                </>
+                                            ) : draftSaveError ? (
+                                                <>
+                                                    {draftSaveError}
+                                                    <button
+                                                        type="button"
+                                                        className="underline ml-1"
+                                                        onClick={() => void saveDraftRef.current()}
+                                                    >
+                                                        Retry
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                'Draft saved'
+                                            )}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                             <button
                                 type="button"
-                                onClick={handleSubmit as unknown as React.MouseEventHandler}
-                                disabled={saving || loadingProduct}
-                                className="h-[40px] px-5 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm disabled:opacity-50 flex items-center gap-2"
+                                onClick={requestClosePanel}
+                                className="w-[40px] h-[40px] rounded-[12px] flex items-center justify-center hover:bg-[#F8F9FB] text-[#7C7C7C] hover:text-[#181725] transition-all"
                             >
-                                {saving ? <Loader2 size={14} className="animate-spin" /> : null}
-                                {saving ? 'Saving...' : editingProduct?.listingStatus === 'draft' ? 'Publish' : editingProduct?.approvalStatus === 'rejected' ? 'Resubmit for Review' : editingProduct ? 'Update' : 'Save'}
+                                <X size={20} />
                             </button>
                         </div>
 
@@ -2258,17 +2287,7 @@ export default function VendorProductsPage() {
                         <div className="flex-1 flex overflow-hidden bg-[#F8F9FB]">
                             {/* Left Sidebar: 9 Groups */}
                             <div className="w-[240px] bg-white border-r border-[#EEEEEE] overflow-y-auto shrink-0 py-6 px-4 flex flex-col gap-1.5">
-                                {([
-                                    { id: 'identity', label: '1. Identity', icon: Info },
-                                    { id: 'status', label: '2. Status', icon: Clock },
-                                    { id: 'pricing', label: '3. Pricing / Tax', icon: DollarSign },
-                                    { id: 'accounting', label: '4. Accounting', icon: SettingsIcon },
-                                    { id: 'inventory', label: '5. Inventory', icon: BarChart3 },
-                                    { id: 'packaging', label: '6. Packaging', icon: Package },
-                                    { id: 'identifiers', label: '7. Identifiers', icon: Tag },
-                                    { id: 'attributes', label: '8. Attributes', icon: BoxIcon },
-                                    { id: 'bulk', label: '9. Bulk Slabs', icon: Plus },
-                                ] as const).map(tab => {
+                                {PRODUCT_FORM_TABS.map(tab => {
                                     const isActive = activeTab === tab.id;
                                     const Icon = tab.icon;
                                     return (
@@ -2292,7 +2311,13 @@ export default function VendorProductsPage() {
 
                             {/* Right Content Area */}
                             <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
-                                <form onSubmit={handleSubmit} className="space-y-6 max-w-[900px] w-full pb-12">
+                                <form id="vendor-product-form" onSubmit={handleSubmit} className="space-y-6">
+                                    {loadingProduct ? (
+                                        <div className="flex items-center justify-center py-32">
+                                            <Loader2 className="animate-spin text-[#299E60]" size={32} />
+                                        </div>
+                                    ) : (
+                                    <>
                                     {/* Error */}
                                     {formError && (
                                         <div className="bg-[#FFF0F0] text-[#E74C3C] text-[13px] font-medium p-3.5 rounded-[10px] flex items-center gap-2">
@@ -2317,19 +2342,138 @@ export default function VendorProductsPage() {
                                         <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
                                             <SectionHeader icon={<Info size={16} />} title="Identity" />
 
-                                            {(!editingProduct || editingProduct.approvalStatus === 'rejected') && !identityFromCatalog && (
-                                                <div className="relative" ref={suggestionsRef}>
-                                                    <FieldLabel>Search master catalog (optional — instant approval)</FieldLabel>
-                                                    <div className="relative">
-                                                        <input
-                                                            type="text"
-                                                            value={catalogSearch}
-                                                            onChange={(e) => handleCatalogSearchChange(e.target.value)}
-                                                            className={inputCls}
-                                                            placeholder="e.g., RIC-BAS-001"
-                                                        />
+                                            {(!editingProduct || editingProduct.approvalStatus === 'rejected') && (
+                                                identityFromCatalog ? (
+                                                    <div className="rounded-[10px] bg-[#EEF8F1] border border-[#299E60]/30 px-4 py-3 flex items-center justify-between gap-3">
+                                                        <p className="text-[12px] font-medium text-[#299E60]">
+                                                            {masterProductId
+                                                                ? `Linked to master catalog — ${catalogSearch || form.name}`
+                                                                : `Based on approved product — ${catalogSearch || form.name}`}
+                                                        </p>
+                                                        <button
+                                                            type="button"
+                                                            onClick={clearCatalogSelection}
+                                                            className="text-[12px] font-bold text-[#299E60] hover:underline shrink-0"
+                                                        >
+                                                            Change
+                                                        </button>
                                                     </div>
-                                                </div>
+                                                ) : (
+                                                    <div className="relative" ref={suggestionsRef}>
+                                                        <FieldLabel>Search master catalog (optional — instant approval)</FieldLabel>
+                                                        <div className="relative">
+                                                            <input
+                                                                type="text"
+                                                                value={catalogSearch}
+                                                                onChange={(e) => handleCatalogSearchChange(e.target.value)}
+                                                                onFocus={() => {
+                                                                    if (catalogSearch.trim().length >= 2) {
+                                                                        void fetchSuggestions(catalogSearch);
+                                                                    }
+                                                                }}
+                                                                className={inputCls}
+                                                                placeholder="e.g., RIC-BAS-001 or Butter"
+                                                            />
+                                                            {loadingSuggestions && (
+                                                                <Loader2
+                                                                    size={16}
+                                                                    className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-[#299E60]"
+                                                                />
+                                                            )}
+                                                        </div>
+
+                                                        {showSuggestions && (masterSuggestions.length > 0 || suggestions.length > 0) && (
+                                                            <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-[#EEEEEE] rounded-[10px] shadow-lg max-h-[280px] overflow-y-auto">
+                                                                {masterSuggestions.length > 0 && (
+                                                                    <>
+                                                                        <div className="px-3 py-1.5 bg-[#F8F9FB] border-b border-[#EEEEEE] text-[10px] font-bold text-[#AEAEAE] uppercase tracking-wider">
+                                                                            Master Catalog
+                                                                        </div>
+                                                                        {masterSuggestions.map((m) => (
+                                                                            <button
+                                                                                key={m.id}
+                                                                                type="button"
+                                                                                onMouseDown={(e) => e.preventDefault()}
+                                                                                onClick={() => fillFromMaster(m)}
+                                                                                className="w-full text-left px-4 py-2.5 text-[13px] hover:bg-[#EEF8F1] transition-colors flex items-center justify-between gap-3 border-b border-[#F5F5F5] last:border-0"
+                                                                            >
+                                                                                <div className="min-w-0">
+                                                                                    <p className="font-bold text-[#181725] truncate">{m.name}</p>
+                                                                                    <p className="text-[11px] text-[#AEAEAE] truncate">
+                                                                                        {m.brand ? `Brand: ${m.brand}` : ''}
+                                                                                        {m.sku ? `${m.brand ? ' • ' : ''}SKU: ${m.sku}` : ''}
+                                                                                    </p>
+                                                                                </div>
+                                                                                {m.imageUrl && (
+                                                                                    // eslint-disable-next-line @next/next/no-img-element
+                                                                                    <img
+                                                                                        src={m.imageUrl}
+                                                                                        alt=""
+                                                                                        className="w-8 h-8 rounded-[6px] object-cover border border-[#EEEEEE] shrink-0"
+                                                                                    />
+                                                                                )}
+                                                                            </button>
+                                                                        ))}
+                                                                    </>
+                                                                )}
+                                                                {suggestions.length > 0 && (
+                                                                    <>
+                                                                        <div className="px-3 py-1.5 bg-[#F8F9FB] border-b border-[#EEEEEE] text-[10px] font-bold text-[#AEAEAE] uppercase tracking-wider">
+                                                                            Approved Marketplace Products
+                                                                        </div>
+                                                                        {suggestions.map((s) => (
+                                                                            <button
+                                                                                key={s.id}
+                                                                                type="button"
+                                                                                onMouseDown={(e) => e.preventDefault()}
+                                                                                onClick={() => fillFromSuggestion(s)}
+                                                                                className="w-full text-left px-4 py-2.5 text-[13px] hover:bg-[#EEF8F1] transition-colors flex items-center justify-between gap-3 border-b border-[#F5F5F5] last:border-0"
+                                                                            >
+                                                                                <div className="min-w-0">
+                                                                                    <p className="font-bold text-[#181725] truncate">{s.name}</p>
+                                                                                    <p className="text-[11px] text-[#AEAEAE] truncate">
+                                                                                        {s.vendor?.businessName ? `Sold by ${s.vendor.businessName}` : 'Catalog product'}
+                                                                                        {s.sku ? ` • SKU: ${s.sku}` : ''}
+                                                                                    </p>
+                                                                                </div>
+                                                                                {s.imageUrl && (
+                                                                                    // eslint-disable-next-line @next/next/no-img-element
+                                                                                    <img
+                                                                                        src={s.imageUrl}
+                                                                                        alt=""
+                                                                                        className="w-8 h-8 rounded-[6px] object-cover border border-[#EEEEEE] shrink-0"
+                                                                                    />
+                                                                                )}
+                                                                            </button>
+                                                                        ))}
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        )}
+
+                                                        {ownMatches.length > 0 && showSuggestions && (
+                                                            <div className="mt-2 rounded-[10px] bg-[#FFF7E6] border border-amber-200 px-3 py-2 text-[12px] text-amber-800">
+                                                                <p className="font-bold mb-1">You already list similar products:</p>
+                                                                <ul className="list-disc list-inside space-y-0.5">
+                                                                    {ownMatches.map((o) => (
+                                                                        <li key={o.id}>
+                                                                            {o.name}
+                                                                            <span className="text-[#AEAEAE] ml-1">
+                                                                                ({o.approvalStatus}{o.isActive ? '' : ', inactive'})
+                                                                            </span>
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        )}
+
+                                                        {noCatalogMatch && catalogSearch.trim().length >= 2 && !loadingSuggestions && (
+                                                            <p className="text-[11px] text-amber-700 font-medium mt-1.5">
+                                                                No catalog match found — you can still add this as a new product for admin approval.
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )
                                             )}
 
                                             <div id="ff-name">
@@ -2340,7 +2484,35 @@ export default function VendorProductsPage() {
                                                     onChange={(e) => handleProductNameChange(e.target.value)}
                                                     className={cn(inputCls, fieldErrors.name && 'border-[#E74C3C]')}
                                                 />
+                                                {fieldErrors.name && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.name}</p>}
                                             </div>
+
+                                            {masterProductId && (
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <FieldLabel>Catalog SKU</FieldLabel>
+                                                        <input
+                                                            type="text"
+                                                            value={form.catalogSku}
+                                                            readOnly
+                                                            className={cn(inputCls, 'bg-[#F8F9FB] cursor-not-allowed')}
+                                                        />
+                                                    </div>
+                                                    <div id="ff-vendorSku">
+                                                        <FieldLabel required>Your POS SKU</FieldLabel>
+                                                        <input
+                                                            type="text"
+                                                            value={form.vendorSku}
+                                                            onChange={(e) => updateField('vendorSku', e.target.value)}
+                                                            placeholder="Your in-store / POS code"
+                                                            className={cn(inputCls, fieldErrors.vendorSku && 'border-[#E74C3C]')}
+                                                        />
+                                                        {fieldErrors.vendorSku && (
+                                                            <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.vendorSku}</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div id="ff-brand">
@@ -2366,11 +2538,27 @@ export default function VendorProductsPage() {
 
                                             <div id="ff-categoryIds">
                                                 <CategoryHierarchyPicker
+                                                    key={`cat-${categoryPickerKey}`}
                                                     value={form.categoryIds}
                                                     onChange={(ids) => updateField('categoryIds', ids)}
                                                     label="Categories"
                                                     endpoint="/api/v1/vendor/categories/suggest"
+                                                    disabled={!!masterProductId && !masterCategoryLeafMissing}
+                                                    lockParent={!!masterProductId}
                                                 />
+                                                {fieldErrors.categoryIds && (
+                                                    <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.categoryIds}</p>
+                                                )}
+                                                {masterProductId && !masterCategoryLeafMissing && (
+                                                    <p className="text-[11px] text-[#7C7C7C] font-medium mt-1">
+                                                        Categories are set from the master catalog (read-only).
+                                                    </p>
+                                                )}
+                                                {masterProductId && masterCategoryLeafMissing && (
+                                                    <p className="text-[11px] text-[#7C7C7C] font-medium mt-1">
+                                                        Parent category is from the master catalog. Pick the sub-category below.
+                                                    </p>
+                                                )}
                                             </div>
 
                                             <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
@@ -2459,7 +2647,7 @@ export default function VendorProductsPage() {
                                             <SectionHeader icon={<DollarSign size={16} />} title="Pricing & Tax" />
                                             
                                             <div className="grid grid-cols-2 gap-4">
-                                                <div>
+                                                <div id="ff-basePrice">
                                                     <FieldLabel required>Taxable Rate (ex-GST)</FieldLabel>
                                                     <div className="relative">
                                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">₹</span>
@@ -3208,25 +3396,38 @@ export default function VendorProductsPage() {
                                             <h3 className="text-[13px] font-bold text-[#181725]">Change history</h3>
                                         </div>
                                     )}
-
-                                    <div className="flex items-center gap-3 pt-2">
-                                        <button
-                                            type="button"
-                                            onClick={requestClosePanel}
-                                            className="flex-1 h-[48px] border border-[#EEEEEE] bg-white rounded-[12px] text-[14px] font-bold text-[#7C7C7C] hover:bg-gray-50 transition-colors"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            disabled={saving}
-                                            className="flex-1 h-[48px] bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center justify-center gap-2"
-                                        >
-                                            {saving ? 'Saving...' : 'Update Product'}
-                                        </button>
-                                    </div>
+                                    </>
+                                    )}
                                 </form>
                             </div>
+                        </div>
+
+                        {/* Panel Footer */}
+                        <div className="px-8 py-6 border-t border-[#EEEEEE] shrink-0 flex items-center gap-4">
+                            <button
+                                type="button"
+                                onClick={requestClosePanel}
+                                className="flex-1 h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[12px] text-[14px] font-bold hover:bg-[#EEEEEE] transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                form="vendor-product-form"
+                                disabled={saving || loadingProduct}
+                                className="flex-1 h-[48px] bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-2 shadow-sm shadow-[#299E60]/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                                {saving && <Loader2 size={16} className="animate-spin" />}
+                                {saving
+                                    ? 'Saving...'
+                                    : editingProduct?.listingStatus === 'draft'
+                                        ? 'Publish'
+                                        : editingProduct?.approvalStatus === 'rejected'
+                                            ? 'Resubmit for Review'
+                                            : editingProduct
+                                                ? 'Update Product'
+                                                : 'Save'}
+                            </button>
                         </div>
                     </div>
                 </>
@@ -3235,8 +3436,8 @@ export default function VendorProductsPage() {
             {/* Unsaved changes confirmation */}
             {showCloseConfirm && (
                 <>
-                    <div className="fixed inset-0 bg-black/40 z-[10003]" onClick={() => setShowCloseConfirm(false)} />
-                    <div className="fixed inset-0 z-[10004] flex items-center justify-center p-4">
+                    <div className="fixed inset-0 bg-black/40 z-[80]" onClick={() => setShowCloseConfirm(false)} />
+                    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
                         <div className="bg-white rounded-[16px] shadow-xl max-w-[420px] w-full p-6">
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="w-[40px] h-[40px] rounded-full bg-[#FFF7E6] flex items-center justify-center shrink-0">

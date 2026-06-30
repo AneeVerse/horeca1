@@ -280,6 +280,114 @@ export async function getCategoryParentIds(subCategoryId: string, db: Db = prism
   return cat?.parentId ? [cat.parentId] : [];
 }
 
+/** Resolve category IDs for the hierarchy picker (master fill, edit preload). */
+export async function resolveCategoriesForPicker(ids: string[], db: Db = prisma) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return [];
+
+  const cats = await db.category.findMany({
+    where: { id: { in: unique }, isActive: true, approvalStatus: 'approved' },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      parentId: true,
+      _count: { select: { children: true } },
+    },
+  });
+
+  const results = await Promise.all(
+    cats.map(async (c) => {
+      const isParent = c._count.children > 0;
+      if (isParent) {
+        return {
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          parentCategoryIds: [] as string[],
+          primaryParentCategoryId: null as string | null,
+          isParent: true,
+        };
+      }
+      const parentIds = await getCategoryParentIds(c.id, db);
+      return {
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        parentCategoryIds: parentIds.length > 0 ? parentIds : c.parentId ? [c.parentId] : [],
+        primaryParentCategoryId: parentIds[0] ?? c.parentId ?? null,
+        isParent: false,
+      };
+    }),
+  );
+
+  const parentIdsNeeded = new Set<string>();
+  for (const row of results) {
+    for (const pid of row.parentCategoryIds) {
+      if (!results.some((r) => r.id === pid)) parentIdsNeeded.add(pid);
+    }
+  }
+  if (parentIdsNeeded.size > 0) {
+    const parentRows = await db.category.findMany({
+      where: { id: { in: [...parentIdsNeeded] }, isActive: true, approvalStatus: 'approved' },
+      select: { id: true, name: true, slug: true },
+    });
+    for (const p of parentRows) {
+      results.push({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        parentCategoryIds: [],
+        primaryParentCategoryId: null,
+        isParent: true,
+      });
+    }
+  }
+
+  return results;
+}
+
+/** Leaf IDs first so picker value[0] is never a bare parent when a leaf exists. */
+export async function normalizeCategoryIdsForPicker(ids: string[], db: Db = prisma): Promise<string[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return [];
+
+  const resolved = await resolveCategoriesForPicker(unique, db);
+  const byId = new Map(resolved.map((r) => [r.id, r]));
+
+  const leafIds: string[] = [];
+  const parentIds: string[] = [];
+
+  for (const id of unique) {
+    const row = byId.get(id);
+    if (!row) continue;
+    if (row.isParent) parentIds.push(id);
+    else leafIds.push(id);
+  }
+
+  const parentIdsCoveredByLeaves = new Set<string>();
+  for (const leafId of leafIds) {
+    const leaf = byId.get(leafId);
+    if (!leaf) continue;
+    if (leaf.primaryParentCategoryId) parentIdsCoveredByLeaves.add(leaf.primaryParentCategoryId);
+    for (const pid of leaf.parentCategoryIds) parentIdsCoveredByLeaves.add(pid);
+  }
+
+  const extraParents = parentIds.filter((pid) => !parentIdsCoveredByLeaves.has(pid));
+  return [...leafIds, ...extraParents];
+}
+
+/** Normalized IDs plus whether only parent-level categories are present (no leaf). */
+export async function getCategoryPickerMeta(ids: string[], db: Db = prisma) {
+  const categoryIds = await normalizeCategoryIdsForPicker(ids, db);
+  if (categoryIds.length === 0) {
+    return { categoryIds, categoryLeafMissing: false };
+  }
+  const resolved = await resolveCategoriesForPicker(categoryIds, db);
+  const hasLeaf = resolved.some((r) => !r.isParent && categoryIds.includes(r.id));
+  return { categoryIds, categoryLeafMissing: !hasLeaf };
+}
+
 /** Replace CategoryCategory rows for a sub-category; sync denormalized parentId. */
 export async function syncCategoryParentLinks(
   subCategoryId: string,
@@ -668,7 +776,7 @@ export class CatalogService {
             },
           },
         },
-        vendor: { select: { id: true, businessName: true, logoUrl: true } },
+        vendor: { select: { id: true, businessName: true, logoUrl: true, vendorCode: true } },
         brandMappings: {
           where: { status: { in: ['verified', 'auto_mapped'] } },
           select: {
@@ -846,9 +954,20 @@ export class CatalogService {
     if (resolvedCategoryIds.length === 0 && productData.masterProductId) {
       const m = await prisma.masterProduct.findUnique({
         where: { id: productData.masterProductId },
-        select: { categoryId: true },
+        select: {
+          categoryId: true,
+          categoryLinks: {
+            select: { categoryId: true, isPrimary: true },
+            orderBy: [{ isPrimary: 'desc' }, { categoryId: 'asc' }],
+          },
+        },
       });
-      if (m) resolvedCategoryIds = [m.categoryId];
+      if (m) {
+        resolvedCategoryIds =
+          m.categoryLinks.length > 0
+            ? m.categoryLinks.map((l) => l.categoryId)
+            : [m.categoryId];
+      }
     }
     // Published listings require at least one leaf sub-category; drafts may omit categories.
     if (!isDraft) {
@@ -921,7 +1040,13 @@ export class CatalogService {
     if (!isDraft && productData.masterProductId) {
       const master = await prisma.masterProduct.findFirst({
         where: { id: productData.masterProductId, approvalStatus: 'approved', isActive: true },
-        select: { id: true, name: true, brand: true, sku: true, categoryId: true, imageUrl: true, images: true, uom: true },
+        select: {
+          id: true, name: true, brand: true, sku: true, categoryId: true, imageUrl: true, images: true, uom: true,
+          categoryLinks: {
+            select: { categoryId: true, isPrimary: true },
+            orderBy: [{ isPrimary: 'desc' }, { categoryId: 'asc' }],
+          },
+        },
       });
       if (!master) throw Errors.badRequest('Master product not found or not approved.');
       approvalStatus = 'approved';
@@ -938,8 +1063,11 @@ export class CatalogService {
         productData.images = master.images;
       }
       if (resolvedCategoryIds.length === 0) {
-        resolvedCategoryIds = [master.categoryId];
-        productData.categoryId = master.categoryId;
+        resolvedCategoryIds =
+          master.categoryLinks.length > 0
+            ? master.categoryLinks.map((l) => l.categoryId)
+            : [master.categoryId];
+        productData.categoryId = resolvedCategoryIds[0];
       }
 
       const dup = await prisma.product.findFirst({
