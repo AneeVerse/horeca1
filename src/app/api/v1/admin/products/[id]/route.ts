@@ -10,7 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
-import { CatalogService, assertLeafCategory } from '@/modules/catalog/catalog.service';
+import { CatalogService, assertLeafCategory, findOrCreateMaster } from '@/modules/catalog/catalog.service';
 import { syncProductToBrand } from '@/modules/brand/brand.service';
 
 // Helper: extract the [id] segment from the URL
@@ -52,6 +52,7 @@ const updateProductSchema = z.object({
   countryOfOrigin: z.string().max(100).optional(),
   substituteIds: z.array(z.string().uuid()).optional(),
   isFeatured: z.boolean().optional(),
+  listingStatus: z.enum(['draft', 'submitted']).optional(),
   promoPrice: z.number().positive().nullable().optional(),
   promoStartTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
   promoEndTime: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
@@ -102,33 +103,73 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     // Check product exists
     const existing = await prisma.product.findUnique({
       where: { id },
-      select: { id: true, vendorId: true },
+      select: { id: true, vendorId: true, listingStatus: true, name: true, brand: true, masterProductId: true, categoryId: true },
     });
     if (!existing) throw Errors.notFound('Product');
 
-    const { priceSlabs, categoryIds, primaryCategoryId, ...productData } = data;
+    const { priceSlabs, categoryIds, primaryCategoryId, listingStatus: reqListingStatus, ...productData } = data;
 
-    // Resolve multi-category inputs when caller supplies them. Denormalized
-    // Product.categoryId always mirrors the primary so indexed filtering keeps working.
+    const isDraftSave = reqListingStatus === 'draft';
+    const isPublishing =
+      reqListingStatus === 'submitted' && existing.listingStatus === 'draft';
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updatePayload: any = { ...productData };
+
+    if (isDraftSave) {
+      updatePayload.isActive = false;
+      updatePayload.listingStatus = 'draft';
+    } else if (reqListingStatus === 'submitted') {
+      updatePayload.listingStatus = 'submitted';
+      if (updatePayload.isActive === undefined) {
+        updatePayload.isActive = true;
+      }
+    }
+
     const categoriesChanged = categoryIds !== undefined || primaryCategoryId !== undefined;
     const multiIds = categoryIds && categoryIds.length > 0 ? Array.from(new Set(categoryIds)) : [];
     const primaryId = primaryCategoryId
-      ?? productData.categoryId
+      ?? updatePayload.categoryId
       ?? multiIds[0];
     if (multiIds.length > 0 && primaryId && !multiIds.includes(primaryId)) multiIds.push(primaryId);
-    if (categoriesChanged && primaryId) productData.categoryId = primaryId;
+    if (categoriesChanged && primaryId) updatePayload.categoryId = primaryId;
 
-    // Req 5: a changed category set must remain mapped to leaf (level-2) sub-categories.
     if (categoriesChanged) {
       const joinIds = multiIds.length > 0 ? multiIds : (primaryId ? [primaryId] : []);
-      if (joinIds.length === 0) throw Errors.badRequest('Product must remain mapped to at least one sub-category.');
-      await assertLeafCategory(joinIds);
+      if (isPublishing || (!isDraftSave && existing.listingStatus !== 'draft')) {
+        if (joinIds.length === 0) throw Errors.badRequest('Product must remain mapped to at least one sub-category.');
+        await assertLeafCategory(joinIds);
+      } else if (joinIds.length > 0) {
+        await assertLeafCategory(joinIds);
+      }
+    } else if (isPublishing) {
+      const existingCats = await prisma.productCategory.findMany({
+        where: { productId: id },
+        select: { categoryId: true },
+      });
+      const cats =
+        existingCats.length > 0
+          ? existingCats.map((c) => c.categoryId)
+          : existing.categoryId
+            ? [existing.categoryId]
+            : [];
+      if (cats.length === 0) throw Errors.badRequest('Product must be mapped to at least one sub-category.');
+      await assertLeafCategory(cats);
+
+      if (!existing.masterProductId && cats[0]) {
+        const publishName = (typeof updatePayload.name === 'string' ? updatePayload.name : existing.name).trim();
+        updatePayload.masterProductId = await findOrCreateMaster({
+          name: publishName,
+          brand: (typeof updatePayload.brand === 'string' ? updatePayload.brand : existing.brand) ?? null,
+          categoryId: cats[0],
+        });
+      }
     }
 
     const product = await prisma.$transaction(async (tx) => {
       const updated = await tx.product.update({
         where: { id },
-        data: productData,
+        data: updatePayload,
         include: {
           vendor: { select: { id: true, businessName: true } },
           category: { select: { id: true, name: true } },
@@ -173,7 +214,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     });
 
     // Sync to brand catalog in background
-    if (product.brand) {
+    if (product.brand && product.listingStatus !== 'draft') {
       syncProductToBrand(
         product.brand,
         product.name,
