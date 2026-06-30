@@ -4,7 +4,7 @@ import { adminOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { parseProductImport, type ParsedProductRow } from '@/modules/import-export/excel.service';
 import { requirePermission } from '@/lib/permissions/engine';
-import { findOrCreateMaster, resolveImportCategoryIds, syncImportProductCategories } from '@/modules/catalog/catalog.service';
+import { findOrCreateMaster, resolveImportCategoryIds, syncImportProductCategories, composeVendorListingSku } from '@/modules/catalog/catalog.service';
 import { syncProductToBrand, findOrCreateBrandByName } from '@/modules/brand/brand.service';
 
 // ── Preview mode: parse file, match SKUs, return diff without committing ──
@@ -120,18 +120,25 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 
     // 1. Match by SKU
     const skus = rows.filter(r => r.sku).map(r => r.sku!);
-    const existingBySku = new Map<string, typeof existingProducts[0]>();
     const existingProducts = skus.length > 0
       ? await prisma.product.findMany({
-          where: { sku: { in: skus }, ...vendorFilter },
+          where: {
+            OR: [
+              { sku: { in: skus } },
+              ...(vendorId ? [{ vendorSku: { in: skus } }] : []),
+            ],
+            ...vendorFilter,
+          },
           include: {
             inventory: { select: { qtyAvailable: true } },
             priceSlabs: { orderBy: { sortOrder: 'asc' } },
           },
         })
       : [];
+    const existingBySku = new Map<string, typeof existingProducts[0]>();
     for (const p of existingProducts) {
-      if (p.sku) existingBySku.set(p.sku, p);
+      if (p.sku) existingBySku.set(p.sku.toLowerCase(), p);
+      if (p.vendorSku) existingBySku.set(p.vendorSku.toLowerCase(), p);
     }
 
     // 2. Match by name (fallback for rows without SKU or no SKU match)
@@ -150,14 +157,17 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 
     // Helper: find existing product by SKU first, then by name
     function findExisting(row: { sku?: string; name: string }) {
-      if (row.sku && existingBySku.has(row.sku)) return existingBySku.get(row.sku)!;
+      if (row.sku) {
+        const match = existingBySku.get(row.sku.toLowerCase());
+        if (match) return match;
+      }
       return existingByName.get(row.name.toLowerCase());
     }
 
     // Products created earlier in THIS commit run, so a file that lists the same
     // item twice updates the freshly-created product instead of inserting a
     // duplicate (the snapshot maps above predate any writes in this run).
-    const createdThisRun = new Map<string, { id: string; sku: string | null; categoryId: string | null; slug: string }>();
+    const createdThisRun = new Map<string, { id: string; sku: string | null; vendorSku?: string | null; categoryId: string | null; slug: string }>();
     function findCreated(row: { sku?: string; name: string }) {
       if (row.sku) {
         const bySku = createdThisRun.get('sku:' + row.sku.toLowerCase());
@@ -165,9 +175,10 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       }
       return createdThisRun.get('name:' + row.name.toLowerCase());
     }
-    function registerCreated(p: { id: string; sku: string | null; name: string; categoryId: string | null; slug: string }) {
-      const ref = { id: p.id, sku: p.sku, categoryId: p.categoryId, slug: p.slug };
+    function registerCreated(p: { id: string; sku: string | null; vendorSku?: string | null; name: string; categoryId: string | null; slug: string }) {
+      const ref = { id: p.id, sku: p.sku, vendorSku: p.vendorSku, categoryId: p.categoryId, slug: p.slug };
       if (p.sku) createdThisRun.set('sku:' + p.sku.toLowerCase(), ref);
+      if (p.vendorSku) createdThisRun.set('sku:' + p.vendorSku.toLowerCase(), ref);
       createdThisRun.set('name:' + p.name.toLowerCase(), ref);
     }
 
@@ -576,11 +587,23 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           // ── UPDATE existing product ──
           // SKU also gets written through — previously the update path
           // dropped SKU edits silently. Admin edits land everywhere.
+          let composedSku: string | undefined;
+          let vendorSku: string | undefined;
+          if (vendorId && r.sku) {
+            vendorSku = r.sku.trim();
+            composedSku = await composeVendorListingSku(vendorId, vendorSku);
+          }
+
           const updatedProduct = await prisma.product.update({
             where: { id: existing.id },
             data: {
               name: r.name,
-              sku: r.sku ?? existing.sku,
+              ...(vendorId ? {
+                ...(composedSku !== undefined ? { sku: composedSku } : {}),
+                ...(vendorSku !== undefined ? { vendorSku } : {}),
+              } : {
+                ...(r.sku !== undefined ? { sku: r.sku } : {}),
+              }),
               categoryId: categoryId || existing.categoryId,
               basePrice: r.basePrice,
               taxPercent: r.taxPercent,
@@ -656,13 +679,21 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             ? await findOrCreateMaster({ name: r.name, brand: r.brand ?? null, categoryId })
             : null;
 
+          let composedSku: string | null = null;
+          let vendorSku: string | null = null;
+          if (vendorId && r.sku) {
+            vendorSku = r.sku.trim();
+            composedSku = await composeVendorListingSku(vendorId, vendorSku);
+          }
+
           const productData: Record<string, unknown> = {
             vendorId: vendorId || null,
             categoryId,
             masterProductId,
             name: r.name,
             slug,
-            sku: r.sku || null,
+            sku: vendorId ? composedSku : (r.sku || null),
+            vendorSku: vendorId ? vendorSku : null,
             hsn: r.hsn || null,
             unit: r.unit || null,
             brand: r.brand || null,

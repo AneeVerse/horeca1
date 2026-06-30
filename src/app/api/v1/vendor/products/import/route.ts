@@ -178,7 +178,14 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     const skus = rows.filter(r => r.sku).map(r => r.sku!);
     const existingProducts = skus.length > 0
       ? await prisma.product.findMany({
-          where: { sku: { in: skus }, vendorId, ...NOT_TOMBSTONED },
+          where: {
+            OR: [
+              { sku: { in: skus } },
+              { vendorSku: { in: skus } },
+            ],
+            vendorId,
+            ...NOT_TOMBSTONED,
+          },
           include: {
             inventory: { select: { qtyAvailable: true } },
             priceSlabs: { orderBy: { sortOrder: 'asc' } },
@@ -187,7 +194,8 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       : [];
     const existingBySku = new Map<string, typeof existingProducts[0]>();
     for (const p of existingProducts) {
-      if (p.sku) existingBySku.set(p.sku, p);
+      if (p.sku) existingBySku.set(p.sku.toLowerCase(), p);
+      if (p.vendorSku) existingBySku.set(p.vendorSku.toLowerCase(), p);
     }
 
     const names = rows.map(r => r.name);
@@ -204,7 +212,10 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     }
 
     function findExisting(row: { sku?: string; name: string }) {
-      if (row.sku && existingBySku.has(row.sku)) return existingBySku.get(row.sku)!;
+      if (row.sku) {
+        const match = existingBySku.get(row.sku.toLowerCase());
+        if (match) return match;
+      }
       return existingByName.get(row.name.toLowerCase());
     }
 
@@ -213,7 +224,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     // common export artifact), the second row wouldn't see the product the
     // first row just created and would insert a DUPLICATE. Tracking in-run
     // creations lets the duplicate row update that product instead.
-    const createdThisRun = new Map<string, { id: string; sku: string | null; categoryId: string | null }>();
+    const createdThisRun = new Map<string, { id: string; sku: string | null; vendorSku?: string | null; categoryId: string | null }>();
     function findCreated(row: { sku?: string; name: string }) {
       if (row.sku) {
         const bySku = createdThisRun.get('sku:' + row.sku.toLowerCase());
@@ -221,9 +232,10 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       }
       return createdThisRun.get('name:' + row.name.toLowerCase());
     }
-    function registerCreated(p: { id: string; sku: string | null; name: string; categoryId: string | null }) {
-      const ref = { id: p.id, sku: p.sku, categoryId: p.categoryId };
+    function registerCreated(p: { id: string; sku: string | null; vendorSku?: string | null; name: string; categoryId: string | null }) {
+      const ref = { id: p.id, sku: p.sku, vendorSku: p.vendorSku, categoryId: p.categoryId };
       if (p.sku) createdThisRun.set('sku:' + p.sku.toLowerCase(), ref);
+      if (p.vendorSku) createdThisRun.set('sku:' + p.vendorSku.toLowerCase(), ref);
       createdThisRun.set('name:' + p.name.toLowerCase(), ref);
     }
 
