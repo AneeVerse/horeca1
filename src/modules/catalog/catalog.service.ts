@@ -34,6 +34,19 @@ export async function findOrCreateMaster(input: { name: string; brand: string | 
   if (existing) return existing.id;
 
   return prisma.$transaction(async (tx) => {
+    // Acquire table lock to serialize concurrent SKU generation and inserts
+    await tx.$executeRawUnsafe('LOCK TABLE master_products IN EXCLUSIVE MODE;');
+
+    // Re-check existence inside lock to avoid duplicates from concurrent creators
+    const doubleCheck = await tx.masterProduct.findFirst({
+      where: {
+        name: { equals: input.name, mode: 'insensitive' },
+        brand: input.brand ? { equals: input.brand, mode: 'insensitive' } : null,
+      },
+      select: { id: true },
+    });
+    if (doubleCheck) return doubleCheck.id;
+
     const sku = await nextMasterSku(tx);
     const master = await tx.masterProduct.create({
       data: { sku, name: input.name, brand: input.brand, categoryId: input.categoryId },
