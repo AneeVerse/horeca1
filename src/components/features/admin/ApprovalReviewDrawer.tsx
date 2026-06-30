@@ -166,6 +166,7 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
 
     const [brands, setBrands] = useState<BrandOption[]>([]);
     const [parentCategories, setParentCategories] = useState<ParentCategoryOption[]>([]);
+    const [allCategories, setAllCategories] = useState<Array<{ id: string; name: string }>>([]);
 
     // Edit form state
     const [vendorForm, setVendorForm] = useState({ businessName: '', fullName: '', email: '', phone: '' });
@@ -188,6 +189,7 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
         setBrand(null);
         setCatalogSkuInput('');
         setLinkMasterId('');
+        setAllCategories([]);
         setTitle('');
         setStatusLabel('');
         setIsApproved(false);
@@ -241,8 +243,15 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
                     setBrands(Array.isArray(list) ? list.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : []);
                 }
             } else if (t.type === 'product' && t.kind === 'vendor') {
-                const res = await fetch(`/api/v1/admin/products/${t.id}`);
+                const [res, bRes, cRes] = await Promise.all([
+                    fetch(`/api/v1/admin/products/${t.id}`),
+                    fetch('/api/v1/brands?limit=100'),
+                    fetch('/api/v1/admin/categories'),
+                ]);
                 const json = await res.json();
+                const bJson = await bRes.json();
+                const cJson = await cRes.json();
+
                 if (!json.success) throw new Error(json.error?.message || 'Failed to load product');
                 const p: VendorProductDetail = json.data;
                 setVendorProduct(p);
@@ -259,11 +268,13 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
                 });
                 setCatalogSkuInput(p.masterProduct?.sku ?? '');
                 setLinkMasterId(p.masterProduct?.id ?? '');
-                const bRes = await fetch('/api/v1/brands?limit=100');
-                const bJson = await bRes.json();
                 if (bJson.success) {
                     const list = bJson.data?.brands ?? bJson.data ?? [];
                     setBrands(Array.isArray(list) ? list.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : []);
+                }
+                if (cJson.success) {
+                    const list = cJson.data ?? [];
+                    setAllCategories(Array.isArray(list) ? list.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : []);
                 }
             } else if (t.type === 'category') {
                 const [cRes, listRes] = await Promise.all([
@@ -820,15 +831,116 @@ export function ApprovalReviewDrawer({ target, onClose, onComplete }: Props) {
                         <DetailRow label="Stock" value={vendorProduct.inventory ? String(vendorProduct.inventory.qtyAvailable) : '—'} />
                         <DetailRow label="Status" value={vendorProduct.approvalStatus} />
                     </div>
-                    {vendorProduct.approvalStatus === 'pending_edit' && vendorProduct.pendingEditPayload && (
-                        <div className="space-y-2 pt-2 border-t border-[#F5F5F5] bg-[#FFF8E1] rounded-[10px] p-4">
-                            <p className="text-[12px] font-bold text-[#8B6914] uppercase">Queued material changes</p>
-                            <pre className="text-[12px] text-[#181725] whitespace-pre-wrap font-mono">
-                                {JSON.stringify(vendorProduct.pendingEditPayload, null, 2)}
-                            </pre>
-                            <p className="text-[11px] text-[#AEAEAE]">Live listing unchanged until you approve this edit.</p>
-                        </div>
-                    )}
+                    {vendorProduct.approvalStatus === 'pending_edit' && vendorProduct.pendingEditPayload && (() => {
+                        const pending = vendorProduct.pendingEditPayload as Record<string, any>;
+                        const diffFields: Array<{ label: string; oldVal: React.ReactNode; newVal: React.ReactNode }> = [];
+
+                        if (pending.name !== undefined && pending.name !== vendorProduct.name) {
+                            diffFields.push({ label: 'Product Name', oldVal: vendorProduct.name, newVal: pending.name });
+                        }
+                        if (pending.brand !== undefined && pending.brand !== vendorProduct.brand) {
+                            diffFields.push({ label: 'Brand', oldVal: vendorProduct.brand, newVal: pending.brand });
+                        }
+                        if (pending.hsn !== undefined && pending.hsn !== (vendorProduct as any).hsn) {
+                            diffFields.push({ label: 'HSN Code', oldVal: (vendorProduct as any).hsn, newVal: pending.hsn });
+                        }
+                        if (pending.packSize !== undefined && pending.packSize !== (vendorProduct as any).packSize) {
+                            diffFields.push({ label: 'Pack Size', oldVal: (vendorProduct as any).packSize, newVal: pending.packSize });
+                        }
+                        if (pending.unit !== undefined && pending.unit !== (vendorProduct as any).unit) {
+                            diffFields.push({ label: 'Unit', oldVal: (vendorProduct as any).unit, newVal: pending.unit });
+                        }
+                        if (pending.vegNonVeg !== undefined && pending.vegNonVeg !== (vendorProduct as any).vegNonVeg) {
+                            diffFields.push({ label: 'Veg/Non-Veg', oldVal: (vendorProduct as any).vegNonVeg, newVal: pending.vegNonVeg });
+                        }
+                        if (pending.imageUrl !== undefined && pending.imageUrl !== vendorProduct.imageUrl) {
+                            diffFields.push({
+                                label: 'Image',
+                                oldVal: vendorProduct.imageUrl ? <img src={vendorProduct.imageUrl} alt="Current" className="w-12 h-12 object-contain rounded border border-gray-200 bg-gray-50" /> : '—',
+                                newVal: pending.imageUrl ? <img src={pending.imageUrl} alt="Proposed" className="w-12 h-12 object-contain rounded border border-[#E2B755] bg-yellow-50/20" /> : '—',
+                            });
+                        }
+                        if (pending.images !== undefined) {
+                            const oldImgs = (vendorProduct as any).images || [];
+                            const newImgs = pending.images || [];
+                            const oldStr = [...oldImgs].sort().join(',');
+                            const newStr = [...newImgs].sort().join(',');
+                            if (oldStr !== newStr) {
+                                diffFields.push({
+                                    label: 'Additional Images',
+                                    oldVal: oldImgs.length > 0 ? (
+                                        <div className="flex gap-1 flex-wrap">
+                                            {oldImgs.map((img: string) => <img key={img} src={img} className="w-10 h-10 object-contain rounded border border-gray-200 bg-gray-50" />)}
+                                        </div>
+                                    ) : '—',
+                                    newVal: newImgs.length > 0 ? (
+                                        <div className="flex gap-1 flex-wrap">
+                                            {newImgs.map((img: string) => <img key={img} src={img} className="w-10 h-10 object-contain rounded border border-[#E2B755] bg-yellow-50/20" />)}
+                                        </div>
+                                    ) : '—',
+                                });
+                            }
+                        }
+                        if (pending.categoryIds !== undefined) {
+                            const oldCats = (vendorProduct as any).categoryLinks?.map((l: any) => l.category?.name).filter(Boolean) || [];
+                            if (oldCats.length === 0 && vendorProduct.category?.name) {
+                                oldCats.push(vendorProduct.category.name);
+                            }
+                            const newCats = pending.categoryIds.map((id: string) => {
+                                return allCategories.find((c) => c.id === id)?.name || id;
+                            });
+                            const oldStr = [...oldCats].sort().join(', ');
+                            const newStr = [...newCats].sort().join(', ');
+                            if (oldStr !== newStr) {
+                                diffFields.push({
+                                    label: 'Categories',
+                                    oldVal: oldCats.join(', '),
+                                    newVal: newCats.join(', '),
+                                });
+                            }
+                        }
+
+                        return (
+                            <div className="space-y-3 pt-2 border-t border-[#F5F5F5] bg-[#FFF8E1] rounded-[10px] p-4">
+                                <div className="flex justify-between items-center">
+                                    <p className="text-[12px] font-bold text-[#8B6914] uppercase text-xs tracking-wide">Queued material changes</p>
+                                    {pending.submittedAt && (
+                                        <p className="text-[11px] text-[#8B6914]/80 font-bold">
+                                            Submitted on {new Date(pending.submittedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {diffFields.length > 0 ? (
+                                    <div className="border border-[#F0D8A8] rounded-[10px] overflow-hidden bg-white shadow-sm">
+                                        <table className="w-full text-left border-collapse text-[12px]">
+                                            <thead>
+                                                <tr className="bg-[#FFF8E1] border-b border-[#F0D8A8]">
+                                                    <th className="p-2 font-extrabold text-[#8B6914] w-[30%]">Field</th>
+                                                    <th className="p-2 font-extrabold text-[#7C7C7C] w-[35%]">Live Value</th>
+                                                    <th className="p-2 font-extrabold text-[#8B6914] w-[35%]">Proposed Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {diffFields.map((field, idx) => (
+                                                    <tr key={field.label} className={cn("border-b border-gray-100 last:border-0", idx % 2 === 0 ? "bg-white" : "bg-gray-50/50")}>
+                                                        <td className="p-2 font-bold text-gray-500">{field.label}</td>
+                                                        <td className="p-2 text-[#7C7C7C] font-semibold">{field.oldVal || '—'}</td>
+                                                        <td className="p-2 font-bold text-[#8B6914] bg-[#FFFDE7]/40">{field.newVal || '—'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <pre className="text-[12px] text-[#181725] whitespace-pre-wrap font-mono bg-white p-3 rounded-[10px] border border-[#F0D8A8]">
+                                        {JSON.stringify(pending, null, 2)}
+                                    </pre>
+                                )}
+                                <p className="text-[11px] text-[#AEAEAE] font-semibold">Live listing remains unchanged until you approve this edit.</p>
+                            </div>
+                        );
+                    })()}
                     {vendorProduct.approvalStatus === 'pending' && !vendorProduct.masterProduct && (
                         <div className="space-y-3 pt-2 border-t border-[#F5F5F5]">
                             <div>
