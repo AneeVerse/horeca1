@@ -597,6 +597,9 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
 
   const activeItems = preview?.items.filter(i => !skipRows.has(i.row)) ?? [];
   const currentItem = activeItems[reviewIdx];
+  const missingSubCategoryRows = preview?.items
+    .filter((i) => !!i.parentCategory && !i.subCategory)
+    .map((i) => i.row) ?? [];
 
   if (!open) return null;
 
@@ -726,6 +729,14 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                     <ul className="list-disc pl-5 font-normal text-[#181725] text-[12.5px] max-h-[100px] overflow-y-auto space-y-0.5">
                       {preview.errors.map((err, i) => (<li key={i}>Row {err.row}{err.field ? ` · ${err.field}` : ''}: {err.message}</li>))}
                     </ul>
+                  </div>
+                )}
+                {missingSubCategoryRows.length > 0 && (
+                  <div className="py-2 px-4 bg-amber-50 border border-amber-200 rounded-[10px] text-[12.5px] text-amber-800">
+                    <p className="font-semibold">
+                      Parent category was provided without a sub-category in row{missingSubCategoryRows.length > 1 ? 's' : ''} {missingSubCategoryRows.join(', ')}.
+                    </p>
+                    <p className="mt-1">Pick a valid sub-category before commit; parent-only mappings are blocked.</p>
                   </div>
                 )}
 

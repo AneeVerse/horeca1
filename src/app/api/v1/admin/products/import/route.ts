@@ -4,8 +4,19 @@ import { adminOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { parseProductImport, type ParsedProductRow } from '@/modules/import-export/excel.service';
 import { requirePermission } from '@/lib/permissions/engine';
-import { findOrCreateMaster, resolveImportCategoryIds, syncImportProductCategories, composeVendorListingSku } from '@/modules/catalog/catalog.service';
+import {
+  assertLeafCategory,
+  findOrCreateMaster,
+  resolveImportCategoryIds,
+  syncImportProductCategories,
+  composeVendorListingSku,
+} from '@/modules/catalog/catalog.service';
 import { syncProductToBrand, findOrCreateBrandByName } from '@/modules/brand/brand.service';
+import {
+  partitionImportRows,
+  buildImportErrorReportCsv,
+  type ImportErrorRowData,
+} from '@/modules/import-export/import-commit';
 
 // ── Preview mode: parse file, match SKUs, return diff without committing ──
 // ── Commit mode: actually create/update products with backup ──
@@ -66,9 +77,14 @@ interface PreviewResponse {
 }
 
 interface CommitResponse {
+  blocked: boolean;
+  totalRows: number;
+  validRows: number;
   created: number;
   updated: number;
-  errors: { row: number; message: string }[];
+  imported: number;
+  errors: { row: number; field?: string; message: string }[];
+  errorReport?: string;
   backupId: string;
 }
 
@@ -314,10 +330,12 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       })),
     }));
 
+    const force = (formData.get('force') as string | null) === 'true';
+
     // Store backup as JSON in metadata (could use Redis/DB for production scale)
     // For now, we return it to the client for undo capability
     let created = 0, updated = 0;
-    const commitErrors: { row: number; message: string }[] = [...parseErrors];
+    const commitErrors: { row: number; field?: string; message: string }[] = [...parseErrors];
 
     // Optional: get skip list from client (rows to skip)
     const skipRowsStr = formData.get('skipRows') as string | null;
@@ -453,11 +471,36 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       return candidate;
     }
 
-    for (let i = 0; i < rows.length; i++) {
-      const parsedRow = rows[i];
-      const rowNum = i + 2;
+    const rowData = new Map<number, ImportErrorRowData>(
+      rows.map((r, idx) => [idx + 2, { name: r.name, sku: r.sku, hsn: r.hsn, brand: r.brand, netRate: r.basePrice }])
+    );
 
-      if (skipRows.has(rowNum)) continue;
+    if (parseErrors.length > 0 && !force) {
+      const blockedErrorReport = buildImportErrorReportCsv(rowData, commitErrors);
+      return NextResponse.json({
+        success: true,
+        data: {
+          blocked: true,
+          totalRows: rows.length,
+          validRows: 0,
+          created: 0,
+          updated: 0,
+          imported: 0,
+          errors: commitErrors,
+          errorReport: blockedErrorReport,
+          backupId,
+          backup: productsToBackup,
+        } satisfies CommitResponse & { backup: typeof productsToBackup },
+      });
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (let i = 0; i < rows.length; i++) {
+          const parsedRow = rows[i];
+          const rowNum = i + 2;
+
+          if (skipRows.has(rowNum)) continue;
 
       // Merge inline edits OVER the parsed row. The admin's keystrokes
       // win for any field they touched in the review table.
@@ -553,37 +596,41 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
         }));
       }
 
-      try {
-        const hasCategoryData = !!(
-          r.parentCategory ||
-          r.subCategory ||
-          r.legacyCategory ||
-          (r.additionalSubCategories && r.additionalSubCategories.length > 0)
-        );
-        let categoryId: string | null = null;
-        let categoryIds: string[] = [];
-        if (hasCategoryData) {
-          const resolved = await resolveImportCategoryIds({
-            parentCategory: r.parentCategory,
-            subCategory: r.subCategory,
-            additionalSubCategories: r.additionalSubCategories,
-            legacyCategory: r.legacyCategory,
-            autoApprove: true,
-            catMap,
-          });
-          categoryId = resolved.primaryCategoryId;
-          categoryIds = resolved.categoryIds;
-        }
+          try {
+            const hasCategoryData = !!(
+              r.parentCategory ||
+              r.subCategory ||
+              r.legacyCategory ||
+              (r.additionalSubCategories && r.additionalSubCategories.length > 0)
+            );
+            let categoryId: string | null = null;
+            let categoryIds: string[] = [];
+            if (hasCategoryData) {
+              const resolved = await resolveImportCategoryIds({
+                parentCategory: r.parentCategory,
+                subCategory: r.subCategory,
+                additionalSubCategories: r.additionalSubCategories,
+                legacyCategory: r.legacyCategory,
+                autoApprove: true,
+                catMap,
+              });
+              categoryId = resolved.primaryCategoryId;
+              categoryIds = resolved.categoryIds;
+              if (categoryIds.length === 0) {
+                throw new Error('Sub-category required: pick a valid sub-category under the selected parent.');
+              }
+              await assertLeafCategory(categoryIds, tx);
+            }
         // Admin path: an unknown brand is auto-created (approved + active) so it
         // reaches the Brands list and the approvals model — instead of living
         // only as denormalized text on the product.
-        if (r.brand) {
-          await findOrCreateBrandByName({ name: r.brand, autoApprove: true });
-        }
-        const existing = findExisting(r) ?? findCreated(r);
-        const slug = existing ? existing.slug : uniqueSlug(r.name);
+            if (r.brand) {
+              await findOrCreateBrandByName({ name: r.brand, autoApprove: true });
+            }
+            const existing = findExisting(r) ?? findCreated(r);
+            const slug = existing ? existing.slug : uniqueSlug(r.name);
 
-        if (existing) {
+            if (existing) {
           // ── UPDATE existing product ──
           // SKU also gets written through — previously the update path
           // dropped SKU edits silently. Admin edits land everywhere.
@@ -594,7 +641,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             composedSku = await composeVendorListingSku(vendorId, vendorSku);
           }
 
-          const updatedProduct = await prisma.product.update({
+          const updatedProduct = await tx.product.update({
             where: { id: existing.id },
             data: {
               name: r.name,
@@ -636,13 +683,13 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           // one is safe because the FK to vendor is preserved.
           if (r.stock !== undefined) {
             if (vendorId) {
-              await prisma.inventory.upsert({
+              await tx.inventory.upsert({
                 where: { productId: existing.id },
                 update: { qtyAvailable: r.stock },
                 create: { productId: existing.id, vendorId, qtyAvailable: r.stock, lowStockThreshold: 10 },
               });
             } else {
-              await prisma.inventory.updateMany({
+              await tx.inventory.updateMany({
                 where: { productId: existing.id },
                 data: { qtyAvailable: r.stock },
               });
@@ -650,7 +697,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           }
 
           // Replace price slabs (requires vendorId — slabs are per-vendor)
-          if (vendorId) await updatePriceSlabs(existing.id, vendorId, r);
+          if (vendorId) await updatePriceSlabs(existing.id, vendorId, r, tx);
 
           // Link category in the join table
           if (categoryIds.length > 0) {
@@ -721,7 +768,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             };
           }
 
-          const product = await prisma.product.create({ data: productData as Parameters<typeof prisma.product.create>[0]['data'] });
+          const product = await tx.product.create({ data: productData as Parameters<typeof prisma.product.create>[0]['data'] });
 
           // Link category in the join table
           if (categoryIds.length > 0) {
@@ -729,7 +776,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           }
 
           // Create price slabs (requires vendorId)
-          if (vendorId) await updatePriceSlabs(product.id, vendorId, r);
+          if (vendorId) await updatePriceSlabs(product.id, vendorId, r, tx);
 
           if (product.brand) {
             syncProductToBrand(
@@ -747,22 +794,54 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           // product instead of creating another copy.
           registerCreated(product);
 
-          created++;
+              created++;
+            }
+          } catch (err) {
+            commitErrors.push({
+              row: rowNum,
+              message: err instanceof Error ? err.message : 'Failed to process product',
+            });
+            if (!force) {
+              throw err;
+            }
+          }
         }
-      } catch (err) {
-        commitErrors.push({
-          row: rowNum,
-          message: err instanceof Error ? err.message : 'Failed to process product',
+      });
+    } catch {
+      if (!force) {
+        const strictErrorReport = buildImportErrorReportCsv(rowData, commitErrors);
+        return NextResponse.json({
+          success: true,
+          data: {
+            blocked: true,
+            totalRows: rows.length,
+            validRows: 0,
+            created: 0,
+            updated: 0,
+            imported: 0,
+            errors: commitErrors,
+            errorReport: strictErrorReport,
+            backupId,
+            backup: productsToBackup,
+          } satisfies CommitResponse & { backup: typeof productsToBackup },
         });
       }
     }
 
+    const errorReport = commitErrors.length > 0 ? buildImportErrorReportCsv(rowData, commitErrors) : undefined;
+    const validRows = rows.length - skipRows.size - commitErrors.length;
+
     return NextResponse.json({
       success: true,
       data: {
+        blocked: false,
+        totalRows: rows.length,
+        validRows: Math.max(0, validRows),
         created,
         updated,
+        imported: created + updated,
         errors: commitErrors,
+        errorReport,
         backupId,
         backup: productsToBackup, // Client stores this for undo
       } satisfies CommitResponse & { backup: typeof productsToBackup },
@@ -773,14 +852,19 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 });
 
 // Helper: replace price slabs for a product from import row
-async function updatePriceSlabs(productId: string, vendorId: string, row: ParsedProductRow) {
+async function updatePriceSlabs(
+  productId: string,
+  vendorId: string,
+  row: ParsedProductRow,
+  db: typeof prisma | Parameters<Parameters<typeof prisma.$transaction>[0]>[0] = prisma,
+) {
   if (row.bulkSlabs.length === 0) return;
 
   // Delete existing slabs
-  await prisma.priceSlab.deleteMany({ where: { productId, vendorId } });
+  await db.priceSlab.deleteMany({ where: { productId, vendorId } });
 
   // Create new slabs
-  await prisma.priceSlab.createMany({
+  await db.priceSlab.createMany({
     data: row.bulkSlabs.map((slab, idx) => ({
       productId,
       vendorId,

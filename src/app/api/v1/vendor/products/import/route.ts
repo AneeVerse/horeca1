@@ -29,6 +29,7 @@ import { parseProductImport, generateImportTemplate, type ParsedProductRow } fro
 import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
 import {
+  assertLeafCategory,
   composeVendorListingSku,
   findApprovedMasterByNameBrand,
   resolveImportCategoryIds,
@@ -645,6 +646,10 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
           categoryId = resolved.primaryCategoryId;
           categoryIds = resolved.categoryIds;
           categoryPending = resolved.pending;
+          if (categoryIds.length === 0) {
+            throw new Error('Sub-category required: pick a valid sub-category under the selected parent.');
+          }
+          await assertLeafCategory(categoryIds);
         }
 
         // ── Resolve brand → lightweight PENDING brand record when unknown.
