@@ -27,22 +27,29 @@ import {
     BoxIcon,
     Settings as SettingsIcon,
     BarChart3,
-    Wand2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { ImageUpload, MultiImageUpload } from '@/components/ui/ImageUpload';
 import ProductImportModal from '@/components/features/admin/ProductImportModal';
-import AdminBulkEngine from '@/components/features/admin/AdminBulkEngine';
+import BulkProductToolbar from '@/components/features/shared/BulkProductToolbar';
 import VendorBulkGrid from '@/components/features/vendor/VendorBulkGrid';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 import { CategoryHierarchyPicker } from '@/components/features/brand/CategoryHierarchyPicker';
 import { BrandSinglePicker } from '@/components/features/brand/BrandSinglePicker';
-import { validateMasterSku } from '@/lib/sku';
 import { toast } from 'sonner';
-import { PRODUCT_FORM_TABS, type ProductFormTabId } from '@/components/features/shared/productFormTabs';
-
-// ---------------------------------------------------------------------------
+import FormSection, {
+    FieldLabel,
+    SectionHeader,
+    productFormInputCls,
+    productFormSelectCls,
+    productFormTextareaCls,
+} from '@/components/features/shared/FormSection';
+import {
+    validateProductEssentials,
+    focusFirstProductFormError,
+    type ProductValidationField,
+} from '@/components/features/shared/productFormValidation';
 // Types
 // ---------------------------------------------------------------------------
 
@@ -61,11 +68,12 @@ interface Product {
     creditEligible: boolean;
     description: string | null;
     isActive: boolean;
+    listingStatus?: 'draft' | 'submitted';
     approvalStatus: 'pending' | 'approved' | 'rejected';
     approvalNote: string | null;
     createdAt: string;
-    vendor: { id: string; businessName: string } | null;
-    category: { id: string; name: string } | null;
+    vendor: { id: string; businessName: string; vendorCode?: string | null } | null;
+    category: { id: string; name: string; parentId?: string | null } | null;
     categoryLinks?: { categoryId: string; isPrimary: boolean; category: { id: string; name: string } }[];
     inventory: { qtyAvailable: number } | null;
     vendorCount?: number;
@@ -79,11 +87,19 @@ interface Product {
     tags?: string[] | null;
     images?: string[] | null;
     barcode?: string | null;
+    metadata?: Record<string, unknown>;
+    priceSlabs?: { minQty: number; price: number }[];
+    aliasNames?: string[];
+    countryOfOrigin?: string | null;
+    vegNonVeg?: string | null;
+    storageType?: string | null;
+    vendorSku?: string | null;
 }
 
 interface Vendor {
     id: string;
     businessName: string;
+    vendorCode?: string | null;
 }
 
 interface Category {
@@ -261,28 +277,9 @@ const EMPTY_FORM: ProductFormData = {
 // Reusable small components (mirrors vendor product form for consistent UX)
 // ---------------------------------------------------------------------------
 
-function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
-    return (
-        <div className="flex items-center gap-2.5 mb-5 mt-1">
-            <div className="w-[32px] h-[32px] rounded-[8px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]">
-                {icon}
-            </div>
-            <h3 className="text-[16px] font-bold text-[#181725]">{title}</h3>
-        </div>
-    );
-}
-
-function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
-    return (
-        <label className="block text-[13px] font-bold text-[#181725] mb-1.5">
-            {children}{required && <span className="text-[#E74C3C] ml-0.5">*</span>}
-        </label>
-    );
-}
-
-const inputCls = 'w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors bg-white';
-const selectCls = 'w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors bg-white appearance-none';
-const textareaCls = 'w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors resize-none bg-white';
+const inputCls = productFormInputCls;
+const selectCls = productFormSelectCls;
+const textareaCls = productFormTextareaCls;
 const cellInput = 'bg-transparent border border-transparent hover:border-[#D1D5DB] focus:border-[#299E60] focus:bg-white focus:ring-1 focus:ring-[#299E60]/20 px-1.5 py-1 rounded-[4px] outline-none w-full text-[12.5px] tabular-nums transition-colors';
 
 function TagInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
@@ -432,22 +429,25 @@ export default function ProductsPage() {
     // Vendor filter UI was dropped in the spreadsheet redesign; state kept for the query builder.
     const [filterVendor] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
+    const [filterDrafts, setFilterDrafts] = useState(false);
+    const [draftCount, setDraftCount] = useState(0);
 
-    // Panel / Modal state
+    // Draft autosave
+    const [draftSaving, setDraftSaving] = useState(false);
+    const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
+    const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const savedFormSnapshotRef = useRef<string>('');
     const [panelOpen, setPanelOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<ProductFormTabId>('identity');
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [formData, setFormData] = useState<ProductFormData>(EMPTY_FORM);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
     // Import modal
     const [importOpen, setImportOpen] = useState(false);
-    const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
     const [gridOpen, setGridOpen] = useState(false);
-
-    // Export dropdown
-    const [exportOpen, setExportOpen] = useState(false);
-    const exportRef = useRef<HTMLDivElement>(null);
+    const [gridVendorId, setGridVendorId] = useState('');
+    const [gridListings, setGridListings] = useState<Product[]>([]);
+    const [gridLoading, setGridLoading] = useState(false);
 
     // Delete confirmation
     const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
@@ -473,11 +473,73 @@ export default function ProductsPage() {
         });
     };
 
-    const gridProducts = useMemo(() => products.map(p => ({
-        ...p,
+    const gridProducts = useMemo(() => gridListings.map((p) => ({
+        id: p.id,
+        name: p.name,
+        sku: p.vendorSku || p.sku,
         categoryName: p.category?.name ?? '',
+        basePrice: Number(p.basePrice) || 0,
         originalPrice: p.originalPrice ?? undefined,
-    })), [products]);
+        taxPercent: Number(p.taxPercent) || 0,
+        minOrderQty: p.minOrderQty ?? 1,
+        isActive: p.isActive,
+        creditEligible: p.creditEligible,
+        hsn: p.hsn,
+        brand: p.brand,
+        unit: p.unit,
+        packSize: p.packSize,
+        description: p.description,
+        imageUrl: p.imageUrl,
+        vegNonVeg: p.vegNonVeg as 'veg' | 'nonveg' | 'egg' | null | undefined,
+        storageType: p.storageType,
+        countryOfOrigin: p.countryOfOrigin,
+        barcode: p.barcode,
+        aliasNames: p.aliasNames,
+        metadata: p.metadata,
+        inventory: p.inventory,
+        priceSlabs: p.priceSlabs,
+        vendor: p.vendor,
+    })), [gridListings]);
+
+    const buildGridListingsUrl = useCallback(() => {
+        const params = new URLSearchParams();
+        params.set('gridListings', 'true');
+        params.set('limit', '500');
+        if (gridVendorId) params.set('vendorId', gridVendorId);
+        if (debouncedSearch) params.set('search', debouncedSearch);
+        if (filterCategory) params.set('categoryId', filterCategory);
+        if (filterStatus) params.set('approvalStatus', filterStatus);
+        return `/api/v1/admin/products?${params.toString()}`;
+    }, [gridVendorId, debouncedSearch, filterCategory, filterStatus]);
+
+    const openBulkGrid = useCallback(async () => {
+        setGridLoading(true);
+        try {
+            const res = await fetch(buildGridListingsUrl());
+            const json = await res.json();
+            if (!json.success) {
+                toast.error('Failed to load products for spreadsheet');
+                return;
+            }
+            const listings = (json.data?.products ?? []) as Product[];
+            const total = json.data?.pagination?.total ?? listings.length;
+            if (total > 500) {
+                toast.info('Showing first 500 products — narrow with filters if needed');
+            }
+            setGridListings(listings);
+            setGridOpen(true);
+        } catch {
+            toast.error('Failed to load products for spreadsheet');
+        } finally {
+            setGridLoading(false);
+        }
+    }, [buildGridListingsUrl]);
+
+    const refreshGridListings = useCallback(async () => {
+        const res = await fetch(buildGridListingsUrl());
+        const json = await res.json();
+        if (json.success) setGridListings(json.data?.products ?? []);
+    }, [buildGridListingsUrl]);
 
     // -----------------------------------------------------------------------
     // Debounced search
@@ -489,18 +551,8 @@ export default function ProductsPage() {
     }, [searchInput]);
 
     // -----------------------------------------------------------------------
-    // Close export dropdown on outside click
+    // Close export dropdown on outside click — removed (export in BulkProductToolbar)
     // -----------------------------------------------------------------------
-
-    useEffect(() => {
-        function handleClick(e: MouseEvent) {
-            if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
-                setExportOpen(false);
-            }
-        }
-        document.addEventListener('mousedown', handleClick);
-        return () => document.removeEventListener('mousedown', handleClick);
-    }, []);
 
     // -----------------------------------------------------------------------
     // Fetch vendors & categories (once)
@@ -542,11 +594,78 @@ export default function ProductsPage() {
     // Fetch products
     // -----------------------------------------------------------------------
 
+    const fetchDraftCount = useCallback(async () => {
+        try {
+            const res = await fetch('/api/v1/admin/products?listingStatus=draft&limit=1&page=1');
+            const json = await res.json();
+            if (json.success) {
+                setDraftCount(json.data?.pagination?.total ?? json.data?.products?.length ?? 0);
+            }
+        } catch {
+            /* ignore */
+        }
+    }, []);
+
+    useEffect(() => {
+        void fetchDraftCount();
+    }, [fetchDraftCount, panelOpen]);
+
     const fetchProducts = useCallback(
         async (targetPage = 1, currentLimit = pageSize) => {
             setLoading(true);
 
             try {
+                if (filterDrafts) {
+                    const params = new URLSearchParams();
+                    params.set('listingStatus', 'draft');
+                    params.set('limit', String(currentLimit));
+                    params.set('page', String(targetPage));
+                    if (debouncedSearch) params.set('search', debouncedSearch);
+                    if (filterCategory) params.set('categoryId', filterCategory);
+
+                    const res = await fetch(`/api/v1/admin/products?${params.toString()}`);
+                    const json = await res.json();
+
+                    if (json.success) {
+                        const rows = (json.data?.products ?? []) as Array<Record<string, unknown>>;
+                        const incoming: Product[] = rows.map((p) => ({
+                            id: String(p.id),
+                            name: String(p.name ?? 'Untitled product'),
+                            slug: String(p.slug ?? ''),
+                            sku: (p.sku as string | null) ?? null,
+                            hsn: (p.hsn as string | null) ?? null,
+                            brand: (p.brand as string | null) ?? null,
+                            basePrice: Number(p.basePrice) || 0,
+                            originalPrice: p.originalPrice != null ? Number(p.originalPrice) : null,
+                            imageUrl: (p.imageUrl as string | null) ?? null,
+                            taxPercent: Number(p.taxPercent) || 0,
+                            minOrderQty: Number(p.minOrderQty) || 1,
+                            creditEligible: !!p.creditEligible,
+                            description: (p.description as string | null) ?? null,
+                            isActive: !!p.isActive,
+                            listingStatus: (p.listingStatus as 'draft' | 'submitted') ?? 'draft',
+                            approvalStatus: (p.approvalStatus as Product['approvalStatus']) ?? 'approved',
+                            approvalNote: null,
+                            createdAt: String(p.createdAt ?? ''),
+                            vendor: p.vendor as Product['vendor'],
+                            category: p.category as Product['category'],
+                            inventory: p.inventory as Product['inventory'],
+                            metadata: p.metadata as Record<string, unknown> | undefined,
+                            isMasterRow: false,
+                        }));
+                        setProducts(incoming);
+                        originalProductsRef.current = JSON.parse(JSON.stringify(incoming));
+                        const pagination = json.data?.pagination;
+                        if (pagination) {
+                            setCurrentPage(pagination.page);
+                            setTotalPages(pagination.totalPages);
+                            setTotalProductsCount(pagination.total);
+                            setDraftCount(pagination.total);
+                        }
+                    }
+                    return;
+                }
+
                 const params = new URLSearchParams();
                 params.set('limit', String(currentLimit));
                 params.set('page', String(targetPage));
@@ -622,13 +741,13 @@ export default function ProductsPage() {
                 setLoading(false);
             }
         },
-        [debouncedSearch, filterStatus, filterVendor, filterCategory, pageSize],
+        [debouncedSearch, filterStatus, filterVendor, filterCategory, filterDrafts, pageSize],
     );
 
     // Refetch on filter change (reset to page 1)
     useEffect(() => {
         fetchProducts(1);
-    }, [debouncedSearch, filterStatus, filterVendor, filterCategory, fetchProducts]);
+    }, [debouncedSearch, filterStatus, filterVendor, filterCategory, filterDrafts, fetchProducts]);
 
     // -----------------------------------------------------------------------
     // Inline Cell Editing Handlers
@@ -868,11 +987,12 @@ export default function ProductsPage() {
         setEditingProduct(null);
         setFormData(EMPTY_FORM);
         setFormErrors({});
-        setActiveTab('identity');
+        setDraftSaveError(null);
+        savedFormSnapshotRef.current = JSON.stringify(EMPTY_FORM);
         setPanelOpen(true);
     };
 
-    // Auto-open edit panel when ?editId=… is in the URL (e.g. from Approvals page)
+    // Auto-open edit panel
     useEffect(() => {
         if (!editIdParam || autoOpenedRef.current || loading) return;
         const target = products.find(p => p.id === editIdParam);
@@ -887,7 +1007,7 @@ export default function ProductsPage() {
         setPanelOpen(true);
         setLoadingProduct(true);
         setFormErrors({});
-        setActiveTab('identity');
+        setDraftSaveError(null);
 
         try {
             const isMaster = product.isMasterRow;
@@ -1035,6 +1155,10 @@ export default function ProductsPage() {
                 itemStatus: att.itemStatus || 'Active',
                 activeOnlineStore: att.activeOnlineStore ?? true,
             });
+            setEditingProduct(prev => prev ? {
+                ...prev,
+                listingStatus: (p.listingStatus as 'draft' | 'submitted') ?? prev.listingStatus,
+            } : prev);
         } catch (err) {
             console.error('Failed to fetch product details:', err);
             const primaryId = product.category?.id ?? '';
@@ -1069,12 +1193,12 @@ export default function ProductsPage() {
     };
 
     const closePanel = () => {
+        if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
         setPanelOpen(false);
         setTimeout(() => {
             setEditingProduct(null);
             setFormData(EMPTY_FORM);
             setFormErrors({});
-            setActiveTab('identity');
         }, 300);
     };
 
@@ -1083,79 +1207,194 @@ export default function ProductsPage() {
     // -----------------------------------------------------------------------
 
     const validateForm = (): boolean => {
-        const errors: Record<string, string> = {};
-        if (!formData.name.trim()) errors.name = 'Product name is required';
-        if (!formData.sku.trim()) {
-            errors.sku = 'SKU is required';
-        } else if (!editingProduct && !formData.vendorId) {
-            // Master create — mirror the server's SKU format rule client-side so
-            // the error lands inline on the SKU field, not as a server banner.
-            const skuCheck = validateMasterSku(formData.sku);
-            if (!skuCheck.ok) errors.sku = skuCheck.message;
-        }
-        if (!formData.brand.trim()) errors.brand = 'Brand is required';
-        if (formData.categoryIds.length === 0) errors.categoryIds = 'At least one category is required';
-        const isVendorListing = !!formData.vendorId;
-        if (isVendorListing && (!formData.basePrice || Number(formData.basePrice) <= 0)) {
-            errors.basePrice = 'Valid base price is required when listing for a vendor';
-        }
+        const isMasterCreate = !editingProduct && !formData.vendorId;
+        const errors = validateProductEssentials(formData, {
+            portal: 'admin',
+            validateMasterSkuFormat: isMasterCreate,
+            requireBasePriceForVendorListing: !!formData.vendorId,
+        });
         setFormErrors(errors);
-        if (Object.keys(errors).length > 0) focusFirstError(errors);
+        if (Object.keys(errors).length > 0) focusFirstProductFormError(errors);
         return Object.keys(errors).length === 0;
+    };
+
+    const buildFormMetadata = () => ({
+        accounting: {
+            account: formData.account.trim(),
+            accountCode: formData.accountCode.trim(),
+            taxable: formData.taxable,
+            exemptionReason: formData.exemptionReason.trim(),
+            taxabilityType: formData.taxabilityType.trim(),
+            intraStateTaxName: formData.intraStateTaxName.trim(),
+            intraStateTaxRate: formData.intraStateTaxRate ? Number(formData.intraStateTaxRate) : undefined,
+            intraStateTaxType: formData.intraStateTaxType.trim(),
+            interStateTaxName: formData.interStateTaxName.trim(),
+            interStateTaxRate: formData.interStateTaxRate ? Number(formData.interStateTaxRate) : undefined,
+            interStateTaxType: formData.interStateTaxType.trim(),
+            inventoryAccount: formData.inventoryAccount.trim(),
+            inventoryAccountCode: formData.inventoryAccountCode.trim(),
+            platformCommission: formData.platformCommission ? Number(formData.platformCommission) : undefined,
+        },
+        inventory: {
+            reorderPoint: formData.reorderPoint ? Number(formData.reorderPoint) : undefined,
+            openingStock: formData.openingStock ? Number(formData.openingStock) : undefined,
+            valuationMethod: formData.valuationMethod.trim(),
+            trackInventory: formData.trackInventory,
+        },
+        packaging: {
+            packageWeight: formData.packageWeight ? Number(formData.packageWeight) : undefined,
+            packageLength: formData.packageLength ? Number(formData.packageLength) : undefined,
+            packageWidth: formData.packageWidth ? Number(formData.packageWidth) : undefined,
+            packageHeight: formData.packageHeight ? Number(formData.packageHeight) : undefined,
+            dimensionUnit: formData.dimensionUnit.trim(),
+            weightUnit: formData.weightUnit.trim(),
+        },
+        identifiers: {
+            ean: formData.ean.trim(),
+            isbn: formData.isbn.trim(),
+        },
+        attributes: {
+            itemType: formData.itemType.trim(),
+            productType: formData.productType.trim(),
+            source: formData.source.trim(),
+            referenceId: formData.referenceId.trim(),
+            lastSync: formData.lastSync.trim(),
+            sellable: formData.sellable,
+            purchasable: formData.purchasable,
+            variantMapping: formData.variantMapping.trim(),
+            itemStatus: formData.itemStatus.trim(),
+            activeOnlineStore: formData.activeOnlineStore,
+        },
+    });
+
+    const buildProductPayload = (opts: { isDraft: boolean }): Record<string, unknown> => {
+        const metadata = buildFormMetadata();
+        const parsedBase = parseFloat(formData.basePrice);
+        const payload: Record<string, unknown> = {
+            name: formData.name.trim() || 'Untitled product',
+            listingStatus: opts.isDraft ? 'draft' : 'submitted',
+            isActive: !opts.isDraft,
+            taxPercent: Number(formData.taxPercent) || 0,
+            minOrderQty: Number(formData.minOrderQty) || 1,
+            creditEligible: formData.creditEligible,
+            metadata,
+        };
+        if (opts.isDraft) {
+            payload.basePrice = !isNaN(parsedBase) && parsedBase > 0 ? parsedBase : 0.01;
+        } else {
+            payload.basePrice = parsedBase;
+        }
+        if (formData.vendorId) payload.vendorId = formData.vendorId;
+        if (formData.imageUrl) payload.imageUrl = formData.imageUrl;
+        if (formData.sku.trim()) payload.sku = formData.sku.trim();
+        if (formData.hsn.trim()) payload.hsn = formData.hsn.trim();
+        if (formData.barcode.trim()) payload.barcode = formData.barcode.trim();
+        if (formData.brand.trim()) payload.brand = formData.brand.trim();
+        if (formData.unit) payload.unit = formData.unit;
+        const slabs = formData.priceSlabs
+            .filter(s => s.minQty && s.price)
+            .map(s => ({
+                minQty: Number(s.minQty),
+                maxQty: s.maxQty ? Number(s.maxQty) : undefined,
+                price: Number(s.price),
+            }));
+        if (slabs.length > 0) payload.priceSlabs = slabs;
+        if (formData.categoryIds.length > 0) {
+            payload.categoryId = formData.categoryIds[0];
+            payload.primaryCategoryId = formData.categoryIds[0];
+            payload.categoryIds = formData.categoryIds;
+        } else if (editingProduct) {
+            payload.categoryIds = [];
+        }
+        if (formData.description.trim()) payload.description = formData.description.trim();
+        if (formData.originalPrice && Number(formData.originalPrice) > 0) {
+            payload.originalPrice = Number(formData.originalPrice);
+        }
+        if (formData.packSize.trim()) payload.packSize = formData.packSize.trim();
+        if (formData.tags.length > 0) payload.tags = formData.tags;
+        const additionalImages = formData.images.filter(Boolean);
+        if (additionalImages.length > 0) payload.images = additionalImages;
+        if (formData.fssaiRef.trim()) payload.fssaiRef = formData.fssaiRef.trim();
+        if (formData.aliasNames.length > 0) payload.aliasNames = formData.aliasNames;
+        if (formData.vegNonVeg) payload.vegNonVeg = formData.vegNonVeg;
+        if (formData.storageType) payload.storageType = formData.storageType;
+        if (formData.shelfLifeDays) payload.shelfLifeDays = parseInt(formData.shelfLifeDays, 10);
+        if (formData.countryOfOrigin.trim()) payload.countryOfOrigin = formData.countryOfOrigin.trim();
+        if (formData.substituteIds.length > 0) payload.substituteIds = formData.substituteIds;
+        payload.isFeatured = formData.isFeatured;
+        return payload;
+    };
+
+    const syncFormSnapshot = useCallback(() => {
+        savedFormSnapshotRef.current = JSON.stringify(formData);
+    }, [formData]);
+
+    const isFormDirty = useCallback(() => {
+        return JSON.stringify(formData) !== savedFormSnapshotRef.current;
+    }, [formData]);
+
+    const canAutosaveDraft = useCallback(() => {
+        if (!panelOpen || loadingProduct || saving || draftSaving) return false;
+        if (editingProduct?.isMasterRow) return false;
+        if (editingProduct?.listingStatus === 'submitted') return false;
+        if (editingProduct?.listingStatus === 'draft') return true;
+        return formData.name.trim().length > 0;
+    }, [panelOpen, loadingProduct, saving, draftSaving, editingProduct, formData.name]);
+
+    const handleSaveDraft = async () => {
+        if (editingProduct?.isMasterRow) {
+            toast.error('Master catalog rows cannot be saved as drafts.');
+            return;
+        }
+        if (!formData.name.trim() && !editingProduct) {
+            toast.error('Enter a product name before saving a draft.');
+            return;
+        }
+
+        setDraftSaving(true);
+        setDraftSaveError(null);
+        try {
+            const payload = buildProductPayload({ isDraft: true });
+            const isEdit = !!editingProduct && !editingProduct.isMasterRow;
+            const url = isEdit
+                ? `/api/v1/admin/products/${editingProduct!.id}`
+                : '/api/v1/admin/products';
+            const method = isEdit ? 'PATCH' : 'POST';
+
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const json = await res.json();
+            if (!json.success && !res.ok) {
+                setDraftSaveError(json.error?.message ?? 'Couldn\'t save draft');
+                return;
+            }
+
+            const saved = json.data as Product;
+            syncFormSnapshot();
+            if (!isEdit) {
+                setEditingProduct({ ...saved, listingStatus: 'draft', isMasterRow: false });
+                setProducts(prev => [{ ...saved, listingStatus: 'draft', isMasterRow: false }, ...prev]);
+            } else {
+                setEditingProduct(prev => prev ? { ...prev, ...saved, listingStatus: 'draft' } : prev);
+                setProducts(prev => prev.map(p => p.id === saved.id ? { ...p, ...saved, listingStatus: 'draft' } : p));
+            }
+            void fetchDraftCount();
+            toast.success('Draft saved');
+        } catch {
+            setDraftSaveError('Couldn\'t save draft — check connection');
+        } finally {
+            setDraftSaving(false);
+        }
     };
 
     const handleSave = async () => {
         if (!validateForm()) return;
         setSaving(true);
         try {
-            const metadata = {
-                accounting: {
-                    account: formData.account.trim(),
-                    accountCode: formData.accountCode.trim(),
-                    taxable: formData.taxable,
-                    exemptionReason: formData.exemptionReason.trim(),
-                    taxabilityType: formData.taxabilityType.trim(),
-                    intraStateTaxName: formData.intraStateTaxName.trim(),
-                    intraStateTaxRate: formData.intraStateTaxRate ? Number(formData.intraStateTaxRate) : undefined,
-                    intraStateTaxType: formData.intraStateTaxType.trim(),
-                    interStateTaxName: formData.interStateTaxName.trim(),
-                    interStateTaxRate: formData.interStateTaxRate ? Number(formData.interStateTaxRate) : undefined,
-                    interStateTaxType: formData.interStateTaxType.trim(),
-                    inventoryAccount: formData.inventoryAccount.trim(),
-                    inventoryAccountCode: formData.inventoryAccountCode.trim(),
-                    platformCommission: formData.platformCommission ? Number(formData.platformCommission) : undefined,
-                },
-                inventory: {
-                    reorderPoint: formData.reorderPoint ? Number(formData.reorderPoint) : undefined,
-                    openingStock: formData.openingStock ? Number(formData.openingStock) : undefined,
-                    valuationMethod: formData.valuationMethod.trim(),
-                    trackInventory: formData.trackInventory,
-                },
-                packaging: {
-                    packageWeight: formData.packageWeight ? Number(formData.packageWeight) : undefined,
-                    packageLength: formData.packageLength ? Number(formData.packageLength) : undefined,
-                    packageWidth: formData.packageWidth ? Number(formData.packageWidth) : undefined,
-                    packageHeight: formData.packageHeight ? Number(formData.packageHeight) : undefined,
-                    dimensionUnit: formData.dimensionUnit.trim(),
-                    weightUnit: formData.weightUnit.trim(),
-                },
-                identifiers: {
-                    ean: formData.ean.trim(),
-                    isbn: formData.isbn.trim(),
-                },
-                attributes: {
-                    itemType: formData.itemType.trim(),
-                    productType: formData.productType.trim(),
-                    source: formData.source.trim(),
-                    referenceId: formData.referenceId.trim(),
-                    lastSync: formData.lastSync.trim(),
-                    sellable: formData.sellable,
-                    purchasable: formData.purchasable,
-                    variantMapping: formData.variantMapping.trim(),
-                    itemStatus: formData.itemStatus.trim(),
-                    activeOnlineStore: formData.activeOnlineStore,
-                }
-            };
+            const metadata = buildFormMetadata();
 
             const isMasterEdit = !!editingProduct?.isMasterRow;
             const isMasterCreate = !editingProduct && !formData.vendorId;
@@ -1196,61 +1435,9 @@ export default function ProductsPage() {
                 return;
             }
 
-            const payload: Record<string, unknown> = {
-                name: formData.name.trim(),
-                basePrice: Number(formData.basePrice),
-                taxPercent: Number(formData.taxPercent) || 0,
-                minOrderQty: Number(formData.minOrderQty) || 1,
-                creditEligible: formData.creditEligible,
-                metadata,
-            };
-            if (formData.vendorId) payload.vendorId = formData.vendorId;
-            if (formData.imageUrl) payload.imageUrl = formData.imageUrl;
-            if (formData.sku.trim()) payload.sku = formData.sku.trim();
-            if (formData.hsn.trim()) payload.hsn = formData.hsn.trim();
-            if (formData.barcode.trim()) payload.barcode = formData.barcode.trim();
-            if (formData.brand.trim()) payload.brand = formData.brand.trim();
-            if (formData.unit) payload.unit = formData.unit;
-            const slabs = formData.priceSlabs
-                .filter(s => s.minQty && s.price)
-                .map(s => ({
-                    minQty: Number(s.minQty),
-                    maxQty: s.maxQty ? Number(s.maxQty) : undefined,
-                    price: Number(s.price),
-                }));
-            if (slabs.length > 0) payload.priceSlabs = slabs;
-            // Categories: the multi-picker already gives us UUIDs with the
-            // primary at index 0. Send all three field shapes the admin API
-            // accepts — the backend uses `primaryCategoryId` (or first of
-            // categoryIds) as the canonical primary and writes the full set
-            // to the ProductCategory join table.
-            if (formData.categoryIds.length > 0) {
-                payload.categoryId = formData.categoryIds[0];
-                payload.primaryCategoryId = formData.categoryIds[0];
-                payload.categoryIds = formData.categoryIds;
-            } else if (editingProduct) {
-                // User cleared all categories on an existing product — explicit empty.
-                payload.categoryIds = [];
-            }
-            if (formData.description.trim()) payload.description = formData.description.trim();
-            if (formData.originalPrice && Number(formData.originalPrice) > 0) {
-                payload.originalPrice = Number(formData.originalPrice);
-            }
-            if (formData.packSize.trim()) payload.packSize = formData.packSize.trim();
-            if (formData.tags.length > 0) payload.tags = formData.tags;
-            const additionalImages = formData.images.filter(Boolean);
-            if (additionalImages.length > 0) payload.images = additionalImages;
+            const payload = buildProductPayload({ isDraft: false });
 
-            if (formData.fssaiRef.trim()) payload.fssaiRef = formData.fssaiRef.trim();
-            if (formData.aliasNames.length > 0) payload.aliasNames = formData.aliasNames;
-            if (formData.vegNonVeg) payload.vegNonVeg = formData.vegNonVeg;
-            if (formData.storageType) payload.storageType = formData.storageType;
-            if (formData.shelfLifeDays) payload.shelfLifeDays = parseInt(formData.shelfLifeDays, 10);
-            if (formData.countryOfOrigin.trim()) payload.countryOfOrigin = formData.countryOfOrigin.trim();
-            if (formData.substituteIds.length > 0) payload.substituteIds = formData.substituteIds;
-            payload.isFeatured = formData.isFeatured;
-
-            const isEdit = !!editingProduct;
+            const isEdit = !!editingProduct && !editingProduct.isMasterRow;
             const url = isEdit
                 ? `/api/v1/admin/products/${editingProduct!.id}`
                 : '/api/v1/admin/products';
@@ -1264,12 +1451,13 @@ export default function ProductsPage() {
             const json = await res.json();
 
             if (json.success || res.ok) {
-                const saved: Product = json.data?.product ?? json.data;
+                const saved: Product = { ...(json.data as Product), listingStatus: 'submitted', isMasterRow: false };
                 if (isEdit) {
                     setProducts(prev => prev.map(p => (p.id === saved.id ? saved : p)));
                 } else {
                     setProducts(prev => [saved, ...prev]);
                 }
+                void fetchDraftCount();
                 closePanel();
             } else {
                 const msg = json.error?.message ?? json.message ?? 'Failed to save product';
@@ -1282,6 +1470,20 @@ export default function ProductsPage() {
             setSaving(false);
         }
     };
+
+    const saveDraftRef = useRef(handleSaveDraft);
+    saveDraftRef.current = handleSaveDraft;
+
+    useEffect(() => {
+        if (!canAutosaveDraft() || !isFormDirty()) return;
+        if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
+        draftSaveTimeoutRef.current = setTimeout(() => {
+            void saveDraftRef.current();
+        }, 2000);
+        return () => {
+            if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
+        };
+    }, [formData, canAutosaveDraft, isFormDirty]);
 
     // -----------------------------------------------------------------------
     // Import
@@ -1302,12 +1504,11 @@ export default function ProductsPage() {
         const params = new URLSearchParams();
         params.set('format', format);
         if (filterStatus) params.set('approvalStatus', filterStatus);
-        if (filterVendor) params.set('vendorId', filterVendor);
+        if (gridVendorId) params.set('vendorId', gridVendorId);
         if (filterCategory) params.set('categoryId', filterCategory);
         if (debouncedSearch) params.set('search', debouncedSearch);
 
         window.open(`/api/v1/admin/products/export?${params.toString()}`, '_blank');
-        setExportOpen(false);
     };
 
     // -----------------------------------------------------------------------
@@ -1360,33 +1561,11 @@ export default function ProductsPage() {
         }
     };
 
-    // Which tab each errorable field lives on, plus the order we walk them to
-    // find the first offender. Keeps error feedback next to the bad field.
-    const ERROR_FIELD_TAB = {
-        name: 'identity', brand: 'identity', sku: 'identifiers', categoryIds: 'identity', basePrice: 'pricing',
-    } as const;
-    const ERROR_FIELD_ORDER: Array<keyof typeof ERROR_FIELD_TAB> = ['name', 'brand', 'sku', 'categoryIds', 'basePrice'];
-
-    // Jump to the first field with an error: open its tab, scroll it into view,
-    // and focus its input — so the message shows right under the offending
-    // field instead of only as a banner at the top of the panel.
-    const focusFirstError = (errors: Record<string, string>) => {
-        const field = ERROR_FIELD_ORDER.find(f => errors[f]);
-        if (!field) return;
-        setActiveTab(ERROR_FIELD_TAB[field]);
-        // Defer until the (possibly just-switched) tab content has mounted.
-        setTimeout(() => {
-            const el = document.getElementById(`ff-${field}`);
-            if (!el) return;
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            el.querySelector<HTMLElement>('input, textarea, select')?.focus({ preventScroll: true });
-        }, 60);
-    };
-
-    // Best-effort: route a server error message to the field it's about so it
-    // renders inline (and we can scroll to it) rather than in the top banner.
-    const mapServerErrorToField = (msg: string): keyof typeof ERROR_FIELD_TAB | null => {
+    const mapServerErrorToField = (msg: string): ProductValidationField | null => {
         const m = msg.toLowerCase();
+        if (m.includes('substitut')) return 'substituteIds';
+        if (m.includes('hsn')) return 'hsn';
+        if (m.includes('image')) return 'imageUrl';
         if (m.includes('sku')) return 'sku';
         if (m.includes('categor')) return 'categoryIds';
         if (m.includes('brand')) return 'brand';
@@ -1395,13 +1574,11 @@ export default function ProductsPage() {
         return null;
     };
 
-    // Apply a server error: attach to its field (inline + scroll) when we can
-    // identify it, otherwise fall back to the top-of-panel banner.
     const applyServerError = (msg: string) => {
         const field = mapServerErrorToField(msg);
         const errs: Record<string, string> = field ? { [field]: msg } : { _server: msg };
         setFormErrors(errs);
-        focusFirstError(errs);
+        focusFirstProductFormError(errs);
     };
 
     // -----------------------------------------------------------------------
@@ -1423,56 +1600,33 @@ export default function ProductsPage() {
                     </p>
                 </div>
 
-                <div className="flex items-center gap-3 flex-wrap">
-                    {/* Export Dropdown */}
-                    <div className="relative" ref={exportRef}>
-                        <button
-                            onClick={() => setExportOpen(prev => !prev)}
-                            className="h-[44px] px-5 bg-white border border-[#EEEEEE] rounded-[12px] text-[13px] font-bold text-[#181725] hover:bg-[#F8F9FB] transition-all flex items-center gap-2 shadow-sm"
-                        >
-                            <FileDown size={16} />
-                            Export
-                            <ChevronDown size={14} className={cn('transition-transform', exportOpen && 'rotate-180')} />
-                        </button>
-                        {exportOpen && (
-                            <div className="absolute right-0 top-[52px] w-[180px] bg-white border border-[#EEEEEE] rounded-[12px] shadow-lg z-50 overflow-hidden">
-                                <button
-                                    onClick={() => handleExport('csv')}
-                                    className="w-full flex items-center gap-3 px-5 py-3.5 text-[13px] font-semibold text-[#181725] hover:bg-[#F8F9FB] transition-colors"
-                                >
-                                    <FileSpreadsheet size={16} className="text-[#299E60]" />
-                                    Export CSV
-                                </button>
-                                <button
-                                    onClick={() => handleExport('xlsx')}
-                                    className="w-full flex items-center gap-3 px-5 py-3.5 text-[13px] font-semibold text-[#181725] hover:bg-[#F8F9FB] transition-colors border-t border-[#EEEEEE]"
-                                >
-                                    <FileSpreadsheet size={16} className="text-[#3B82F6]" />
-                                    Export Excel
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Import Button */}
+                <div className="flex items-center gap-3 flex-wrap justify-end">
                     {perms.canWriteProducts && (
-                        <button
-                            onClick={openImport}
-                            className="h-[44px] px-5 bg-white border border-[#EEEEEE] rounded-[12px] text-[13px] font-bold text-[#181725] hover:bg-[#F8F9FB] transition-all flex items-center gap-2 shadow-sm"
-                        >
-                            <Upload size={16} />
-                            Import
-                        </button>
+                        <BulkProductToolbar
+                            vendors={vendors}
+                            gridVendorId={gridVendorId}
+                            onGridVendorChange={setGridVendorId}
+                            onImport={openImport}
+                            onSpreadsheet={() => void openBulkGrid()}
+                            onExportCsv={() => handleExport('csv')}
+                            onExportXlsx={() => handleExport('xlsx')}
+                            spreadsheetLoading={gridLoading}
+                            showVendorPicker
+                            activeTab={gridOpen ? 'spreadsheet' : importOpen ? 'import' : null}
+                        />
                     )}
 
-                    {/* Bulk Update Button */}
-                    {perms.canWriteProducts && (
+                    {perms.canWriteProducts && draftCount > 0 && (
                         <button
-                            onClick={() => setGridOpen(true)}
-                            className="h-[44px] px-5 bg-white border border-[#EEEEEE] rounded-[12px] text-[13px] font-bold text-[#181725] hover:bg-[#F8F9FB] transition-all flex items-center gap-2 shadow-sm"
+                            type="button"
+                            onClick={() => {
+                                setFilterDrafts(true);
+                                setFilterStatus('');
+                            }}
+                            className="h-[44px] px-4 bg-white border border-[#EEEEEE] rounded-[12px] text-[13px] font-bold text-[#4F6BED] hover:bg-[#F0F4FF] transition-all flex items-center gap-2"
                         >
-                            <FileSpreadsheet size={16} className="text-[#299E60]" />
-                            Bulk Update
+                            <Clock size={16} />
+                            Drafts ({draftCount})
                         </button>
                     )}
 
@@ -1533,11 +1687,20 @@ export default function ProductsPage() {
 
                     {/* Approval Status */}
                     <select
-                        value={filterStatus}
-                        onChange={e => setFilterStatus(e.target.value)}
+                        value={filterDrafts ? '__drafts__' : filterStatus}
+                        onChange={e => {
+                            if (e.target.value === '__drafts__') {
+                                setFilterDrafts(true);
+                                setFilterStatus('');
+                            } else {
+                                setFilterDrafts(false);
+                                setFilterStatus(e.target.value);
+                            }
+                        }}
                         className="h-[44px] bg-[#F8F9FB] border border-[#EEEEEE] rounded-[12px] px-4 text-[13px] font-medium text-[#181725] outline-none focus:border-[#299E60]/40 focus:bg-white transition-all min-w-[160px] cursor-pointer"
                     >
                         <option value="">All Statuses</option>
+                        <option value="__drafts__">Drafts</option>
                         <option value="pending">Pending</option>
                         <option value="approved">Approved</option>
                         <option value="rejected">Rejected</option>
@@ -1786,6 +1949,11 @@ export default function ProductsPage() {
 
                                             {/* Status */}
                                             <td className="px-5 py-3 border-r border-[#EEEEEE]/40">
+                                                {product.listingStatus === 'draft' ? (
+                                                    <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-[6px] uppercase tracking-wider bg-[#F0F4FF] text-[#4F6BED]">
+                                                        Draft
+                                                    </span>
+                                                ) : (
                                                 <select
                                                     value={product.approvalStatus}
                                                     onChange={e => {
@@ -1804,6 +1972,7 @@ export default function ProductsPage() {
                                                     <option value="approved">Approved</option>
                                                     <option value="rejected">Rejected</option>
                                                 </select>
+                                                )}
                                             </td>
 
                                             {/* Inventory — aggregated across vendors */}
@@ -1996,10 +2165,33 @@ export default function ProductsPage() {
                 )}
             >
                 {/* Panel Header */}
-                <div className="flex items-center justify-between px-8 py-6 border-b border-[#EEEEEE] shrink-0">
-                    <h2 className="text-[22px] font-[900] text-[#181725]">
-                        {editingProduct ? 'Edit Product' : 'Add Product'}
-                    </h2>
+                <div className="flex items-center justify-between px-4 lg:px-6 py-4 border-b border-[#EEEEEE] shrink-0">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <h2 className="text-[22px] font-[900] text-[#181725]">
+                            {editingProduct ? 'Edit Product' : 'Add Product'}
+                        </h2>
+                        {(draftSaving || draftSaveError || editingProduct?.listingStatus === 'draft') && (
+                            <span className={cn(
+                                'inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-[8px]',
+                                draftSaveError
+                                    ? 'text-[#E74C3C] bg-[#FFF0F0]'
+                                    : draftSaving
+                                        ? 'text-[#7C7C7C] bg-[#F5F5F5]'
+                                        : 'text-[#4F6BED] bg-[#F0F4FF]',
+                            )}>
+                                {draftSaving ? (
+                                    <>
+                                        <Loader2 size={12} className="animate-spin" />
+                                        Saving draft…
+                                    </>
+                                ) : draftSaveError ? (
+                                    draftSaveError
+                                ) : (
+                                    'Draft'
+                                )}
+                            </span>
+                        )}
+                    </div>
                     <button
                         onClick={closePanel}
                         className="w-[40px] h-[40px] rounded-[12px] flex items-center justify-center hover:bg-[#F8F9FB] text-[#7C7C7C] hover:text-[#181725] transition-all"
@@ -2008,34 +2200,8 @@ export default function ProductsPage() {
                     </button>
                 </div>
 
-                {/* Panel Body with Side Navigation */}
-                <div className="flex-1 flex overflow-hidden bg-[#F8F9FB]">
-                    {/* Left Sidebar: 9 Groups */}
-                    <div className="w-[240px] bg-white border-r border-[#EEEEEE] overflow-y-auto shrink-0 py-6 px-4 flex flex-col gap-1.5">
-                        {PRODUCT_FORM_TABS.map(tab => {
-                            const isActive = activeTab === tab.id;
-                            const Icon = tab.icon;
-                            return (
-                                <button
-                                    key={tab.id}
-                                    type="button"
-                                    onClick={() => setActiveTab(tab.id)}
-                                    className={cn(
-                                        "flex items-center gap-3 px-4 py-3 rounded-xl text-[13px] font-bold transition-all outline-none text-left",
-                                        isActive
-                                            ? "bg-[#299E60]/10 text-[#299E60]"
-                                            : "text-[#7C7C7C] hover:bg-gray-50 hover:text-[#181725]"
-                                    )}
-                                >
-                                    <Icon size={16} strokeWidth={isActive ? 2.5 : 2} className={cn(isActive ? "text-[#299E60]" : "text-[#AEAEAE]")} />
-                                    {tab.label}
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    {/* Right Content Area */}
-                    <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
+                <div className="flex-1 overflow-y-auto bg-[#F8F9FB] px-4 lg:px-6 py-4">
+                    <div className="w-full space-y-8">
                         {loadingProduct ? (
                             <div className="flex items-center justify-center py-32">
                                 <Loader2 className="animate-spin text-[#299E60]" size={32} />
@@ -2049,100 +2215,197 @@ export default function ProductsPage() {
                                     </div>
                                 )}
 
-                                {activeTab === 'identity' && (
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                        <SectionHeader icon={<Info size={16} />} title="Identity" />
-                                        <div>
-                                            <FieldLabel required>Product Name</FieldLabel>
+                                <FormSection title="Product essentials" icon={<Info size={16} />} requiredBadge sectionId="essentials">
+                                    <div id="ff-name">
+                                        <FieldLabel required>Item Name</FieldLabel>
+                                        <input
+                                            type="text"
+                                            value={formData.name}
+                                            onChange={e => updateField('name', e.target.value)}
+                                            placeholder="Enter product name"
+                                            className={cn(inputCls, formErrors.name && 'border-[#E74C3C] focus:border-[#E74C3C]')}
+                                        />
+                                        {formErrors.name && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.name}</p>}
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div id="ff-sku">
+                                            <FieldLabel required>SKU</FieldLabel>
                                             <input
                                                 type="text"
-                                                value={formData.name}
-                                                onChange={e => updateField('name', e.target.value)}
-                                                placeholder="Enter product name"
-                                                className={cn(inputCls, formErrors.name && 'border-[#E74C3C] focus:border-[#E74C3C]')}
+                                                value={formData.sku}
+                                                onChange={e => updateField('sku', e.target.value.toUpperCase())}
+                                                placeholder="RIC-BAS-001"
+                                                readOnly={!!editingProduct?.isMasterRow}
+                                                className={cn(inputCls, editingProduct?.isMasterRow && 'bg-[#F8F9FB] cursor-not-allowed', formErrors.sku && 'border-[#E74C3C]')}
                                             />
-                                            {formErrors.name && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.name}</p>}
+                                            {formErrors.sku && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.sku}</p>}
                                         </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <FieldLabel required>Brand</FieldLabel>
-                                                <BrandSinglePicker
-                                                    value={formData.brand}
-                                                    onChange={val => updateField('brand', val)}
-                                                    brands={brands}
-                                                    placeholder="Select brand"
-                                                    hasError={!!formErrors.brand}
-                                                    onSuggest={(name) => suggestBrand(name)}
-                                                    suggesting={brandSuggesting}
-                                                />
-                                                {formErrors.brand && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.brand}</p>}
-                                            </div>
-                                            <div>
-                                                <FieldLabel>Description</FieldLabel>
-                                                <textarea
-                                                    value={formData.description}
-                                                    onChange={e => updateField('description', e.target.value)}
-                                                    rows={3}
-                                                    className={textareaCls}
-                                                    placeholder="Enter product description"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <CategoryHierarchyPicker
-                                                key={`cat-${editingProduct?.id ?? (panelOpen ? 'open' : 'closed')}`}
-                                                value={formData.categoryIds}
-                                                onChange={(ids) => setFormData(prev => ({ ...prev, categoryIds: ids }))}
-                                                maxAdditional={4}
-                                                endpoint="/api/v1/admin/categories"
-                                                label="Categories"
-                                                helper="Pick a parent category, then a sub-category. Add more sub-categories if needed."
+                                        <div id="ff-hsn">
+                                            <FieldLabel required>HSN Code</FieldLabel>
+                                            <input
+                                                type="text"
+                                                value={formData.hsn}
+                                                onChange={e => updateField('hsn', e.target.value)}
+                                                placeholder="e.g. 1006"
+                                                className={cn(inputCls, formErrors.hsn && 'border-[#E74C3C]')}
                                             />
-                                            {formErrors.categoryIds && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.categoryIds}</p>}
-                                        </div>
-
-                                        <div className="pt-4 border-t border-[#EEEEEE]">
-                                            <FieldLabel>
-                                                Vendor <span className="text-[11px] font-medium text-[#AEAEAE]">(optional — leave empty for catalog product)</span>
-                                            </FieldLabel>
-                                            <select
-                                                value={formData.vendorId}
-                                                onChange={e => updateField('vendorId', e.target.value)}
-                                                className={cn(selectCls, 'cursor-pointer')}
-                                            >
-                                                <option value="">No vendor (Catalog product)</option>
-                                                {vendors.map(v => (
-                                                    <option key={v.id} value={v.id}>{v.businessName}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
-                                            <FieldLabel>Media</FieldLabel>
-                                            <ImageUpload
-                                                value={formData.imageUrl}
-                                                onChange={(url) => updateField('imageUrl', url)}
-                                                folder="products"
-                                                label="Primary Image"
-                                                size="lg"
-                                            />
-                                            <MultiImageUpload
-                                                values={formData.images.filter(Boolean)}
-                                                onChange={(urls) => setFormData(prev => ({ ...prev, images: urls }))}
-                                                folder="products"
-                                                label="Additional Images"
-                                                max={8}
-                                            />
+                                            {formErrors.hsn && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.hsn}</p>}
                                         </div>
                                     </div>
-                                )}
 
-                                {activeTab === 'status' && (
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                        <SectionHeader icon={<Clock size={16} />} title="Status" />
-                                        <div className="grid grid-cols-2 gap-4">
+                                    <div id="ff-brand">
+                                        <FieldLabel required>Brand</FieldLabel>
+                                        <BrandSinglePicker
+                                            value={formData.brand}
+                                            onChange={val => updateField('brand', val)}
+                                            brands={brands}
+                                            placeholder="Select brand"
+                                            hasError={!!formErrors.brand}
+                                            onSuggest={(name) => suggestBrand(name)}
+                                            suggesting={brandSuggesting}
+                                        />
+                                        {formErrors.brand && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.brand}</p>}
+                                    </div>
+
+                                    <div id="ff-categoryIds">
+                                        <CategoryHierarchyPicker
+                                            key={`cat-${editingProduct?.id ?? (panelOpen ? 'open' : 'closed')}`}
+                                            value={formData.categoryIds}
+                                            onChange={(ids) => setFormData(prev => ({ ...prev, categoryIds: ids }))}
+                                            maxAdditional={4}
+                                            endpoint="/api/v1/admin/categories"
+                                            label="Categories"
+                                            helper="Pick a parent category, then a sub-category."
+                                        />
+                                        {formErrors.categoryIds && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.categoryIds}</p>}
+                                    </div>
+
+                                    <div id="ff-imageUrl">
+                                        <FieldLabel required>Image URL</FieldLabel>
+                                        <ImageUpload
+                                            value={formData.imageUrl}
+                                            onChange={(url) => updateField('imageUrl', url)}
+                                            folder="products"
+                                            label="Primary Image"
+                                            size="lg"
+                                        />
+                                        {formErrors.imageUrl && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.imageUrl}</p>}
+                                    </div>
+
+                                    <div className="space-y-3 pt-2 border-t border-[#EEEEEE]">
+                                        <h4 className="text-[13px] font-bold text-[#181725]">Tax details</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div id="ff-intraStateTaxName">
+                                                <FieldLabel required>Intra State Tax Name</FieldLabel>
+                                                <input type="text" value={formData.intraStateTaxName} onChange={e => updateField('intraStateTaxName', e.target.value)} placeholder="e.g. SGST+CGST" className={cn(inputCls, formErrors.intraStateTaxName && 'border-[#E74C3C]')} />
+                                                {formErrors.intraStateTaxName && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.intraStateTaxName}</p>}
+                                            </div>
+                                            <div id="ff-intraStateTaxRate">
+                                                <FieldLabel required>Intra State Tax Rate</FieldLabel>
+                                                <input type="number" step="0.01" value={formData.intraStateTaxRate} onChange={e => updateField('intraStateTaxRate', e.target.value)} placeholder="18" className={cn(inputCls, formErrors.intraStateTaxRate && 'border-[#E74C3C]')} />
+                                                {formErrors.intraStateTaxRate && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.intraStateTaxRate}</p>}
+                                            </div>
+                                            <div id="ff-intraStateTaxType">
+                                                <FieldLabel required>Intra State Tax Type</FieldLabel>
+                                                <input type="text" value={formData.intraStateTaxType} onChange={e => updateField('intraStateTaxType', e.target.value)} placeholder="Tax Group" className={cn(inputCls, formErrors.intraStateTaxType && 'border-[#E74C3C]')} />
+                                                {formErrors.intraStateTaxType && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.intraStateTaxType}</p>}
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div id="ff-interStateTaxName">
+                                                <FieldLabel required>Inter State Tax Name</FieldLabel>
+                                                <input type="text" value={formData.interStateTaxName} onChange={e => updateField('interStateTaxName', e.target.value)} placeholder="e.g. IGST" className={cn(inputCls, formErrors.interStateTaxName && 'border-[#E74C3C]')} />
+                                                {formErrors.interStateTaxName && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.interStateTaxName}</p>}
+                                            </div>
+                                            <div id="ff-interStateTaxRate">
+                                                <FieldLabel required>Inter State Tax Rate</FieldLabel>
+                                                <input type="number" step="0.01" value={formData.interStateTaxRate} onChange={e => updateField('interStateTaxRate', e.target.value)} placeholder="18" className={cn(inputCls, formErrors.interStateTaxRate && 'border-[#E74C3C]')} />
+                                                {formErrors.interStateTaxRate && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.interStateTaxRate}</p>}
+                                            </div>
+                                            <div id="ff-interStateTaxType">
+                                                <FieldLabel required>Inter State Tax Type</FieldLabel>
+                                                <input type="text" value={formData.interStateTaxType} onChange={e => updateField('interStateTaxType', e.target.value)} placeholder="Tax" className={cn(inputCls, formErrors.interStateTaxType && 'border-[#E74C3C]')} />
+                                                {formErrors.interStateTaxType && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.interStateTaxType}</p>}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div id="ff-countryOfOrigin">
+                                            <FieldLabel required>Country of Origin</FieldLabel>
+                                            <input type="text" value={formData.countryOfOrigin} onChange={e => updateField('countryOfOrigin', e.target.value)} placeholder="e.g. India" className={cn(inputCls, formErrors.countryOfOrigin && 'border-[#E74C3C]')} />
+                                            {formErrors.countryOfOrigin && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.countryOfOrigin}</p>}
+                                        </div>
+                                        <div id="ff-vegNonVeg">
+                                            <FieldLabel required>Veg / Non-Veg</FieldLabel>
+                                            <select value={formData.vegNonVeg} onChange={e => updateField('vegNonVeg', e.target.value)} className={cn(selectCls, formErrors.vegNonVeg && 'border-[#E74C3C]')}>
+                                                <option value="">Select…</option>
+                                                <option value="veg">Veg</option>
+                                                <option value="nonveg">Non-Veg</option>
+                                                <option value="egg">Egg</option>
+                                            </select>
+                                            {formErrors.vegNonVeg && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.vegNonVeg}</p>}
+                                        </div>
+                                        <div id="ff-storageType">
+                                            <FieldLabel required>Storage type</FieldLabel>
+                                            <select value={formData.storageType} onChange={e => updateField('storageType', e.target.value)} className={cn(selectCls, formErrors.storageType && 'border-[#E74C3C]')}>
+                                                <option value="">Select…</option>
+                                                <option value="ambient">Ambient</option>
+                                                <option value="refrigerated">Refrigerated</option>
+                                                <option value="frozen">Frozen</option>
+                                                <option value="dry">Dry Storage</option>
+                                                <option value="cool">Cool / Dark</option>
+                                            </select>
+                                            {formErrors.storageType && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.storageType}</p>}
+                                        </div>
+                                        <div id="ff-shelfLifeDays">
+                                            <FieldLabel required>Shelf Life (days)</FieldLabel>
+                                            <input type="number" min="0" value={formData.shelfLifeDays} onChange={e => updateField('shelfLifeDays', e.target.value)} placeholder="e.g. 365" className={cn(inputCls, formErrors.shelfLifeDays && 'border-[#E74C3C]')} />
+                                            {formErrors.shelfLifeDays && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.shelfLifeDays}</p>}
+                                        </div>
+                                        <div id="ff-minOrderQty">
+                                            <FieldLabel required>MOQ</FieldLabel>
+                                            <input type="number" min="1" value={formData.minOrderQty} onChange={e => updateField('minOrderQty', e.target.value)} className={cn(inputCls, formErrors.minOrderQty && 'border-[#E74C3C]')} />
+                                            {formErrors.minOrderQty && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.minOrderQty}</p>}
+                                        </div>
+                                        <div id="ff-variantMapping">
+                                            <FieldLabel required>Variant Mapping</FieldLabel>
+                                            <input type="text" value={formData.variantMapping} onChange={e => updateField('variantMapping', e.target.value)} placeholder="e.g. size:large" className={cn(inputCls, formErrors.variantMapping && 'border-[#E74C3C]')} />
+                                            {formErrors.variantMapping && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.variantMapping}</p>}
+                                        </div>
+                                    </div>
+
+                                    <div id="ff-substituteIds">
+                                        <FieldLabel required>Substitute Mapping</FieldLabel>
+                                        <SubstituteProductPicker
+                                            selectedIds={formData.substituteIds}
+                                            currentProductId={editingProduct?.id}
+                                            products={products}
+                                            onChange={(ids) => setFormData(prev => ({ ...prev, substituteIds: ids }))}
+                                        />
+                                        {formErrors.substituteIds && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.substituteIds}</p>}
+                                    </div>
+                                </FormSection>
+
+                                <FormSection title="Vendor assignment" sectionId="vendor">
+                                    <FieldLabel>
+                                        Vendor <span className="text-[11px] font-medium text-[#AEAEAE]">(optional — catalog product if empty)</span>
+                                    </FieldLabel>
+                                    <select
+                                        value={formData.vendorId}
+                                        onChange={e => updateField('vendorId', e.target.value)}
+                                        className={cn(selectCls, 'cursor-pointer')}
+                                    >
+                                        <option value="">No vendor (Catalog product)</option>
+                                        {vendors.map(v => (
+                                            <option key={v.id} value={v.id}>{v.businessName}</option>
+                                        ))}
+                                    </select>
+                                </FormSection>
+
+                                <FormSection title="Status & availability" icon={<Clock size={16} />} sectionId="status">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <FieldLabel>Item Status</FieldLabel>
                                                 <select
@@ -2155,38 +2418,7 @@ export default function ProductsPage() {
                                                     <option value="Draft">Draft</option>
                                                 </select>
                                             </div>
-                                            <div>
-                                                <FieldLabel>Veg / Non-Veg</FieldLabel>
-                                                <select
-                                                    value={formData.vegNonVeg}
-                                                    onChange={e => updateField('vegNonVeg', e.target.value)}
-                                                    className={selectCls}
-                                                >
-                                                    <option value="">Not Specified</option>
-                                                    <option value="veg">🟢 Veg</option>
-                                                    <option value="nonveg">🔴 Non-Veg</option>
-                                                    <option value="egg">🟡 Egg</option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <FieldLabel>Storage Type</FieldLabel>
-                                                <select
-                                                    value={formData.storageType}
-                                                    onChange={e => updateField('storageType', e.target.value)}
-                                                    className={selectCls}
-                                                >
-                                                    <option value="">Not specified</option>
-                                                    <option value="ambient">Ambient (Room Temp)</option>
-                                                    <option value="refrigerated">Refrigerated (2–8°C)</option>
-                                                    <option value="frozen">Frozen (−18°C)</option>
-                                                    <option value="dry">Dry Storage</option>
-                                                    <option value="cool">Cool / Dark (10–15°C)</option>
-                                                </select>
-                                            </div>
-                                            <div className="flex items-center pt-6">
+                                            <div className="flex items-center pt-2 md:pt-6">
                                                 <label className="flex items-center gap-3 cursor-pointer">
                                                     <input
                                                         type="checkbox"
@@ -2201,16 +2433,13 @@ export default function ProductsPage() {
                                                 </label>
                                             </div>
                                         </div>
-                                    </div>
-                                )}
+                                </FormSection>
 
-                                {activeTab === 'pricing' && (
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                        <SectionHeader icon={<DollarSign size={16} />} title="Pricing & Tax" />
+                                <FormSection title="Pricing & tax" icon={<DollarSign size={16} />} sectionId="pricing">
                                         
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <FieldLabel required>Taxable Rate (ex-GST)</FieldLabel>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div id="ff-basePrice">
+                                                <FieldLabel required={!!formData.vendorId}>Taxable Rate (ex-GST)</FieldLabel>
                                                 <div className="relative">
                                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">₹</span>
                                                     <input
@@ -2323,12 +2552,9 @@ export default function ProductsPage() {
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
-                                )}
+                                </FormSection>
 
-                                {activeTab === 'accounting' && (
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                        <SectionHeader icon={<SettingsIcon size={16} />} title="Accounting Details" />
+                                <FormSection title="Accounting" icon={<SettingsIcon size={16} />} sectionId="accounting">
                                         
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
@@ -2389,84 +2615,9 @@ export default function ProductsPage() {
                                                 />
                                             </div>
                                         </div>
+                                </FormSection>
 
-                                        <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
-                                            <h4 className="text-[14px] font-bold text-[#181725]">Tax Group Settings</h4>
-                                            
-                                            <div className="grid grid-cols-3 gap-4">
-                                                <div>
-                                                    <FieldLabel>Intra-State Tax Name</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.intraStateTaxName}
-                                                        onChange={e => updateField('intraStateTaxName', e.target.value)}
-                                                        placeholder="e.g. SGST+CGST"
-                                                        className={inputCls}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <FieldLabel>Intra-State Tax Rate</FieldLabel>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        value={formData.intraStateTaxRate}
-                                                        onChange={e => updateField('intraStateTaxRate', e.target.value)}
-                                                        placeholder="e.g. 18.00"
-                                                        className={inputCls}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <FieldLabel>Intra-State Tax Type</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.intraStateTaxType}
-                                                        onChange={e => updateField('intraStateTaxType', e.target.value)}
-                                                        placeholder="e.g. Tax Group"
-                                                        className={inputCls}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-3 gap-4">
-                                                <div>
-                                                    <FieldLabel>Inter-State Tax Name</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.interStateTaxName}
-                                                        onChange={e => updateField('interStateTaxName', e.target.value)}
-                                                        placeholder="e.g. IGST"
-                                                        className={inputCls}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <FieldLabel>Inter-State Tax Rate</FieldLabel>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        value={formData.interStateTaxRate}
-                                                        onChange={e => updateField('interStateTaxRate', e.target.value)}
-                                                        placeholder="e.g. 18.00"
-                                                        className={inputCls}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <FieldLabel>Inter-State Tax Type</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.interStateTaxType}
-                                                        onChange={e => updateField('interStateTaxType', e.target.value)}
-                                                        placeholder="e.g. Tax"
-                                                        className={inputCls}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {activeTab === 'inventory' && (
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                        <SectionHeader icon={<BarChart3 size={16} />} title="Inventory Settings" />
+                                <FormSection title="Inventory" icon={<BarChart3 size={16} />} sectionId="inventory">
                                         
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
@@ -2519,12 +2670,9 @@ export default function ProductsPage() {
                                                 </label>
                                             </div>
                                         </div>
-                                    </div>
-                                )}
+                                </FormSection>
 
-                                {activeTab === 'packaging' && (
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                        <SectionHeader icon={<Package size={16} />} title="Packaging & Dimensions" />
+                                <FormSection title="Packaging & dimensions" icon={<Package size={16} />} sectionId="packaging">
                                         
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
@@ -2628,39 +2776,10 @@ export default function ProductsPage() {
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                )}
+                                </FormSection>
 
-                                {activeTab === 'identifiers' && (
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                        <SectionHeader icon={<Tag size={16} />} title="Product Identifiers" />
-                                        
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <FieldLabel required>SKU</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={formData.sku}
-                                                    onChange={e => updateField('sku', e.target.value.toUpperCase())}
-                                                    placeholder="RIC-BAS-001"
-                                                    readOnly={!!editingProduct?.isMasterRow}
-                                                    className={cn(inputCls, editingProduct?.isMasterRow && 'bg-[#F8F9FB] cursor-not-allowed')}
-                                                />
-                                                {formErrors.sku && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{formErrors.sku}</p>}
-                                            </div>
-                                            <div>
-                                                <FieldLabel>HSN Code</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={formData.hsn}
-                                                    onChange={e => updateField('hsn', e.target.value)}
-                                                    placeholder="e.g. 1006"
-                                                    className={inputCls}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                <FormSection title="Additional identifiers" icon={<Tag size={16} />} sectionId="identifiers">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <FieldLabel>EAN</FieldLabel>
                                                 <input
@@ -2681,9 +2800,6 @@ export default function ProductsPage() {
                                                     className={inputCls}
                                                 />
                                             </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
                                             <div>
                                                 <FieldLabel>Barcode</FieldLabel>
                                                 <input
@@ -2695,24 +2811,34 @@ export default function ProductsPage() {
                                                 />
                                             </div>
                                         </div>
-                                    </div>
-                                )}
+                                </FormSection>
 
-                                {activeTab === 'attributes' && (
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                        <SectionHeader icon={<BoxIcon size={16} />} title="Product Attributes" />
-                                        
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <FieldLabel>Country of Origin</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={formData.countryOfOrigin}
-                                                    onChange={e => updateField('countryOfOrigin', e.target.value)}
-                                                    placeholder="e.g. India"
-                                                    className={inputCls}
-                                                />
-                                            </div>
+                                <FormSection title="Additional details" icon={<BoxIcon size={16} />} sectionId="details">
+                                        <div>
+                                            <FieldLabel>Description</FieldLabel>
+                                            <textarea
+                                                value={formData.description}
+                                                onChange={e => updateField('description', e.target.value)}
+                                                rows={3}
+                                                className={textareaCls}
+                                                placeholder="Enter product description"
+                                            />
+                                        </div>
+                                        <MultiImageUpload
+                                            values={formData.images.filter(Boolean)}
+                                            onChange={(urls) => setFormData(prev => ({ ...prev, images: urls }))}
+                                            folder="products"
+                                            label="Additional Images"
+                                            max={8}
+                                        />
+                                        <div>
+                                            <FieldLabel>Tags</FieldLabel>
+                                            <TagInput
+                                                tags={formData.tags}
+                                                onChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <FieldLabel>FSSAI Reference</FieldLabel>
                                                 <input
@@ -2723,9 +2849,6 @@ export default function ProductsPage() {
                                                     className={inputCls}
                                                 />
                                             </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
                                             <div>
                                                 <FieldLabel>Product Type</FieldLabel>
                                                 <select
@@ -2751,109 +2874,42 @@ export default function ProductsPage() {
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-[#EEEEEE]">
                                             <div>
                                                 <FieldLabel>Source</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={formData.source}
-                                                    onChange={e => updateField('source', e.target.value)}
-                                                    placeholder="Data source"
-                                                    className={inputCls}
-                                                />
+                                                <input type="text" value={formData.source} onChange={e => updateField('source', e.target.value)} placeholder="Data source" className={inputCls} />
                                             </div>
                                             <div>
                                                 <FieldLabel>Reference ID</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={formData.referenceId}
-                                                    onChange={e => updateField('referenceId', e.target.value)}
-                                                    placeholder="External Ref ID"
-                                                    className={inputCls}
-                                                />
+                                                <input type="text" value={formData.referenceId} onChange={e => updateField('referenceId', e.target.value)} placeholder="External Ref ID" className={inputCls} />
                                             </div>
                                             <div>
                                                 <FieldLabel>Last Sync</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={formData.lastSync}
-                                                    onChange={e => updateField('lastSync', e.target.value)}
-                                                    placeholder="e.g. 2026-06-29"
-                                                    className={inputCls}
-                                                />
+                                                <input type="text" value={formData.lastSync} onChange={e => updateField('lastSync', e.target.value)} placeholder="e.g. 2026-06-29" className={inputCls} />
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <label className="flex items-center gap-3 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={formData.sellable}
-                                                    onChange={(e) => updateField('sellable', e.target.checked)}
-                                                    className="w-5 h-5 accent-[#299E60]"
-                                                />
-                                                <div>
-                                                    <span className="text-[13px] font-bold text-[#181725]">Sellable</span>
-                                                </div>
+                                                <input type="checkbox" checked={formData.sellable} onChange={(e) => updateField('sellable', e.target.checked)} className="w-5 h-5 accent-[#299E60]" />
+                                                <span className="text-[13px] font-bold text-[#181725]">Sellable</span>
                                             </label>
                                             <label className="flex items-center gap-3 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={formData.purchasable}
-                                                    onChange={(e) => updateField('purchasable', e.target.checked)}
-                                                    className="w-5 h-5 accent-[#299E60]"
-                                                />
-                                                <div>
-                                                    <span className="text-[13px] font-bold text-[#181725]">Purchasable</span>
-                                                </div>
+                                                <input type="checkbox" checked={formData.purchasable} onChange={(e) => updateField('purchasable', e.target.checked)} className="w-5 h-5 accent-[#299E60]" />
+                                                <span className="text-[13px] font-bold text-[#181725]">Purchasable</span>
                                             </label>
                                             <label className="flex items-center gap-3 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={formData.isFeatured}
-                                                    onChange={(e) => updateField('isFeatured', e.target.checked)}
-                                                    className="w-5 h-5 accent-[#F59E0B]"
-                                                />
-                                                <div>
-                                                    <span className="text-[13px] font-bold text-[#181725]">Featured</span>
-                                                </div>
+                                                <input type="checkbox" checked={formData.isFeatured} onChange={(e) => updateField('isFeatured', e.target.checked)} className="w-5 h-5 accent-[#F59E0B]" />
+                                                <span className="text-[13px] font-bold text-[#181725]">Featured</span>
                                             </label>
                                         </div>
+                                </FormSection>
 
-                                        <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
-                                            <div>
-                                                <FieldLabel>Variant Mapping</FieldLabel>
-                                                <input
-                                                    type="text"
-                                                    value={formData.variantMapping}
-                                                    onChange={e => updateField('variantMapping', e.target.value)}
-                                                    placeholder="e.g. size:large, color:red"
-                                                    className={inputCls}
-                                                />
-                                            </div>
-                                            
-                                            <div>
-                                                <FieldLabel>Substitute Products</FieldLabel>
-                                                <SubstituteProductPicker
-                                                    selectedIds={formData.substituteIds}
-                                                    currentProductId={editingProduct?.id}
-                                                    products={products}
-                                                    onChange={(ids) => setFormData(prev => ({ ...prev, substituteIds: ids }))}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {activeTab === 'bulk' && (
-                                    <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                        <div className="flex items-start justify-between">
-                                            <div>
-                                                <SectionHeader icon={<Tag size={16} />} title="Bulk Pricing Tiers" />
-                                                <p className="text-[12px] text-[#AEAEAE] font-medium -mt-3 ml-[42px]">
-                                                    Up to 3 quantity-based discount tiers (taxable rate, ex-GST)
-                                                </p>
-                                            </div>
+                                <FormSection title="Bulk pricing tiers" icon={<Tag size={16} />} sectionId="bulk">
+                                        <div className="flex items-start justify-between gap-4 mb-2">
+                                            <p className="text-[12px] text-[#AEAEAE] font-medium">
+                                                Up to 3 quantity-based discount tiers (taxable rate, ex-GST)
+                                            </p>
                                             {formData.priceSlabs.length < 3 && (
                                                 <button
                                                     type="button"
@@ -2951,28 +3007,42 @@ export default function ProductsPage() {
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
-                                )}
+                                </FormSection>
                             </>
                         )}
                     </div>
                 </div>
 
                 {/* Panel Footer */}
-                <div className="px-8 py-6 border-t border-[#EEEEEE] shrink-0 flex items-center gap-4">
+                <div className="px-4 lg:px-6 py-4 border-t border-[#EEEEEE] shrink-0 flex items-center gap-3">
                     <button
                         onClick={closePanel}
                         className="flex-1 h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[12px] text-[14px] font-bold hover:bg-[#EEEEEE] transition-all"
                     >
                         Cancel
                     </button>
+                    {perms.canWriteProducts && (
+                        <button
+                            type="button"
+                            onClick={() => void handleSaveDraft()}
+                            disabled={draftSaving || saving}
+                            className="flex-1 h-[48px] bg-[#FFCF4D] border border-[#E6B800] text-[#4A3800] rounded-[12px] text-[14px] font-bold hover:bg-[#F5C542] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                        >
+                            {draftSaving && <Loader2 size={16} className="animate-spin" />}
+                            Save as Draft
+                        </button>
+                    )}
                     <button
                         onClick={handleSave}
-                        disabled={saving}
+                        disabled={saving || draftSaving}
                         className="flex-1 h-[48px] bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-2 shadow-sm shadow-[#299E60]/20 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                         {saving && <Loader2 size={16} className="animate-spin" />}
-                        {editingProduct ? 'Update Product' : 'Create Product'}
+                        {editingProduct?.listingStatus === 'draft'
+                            ? 'Publish'
+                            : editingProduct
+                                ? 'Update Product'
+                                : 'Create Product'}
                     </button>
                 </div>
             </div>
@@ -2987,47 +3057,23 @@ export default function ProductsPage() {
                 onComplete={handleImportComplete}
             />
 
-            {/* ============================================================= */}
-            {/* Bulk Update Engine                                              */}
-            {/* ============================================================= */}
-            <AdminBulkEngine
-                open={bulkUpdateOpen}
-                onClose={() => setBulkUpdateOpen(false)}
-                products={products}
-                selectedIds={Array.from(selectedIds)}
-                categories={categories}
-                brands={brands}
-                vendors={vendors}
-                onComplete={() => { handleImportComplete(); setSelectedIds(new Set()); }}
-            />
-
             <VendorBulkGrid
                 open={gridOpen}
                 onClose={() => setGridOpen(false)}
                 products={gridProducts}
-                onComplete={handleImportComplete}
+                onComplete={() => { void refreshGridListings(); handleImportComplete(); }}
                 categories={categories}
                 brands={brands}
-                patchUrl={(id) => {
-                    const row = products.find(p => p.id === id);
-                    return row?.isMasterRow
-                        ? `/api/v1/admin/master-products/${id}`
-                        : `/api/v1/admin/products/${id}`;
-                }}
-                onOpenAdvanced={() => setBulkUpdateOpen(true)}
+                patchUrl={(id: string) => `/api/v1/admin/products/${id}`}
+                readOnlyCommission={false}
+                isAdmin
             />
 
 
             {/* Floating selection action bar */}
-            {selectedIds.size > 0 && !bulkUpdateOpen && (
+            {selectedIds.size > 0 && (
                 <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[55] flex items-center gap-3 bg-[#181725] text-white rounded-[14px] shadow-2xl px-5 py-3 animate-in slide-in-from-bottom-4 duration-200">
                     <span className="text-[13px] font-bold">{selectedIds.size} selected</span>
-                    <button
-                        onClick={() => setBulkUpdateOpen(true)}
-                        className="h-[36px] px-4 bg-[#299E60] hover:bg-[#238a54] rounded-[10px] text-[13px] font-bold flex items-center gap-1.5 transition-colors"
-                    >
-                        <Wand2 size={14} /> Bulk edit
-                    </button>
                     <button
                         onClick={() => setShowBulkDeleteModal(true)}
                         className="h-[36px] px-4 bg-[#E74C3C] hover:bg-[#cf4436] rounded-[10px] text-[13px] font-bold flex items-center gap-1.5 transition-colors"
