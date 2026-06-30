@@ -17,7 +17,17 @@ import { BrandSinglePicker } from '@/components/features/brand/BrandSinglePicker
 import VendorProductImportModal from '@/components/features/vendor/VendorProductImportModal';
 import VendorBulkEngine from '@/components/features/vendor/VendorBulkEngine';
 import VendorBulkGrid from '@/components/features/vendor/VendorBulkGrid';
-import { PRODUCT_FORM_TABS, type ProductFormTabId } from '@/components/features/shared/productFormTabs';
+import FormSection, {
+    FieldLabel,
+    productFormInputCls,
+    productFormSelectCls,
+    productFormTextareaCls,
+} from '@/components/features/shared/FormSection';
+import {
+    validateProductEssentials,
+    focusFirstProductFormError,
+    type ProductValidationField,
+} from '@/components/features/shared/productFormValidation';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -44,6 +54,9 @@ interface VendorProduct {
     hsn?: string | null;
     brand?: string | null;
     barcode?: string | null;
+    vendorSku?: string | null;
+    aliasNames?: string[];
+    countryOfOrigin?: string | null;
     taxPercent?: number | null;
     minOrderQty?: number | null;
     tags?: string[] | null;
@@ -295,28 +308,9 @@ function getPageRange(current: number, total: number): (number | 'gap')[] {
 /*  Reusable small components                                          */
 /* ------------------------------------------------------------------ */
 
-function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
-    return (
-        <div className="flex items-center gap-2.5 mb-5 mt-1">
-            <div className="w-[32px] h-[32px] rounded-[8px] bg-[#EEF8F1] flex items-center justify-center text-[#299E60]">
-                {icon}
-            </div>
-            <h3 className="text-[16px] font-bold text-[#181725]">{title}</h3>
-        </div>
-    );
-}
-
-function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
-    return (
-        <label className="block text-[13px] font-bold text-[#181725] mb-1.5">
-            {children}{required && <span className="text-[#E74C3C] ml-0.5">*</span>}
-        </label>
-    );
-}
-
-const inputCls = 'w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors bg-white';
-const selectCls = 'w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors bg-white appearance-none';
-const textareaCls = 'w-full border border-[#EEEEEE] rounded-[10px] px-4 py-3 text-[14px] outline-none focus:border-[#299E60]/40 transition-colors resize-none bg-white';
+const inputCls = productFormInputCls;
+const selectCls = productFormSelectCls;
+const textareaCls = productFormTextareaCls;
 
 /* ------------------------------------------------------------------ */
 /*  Tag Input                                                          */
@@ -471,7 +465,7 @@ export default function VendorProductsPage() {
     const [brands, setBrands] = useState<BrandOption[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'featured'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'featured' | 'drafts'>('all');
     const [approvalFilter, setApprovalFilter] = useState<'all' | 'pending' | 'rejected' | 'approved'>('all');
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
@@ -482,7 +476,6 @@ export default function VendorProductsPage() {
     const [formError, setFormError] = useState('');
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [loadingProduct, setLoadingProduct] = useState(false);
-    const [activeTab, setActiveTab] = useState<ProductFormTabId>('identity');
     const panelRef = useRef<HTMLDivElement>(null);
 
     // Product suggestion state
@@ -565,19 +558,16 @@ export default function VendorProductsPage() {
     const canAutosaveDraft = useCallback(() => {
         if (!isPanelOpen || loadingProduct || saving || draftSaving) return false;
         if (editingProduct?.listingStatus === 'submitted') return false;
-        if (!form.name.trim()) return false;
-        // Only autosave existing drafts with partial data; new products need a price
-        // so picking a master catalog item doesn't immediately flip Add → Edit draft.
         if (editingProduct?.listingStatus === 'draft') return true;
-        return !!(form.basePrice && Number(form.basePrice) > 0);
-    }, [isPanelOpen, loadingProduct, saving, draftSaving, editingProduct?.listingStatus, form.name, form.basePrice]);
+        return form.name.trim().length > 0;
+    }, [isPanelOpen, loadingProduct, saving, draftSaving, editingProduct?.listingStatus, form.name]);
 
     /* ---- Data fetching ---- */
 
     const fetchProducts = useCallback(async (showSpinner = true) => {
         try {
             if (showSpinner) setLoading(true);
-            const res = await fetch('/api/v1/vendor/products?limit=200');
+            const res = await fetch('/api/v1/vendor/products?limit=500');
             const json = await res.json();
             if (json.success) setProducts(json.data.products);
         } catch (err) {
@@ -632,6 +622,7 @@ export default function VendorProductsPage() {
         const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesFilter =
             statusFilter === 'all' ? true :
+            statusFilter === 'drafts' ? p.listingStatus === 'draft' :
             statusFilter === 'active' ? p.isActive :
             statusFilter === 'inactive' ? !p.isActive :
             statusFilter === 'featured' ? p.isFeatured :
@@ -1018,9 +1009,14 @@ export default function VendorProductsPage() {
 
     const saveDraftRef = useRef<() => Promise<void>>(async () => {});
 
-    const saveDraft = useCallback(async () => {
-        if (!canAutosaveDraft() || skipDraftAutosaveRef.current) return;
-        if (!isFormDirty()) return;
+    const saveDraft = useCallback(async (force = false) => {
+        if (skipDraftAutosaveRef.current) return;
+        if (!force) {
+            if (!canAutosaveDraft() || !isFormDirty()) return;
+        } else if (!form.name.trim() && !editingProduct) {
+            toast.error('Enter a product name before saving a draft.');
+            return;
+        }
 
         setDraftSaving(true);
         try {
@@ -1096,7 +1092,7 @@ export default function VendorProductsPage() {
         } finally {
             setDraftSaving(false);
         }
-    }, [canAutosaveDraft, isFormDirty, buildProductBody, editingProduct, categories, syncSavedSnapshot]);
+    }, [canAutosaveDraft, isFormDirty, buildProductBody, editingProduct, categories, syncSavedSnapshot, form.name]);
 
     useEffect(() => {
         saveDraftRef.current = saveDraft;
@@ -1122,7 +1118,6 @@ export default function VendorProductsPage() {
         setShowCloseConfirm(false);
         setLastSavedSnapshot('');
         setAuditLogs([]);
-        setActiveTab('identity');
         setCategoryPickerKey((k) => k + 1);
         setIsPanelOpen(true);
         Promise.resolve().then(() => {
@@ -1138,7 +1133,6 @@ export default function VendorProductsPage() {
         setFormError('');
         setFieldErrors({});
         setShowCloseConfirm(false);
-        setActiveTab('identity');
         setMasterProductId(null);
         setMasterCategoryLeafMissing(false);
         setCatalogSearch('');
@@ -1425,36 +1419,11 @@ export default function VendorProductsPage() {
         });
     };
 
-    // Which tab each errorable field lives on, plus the order we walk them to
-    // find the first offender.
-    const ERROR_FIELD_TAB = {
-        name: 'identity',
-        brand: 'identity',
-        vendorSku: 'identity',
-        sku: 'identifiers',
-        categoryIds: 'identity',
-        basePrice: 'pricing',
-    } as const;
-    const ERROR_FIELD_ORDER: Array<keyof typeof ERROR_FIELD_TAB> = ['name', 'categoryIds', 'vendorSku', 'brand', 'basePrice'];
-
-    // Jump to the first field with an error: open its tab, scroll it into view,
-    // and focus its input so the message shows right under the offending field.
-    const focusFirstError = (errors: Record<string, string>) => {
-        const field = ERROR_FIELD_ORDER.find(f => errors[f]);
-        if (!field) return;
-        setActiveTab(ERROR_FIELD_TAB[field]);
-        setTimeout(() => {
-            const el = document.getElementById(`ff-${field}`);
-            if (!el) return;
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            el.querySelector<HTMLElement>('input, textarea, select, button')?.focus({ preventScroll: true });
-        }, 60);
-    };
-
-    // Best-effort: route a server error message to the field it's about so it
-    // renders inline (and we can scroll to it) rather than only in the banner.
-    const mapServerErrorToField = (msg: string): keyof typeof ERROR_FIELD_TAB | null => {
+    const mapServerErrorToField = (msg: string): ProductValidationField | null => {
         const m = msg.toLowerCase();
+        if (m.includes('substitut')) return 'substituteIds';
+        if (m.includes('hsn')) return 'hsn';
+        if (m.includes('image')) return 'imageUrl';
         if (m.includes('pos sku') || m.includes('vendor sku')) return 'vendorSku';
         if (m.includes('sku')) return 'sku';
         if (m.includes('categor')) return 'categoryIds';
@@ -1464,16 +1433,12 @@ export default function VendorProductsPage() {
         return null;
     };
 
-    // Apply a server error: attach to its field (inline + scroll) when we can
-    // identify it, otherwise fall back to the banner at the top of the panel.
     const applyServerError = (msg: string) => {
         const field = mapServerErrorToField(msg);
-        // Only attach inline if the field is actually on screen (e.g. SKU only
-        // shows when editing) — otherwise the message would have nowhere to render.
         if (field && document.getElementById(`ff-${field}`)) {
             setFormError('');
             setFieldErrors({ [field]: msg });
-            focusFirstError({ [field]: msg });
+            focusFirstProductFormError({ [field]: msg });
         } else {
             setFieldErrors({});
             setFormError(msg);
@@ -1533,24 +1498,33 @@ export default function VendorProductsPage() {
         if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
         const isNewSubmission = !editingProduct && !masterProductId && !basedOnProductId;
         const publishingDraft = editingProduct?.listingStatus === 'draft';
-        const errors: Record<string, string> = {};
-        if (!form.name.trim()) errors.name = 'Product name is required';
-        if (!form.basePrice || Number(form.basePrice) <= 0) errors.basePrice = 'A valid base price is required';
         const needsCategory =
             (isNewSubmission || publishingDraft) &&
             !masterProductId &&
             !basedOnProductId;
-        if (needsCategory && form.categoryIds.length === 0) {
-            errors.categoryIds = 'Pick a parent and sub-category';
-        }
-        if (masterProductId && (!editingProduct || editingProduct.approvalStatus === 'rejected' || publishingDraft) && !form.vendorSku.trim()) {
-            errors.vendorSku = 'Your POS SKU is required when listing a catalog item';
-        }
+        const requireVendorSku = !!(
+            masterProductId &&
+            (!editingProduct || editingProduct.approvalStatus === 'rejected' || publishingDraft)
+        );
+
+        const errors = validateProductEssentials(
+            {
+                ...form,
+                sku: requireVendorSku ? form.vendorSku : form.sku,
+            },
+            {
+                portal: 'vendor',
+                requireVendorSku,
+                requireBasePrice: true,
+                skipCategory: !needsCategory,
+            },
+        );
+
         if (Object.keys(errors).length > 0) {
             setFormError('');
             setFieldErrors(errors);
-            focusFirstError(errors);
-            const firstMsg = ERROR_FIELD_ORDER.map((f) => errors[f]).find(Boolean);
+            focusFirstProductFormError(errors);
+            const firstMsg = Object.values(errors)[0];
             if (firstMsg) toast.error(firstMsg);
             return;
         }
@@ -1884,6 +1858,17 @@ export default function VendorProductsPage() {
                         Bulk Update
                     </button>
 
+                    {products.some(p => p.listingStatus === 'draft') && (
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter('drafts')}
+                            className="h-[40px] px-3.5 border border-[#EEEEEE] bg-white rounded-[10px] text-[12px] font-bold text-[#4F6BED] hover:bg-[#F0F4FF] transition-all flex items-center gap-1.5 shrink-0"
+                        >
+                            <Clock size={13} />
+                            Drafts ({products.filter(p => p.listingStatus === 'draft').length})
+                        </button>
+                    )}
+
                     <button
                         onClick={openAddPanel}
                         className="h-[40px] px-4 bg-[#299E60] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#238a54] transition-all shadow-sm flex items-center gap-2 shrink-0"
@@ -1896,24 +1881,27 @@ export default function VendorProductsPage() {
 
             {/* Filter Tabs */}
             <div className="flex items-center gap-1 flex-wrap">
-                {(['all', 'active', 'inactive', 'featured'] as const).map(tab => (
+                {(['all', 'drafts', 'active', 'inactive', 'featured'] as const).map(tab => (
                     <button
                         key={tab}
                         onClick={() => setStatusFilter(tab)}
                         className={cn(
                             'h-[34px] px-4 rounded-[8px] text-[12px] font-bold transition-all flex items-center gap-1.5',
                             statusFilter === tab
-                                ? 'bg-[#299E60] text-white shadow-sm'
+                                ? tab === 'drafts'
+                                    ? 'bg-[#4F6BED] text-white shadow-sm'
+                                    : 'bg-[#299E60] text-white shadow-sm'
                                 : 'bg-white border border-[#EEEEEE] text-[#7C7C7C] hover:bg-[#F5F5F5]'
                         )}
                     >
                         {tab === 'featured' && <Star size={12} className={statusFilter === 'featured' ? 'fill-white' : 'fill-[#AEAEAE] text-[#AEAEAE]'} />}
-                        {tab === 'all' ? 'All' : tab === 'active' ? 'Active' : tab === 'inactive' ? 'Inactive' : 'Featured'}
+                        {tab === 'all' ? 'All' : tab === 'drafts' ? 'Drafts' : tab === 'active' ? 'Active' : tab === 'inactive' ? 'Inactive' : 'Featured'}
                         <span className={cn(
                             'ml-0.5 text-[10px] font-[900] px-1.5 py-0.5 rounded-[4px]',
                             statusFilter === tab ? 'bg-white/20 text-white' : 'bg-[#F5F5F5] text-[#AEAEAE]'
                         )}>
                             {tab === 'all' ? products.length :
+                             tab === 'drafts' ? products.filter(p => p.listingStatus === 'draft').length :
                              tab === 'active' ? products.filter(p => p.isActive).length :
                              tab === 'inactive' ? products.filter(p => !p.isActive).length :
                              products.filter(p => p.isFeatured).length}
@@ -1970,6 +1958,7 @@ export default function VendorProductsPage() {
                         </p>
                     </div>
                 ) : (
+                    <>
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
@@ -2136,10 +2125,7 @@ export default function VendorProductsPage() {
                             </tbody>
                         </table>
                     </div>
-                )}
 
-                {/* Pagination bar — only when there are results */}
-                {!loading && filteredProducts.length > 0 && (
                     <div className="flex items-center justify-between px-6 py-4 border-t border-[#F5F5F5] flex-wrap gap-4">
                         {/* Count */}
                         <div className="flex items-center gap-4 flex-wrap">
@@ -2213,6 +2199,7 @@ export default function VendorProductsPage() {
                             </div>
                         )}
                     </div>
+                    </>
                 )}
             </div>
 
@@ -2233,7 +2220,7 @@ export default function VendorProductsPage() {
                         className="fixed top-0 left-0 h-full w-full bg-white z-[70] shadow-2xl flex flex-col animate-in slide-in-from-left duration-300"
                     >
                         {/* Panel Header */}
-                        <div className="flex items-center justify-between px-8 py-6 border-b border-[#EEEEEE] shrink-0">
+                        <div className="flex items-center justify-between px-4 lg:px-6 py-4 border-b border-[#EEEEEE] shrink-0">
                             <div>
                                 <h2 className="text-[22px] font-[900] text-[#181725]">
                                     {editingProduct ? 'Edit Product' : 'Add Product'}
@@ -2283,35 +2270,9 @@ export default function VendorProductsPage() {
                             </button>
                         </div>
 
-                        {/* Panel Body with Side Navigation */}
-                        <div className="flex-1 flex overflow-hidden bg-[#F8F9FB]">
-                            {/* Left Sidebar: 9 Groups */}
-                            <div className="w-[240px] bg-white border-r border-[#EEEEEE] overflow-y-auto shrink-0 py-6 px-4 flex flex-col gap-1.5">
-                                {PRODUCT_FORM_TABS.map(tab => {
-                                    const isActive = activeTab === tab.id;
-                                    const Icon = tab.icon;
-                                    return (
-                                        <button
-                                            key={tab.id}
-                                            type="button"
-                                            onClick={() => setActiveTab(tab.id)}
-                                            className={cn(
-                                                "flex items-center gap-3 px-4 py-3 rounded-xl text-[13px] font-bold transition-all outline-none text-left",
-                                                isActive
-                                                    ? "bg-[#299E60]/10 text-[#299E60]"
-                                                    : "text-[#7C7C7C] hover:bg-gray-50 hover:text-[#181725]"
-                                            )}
-                                        >
-                                            <Icon size={16} strokeWidth={isActive ? 2.5 : 2} className={cn(isActive ? "text-[#299E60]" : "text-[#AEAEAE]")} />
-                                            {tab.label}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Right Content Area */}
-                            <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
-                                <form id="vendor-product-form" onSubmit={handleSubmit} className="space-y-6">
+                        <div className="flex-1 overflow-y-auto bg-[#F8F9FB] px-4 lg:px-6 py-4">
+                            <div className="w-full">
+                                <form id="vendor-product-form" onSubmit={handleSubmit} className="space-y-8">
                                     {loadingProduct ? (
                                         <div className="flex items-center justify-center py-32">
                                             <Loader2 className="animate-spin text-[#299E60]" size={32} />
@@ -2338,9 +2299,7 @@ export default function VendorProductsPage() {
                                         </div>
                                     )}
 
-                                    {activeTab === 'identity' && (
-                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                            <SectionHeader icon={<Info size={16} />} title="Identity" />
+                                    <FormSection title="Product essentials" icon={<Info size={16} />} requiredBadge sectionId="essentials">
 
                                             {(!editingProduct || editingProduct.approvalStatus === 'rejected') && (
                                                 identityFromCatalog ? (
@@ -2514,26 +2473,40 @@ export default function VendorProductsPage() {
                                                 </div>
                                             )}
 
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div id="ff-brand">
-                                                    <FieldLabel>Brand</FieldLabel>
-                                                    <BrandSinglePicker
-                                                        value={form.brand}
-                                                        onChange={(val) => updateField('brand', val)}
-                                                        brands={brands}
-                                                        onSuggest={(name) => suggestBrand(name)}
-                                                        suggesting={brandSuggesting}
-                                                    />
+                                            {!masterProductId && (
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div id="ff-sku">
+                                                        <FieldLabel required>SKU</FieldLabel>
+                                                        <input type="text" value={form.sku} onChange={(e) => updateField('sku', e.target.value)} className={cn(inputCls, fieldErrors.sku && 'border-[#E74C3C]')} />
+                                                        {fieldErrors.sku && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.sku}</p>}
+                                                    </div>
+                                                    <div id="ff-hsn">
+                                                        <FieldLabel required>HSN Code</FieldLabel>
+                                                        <input type="text" value={form.hsn} onChange={(e) => updateField('hsn', e.target.value)} className={cn(inputCls, fieldErrors.hsn && 'border-[#E74C3C]')} />
+                                                        {fieldErrors.hsn && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.hsn}</p>}
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <FieldLabel>Description</FieldLabel>
-                                                    <textarea
-                                                        value={form.description}
-                                                        onChange={(e) => updateField('description', e.target.value)}
-                                                        rows={3}
-                                                        className={textareaCls}
-                                                    />
+                                            )}
+
+                                            {masterProductId && (
+                                                <div id="ff-hsn">
+                                                    <FieldLabel required>HSN Code</FieldLabel>
+                                                    <input type="text" value={form.hsn} onChange={(e) => updateField('hsn', e.target.value)} className={cn(inputCls, fieldErrors.hsn && 'border-[#E74C3C]')} />
+                                                    {fieldErrors.hsn && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.hsn}</p>}
                                                 </div>
+                                            )}
+
+                                            <div id="ff-brand">
+                                                <FieldLabel required>Brand</FieldLabel>
+                                                <BrandSinglePicker
+                                                    value={form.brand}
+                                                    onChange={(val) => updateField('brand', val)}
+                                                    brands={brands}
+                                                    onSuggest={(name) => suggestBrand(name)}
+                                                    suggesting={brandSuggesting}
+                                                    hasError={!!fieldErrors.brand}
+                                                />
+                                                {fieldErrors.brand && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.brand}</p>}
                                             </div>
 
                                             <div id="ff-categoryIds">
@@ -2561,117 +2534,141 @@ export default function VendorProductsPage() {
                                                 )}
                                             </div>
 
-                                            <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
-                                                <FieldLabel>Media</FieldLabel>
+                                            <div id="ff-imageUrl">
+                                                <FieldLabel required>Image URL</FieldLabel>
                                                 <ImageUpload
                                                     value={form.imageUrl}
                                                     onChange={(url) => updateField('imageUrl', url)}
                                                     label="Primary Image"
                                                 />
-                                                <MultiImageUpload
-                                                    values={form.images.filter(Boolean)}
-                                                    onChange={(urls) => updateField('images', urls)}
-                                                    label="Additional Images"
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {activeTab === 'status' && (
-                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                            <SectionHeader icon={<Clock size={16} />} title="Status" />
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <FieldLabel>Item Status</FieldLabel>
-                                                    <select
-                                                        value={form.itemStatus}
-                                                        onChange={e => updateField('itemStatus', e.target.value)}
-                                                        className={selectCls}
-                                                    >
-                                                        <option value="Active">Active</option>
-                                                        <option value="Inactive">Inactive</option>
-                                                        <option value="Draft">Draft</option>
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <FieldLabel>Veg / Non-Veg</FieldLabel>
-                                                    <select
-                                                        value={form.vegNonVeg}
-                                                        onChange={e => updateField('vegNonVeg', e.target.value as '' | 'veg' | 'nonveg' | 'egg')}
-                                                        className={selectCls}
-                                                    >
-                                                        <option value="">Not Specified</option>
-                                                        <option value="veg">🟢 Veg</option>
-                                                        <option value="nonveg">🔴 Non-Veg</option>
-                                                        <option value="egg">🟡 Egg</option>
-                                                    </select>
-                                                </div>
+                                                {fieldErrors.imageUrl && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.imageUrl}</p>}
                                             </div>
 
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <FieldLabel>Storage Type</FieldLabel>
-                                                    <select
-                                                        value={form.storageType}
-                                                        onChange={e => updateField('storageType', e.target.value)}
-                                                        className={selectCls}
-                                                    >
-                                                        <option value="">Not specified</option>
-                                                        <option value="ambient">Ambient (Room Temp)</option>
-                                                        <option value="refrigerated">Refrigerated (2–8°C)</option>
-                                                        <option value="frozen">Frozen (−18°C)</option>
-                                                        <option value="dry">Dry Storage</option>
-                                                        <option value="cool">Cool / Dark (10–15°C)</option>
-                                                    </select>
+                                            <div id="ff-basePrice">
+                                                <FieldLabel required>Taxable Rate (ex-GST)</FieldLabel>
+                                                <div className="relative max-w-md">
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">₹</span>
+                                                    <input type="number" min="0" step="0.01" value={form.basePrice} onChange={(e) => updateField('basePrice', e.target.value)} className={cn(inputCls, 'pl-7', fieldErrors.basePrice && 'border-[#E74C3C]')} />
                                                 </div>
-                                                <div className="flex items-center pt-6">
-                                                    <label className="flex items-center gap-3 cursor-pointer">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={form.activeOnlineStore}
-                                                            onChange={(e) => updateField('activeOnlineStore', e.target.checked)}
-                                                            className="w-5 h-5 accent-[#299E60]"
-                                                        />
-                                                        <div>
-                                                            <span className="text-[13.5px] font-bold text-[#181725]">Active on Online Store</span>
-                                                            <p className="text-[11px] text-[#AEAEAE]">Show this product in the buyer catalog</p>
-                                                        </div>
-                                                    </label>
-                                                </div>
+                                                {fieldErrors.basePrice && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.basePrice}</p>}
                                             </div>
-                                        </div>
-                                    )}
 
-                                    {activeTab === 'pricing' && (
-                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                            <SectionHeader icon={<DollarSign size={16} />} title="Pricing & Tax" />
-                                            
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div id="ff-basePrice">
-                                                    <FieldLabel required>Taxable Rate (ex-GST)</FieldLabel>
-                                                    <div className="relative">
-                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE] font-medium">₹</span>
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            step="0.01"
-                                                            value={form.basePrice}
-                                                            onChange={e => {
-                                                                const base = e.target.value;
-                                                                updateField('basePrice', base);
-                                                                const tp = parseFloat(form.taxPercent || '0');
-                                                                const b = parseFloat(base);
-                                                                if (!isNaN(b) && !isNaN(tp)) {
-                                                                    updateField('originalPrice', (b * (1 + tp / 100)).toFixed(2));
-                                                                }
-                                                            }}
-                                                            placeholder="0.00"
-                                                            className={cn(inputCls, 'pl-7', fieldErrors.basePrice && 'border-[#E74C3C] focus:border-[#E74C3C]')}
-                                                        />
+                                            <div className="space-y-3 pt-2 border-t border-[#EEEEEE]">
+                                                <h4 className="text-[13px] font-bold text-[#181725]">Tax details</h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div id="ff-intraStateTaxName">
+                                                        <FieldLabel required>Intra State Tax Name</FieldLabel>
+                                                        <input type="text" value={form.intraStateTaxName} onChange={e => updateField('intraStateTaxName', e.target.value)} className={cn(inputCls, fieldErrors.intraStateTaxName && 'border-[#E74C3C]')} />
                                                     </div>
-                                                    {fieldErrors.basePrice && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.basePrice}</p>}
+                                                    <div id="ff-intraStateTaxRate">
+                                                        <FieldLabel required>Intra State Tax Rate</FieldLabel>
+                                                        <input type="number" step="0.01" value={form.intraStateTaxRate} onChange={e => updateField('intraStateTaxRate', e.target.value)} className={cn(inputCls, fieldErrors.intraStateTaxRate && 'border-[#E74C3C]')} />
+                                                    </div>
+                                                    <div id="ff-intraStateTaxType">
+                                                        <FieldLabel required>Intra State Tax Type</FieldLabel>
+                                                        <input type="text" value={form.intraStateTaxType} onChange={e => updateField('intraStateTaxType', e.target.value)} className={cn(inputCls, fieldErrors.intraStateTaxType && 'border-[#E74C3C]')} />
+                                                    </div>
                                                 </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div id="ff-interStateTaxName">
+                                                        <FieldLabel required>Inter State Tax Name</FieldLabel>
+                                                        <input type="text" value={form.interStateTaxName} onChange={e => updateField('interStateTaxName', e.target.value)} className={cn(inputCls, fieldErrors.interStateTaxName && 'border-[#E74C3C]')} />
+                                                    </div>
+                                                    <div id="ff-interStateTaxRate">
+                                                        <FieldLabel required>Inter State Tax Rate</FieldLabel>
+                                                        <input type="number" step="0.01" value={form.interStateTaxRate} onChange={e => updateField('interStateTaxRate', e.target.value)} className={cn(inputCls, fieldErrors.interStateTaxRate && 'border-[#E74C3C]')} />
+                                                    </div>
+                                                    <div id="ff-interStateTaxType">
+                                                        <FieldLabel required>Inter State Tax Type</FieldLabel>
+                                                        <input type="text" value={form.interStateTaxType} onChange={e => updateField('interStateTaxType', e.target.value)} className={cn(inputCls, fieldErrors.interStateTaxType && 'border-[#E74C3C]')} />
+                                                    </div>
+                                                </div>
+                                            </div>
 
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div id="ff-countryOfOrigin">
+                                                    <FieldLabel required>Country of Origin</FieldLabel>
+                                                    <input type="text" value={form.countryOfOrigin} onChange={e => updateField('countryOfOrigin', e.target.value)} className={cn(inputCls, fieldErrors.countryOfOrigin && 'border-[#E74C3C]')} />
+                                                </div>
+                                                <div id="ff-vegNonVeg">
+                                                    <FieldLabel required>Veg / Non-Veg</FieldLabel>
+                                                    <select value={form.vegNonVeg} onChange={e => updateField('vegNonVeg', e.target.value as '' | 'veg' | 'nonveg' | 'egg')} className={cn(selectCls, fieldErrors.vegNonVeg && 'border-[#E74C3C]')}>
+                                                        <option value="">Select…</option>
+                                                        <option value="veg">Veg</option>
+                                                        <option value="nonveg">Non-Veg</option>
+                                                        <option value="egg">Egg</option>
+                                                    </select>
+                                                </div>
+                                                <div id="ff-storageType">
+                                                    <FieldLabel required>Storage type</FieldLabel>
+                                                    <select value={form.storageType} onChange={e => updateField('storageType', e.target.value)} className={cn(selectCls, fieldErrors.storageType && 'border-[#E74C3C]')}>
+                                                        <option value="">Select…</option>
+                                                        <option value="ambient">Ambient</option>
+                                                        <option value="refrigerated">Refrigerated</option>
+                                                        <option value="frozen">Frozen</option>
+                                                        <option value="dry">Dry Storage</option>
+                                                        <option value="cool">Cool / Dark</option>
+                                                    </select>
+                                                </div>
+                                                <div id="ff-shelfLifeDays">
+                                                    <FieldLabel required>Shelf Life (days)</FieldLabel>
+                                                    <input type="number" min="0" value={form.shelfLifeDays} onChange={e => updateField('shelfLifeDays', e.target.value)} className={cn(inputCls, fieldErrors.shelfLifeDays && 'border-[#E74C3C]')} />
+                                                </div>
+                                                <div id="ff-minOrderQty">
+                                                    <FieldLabel required>MOQ</FieldLabel>
+                                                    <input type="number" min="1" value={form.minOrderQty} onChange={e => updateField('minOrderQty', e.target.value)} className={cn(inputCls, fieldErrors.minOrderQty && 'border-[#E74C3C]')} />
+                                                </div>
+                                                <div id="ff-variantMapping">
+                                                    <FieldLabel required>Variant Mapping</FieldLabel>
+                                                    <input type="text" value={form.variantMapping} onChange={e => updateField('variantMapping', e.target.value)} className={cn(inputCls, fieldErrors.variantMapping && 'border-[#E74C3C]')} />
+                                                </div>
+                                            </div>
+
+                                            <div id="ff-substituteIds">
+                                                <FieldLabel required>Substitute Mapping</FieldLabel>
+                                                <SubstituteProductPicker
+                                                    selectedIds={form.substituteIds}
+                                                    currentProductId={editingProduct?.id}
+                                                    products={products}
+                                                    onChange={(ids) => updateField('substituteIds', ids)}
+                                                />
+                                                {fieldErrors.substituteIds && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.substituteIds}</p>}
+                                            </div>
+                                </FormSection>
+
+                                <FormSection title="Status & availability" icon={<Clock size={16} />} sectionId="status">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel>Item Status</FieldLabel>
+                                                <select
+                                                    value={form.itemStatus}
+                                                    onChange={e => updateField('itemStatus', e.target.value)}
+                                                    className={selectCls}
+                                                >
+                                                    <option value="Active">Active</option>
+                                                    <option value="Inactive">Inactive</option>
+                                                    <option value="Draft">Draft</option>
+                                                </select>
+                                            </div>
+                                            <div className="flex items-center pt-2 md:pt-6">
+                                                <label className="flex items-center gap-3 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={form.activeOnlineStore}
+                                                        onChange={(e) => updateField('activeOnlineStore', e.target.checked)}
+                                                        className="w-5 h-5 accent-[#299E60]"
+                                                    />
+                                                    <div>
+                                                        <span className="text-[13.5px] font-bold text-[#181725]">Active on Online Store</span>
+                                                        <p className="text-[11px] text-[#AEAEAE]">Show this product in the buyer catalog</p>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                </FormSection>
+
+                                <FormSection title="Pricing & tax" icon={<DollarSign size={16} />} sectionId="pricing">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div>
                                                     <FieldLabel>Tax % (GST)</FieldLabel>
                                                     <select
@@ -2761,12 +2758,9 @@ export default function VendorProductsPage() {
                                                     </div>
                                                 )}
                                             </div>
-                                        </div>
-                                    )}
+                                </FormSection>
 
-                                    {activeTab === 'accounting' && (
-                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                            <SectionHeader icon={<SettingsIcon size={16} />} title="Accounting Details" />
+                                <FormSection title="Accounting" icon={<SettingsIcon size={16} />} sectionId="accounting">
                                             
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
@@ -2827,84 +2821,9 @@ export default function VendorProductsPage() {
                                                     />
                                                 </div>
                                             </div>
+                                </FormSection>
 
-                                            <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
-                                                <h4 className="text-[14px] font-bold text-[#181725]">Tax Group Settings</h4>
-                                                
-                                                <div className="grid grid-cols-3 gap-4">
-                                                    <div>
-                                                        <FieldLabel>Intra-State Tax Name</FieldLabel>
-                                                        <input
-                                                            type="text"
-                                                            value={form.intraStateTaxName}
-                                                            onChange={e => updateField('intraStateTaxName', e.target.value)}
-                                                            placeholder="e.g. SGST+CGST"
-                                                            className={inputCls}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <FieldLabel>Intra-State Tax Rate</FieldLabel>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            value={form.intraStateTaxRate}
-                                                            onChange={e => updateField('intraStateTaxRate', e.target.value)}
-                                                            placeholder="e.g. 18.00"
-                                                            className={inputCls}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <FieldLabel>Intra-State Tax Type</FieldLabel>
-                                                        <input
-                                                            type="text"
-                                                            value={form.intraStateTaxType}
-                                                            onChange={e => updateField('intraStateTaxType', e.target.value)}
-                                                            placeholder="e.g. Tax Group"
-                                                            className={inputCls}
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div className="grid grid-cols-3 gap-4">
-                                                    <div>
-                                                        <FieldLabel>Inter-State Tax Name</FieldLabel>
-                                                        <input
-                                                            type="text"
-                                                            value={form.interStateTaxName}
-                                                            onChange={e => updateField('interStateTaxName', e.target.value)}
-                                                            placeholder="e.g. IGST"
-                                                            className={inputCls}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <FieldLabel>Inter-State Tax Rate</FieldLabel>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            value={form.interStateTaxRate}
-                                                            onChange={e => updateField('interStateTaxRate', e.target.value)}
-                                                            placeholder="e.g. 18.00"
-                                                            className={inputCls}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <FieldLabel>Inter-State Tax Type</FieldLabel>
-                                                        <input
-                                                            type="text"
-                                                            value={form.interStateTaxType}
-                                                            onChange={e => updateField('interStateTaxType', e.target.value)}
-                                                            placeholder="e.g. Tax"
-                                                            className={inputCls}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {activeTab === 'inventory' && (
-                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                            <SectionHeader icon={<BarChart3 size={16} />} title="Inventory Settings" />
+                                <FormSection title="Inventory" icon={<BarChart3 size={16} />} sectionId="inventory">
                                             
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
@@ -2957,12 +2876,9 @@ export default function VendorProductsPage() {
                                                     </label>
                                                 </div>
                                             </div>
-                                        </div>
-                                    )}
+                                </FormSection>
 
-                                    {activeTab === 'packaging' && (
-                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                            <SectionHeader icon={<Package size={16} />} title="Packaging & Dimensions" />
+                                <FormSection title="Packaging & dimensions" icon={<Package size={16} />} sectionId="packaging">
                                             
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
@@ -3066,41 +2982,12 @@ export default function VendorProductsPage() {
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    )}
+                                </FormSection>
 
-                                    {activeTab === 'identifiers' && (
-                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                            <SectionHeader icon={<Tag size={16} />} title="Product Identifiers" />
-                                            
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <FieldLabel required>SKU</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={form.sku}
-                                                        onChange={e => updateField('sku', e.target.value.toUpperCase())}
-                                                        placeholder="RIC-BAS-001"
-                                                        readOnly={!!masterProductId}
-                                                        className={cn(inputCls, masterProductId && 'bg-[#F8F9FB] cursor-not-allowed')}
-                                                    />
-                                                    {fieldErrors.sku && <p className="text-[11px] text-[#E74C3C] font-semibold mt-1.5">{fieldErrors.sku}</p>}
-                                                </div>
-                                                <div>
-                                                    <FieldLabel>HSN Code</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={form.hsn}
-                                                        onChange={e => updateField('hsn', e.target.value)}
-                                                        placeholder="e.g. 1006"
-                                                        className={inputCls}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#EEEEEE]">
-                                                <div>
-                                                    <FieldLabel>EAN</FieldLabel>
+                                <FormSection title="Additional identifiers" icon={<Tag size={16} />} sectionId="identifiers">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel>EAN</FieldLabel>
                                                     <input
                                                         type="text"
                                                         value={form.ean}
@@ -3133,26 +3020,36 @@ export default function VendorProductsPage() {
                                                     />
                                                 </div>
                                             </div>
-                                        </div>
-                                    )}
+                                </FormSection>
 
-                                    {activeTab === 'attributes' && (
-                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                            <SectionHeader icon={<BoxIcon size={16} />} title="Product Attributes" />
-                                            
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <FieldLabel>Country of Origin</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={form.countryOfOrigin}
-                                                        onChange={e => updateField('countryOfOrigin', e.target.value)}
-                                                        placeholder="e.g. India"
-                                                        className={inputCls}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <FieldLabel>FSSAI Reference</FieldLabel>
+                                <FormSection title="Additional details" icon={<BoxIcon size={16} />} sectionId="details">
+                                        <div>
+                                            <FieldLabel>Description</FieldLabel>
+                                            <textarea
+                                                value={form.description}
+                                                onChange={e => updateField('description', e.target.value)}
+                                                rows={3}
+                                                className={textareaCls}
+                                                placeholder="Enter product description"
+                                            />
+                                        </div>
+                                        <MultiImageUpload
+                                            values={form.images.filter(Boolean)}
+                                            onChange={(urls) => setForm(prev => ({ ...prev, images: urls }))}
+                                            folder="products"
+                                            label="Additional Images"
+                                            max={8}
+                                        />
+                                        <div>
+                                            <FieldLabel>Tags</FieldLabel>
+                                            <TagInput
+                                                tags={form.tags}
+                                                onChange={(tags) => updateField('tags', tags)}
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <FieldLabel>FSSAI Reference</FieldLabel>
                                                     <input
                                                         type="text"
                                                         value={form.fssaiRef}
@@ -3257,41 +3154,13 @@ export default function VendorProductsPage() {
                                                     </div>
                                                 </label>
                                             </div>
+                                </FormSection>
 
-                                            <div className="space-y-4 pt-4 border-t border-[#EEEEEE]">
-                                                <div>
-                                                    <FieldLabel>Variant Mapping</FieldLabel>
-                                                    <input
-                                                        type="text"
-                                                        value={form.variantMapping}
-                                                        onChange={e => updateField('variantMapping', e.target.value)}
-                                                        placeholder="e.g. size:large, color:red"
-                                                        className={inputCls}
-                                                    />
-                                                </div>
-                                                
-                                                <div>
-                                                    <FieldLabel>Substitute Products</FieldLabel>
-                                                    <SubstituteProductPicker
-                                                        selectedIds={form.substituteIds}
-                                                        currentProductId={editingProduct?.id}
-                                                        products={products}
-                                                        onChange={(ids) => updateField('substituteIds', ids)}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {activeTab === 'bulk' && (
-                                        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-6 space-y-4">
-                                            <div className="flex items-start justify-between">
-                                                <div>
-                                                    <SectionHeader icon={<Tag size={16} />} title="Bulk Pricing Tiers" />
-                                                    <p className="text-[12px] text-[#AEAEAE] font-medium -mt-3 ml-[42px]">
-                                                        Up to 3 quantity-based discount tiers (taxable rate, ex-GST)
-                                                    </p>
-                                                </div>
+                                <FormSection title="Bulk pricing tiers" icon={<Tag size={16} />} sectionId="bulk">
+                                            <div className="flex items-start justify-between gap-4 mb-2">
+                                                <p className="text-[12px] text-[#AEAEAE] font-medium">
+                                                    Up to 3 quantity-based discount tiers (taxable rate, ex-GST)
+                                                </p>
                                                 {form.priceSlabs.length < 3 && (
                                                     <button
                                                         type="button"
@@ -3388,8 +3257,7 @@ export default function VendorProductsPage() {
                                                     </div>
                                                 )}
                                             </div>
-                                        </div>
-                                    )}
+                                </FormSection>
 
                                     {editingProduct && auditLogs.length > 0 && (
                                         <div className="border border-[#EEEEEE] rounded-[12px] p-4 space-y-2">
@@ -3403,7 +3271,7 @@ export default function VendorProductsPage() {
                         </div>
 
                         {/* Panel Footer */}
-                        <div className="px-8 py-6 border-t border-[#EEEEEE] shrink-0 flex items-center gap-4">
+                        <div className="px-4 lg:px-6 py-4 border-t border-[#EEEEEE] shrink-0 flex items-center gap-3">
                             <button
                                 type="button"
                                 onClick={requestClosePanel}
@@ -3412,9 +3280,18 @@ export default function VendorProductsPage() {
                                 Cancel
                             </button>
                             <button
+                                type="button"
+                                onClick={() => void saveDraft(true)}
+                                disabled={draftSaving || saving || loadingProduct}
+                                className="flex-1 h-[48px] bg-[#FFCF4D] border border-[#E6B800] text-[#4A3800] rounded-[12px] text-[14px] font-bold hover:bg-[#F5C542] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                            >
+                                {draftSaving && <Loader2 size={16} className="animate-spin" />}
+                                Save as Draft
+                            </button>
+                            <button
                                 type="submit"
                                 form="vendor-product-form"
-                                disabled={saving || loadingProduct}
+                                disabled={saving || loadingProduct || draftSaving}
                                 className="flex-1 h-[48px] bg-[#299E60] text-white rounded-[12px] text-[14px] font-bold hover:bg-[#238a54] transition-all flex items-center justify-center gap-2 shadow-sm shadow-[#299E60]/20 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                                 {saving && <Loader2 size={16} className="animate-spin" />}
@@ -3524,11 +3401,21 @@ export default function VendorProductsPage() {
             <VendorBulkGrid
                 open={gridOpen}
                 onClose={() => setGridOpen(false)}
-                products={products}
+                products={products.map((p) => ({
+                    ...p,
+                    sku: p.vendorSku || p.sku,
+                    categoryName: p.category?.name ?? '',
+                    basePrice: Number(p.basePrice) || 0,
+                    barcode: p.barcode,
+                    aliasNames: p.aliasNames,
+                    countryOfOrigin: p.countryOfOrigin,
+                    metadata: p.metadata as Record<string, unknown> | undefined,
+                }))}
                 onComplete={() => fetchProducts(false)}
                 categories={categories}
                 brands={brands}
                 onOpenAdvanced={() => setBulkOpen(true)}
+                readOnlyCommission
             />
 
             {/* Floating selection action bar */}
