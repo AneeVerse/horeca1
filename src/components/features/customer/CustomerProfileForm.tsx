@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { AddressAutocomplete, type AddressPickPayload } from '@/components/ui/AddressAutocomplete';
 import {
   FormField, FormInput, FormSelect, FormTextarea, TextField, PhoneInput, SectionLabel, inputClass,
+  PasswordInput, PasswordToggleButton,
 } from '@/components/ui/form';
 import {
   SALUTATIONS, GST_TREATMENTS, PAYMENT_TERMS, LANGUAGES, INDIAN_STATES,
@@ -325,14 +326,19 @@ export function CustomerProfileForm({
               {showPassword && onPasswordChange && (
                 <FormField label="Password" hint="optional — skip OTP next time" className={SPAN_TWO}
                   error={errors.password}>
-                  <FormInput type={passwordVisible ? 'text' : 'password'} value={password}
-                    onChange={onPasswordChange} placeholder="At least 6 characters" autoComplete="new-password"
-                    hasError={!!errors.password}
-                    rightSlot={showPasswordToggle && onTogglePassword ? (
-                      <button type="button" onClick={onTogglePassword} className="text-gray-400 hover:text-gray-600">
-                        {passwordVisible ? 'Hide' : 'Show'}
-                      </button>
-                    ) : undefined} />
+                  {showPasswordToggle ? (
+                    <PasswordInput value={password} onChange={onPasswordChange}
+                      placeholder="At least 6 characters" autoComplete="new-password"
+                      hasError={!!errors.password} />
+                  ) : (
+                    <FormInput type={passwordVisible ? 'text' : 'password'} value={password}
+                      onChange={onPasswordChange} placeholder="At least 6 characters" autoComplete="new-password"
+                      hasError={!!errors.password}
+                      rightSlot={onTogglePassword ? (
+                        <PasswordToggleButton visible={!!passwordVisible} onToggle={onTogglePassword}
+                          className="static translate-y-0" />
+                      ) : undefined} />
+                  )}
                 </FormField>
               )}
             </>

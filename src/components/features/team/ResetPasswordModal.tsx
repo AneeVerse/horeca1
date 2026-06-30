@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { KeyRound, X, AlertCircle, Loader2, Shuffle, Copy, Check } from 'lucide-react';
+import { PasswordField } from '@/components/ui/form';
 
 interface Props {
   member: { user: { fullName: string; email: string | null; phone: string | null } };
@@ -89,9 +90,14 @@ export function ResetPasswordModal({ member, passwordEndpoint, accent, onClose, 
             <div>
               <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">New Password</label>
               <div className="flex gap-2">
-                <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)}
+                <PasswordField
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={setPassword}
                   placeholder="Min. 6 characters"
-                  className="flex-1 h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none bg-[#FAFAFA] focus:bg-white transition-colors" />
+                  wrapperClassName="flex-1"
+                  inputClassName="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none bg-[#FAFAFA] focus:bg-white transition-colors focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10"
+                />
                 {showGenerate && (
                   <>
                     <button type="button" onClick={handleGenerate} title="Generate password"

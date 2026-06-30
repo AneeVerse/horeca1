@@ -19,8 +19,9 @@
  *   accent   #299E60   gradient from #53B175 → #299E60
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { PasswordToggleButton } from './PasswordField';
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 export const FORM = {
@@ -206,4 +207,28 @@ export function PhoneInput({
 // ─── Section / group heading ────────────────────────────────────────────────
 export function SectionLabel({ children, className }: { children: React.ReactNode; className?: string }) {
   return <p className={cn('text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider', className)}>{children}</p>;
+}
+
+export { PasswordField, PasswordToggleButton } from './PasswordField';
+
+export function PasswordInput({ value, onChange, hasError, className, ...rest }: FormInputProps) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <FormInput
+      value={value}
+      onChange={onChange}
+      hasError={hasError}
+      type={visible ? 'text' : 'password'}
+      className={className}
+      rightSlot={
+        <PasswordToggleButton
+          visible={visible}
+          onToggle={() => setVisible((v) => !v)}
+          className="static translate-y-0"
+        />
+      }
+      {...rest}
+    />
+  );
 }

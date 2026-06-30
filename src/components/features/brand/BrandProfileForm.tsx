@@ -6,12 +6,12 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Building2, User, MapPin, Globe, Target, ChevronDown, ChevronUp, Check, ShieldCheck, Eye, EyeOff,
+  Building2, User, MapPin, Globe, Target, ChevronDown, ChevronUp, Check, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddressAutocomplete, type AddressPickPayload } from '@/components/ui/AddressAutocomplete';
 import {
-  FormField, FormInput, FormSelect, FormTextarea, TextField, PhoneInput,
+  FormField, FormInput, FormSelect, FormTextarea, TextField, PhoneInput, PasswordInput,
 } from '@/components/ui/form';
 import {
   BRAND_TYPES,
@@ -393,18 +393,12 @@ export function BrandProfileForm({
           <>
             <SectionHeader icon={User} spanClass={SPAN_FULL}>Owner Account</SectionHeader>
             <FormField label="Password" required error={errors.password}>
-              <FormInput
+              <PasswordInput
                 value={password}
                 onChange={onPasswordChange}
-                type={passwordVisible ? 'text' : 'password'}
                 placeholder="Min 6 characters"
                 hasError={!!errors.password}
-                rightSlot={showPasswordToggle && onTogglePassword ? (
-                  <button type="button" onClick={onTogglePassword} tabIndex={-1}
-                    className="text-gray-400 hover:text-gray-600">
-                    {passwordVisible ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                ) : undefined}
+                autoComplete="new-password"
               />
             </FormField>
           </>

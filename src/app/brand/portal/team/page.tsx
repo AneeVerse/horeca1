@@ -11,6 +11,7 @@ import { RoleCardsGrid } from '@/components/features/team/RoleCardsGrid';
 import { TeamMemberList } from '@/components/features/team/TeamMemberList';
 import { MODULES } from '@/lib/permissions/registry';
 import { toast } from 'sonner';
+import { PasswordField } from '@/components/ui/form';
 
 const ACCENT = '#53B175';
 const ACCENT_HOVER = '#3d9e41';
@@ -311,8 +312,12 @@ function InviteModal({ roles, onClose, onInvited }: { roles: BrandRole[]; onClos
                                 </div>
                                 <div>
                                     <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Password</label>
-                                    <input type="password" name="newPassword" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="New accounts only"
-                                        className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#53B175]/40 bg-[#FAFAFA] focus:bg-white transition-colors" />
+                                    <PasswordField
+                                        name="newPassword" autoComplete="new-password"
+                                        value={password} onChange={setPassword}
+                                        placeholder="New accounts only"
+                                        inputClassName="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#53B175]/40 focus:ring-2 focus:ring-[#53B175]/10 bg-[#FAFAFA] focus:bg-white transition-colors"
+                                    />
                                 </div>
                             </div>
                             {error && (

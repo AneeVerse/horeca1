@@ -13,6 +13,7 @@ import { TeamPageHeader } from '@/components/features/team/TeamPageHeader';
 import { RoleCardsGrid } from '@/components/features/team/RoleCardsGrid';
 import { TeamMemberList } from '@/components/features/team/TeamMemberList';
 import { MODULES } from '@/lib/permissions/registry';
+import { PasswordField } from '@/components/ui/form';
 import { toast } from 'sonner';
 
 const ACCENT = '#E74C3C';
@@ -339,8 +340,12 @@ function InviteModal({ roles, onClose, onInvited }: { roles: AdminRole[]; onClos
                                 </div>
                                 <div>
                                     <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">Password</label>
-                                    <input type="password" name="newPassword" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="New accounts only"
-                                        className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#E74C3C]/40 bg-[#FAFAFA] focus:bg-white transition-colors" />
+                                    <PasswordField
+                                        name="newPassword" autoComplete="new-password"
+                                        value={password} onChange={setPassword}
+                                        placeholder="New accounts only"
+                                        inputClassName="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#E74C3C]/40 focus:ring-2 focus:ring-[#E74C3C]/10 bg-[#FAFAFA] focus:bg-white transition-colors"
+                                    />
                                 </div>
                             </div>
                             {error && (

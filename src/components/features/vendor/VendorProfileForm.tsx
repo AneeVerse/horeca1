@@ -10,7 +10,7 @@ import { Building2, MapPin, Receipt, User, ShieldCheck, Truck } from 'lucide-rea
 import { cn } from '@/lib/utils';
 import { AddressAutocomplete, type AddressPickPayload } from '@/components/ui/AddressAutocomplete';
 import {
-  FormField, FormInput, FormSelect, FormTextarea, TextField, SectionLabel, inputClass,
+  FormField, FormInput, FormSelect, FormTextarea, TextField, SectionLabel, inputClass, PasswordField,
 } from '@/components/ui/form';
 import {
   VENDOR_BUSINESS_TYPES, subTypesForVendorType, categoriesForSubType,
@@ -244,21 +244,13 @@ export function VendorProfileForm({
           <>
             <SectionHeader icon={ShieldCheck} spanClass={SPAN_FULL}>Account Access</SectionHeader>
             <FormField label="Password (optional)" className={SPAN_FULL}>
-              <div className="relative">
-                <input
-                  type={passwordVisible ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => onPasswordChange(e.target.value)}
-                  placeholder="Min 6 characters"
-                  className={inputClass(!!errors.password)}
-                />
-                {showPasswordToggle && onTogglePassword && (
-                  <button type="button" onClick={onTogglePassword}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-gray-400">
-                    {passwordVisible ? 'Hide' : 'Show'}
-                  </button>
-                )}
-              </div>
+              <PasswordField
+                value={password}
+                onChange={onPasswordChange}
+                placeholder="Min 6 characters"
+                autoComplete="new-password"
+                inputClassName={inputClass(!!errors.password)}
+              />
               {errors.password && <p className="text-[11px] text-red-600 font-medium mt-1">{errors.password}</p>}
             </FormField>
           </>

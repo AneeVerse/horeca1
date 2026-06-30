@@ -6,6 +6,7 @@ import {
   Loader2, AlertCircle, Store, ShoppingCart, CreditCard, Eye,
   Crown, Shield, Users, DollarSign, Package, Archive, Edit3,
 } from 'lucide-react';
+import { PasswordField } from '@/components/ui/form';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -448,11 +449,11 @@ function Step1UserInfo({
           <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
             Password <span className="text-[#AEAEAE] font-normal normal-case">(new accounts)</span>
           </label>
-          <input
-            type="password" name="newMemberPassword" autoComplete="new-password"
-            value={password} onChange={e => setPassword(e.target.value)}
+          <PasswordField
+            name="newMemberPassword" autoComplete="new-password"
+            value={password} onChange={setPassword}
             placeholder="At least 6 characters"
-            className="w-full h-[46px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10 bg-[#FAFAFA] focus:bg-white transition-all"
+            inputClassName="w-full h-[46px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#299E60]/40 focus:ring-2 focus:ring-[#299E60]/10 bg-[#FAFAFA] focus:bg-white transition-all"
           />
         </div>
       </div>
