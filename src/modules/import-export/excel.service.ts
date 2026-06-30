@@ -15,11 +15,77 @@ const INSTRUCTION_ROW_MARKERS = [
   'system fetched',
   'system generated',
   'taxable rate; vendor provided',
+  'to make the item active',
+  'to make it visible online',
+  'refer hyperpure',
+  'non-editable field only',
+  '% of gross sale',
 ];
 
+/** Columns that must stay as exact strings (leading zeros, long IDs). */
+const ID_COLUMN_KEYS = new Set([
+  'Vendor ID',
+  'Item ID',
+  'SKU',
+  'HSN',
+  'HSN Code',
+  'UPC',
+  'EAN',
+  'ISBN',
+  'Reference ID',
+]);
+
+function stringifyIdValue(val: unknown): string | undefined {
+  if (val === undefined || val === null || val === '') return undefined;
+  if (typeof val === 'number') {
+    if (Number.isFinite(val) && Math.abs(val) < 1e15) {
+      return String(Math.trunc(val));
+    }
+    return val.toLocaleString('fullwide', { useGrouping: false, maximumFractionDigits: 0 });
+  }
+  const str = String(val).trim();
+  if (!str) return undefined;
+  if (/^\d+\.?\d*e[+-]?\d+$/i.test(str)) {
+    const n = Number(str);
+    if (!isNaN(n)) {
+      return n.toLocaleString('fullwide', { useGrouping: false, maximumFractionDigits: 20 });
+    }
+  }
+  return str;
+}
+
+export function normalizeVegNonVeg(raw: unknown): string | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const s = String(raw).trim().toLowerCase();
+  if (s === 'veg' || s === 'vegetarian') return 'veg';
+  if (s === 'nonveg' || s === 'non-veg' || s === 'non veg') return 'nonveg';
+  if (s === 'egg' || s === 'eggetarian') return 'egg';
+  return undefined;
+}
+
+/** Resolve image URL from explicit URL or local upload filename. */
+export function resolveImportImageUrl(imageUrl?: string, imageName?: string): string | undefined {
+  const url = imageUrl?.trim();
+  if (url) return url;
+  const name = imageName?.trim();
+  if (!name) return undefined;
+  if (name.startsWith('http://') || name.startsWith('https://')) return name;
+  return `/uploads/${name.replace(/^\/+/, '')}`;
+}
+
 function isInstructionRow(cleaned: Record<string, unknown>): boolean {
+  const values = Object.values(cleaned)
+    .map((v) => String(v ?? '').toLowerCase().trim())
+    .filter(Boolean);
+  if (values.length === 0) return true;
+
+  const instructionHits = values.filter((v) =>
+    INSTRUCTION_ROW_MARKERS.some((m) => v.includes(m)),
+  );
+  if (instructionHits.length >= 2) return true;
+
   const name = String(cleaned['Product Name'] ?? cleaned['Item Name'] ?? '').toLowerCase().trim();
-  if (!name) return true;
+  if (!name) return instructionHits.length >= 1;
   return INSTRUCTION_ROW_MARKERS.some((m) => name.includes(m));
 }
 
@@ -96,7 +162,11 @@ function cleanRow(raw: Record<string, any>): Record<string, unknown> {
     const k = HEADER_MAP[trimmedKey.toLowerCase()] ?? trimmedKey;
     let v = typeof val === 'string' ? val.trim() : val;
 
-    if (numericKeys.includes(k) && typeof v === 'string') {
+    if (ID_COLUMN_KEYS.has(k)) {
+      v = stringifyIdValue(v);
+    } else if (k === 'Veg / Non-Veg') {
+      v = normalizeVegNonVeg(v) ?? (typeof v === 'string' ? v.trim() : v);
+    } else if (numericKeys.includes(k) && typeof v === 'string') {
       const stripped = v.replace(/[₹$,%]/g, '').trim();
       if (stripped === '') {
         v = undefined;
@@ -106,6 +176,8 @@ function cleanRow(raw: Record<string, any>): Record<string, unknown> {
           v = num;
         }
       }
+    } else if (numericKeys.includes(k) && typeof v === 'number') {
+      // keep numeric
     }
 
     cleaned[k] = v;
@@ -166,7 +238,6 @@ const productImportRowSchema = z
     '6pm to 9am Bulk Rates 2 - Gross Rate / Unit': z.coerce.number().positive().optional(),
     'Available Stock': z.coerce.number().optional(),
     'Stock On Hand': z.coerce.number().optional(),
-    'product image url': z.coerce.string().optional(),
     'Image URL': z.coerce.string().optional(),
     'Image Name': z.coerce.string().optional(),
     'Alias Name': z.coerce.string().optional(),
@@ -245,6 +316,7 @@ const HEADER_MAP: Record<string, string> = (() => {
     'hsn code': 'HSN Code',
     'product image url': 'Image URL',
     'image url': 'Image URL',
+    'image name': 'Image Name',
     'image_url': 'Image URL',
     'net rate': 'Net Rate',
     'stock on hand': 'Stock On Hand',
@@ -436,11 +508,11 @@ export function parseProductImport(buffer: Buffer): ProductImportResult {
         if (raw === undefined) return undefined;
         return Math.max(0, Math.trunc(raw));
       })(),
-      imageUrl: r['Image URL'] || r['product image url'],
+      imageUrl: resolveImportImageUrl(r['Image URL'], r['Image Name']),
       imageName: r['Image Name'],
       aliasName: r['Alias Name'],
       upc: r['UPC'],
-      vegNonVeg: r['Veg / Non-Veg'],
+      vegNonVeg: normalizeVegNonVeg(r['Veg / Non-Veg']),
       storageType: r['Storage type'],
       moq: r['MOQ'],
       bulkSlabs,
@@ -509,10 +581,14 @@ export function parseProductImport(buffer: Buffer): ProductImportResult {
 export interface ProductExportRow {
   name: string;
   sku?: string | null;
+  vendorSku?: string | null;
   hsn?: string | null;
   unit?: string | null;
   brand?: string | null;
   categoryName?: string | null;
+  parentCategory?: string | null;
+  subCategory?: string | null;
+  additionalSubCategories?: string[];
   basePrice: number; // taxable rate
   taxPercent: number;
   promoPrice?: number | null; // taxable promo single unit
@@ -520,13 +596,165 @@ export interface ProductExportRow {
   imageName?: string | null;
   stock?: number;
   approvalStatus?: string;
+  barcode?: string | null;
+  aliasName?: string | null;
+  minOrderQty?: number | null;
+  vegNonVeg?: string | null;
+  storageType?: string | null;
+  vendorId?: string | null;
+  itemId?: string | null;
   // Price slabs (up to 2)
   priceSlabs?: {
     minQty: number;
     price: number; // taxable rate
     promoPrice?: number | null; // taxable promo rate
   }[];
-  metadata?: any;
+  metadata?: Record<string, unknown>;
+}
+
+/** Canonical import/export column order (Vendor_Item_Template aligned). */
+export function getImportTemplateHeaders(): string[] {
+  return [
+    'Vendor ID',
+    'Item ID',
+    ...Object.keys(productImportRowSchema.shape).filter((k) => k !== 'product image url'),
+  ];
+}
+
+const TEMPLATE_INSTRUCTIONS: Record<string, string> = {
+  'Vendor ID': 'System Fetched',
+  'Item ID': 'System Generated',
+  'Item Name': 'Vendor Provided',
+  'Product Name': 'Vendor Provided',
+  'SKU': 'Vendor Provided',
+  'HSN Code': 'Vendor Provided',
+  'HSN': 'Vendor Provided',
+  'Brand': 'Vendor Provided',
+  'Parent Category': 'Choose One',
+  'Sub-Category': 'Choose One',
+  'Additional Sub-Category': 'Choose multiple',
+  'Category': 'Choose One',
+  'Item Status': 'to make the item active / inactive',
+  'Active on Online Store': 'to make it visible online',
+  'Net Rate': 'Taxable rate; vendor provided',
+  'Taxable Rate (Amt)': 'Taxable rate; vendor provided',
+  'Account Code': 'System generated',
+  'Platform Commission': 'non-editable field only; Admin assigns from admin panel',
+  'Image URL': 'Full URL or leave blank if using Image Name',
+  'Image Name': 'Filename under /uploads',
+  'Alias Name': 'for search',
+  'UPC': 'barcode',
+  'EAN': 'barcode',
+  'Bulk Qty 1 - Quantity': 'Refer Hyperpure',
+  'Bulk Qty 1 - Net Rate / Pc': 'Refer Hyperpure',
+  'Veg / Non-Veg': 'veg, nonveg, or egg',
+};
+
+function exportCell(v: unknown): string | number {
+  if (v === undefined || v === null || v === '') return '';
+  if (typeof v === 'number') return v;
+  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+  return String(v);
+}
+
+function mapProductToImportColumns(p: ProductExportRow): Record<string, string | number> {
+  const tax = p.taxPercent || 0;
+  const slab1 = p.priceSlabs?.[0];
+  const slab2 = p.priceSlabs?.[1];
+  const meta = (p.metadata && typeof p.metadata === 'object' ? p.metadata : {}) as Record<string, unknown>;
+  const acc = (meta.accounting || {}) as Record<string, unknown>;
+  const inv = (meta.inventory || {}) as Record<string, unknown>;
+  const pkg = (meta.packaging || {}) as Record<string, unknown>;
+  const ids = (meta.identifiers || {}) as Record<string, unknown>;
+  const att = (meta.attributes || {}) as Record<string, unknown>;
+
+  return {
+    'Vendor ID': p.vendorId || String(meta.vendorId || ''),
+    'Item ID': p.itemId || String(meta.itemId || ''),
+    'Item Name': p.name,
+    'SKU': p.vendorSku || p.sku || '',
+    'HSN Code': p.hsn || '',
+    'Brand': p.brand || '',
+    'Parent Category': p.parentCategory || '',
+    'Sub-Category': p.subCategory || '',
+    'Additional Sub-Category': p.additionalSubCategories?.join(', ') || '',
+    'Category': p.categoryName || '',
+    'Net Rate': Number(p.basePrice),
+    'Taxable Rate (Amt)': Number(p.basePrice),
+    'Tax %': tax,
+    'Intra State Tax Rate': tax,
+    'Gross Rate 1Pc (visible to the Customer)': toGross(Number(p.basePrice), tax),
+    'Bulk Qty 1 - Quantity': slab1?.minQty ?? '',
+    'Bulk Qty 1 - Net Rate / Pc': slab1 ? Number(slab1.price) : '',
+    'Bulk Rates 1 - Qty': slab1?.minQty ?? '',
+    'Bulk Rates 1 - Gross Rate / Unit': slab1 ? toGross(Number(slab1.price), tax) : '',
+    'Bulk Rates 2 - Qty': slab2?.minQty ?? '',
+    'Bulk Rates 2 - Gross Rate / Unit': slab2 ? toGross(Number(slab2.price), tax) : '',
+    '6pm to 9am Promo Rate - Single Unit': p.promoPrice ? toGross(Number(p.promoPrice), tax) : '',
+    'Stock On Hand': p.stock ?? 0,
+    'Available Stock': p.stock ?? 0,
+    'MOQ': p.minOrderQty ?? 1,
+    'Image URL': p.imageUrl || '',
+    'Image Name': p.imageName || '',
+    'Alias Name': p.aliasName || '',
+    'UPC': p.barcode || '',
+    'Veg / Non-Veg': p.vegNonVeg || '',
+    'Storage type': p.storageType || '',
+    'Account': String(acc.account || ''),
+    'Account Code': String(acc.accountCode || ''),
+    'Taxable': exportCell(acc.taxable),
+    'Exemption Reason': String(acc.exemptionReason || ''),
+    'Taxability Type': String(acc.taxabilityType || ''),
+    'Product Type': String(att.productType || ''),
+    'Intra State Tax Name': String(acc.intraStateTaxName || ''),
+    'Intra State Tax Type': String(acc.intraStateTaxType || ''),
+    'Inter State Tax Name': String(acc.interStateTaxName || ''),
+    'Inter State Tax Rate': exportCell(acc.interStateTaxRate),
+    'Inter State Tax Type': String(acc.interStateTaxType || ''),
+    'Source': String(att.source || ''),
+    'Reference ID': String(att.referenceId || ''),
+    'Last Sync': String(att.lastSync || ''),
+    'Inventory Account': String(acc.inventoryAccount || ''),
+    'Inventory Account Code': String(acc.inventoryAccountCode || ''),
+    'Valuation Method': String(inv.valuationMethod || ''),
+    'Reorder Point': exportCell(inv.reorderPoint),
+    'Opening Stock': exportCell(inv.openingStock),
+    'Item Type': String(att.itemType || ''),
+    'Sellable': exportCell(att.sellable),
+    'Purchasable': exportCell(att.purchasable),
+    'Track Inventory': exportCell(inv.trackInventory),
+    'Package Weight': exportCell(pkg.packageWeight),
+    'Package Length': exportCell(pkg.packageLength),
+    'Package Width': exportCell(pkg.packageWidth),
+    'Package Height': exportCell(pkg.packageHeight),
+    'Dimension Unit': String(pkg.dimensionUnit || ''),
+    'Weight Unit': String(pkg.weightUnit || ''),
+    'EAN': String(ids.ean || ''),
+    'ISBN': String(ids.isbn || ''),
+    'Variant Mapping': String(att.variantMapping || ''),
+    'Platform Commission': exportCell(acc.platformCommission),
+    'Item Status': String(att.itemStatus || ''),
+    'Active on Online Store': exportCell(att.activeOnlineStore),
+    'Usage unit': p.unit || '',
+    'Unit': p.unit || '',
+    'Unit Name': p.unit || '',
+  };
+}
+
+function applyTextFormatToIdColumns(ws: XLSX.WorkSheet, headers: string[]): void {
+  const idHeaders = new Set(['Vendor ID', 'Item ID', 'SKU', 'HSN', 'HSN Code', 'UPC', 'EAN', 'ISBN']);
+  if (!ws['!ref']) return;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const headerCell = ws[XLSX.utils.encode_cell({ r: 0, c })];
+    const header = headerCell?.v ? String(headerCell.v) : '';
+    if (!idHeaders.has(header)) continue;
+    for (let r = range.s.r + 1; r <= range.e.r; r++) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = ws[addr];
+      if (cell) cell.z = '@';
+    }
+  }
 }
 
 export function exportProductsToXlsx(
@@ -534,86 +762,21 @@ export function exportProductsToXlsx(
   categories?: CategoryExportRow[],
 ): Buffer {
   const wb = XLSX.utils.book_new();
+  const headers = getImportTemplateHeaders();
 
-  // ── Products sheet ──
-  const productData = products.map(p => {
-    const tax = p.taxPercent || 0;
-    const slab1 = p.priceSlabs?.[0];
-    const slab2 = p.priceSlabs?.[1];
-
-    const meta = (p.metadata && typeof p.metadata === 'object' ? p.metadata : {}) as Record<string, any>;
-    const acc = meta.accounting || {};
-    const inv = meta.inventory || {};
-    const pkg = meta.packaging || {};
-    const ids = meta.identifiers || {};
-    const att = meta.attributes || {};
-
-    return {
-      'SKU': p.sku || '',
-      'Product Name': p.name,
-      'HSN': p.hsn || '',
-      'Unit': p.unit || '',
-      'Brand': p.brand || '',
-      'Category': p.categoryName || '',
-      'Taxable Rate (Amt)': Number(p.basePrice),
-      'Tax %': `${tax}%`,
-      'Gross Rate 1Pc (visible to the Customer)': toGross(Number(p.basePrice), tax),
-      'Bulk Rates 1 - Qty': slab1?.minQty ?? '',
-      'Bulk Rates 1 - Gross Rate / Unit': slab1 ? toGross(Number(slab1.price), tax) : '',
-      'Bulk Rates 2 - Qty': slab2?.minQty ?? '',
-      'Bulk Rates 2 - Gross Rate / Unit': slab2 ? toGross(Number(slab2.price), tax) : '',
-      '6pm to 9am Promo Rate - Single Unit': p.promoPrice ? toGross(Number(p.promoPrice), tax) : '',
-      '6pm to 9am Bulk Rates 1 - Qty': slab1?.promoPrice ? slab1.minQty : '',
-      '6pm to 9am Bulk Rates 1 - Unit': slab1?.promoPrice ? toGross(Number(slab1.promoPrice), tax) : '',
-      '6pm to 9am Bulk Rates 2 - Qty': slab2?.promoPrice ? slab2.minQty : '',
-      '6pm to 9am Bulk Rates 2 - Gross Rate / Unit': slab2?.promoPrice ? toGross(Number(slab2.promoPrice), tax) : '',
-      'Available Stock': p.stock ?? 0,
-      'product image url': p.imageUrl || '',
-      'Image Name': p.imageName || '',
-      // Zoho/metadata fields
-      'Account': acc.account || '',
-      'Account Code': acc.accountCode || '',
-      'Taxable': acc.taxable ?? '',
-      'Exemption Reason': acc.exemptionReason || '',
-      'Taxability Type': acc.taxabilityType || '',
-      'Product Type': att.productType || '',
-      'Intra State Tax Name': acc.intraStateTaxName || '',
-      'Intra State Tax Rate': acc.intraStateTaxRate ?? '',
-      'Intra State Tax Type': acc.intraStateTaxType || '',
-      'Inter State Tax Name': acc.interStateTaxName || '',
-      'Inter State Tax Rate': acc.interStateTaxRate ?? '',
-      'Inter State Tax Type': acc.interStateTaxType || '',
-      'Source': att.source || '',
-      'Reference ID': att.referenceId || '',
-      'Last Sync': att.lastSync || '',
-      'Inventory Account': acc.inventoryAccount || '',
-      'Inventory Account Code': acc.inventoryAccountCode || '',
-      'Valuation Method': inv.valuationMethod || '',
-      'Reorder Point': inv.reorderPoint ?? '',
-      'Opening Stock': inv.openingStock ?? '',
-      'Item Type': att.itemType || '',
-      'Sellable': att.sellable ?? '',
-      'Purchasable': att.purchasable ?? '',
-      'Track Inventory': inv.trackInventory ?? '',
-      'Package Weight': pkg.packageWeight ?? '',
-      'Package Length': pkg.packageLength ?? '',
-      'Package Width': pkg.packageWidth ?? '',
-      'Package Height': pkg.packageHeight ?? '',
-      'Dimension Unit': pkg.dimensionUnit || '',
-      'Weight Unit': pkg.weightUnit || '',
-      'EAN': ids.ean || '',
-      'ISBN': ids.isbn || '',
-      'Variant Mapping': att.variantMapping || '',
-      'Platform Commission': acc.platformCommission ?? '',
-      'Item Status': att.itemStatus || '',
-      'Active on Online Store': att.activeOnlineStore ?? '',
-    };
+  const productData = products.map((p) => {
+    const row = mapProductToImportColumns(p);
+    const ordered: Record<string, string | number> = {};
+    for (const h of headers) ordered[h] = row[h] ?? '';
+    return ordered;
   });
 
-  const pws = XLSX.utils.json_to_sheet(productData);
-  // Column widths
-  const pHeaders = Object.keys(productData[0] || {});
-  pws['!cols'] = pHeaders.map(h => ({ wch: Math.max(h.length + 2, 16) }));
+  const pws = XLSX.utils.json_to_sheet(
+    productData.length > 0 ? productData : [Object.fromEntries(headers.map((h) => [h, '']))],
+    { header: headers },
+  );
+  pws['!cols'] = headers.map((h) => ({ wch: Math.max(h.length + 2, 16) }));
+  applyTextFormatToIdColumns(pws, headers);
   XLSX.utils.book_append_sheet(wb, pws, 'Products');
 
   // ── Categories sheet (if provided) ──
@@ -637,78 +800,16 @@ export function exportProductsToXlsx(
 }
 
 export function exportProductsToCsv(products: ProductExportRow[]): string {
-  const data = products.map(p => {
-    const tax = p.taxPercent || 0;
-    const slab1 = p.priceSlabs?.[0];
-    const slab2 = p.priceSlabs?.[1];
-
-    const meta = (p.metadata && typeof p.metadata === 'object' ? p.metadata : {}) as Record<string, any>;
-    const acc = meta.accounting || {};
-    const inv = meta.inventory || {};
-    const pkg = meta.packaging || {};
-    const ids = meta.identifiers || {};
-    const att = meta.attributes || {};
-
-    return {
-      'SKU': p.sku || '',
-      'Product Name': p.name,
-      'HSN': p.hsn || '',
-      'Unit': p.unit || '',
-      'Brand': p.brand || '',
-      'Category': p.categoryName || '',
-      'Taxable Rate (Amt)': Number(p.basePrice),
-      'Tax %': `${tax}%`,
-      'Gross Rate 1Pc (visible to the Customer)': toGross(Number(p.basePrice), tax),
-      'Bulk Rates 1 - Qty': slab1?.minQty ?? '',
-      'Bulk Rates 1 - Gross Rate / Unit': slab1 ? toGross(Number(slab1.price), tax) : '',
-      'Bulk Rates 2 - Qty': slab2?.minQty ?? '',
-      'Bulk Rates 2 - Gross Rate / Unit': slab2 ? toGross(Number(slab2.price), tax) : '',
-      '6pm to 9am Promo Rate - Single Unit': p.promoPrice ? toGross(Number(p.promoPrice), tax) : '',
-      'Available Stock': p.stock ?? 0,
-      'product image url': p.imageUrl || '',
-      'Image Name': p.imageName || '',
-      // Zoho/metadata fields
-      'Account': acc.account || '',
-      'Account Code': acc.accountCode || '',
-      'Taxable': acc.taxable ?? '',
-      'Exemption Reason': acc.exemptionReason || '',
-      'Taxability Type': acc.taxabilityType || '',
-      'Product Type': att.productType || '',
-      'Intra State Tax Name': acc.intraStateTaxName || '',
-      'Intra State Tax Rate': acc.intraStateTaxRate ?? '',
-      'Intra State Tax Type': acc.intraStateTaxType || '',
-      'Inter State Tax Name': acc.interStateTaxName || '',
-      'Inter State Tax Rate': acc.interStateTaxRate ?? '',
-      'Inter State Tax Type': acc.interStateTaxType || '',
-      'Source': att.source || '',
-      'Reference ID': att.referenceId || '',
-      'Last Sync': att.lastSync || '',
-      'Inventory Account': acc.inventoryAccount || '',
-      'Inventory Account Code': acc.inventoryAccountCode || '',
-      'Valuation Method': inv.valuationMethod || '',
-      'Reorder Point': inv.reorderPoint ?? '',
-      'Opening Stock': inv.openingStock ?? '',
-      'Item Type': att.itemType || '',
-      'Sellable': att.sellable ?? '',
-      'Purchasable': att.purchasable ?? '',
-      'Track Inventory': inv.trackInventory ?? '',
-      'Package Weight': pkg.packageWeight ?? '',
-      'Package Length': pkg.packageLength ?? '',
-      'Package Width': pkg.packageWidth ?? '',
-      'Package Height': pkg.packageHeight ?? '',
-      'Dimension Unit': pkg.dimensionUnit || '',
-      'Weight Unit': pkg.weightUnit || '',
-      'EAN': ids.ean || '',
-      'ISBN': ids.isbn || '',
-      'Variant Mapping': att.variantMapping || '',
-      'Platform Commission': acc.platformCommission ?? '',
-      'Item Status': att.itemStatus || '',
-      'Active on Online Store': att.activeOnlineStore ?? '',
-    };
+  const headers = getImportTemplateHeaders();
+  const data = products.map((p) => {
+    const row = mapProductToImportColumns(p);
+    const ordered: Record<string, string | number> = {};
+    for (const h of headers) ordered[h] = row[h] ?? '';
+    return ordered;
   });
 
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(data);
+  const ws = XLSX.utils.json_to_sheet(data.length > 0 ? data : [Object.fromEntries(headers.map((h) => [h, '']))], { header: headers });
   XLSX.utils.book_append_sheet(wb, ws, 'Products');
   return XLSX.utils.sheet_to_csv(ws);
 }
@@ -716,17 +817,8 @@ export function exportProductsToCsv(products: ProductExportRow[]): string {
 // Generate a template XLSX aligned with Vendor_Item_Template.xlsx (Zoho-style)
 export function generateImportTemplate(): Buffer {
   const wb = XLSX.utils.book_new();
+  const headers = getImportTemplateHeaders();
 
-  // Full column set = every header the parser accepts (derived from the Zod
-  // schema so it never drifts), with two system/export-only columns first.
-  const headers: string[] = [
-    'Vendor ID',
-    'Item ID',
-    ...Object.keys(productImportRowSchema.shape),
-  ];
-
-  // Sensible sample values for the common fields; everything else blank so a
-  // downloaded template round-trips cleanly on import.
   const sampleValues: Record<string, string | number> = {
     'Item Name': 'Sample Product 1 Kg',
     'SKU': 'Z0001',
@@ -741,15 +833,20 @@ export function generateImportTemplate(): Buffer {
     'MOQ': 1,
     'Bulk Qty 1 - Quantity': 10,
     'Bulk Qty 1 - Net Rate / Pc': 95,
-    'Veg / Non-Veg': 'Veg',
+    'Veg / Non-Veg': 'veg',
     'Storage type': 'Ambient',
   };
 
+  const instructionRow: Record<string, string> = {};
   const sampleRow: Record<string, string | number> = {};
-  for (const h of headers) sampleRow[h] = sampleValues[h] ?? '';
+  for (const h of headers) {
+    instructionRow[h] = TEMPLATE_INSTRUCTIONS[h] ?? '';
+    sampleRow[h] = sampleValues[h] ?? '';
+  }
 
-  const pws = XLSX.utils.json_to_sheet([sampleRow], { header: headers });
+  const pws = XLSX.utils.json_to_sheet([instructionRow, sampleRow], { header: headers });
   pws['!cols'] = headers.map((h) => ({ wch: Math.max(h.length + 2, 16) }));
+  applyTextFormatToIdColumns(pws, headers);
   XLSX.utils.book_append_sheet(wb, pws, 'Products');
 
   // Categories reference — Parent / Sub-Category pairs for the hierarchy picker

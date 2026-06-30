@@ -41,6 +41,13 @@ import {
   buildImportErrorReportCsv,
   type ImportErrorRowData,
 } from '@/modules/import-export/import-commit';
+import {
+  enrichImportMetadata,
+  mergeMetadata,
+  normalizedVegForDb,
+  resolveRowImageUrl,
+  validateImportCategoryColumns,
+} from '@/modules/import-export/import-helpers';
 import { Prisma } from '@prisma/client';
 
 // ── Response shapes — kept identical to the admin importer so the review
@@ -346,6 +353,12 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
     }
 
     // ── COMMIT MODE ──
+    const vendorRecord = await prisma.vendor.findUnique({
+      where: { id: vendorId },
+      select: { vendorCode: true },
+    });
+    const vendorCode = vendorRecord?.vendorCode ?? null;
+
     // Backup every product that could be updated so the UI can offer a
     // complete Undo. A product can be matched by SKU *or* by name, so we
     // union both maps and dedupe by id — backing up only the SKU matches
@@ -622,6 +635,10 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       }
 
       try {
+        validateImportCategoryColumns(r);
+        const resolvedImageUrl = resolveRowImageUrl(r);
+        if (resolvedImageUrl) r.imageUrl = resolvedImageUrl;
+
         // ── Resolve hierarchical categories (Parent / Sub / Additional).
         // Falls back to the legacy flat Category column during transition.
         const hasCategoryData = !!(
@@ -667,20 +684,19 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
         const vendorSku: string | null = r.sku?.trim() || null;
 
         if (!existing) {
-          // SKU-centric: only link to an already-approved master catalog item;
-          // unmatched rows stay pending for admin to assign a catalog SKU.
+          // SKU-centric: link to approved master when matched; always compose listing SKU.
           if (categoryId) {
             const matched = await findApprovedMasterByNameBrand(r.name, r.brand ?? null);
             if (matched) {
               masterProductId = matched.id;
               approvalStatus = 'approved';
-              // Compose + uniqueness-check the POS SKU NOW so a duplicate becomes a
-              // validation error (blocks strict commit) instead of a mid-write throw.
-              if (vendorSku) composedSku = await composeVendorListingSku(vendorId, vendorSku);
             }
           }
+          if (vendorSku) composedSku = await composeVendorListingSku(vendorId, vendorSku);
           // Invariant: an approved product needs an approved brand AND category.
           if (brandPending || categoryPending) approvalStatus = 'pending';
+        } else if (vendorSku) {
+          composedSku = await composeVendorListingSku(vendorId, vendorSku);
         }
 
         prepared.push({ rowNum, r, existing, categoryId, categoryIds, masterProductId, approvalStatus, composedSku, vendorSku });
@@ -753,30 +769,45 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
 
           if (existing) {
             // ── UPDATE existing product (approval left untouched) ──
+            const updateSku = p.composedSku ?? undefined;
+            const updateVendorSku = p.vendorSku ?? undefined;
+            const mergedMeta = r.metadata
+              ? mergeMetadata(
+                  enrichImportMetadata(
+                    (existing as { metadata?: unknown }).metadata as Record<string, unknown>,
+                    vendorCode,
+                    existing.id,
+                  ),
+                  r.metadata,
+                )
+              : enrichImportMetadata(
+                  (existing as { metadata?: unknown }).metadata as Record<string, unknown>,
+                  vendorCode,
+                  existing.id,
+                );
+            const veg = normalizedVegForDb(r.vegNonVeg);
             await tx.product.update({
               where: { id: existing.id },
               data: {
                 name: r.name,
-                sku: r.sku ?? existing.sku,
+                ...(updateSku !== undefined ? { sku: updateSku } : {}),
+                ...(updateVendorSku !== undefined ? { vendorSku: updateVendorSku } : {}),
                 categoryId: p.categoryId || existing.categoryId,
                 basePrice: r.basePrice,
                 taxPercent: r.taxPercent,
                 promoPrice: r.promoPrice || null,
                 promoStartTime: r.promoStartTime || null,
                 promoEndTime: r.promoEndTime || null,
-                // Only overwrite a descriptive field when THIS row carries a value.
                 ...(r.hsn ? { hsn: r.hsn } : {}),
                 ...(r.unit ? { unit: r.unit } : {}),
                 ...(r.brand ? { brand: r.brand } : {}),
                 ...(r.imageUrl ? { imageUrl: r.imageUrl } : {}),
-                // Deep-merge metadata section-by-section, taking only non-empty incoming
-                // values, so a partial re-import never wipes fields the row left blank.
-                ...(r.metadata ? { metadata: mergeMetadata((existing as { metadata?: unknown }).metadata, r.metadata) } : {}),
-                // Flat attributes
-                vegNonVeg: ['veg', 'nonveg', 'egg'].includes(r.vegNonVeg as any) ? (r.vegNonVeg as any) : undefined,
+                metadata: mergedMeta,
+                ...(veg !== undefined ? { vegNonVeg: veg } : {}),
                 ...(r.storageType ? { storageType: r.storageType } : {}),
                 ...(r.moq !== undefined ? { minOrderQty: r.moq } : {}),
                 ...(r.aliasName ? { aliasNames: [r.aliasName] } : {}),
+                ...(r.upc ? { barcode: r.upc } : {}),
               },
             });
 
@@ -814,15 +845,25 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
                 promoEndTime: r.promoEndTime || null,
                 imageUrl: r.imageUrl || null,
                 approvalStatus: p.approvalStatus,
-                metadata: r.metadata || {},
-                // Flat attributes
-                vegNonVeg: ['veg', 'nonveg', 'egg'].includes(r.vegNonVeg as any) ? (r.vegNonVeg as any) : null,
+                metadata: mergeMetadata({}, r.metadata || {}),
+                vegNonVeg: normalizedVegForDb(r.vegNonVeg) ?? null,
                 storageType: r.storageType || null,
                 minOrderQty: r.moq || 1,
                 aliasNames: r.aliasName ? [r.aliasName] : [],
+                barcode: r.upc || null,
                 inventory: {
                   create: { vendorId, qtyAvailable: r.stock ?? 0, lowStockThreshold: 10 },
                 },
+              },
+            });
+            await tx.product.update({
+              where: { id: product.id },
+              data: {
+                metadata: enrichImportMetadata(
+                  product.metadata as Record<string, unknown>,
+                  vendorCode,
+                  product.id,
+                ) as Prisma.InputJsonValue,
               },
             });
 
@@ -886,26 +927,4 @@ async function updatePriceSlabs(
       sortOrder: idx,
     })),
   });
-}
-
-// Deep-merge nested metadata section-by-section. Only DEFINED, non-empty incoming
-// values overwrite the base — a blank import cell (parsed as undefined/'') preserves
-// whatever the product already had. Keeps the metadata.{accounting,inventory,…} shape.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mergeMetadata(base: unknown, incoming: Record<string, any>): Record<string, any> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const b = (base && typeof base === 'object' ? base : {}) as Record<string, any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result: Record<string, any> = { ...b };
-  for (const section of Object.keys(incoming)) {
-    const inc = incoming[section] ?? {};
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const merged: Record<string, any> = { ...(b[section] ?? {}) };
-    for (const k of Object.keys(inc)) {
-      const v = inc[k];
-      if (v !== undefined && v !== null && v !== '') merged[k] = v;
-    }
-    result[section] = merged;
-  }
-  return result;
 }

@@ -17,6 +17,14 @@ import {
   buildImportErrorReportCsv,
   type ImportErrorRowData,
 } from '@/modules/import-export/import-commit';
+import {
+  enrichImportMetadata,
+  mergeMetadata,
+  normalizedVegForDb,
+  resolveRowImageUrl,
+  validateImportCategoryColumns,
+} from '@/modules/import-export/import-helpers';
+import { Prisma } from '@prisma/client';
 
 // ── Preview mode: parse file, match SKUs, return diff without committing ──
 // ── Commit mode: actually create/update products with backup ──
@@ -307,6 +315,15 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
     }
 
     // ── COMMIT MODE ──
+    let vendorCode: string | null = null;
+    if (vendorId) {
+      const vendorRecord = await prisma.vendor.findUnique({
+        where: { id: vendorId },
+        select: { vendorCode: true },
+      });
+      vendorCode = vendorRecord?.vendorCode ?? null;
+    }
+
     // Step 1: Create backup of existing products that will be updated
     const backupId = `import_${Date.now()}_${(vendorId || 'catalog').slice(0, 8)}`;
     const backupSource = Array.from(
@@ -570,6 +587,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       };
       meta.attributes = {
         ...(meta.attributes || {}),
+        ...(e.productType !== undefined ? { productType: e.productType } : {}),
         ...(e.itemType !== undefined ? { itemType: e.itemType } : {}),
         ...(e.source !== undefined ? { source: e.source } : {}),
         ...(e.referenceId !== undefined ? { referenceId: e.referenceId } : {}),
@@ -597,6 +615,10 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       }
 
           try {
+            validateImportCategoryColumns(r);
+            const resolvedImageUrl = resolveRowImageUrl(r);
+            if (resolvedImageUrl) r.imageUrl = resolvedImageUrl;
+
             const hasCategoryData = !!(
               r.parentCategory ||
               r.subCategory ||
@@ -657,22 +679,31 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
               promoPrice: r.promoPrice || null,
               promoStartTime: r.promoStartTime || null,
               promoEndTime: r.promoEndTime || null,
-              // Only overwrite a descriptive field when THIS row actually carries
-              // a value. The sheet has duplicate rows per product — some carry the
-              // image URL / brand / hsn and some are blank. The old `r.x ||
-              // existing.x` read a STALE pre-import snapshot, so a blank duplicate
-              // processed after a populated row reverted the value (e.g. the image
-              // back to null). Conditional write = a blank cell leaves it alone.
               ...(r.hsn ? { hsn: r.hsn } : {}),
               ...(r.unit ? { unit: r.unit } : {}),
               ...(r.brand ? { brand: r.brand } : {}),
               ...(r.imageUrl ? { imageUrl: r.imageUrl } : {}),
-              ...(r.metadata ? { metadata: r.metadata } : {}),
-              // Flat attributes
-              vegNonVeg: ['veg', 'nonveg', 'egg'].includes(r.vegNonVeg as any) ? (r.vegNonVeg as any) : undefined,
+              metadata: r.metadata
+                ? mergeMetadata(
+                    enrichImportMetadata(
+                      (existing as { metadata?: unknown }).metadata as Record<string, unknown>,
+                      vendorCode,
+                      existing.id,
+                    ),
+                    r.metadata,
+                  )
+                : enrichImportMetadata(
+                    (existing as { metadata?: unknown }).metadata as Record<string, unknown>,
+                    vendorCode,
+                    existing.id,
+                  ),
+              ...(normalizedVegForDb(r.vegNonVeg) !== undefined
+                ? { vegNonVeg: normalizedVegForDb(r.vegNonVeg) }
+                : {}),
               ...(r.storageType ? { storageType: r.storageType } : {}),
               ...(r.moq !== undefined ? { minOrderQty: r.moq } : {}),
               ...(r.aliasName ? { aliasNames: [r.aliasName] } : {}),
+              ...(r.upc ? { barcode: r.upc } : {}),
             },
           });
 
@@ -701,7 +732,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 
           // Link category in the join table
           if (categoryIds.length > 0) {
-            await syncImportProductCategories(existing.id, categoryIds);
+            await syncImportProductCategories(existing.id, categoryIds, tx);
           }
 
           if (updatedProduct.brand) {
@@ -753,12 +784,12 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
             approvalStatus: 'approved',
             approvedBy: ctx.userId,
             approvedAt: new Date(),
-            metadata: r.metadata || {},
-            // Flat attributes
-            vegNonVeg: ['veg', 'nonveg', 'egg'].includes(r.vegNonVeg as any) ? (r.vegNonVeg as any) : null,
+            metadata: mergeMetadata({}, r.metadata || {}),
+            vegNonVeg: normalizedVegForDb(r.vegNonVeg) ?? null,
             storageType: r.storageType || null,
             minOrderQty: r.moq || 1,
             aliasNames: r.aliasName ? [r.aliasName] : [],
+            barcode: r.upc || null,
           };
 
           // Inventory requires vendorId
@@ -770,9 +801,22 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
 
           const product = await tx.product.create({ data: productData as Parameters<typeof prisma.product.create>[0]['data'] });
 
+          if (vendorId) {
+            await tx.product.update({
+              where: { id: product.id },
+              data: {
+                metadata: enrichImportMetadata(
+                  product.metadata as Record<string, unknown>,
+                  vendorCode,
+                  product.id,
+                ) as Prisma.InputJsonValue,
+              },
+            });
+          }
+
           // Link category in the join table
           if (categoryIds.length > 0) {
-            await syncImportProductCategories(product.id, categoryIds);
+            await syncImportProductCategories(product.id, categoryIds, tx);
           }
 
           // Create price slabs (requires vendorId)

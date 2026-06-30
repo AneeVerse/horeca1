@@ -30,35 +30,60 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     const products = await prisma.product.findMany({
       where,
       include: {
-        vendor: { select: { businessName: true } },
-        category: { select: { name: true } },
+        vendor: { select: { businessName: true, vendorCode: true } },
+        category: { select: { name: true, parentId: true, parent: { select: { name: true } } } },
         inventory: { select: { qtyAvailable: true } },
         priceSlabs: { orderBy: { sortOrder: 'asc' }, take: 3 },
+        categoryLinks: {
+          include: { category: { select: { name: true, parentId: true } } },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: 5000,
     });
 
-    const rows = products.map(p => ({
-      name: p.name,
-      sku: p.sku,
-      hsn: p.hsn,
-      unit: p.unit,
-      brand: p.brand,
-      categoryName: p.category?.name,
-      basePrice: Number(p.basePrice),
-      taxPercent: p.taxPercent ? Number(p.taxPercent) : 0,
-      promoPrice: p.promoPrice ? Number(p.promoPrice) : null,
-      imageUrl: p.imageUrl,
-      imageName: p.imageUrl ? p.imageUrl.split('/').pop() || '' : '',
-      stock: p.inventory?.qtyAvailable ?? 0,
-      approvalStatus: p.approvalStatus,
-      priceSlabs: p.priceSlabs.map(s => ({
-        minQty: s.minQty,
-        price: Number(s.price),
-        promoPrice: s.promoPrice ? Number(s.promoPrice) : null,
-      })),
-    }));
+    const rows = products.map((p) => {
+      const meta = (p.metadata && typeof p.metadata === 'object' ? p.metadata : {}) as Record<string, unknown>;
+      const primary = p.category;
+      const parentCategory = primary?.parent?.name ?? (primary && !primary.parentId ? primary.name : '');
+      const subCategory = primary?.parentId ? primary.name : '';
+      const additional = p.categoryLinks
+        ?.filter((l) => !l.isPrimary)
+        .map((l) => l.category.name) ?? [];
+
+      return {
+        name: p.name,
+        sku: p.sku,
+        vendorSku: p.vendorSku,
+        hsn: p.hsn,
+        unit: p.unit,
+        brand: p.brand,
+        categoryName: p.category?.name,
+        parentCategory,
+        subCategory,
+        additionalSubCategories: additional,
+        basePrice: Number(p.basePrice),
+        taxPercent: p.taxPercent ? Number(p.taxPercent) : 0,
+        promoPrice: p.promoPrice ? Number(p.promoPrice) : null,
+        imageUrl: p.imageUrl,
+        imageName: p.imageUrl ? p.imageUrl.split('/').pop() || '' : '',
+        stock: p.inventory?.qtyAvailable ?? 0,
+        approvalStatus: p.approvalStatus,
+        barcode: p.barcode,
+        aliasName: p.aliasNames?.[0] ?? null,
+        minOrderQty: p.minOrderQty,
+        vegNonVeg: p.vegNonVeg,
+        storageType: p.storageType,
+        vendorId: p.vendor?.vendorCode ?? String(meta.vendorId ?? ''),
+        itemId: String(meta.itemId ?? p.id),
+        metadata: meta,
+        priceSlabs: p.priceSlabs.map((s) => ({
+          minQty: s.minQty,
+          price: Number(s.price),
+          promoPrice: s.promoPrice ? Number(s.promoPrice) : null,
+        })),
+      };
+    });
 
     // Fetch categories for the Categories sheet (xlsx only)
     let categories: CategoryExportRow[] = [];
