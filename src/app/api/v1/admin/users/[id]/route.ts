@@ -5,7 +5,6 @@
 // PROTECTED: Admin only
 
 import { NextRequest, NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
@@ -240,11 +239,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       allowedFields.phone = p || null;
     }
     if (typeof body.password === 'string' && body.password.length > 0) {
-      if (body.password.length < 6) throw Errors.badRequest('Password must be at least 6 characters');
-      if (existing.role === 'admin') {
-        throw Errors.forbidden('Use /admin/team to reset another admin\'s password');
-      }
-      allowedFields.password = await bcrypt.hash(body.password, 10);
+      throw Errors.badRequest('Use PATCH /api/v1/admin/users/:id/password to reset a user password');
     }
 
     const cp = body.companyProfile;

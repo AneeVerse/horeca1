@@ -28,6 +28,7 @@ export const AUDIT_ACTIONS = {
   inventoryBulkUpdate: 'inventory.bulk_update',
   priceListBulkApply: 'price_list.bulk_apply',
   comboCreate: 'combo.create',
+  userPasswordReset: 'user.password_reset',
 } as const;
 
 export type AuditAction = typeof AUDIT_ACTIONS[keyof typeof AUDIT_ACTIONS];

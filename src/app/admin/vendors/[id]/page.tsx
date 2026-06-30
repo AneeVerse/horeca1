@@ -37,6 +37,8 @@ import { cn } from '@/lib/utils';
 import { resolveVendorCode, formatVendorSku } from '@/lib/sku';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
+import { AdminPasswordResetButton } from '@/components/features/admin/AdminPasswordResetButton';
+import { AdminUserTeamPanel } from '@/components/features/admin/AdminUserTeamPanel';
 
 interface VendorProduct {
     id: string;
@@ -795,6 +797,15 @@ export default function VendorDetailsPage() {
                             </div>
                         )}
                     </div>
+                    {vendor.user && (
+                        <div className="mt-4 flex justify-start">
+                            <AdminPasswordResetButton
+                                user={vendor.user}
+                                permission="vendors.edit"
+                                accent="#299E60"
+                            />
+                        </div>
+                    )}
                 </div>
 
                 {/* Right side status togglers */}
@@ -1995,6 +2006,12 @@ export default function VendorDetailsPage() {
                     </div>
                 )}
             </div>
+
+            <AdminUserTeamPanel
+                teamEndpoint={`/api/v1/admin/vendors/${vendorId}/team`}
+                editPermission="vendors.edit"
+                accent="#299E60"
+            />
 
             {/* ── Document Review Popup ──────────────────────────────────── */}
             {reviewDoc && (

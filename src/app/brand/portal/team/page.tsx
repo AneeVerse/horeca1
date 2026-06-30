@@ -57,6 +57,8 @@ function lookFor(roleName: string) {
 export default function BrandTeamPage() {
     const { data: session, status: sessionStatus } = useSession();
     const currentUserId = (session?.user as { id?: string })?.id;
+    const userRole = (session?.user as { role?: string })?.role;
+    const isAdminImpersonating = userRole === 'admin';
     const sessionPerms = (session?.user as { permissions?: string[] })?.permissions ?? [];
     const canInvite = sessionPerms.includes('users.create');
     const canEdit = sessionPerms.includes('users.edit');
@@ -139,8 +141,9 @@ export default function BrandTeamPage() {
                 accent={ACCENT}
                 currentUserId={currentUserId}
                 getRoleStyle={lookFor}
-                canEdit={canEdit}
-                canDelete={canDelete}
+                canEdit={canEdit || isAdminImpersonating}
+                canDelete={canDelete && !isAdminImpersonating}
+                allowOwnerPasswordReset={isAdminImpersonating}
                 onEdit={(m) => setEditingRole(m as TeamMember)}
                 onResetPassword={(m) => setPasswordMember(m as TeamMember)}
                 onRemove={(m) => handleRemove(m as TeamMember)}
@@ -181,8 +184,13 @@ export default function BrandTeamPage() {
             {passwordMember && (
                 <ResetPasswordModal
                     member={passwordMember}
-                    passwordEndpoint={`/api/v1/brand/team/${passwordMember.id}/password`}
+                    passwordEndpoint={
+                        isAdminImpersonating
+                            ? `/api/v1/admin/users/${passwordMember.user.id}/password`
+                            : `/api/v1/brand/team/${passwordMember.id}/password`
+                    }
                     accent="#53B175"
+                    showGenerate={isAdminImpersonating}
                     onClose={() => setPasswordMember(null)}
                 />
             )}

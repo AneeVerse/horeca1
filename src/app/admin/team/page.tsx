@@ -199,8 +199,9 @@ export default function AdminTeamPage() {
             {passwordMember && (
                 <ResetPasswordModal
                     member={passwordMember}
-                    passwordEndpoint={`/api/v1/admin/team/${passwordMember.user.id}/password`}
+                    passwordEndpoint={`/api/v1/admin/users/${passwordMember.user.id}/password`}
                     accent="#E74C3C"
+                    showGenerate
                     onClose={() => setPasswordMember(null)}
                 />
             )}

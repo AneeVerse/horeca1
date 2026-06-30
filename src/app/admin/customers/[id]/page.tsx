@@ -27,6 +27,8 @@ import {
 import { cn } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { AdminPasswordResetButton } from '@/components/features/admin/AdminPasswordResetButton';
+import { AdminAccountTeamPanel } from '@/components/features/admin/AdminAccountTeamPanel';
 
 interface VendorProfile {
     id: string;
@@ -146,10 +148,9 @@ export default function CustomerDetailsPage() {
     const [draft, setDraft] = useState<{
         fullName: string; email: string; phone: string;
         businessName: string; gstNumber: string; pincode: string;
-        password: string;
         // P0-4 master-datasheet attributes (BusinessAccount companyProfile).
         cp: Record<string, string>;
-    }>({ fullName: '', email: '', phone: '', businessName: '', gstNumber: '', pincode: '', password: '', cp: {} });
+    }>({ fullName: '', email: '', phone: '', businessName: '', gstNumber: '', pincode: '', cp: {} });
 
     useEffect(() => {
         async function fetchUser() {
@@ -187,7 +188,6 @@ export default function CustomerDetailsPage() {
             businessName: user.businessName || '',
             gstNumber: user.gstNumber || '',
             pincode: user.pincode || '',
-            password: '',
             cp: {
                 pan: ba?.pan || '', fssaiNumber: ba?.fssaiNumber || '',
                 billingAddressLine: ba?.billingAddressLine || '', billingCity: ba?.billingCity || '',
@@ -214,7 +214,6 @@ export default function CustomerDetailsPage() {
                 gstNumber: draft.gstNumber.trim(),
                 pincode: draft.pincode.trim(),
             };
-            if (draft.password) payload.password = draft.password;
             const companyProfile: Record<string, string> = {};
             for (const [k, v] of Object.entries(draft.cp)) companyProfile[k] = v.trim();
             const res = await fetch(`/api/v1/admin/users/${userId}`, {
@@ -370,6 +369,14 @@ export default function CustomerDetailsPage() {
                                         <span className="font-bold">{user.phone}</span>
                                     </div>
                                 </div>
+                                <div className="mb-4">
+                                    <AdminPasswordResetButton
+                                        user={user}
+                                        permission="customers.edit"
+                                        accent="#299E60"
+                                        className="w-full justify-center"
+                                    />
+                                </div>
                                 <button
                                     onClick={handleToggleActive}
                                     disabled={toggling}
@@ -470,11 +477,6 @@ export default function CustomerDetailsPage() {
                                                 className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] outline-none focus:border-[#299E60]" />
                                         </EditRow>
                                     ))}
-                                    <EditRow label="Set new password">
-                                        <input type="password" value={draft.password} onChange={e => setDraft(d => ({ ...d, password: e.target.value }))}
-                                            placeholder="Leave blank to keep existing" autoComplete="new-password"
-                                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] outline-none focus:border-[#299E60]" />
-                                    </EditRow>
                                 </>
                             ) : (
                                 <>
@@ -489,6 +491,12 @@ export default function CustomerDetailsPage() {
                             )}
                         </div>
                     </div>
+
+                    {user.accountMemberships?.find((m) => m.isPrimary)?.businessAccount?.id && (
+                        <AdminAccountTeamPanel
+                            businessAccountId={user.accountMemberships.find((m) => m.isPrimary)!.businessAccount.id}
+                        />
+                    )}
                 </div>
 
                 {/* Right Column */}

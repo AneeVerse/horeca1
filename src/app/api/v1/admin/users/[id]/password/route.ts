@@ -1,4 +1,4 @@
-// PATCH /api/v1/admin/team/[id]/password — reset an admin team member's login password
+// PATCH /api/v1/admin/users/[id]/password — reset any user's login password (superadmin)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';

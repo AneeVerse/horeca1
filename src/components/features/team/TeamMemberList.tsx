@@ -37,6 +37,7 @@ interface Props {
   onEdit?: (member: TeamMemberItem) => void;
   onResetPassword?: (member: TeamMemberItem) => void;
   onRemove?: (member: TeamMemberItem) => void;
+  allowOwnerPasswordReset?: boolean;
   HeaderIcon?: ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>;
 }
 
@@ -48,6 +49,7 @@ export function TeamMemberList({
   title = 'Team Members',
   members, loading, accent, currentUserId, getRoleStyle,
   canEdit, canDelete, onEdit, onResetPassword, onRemove,
+  allowOwnerPasswordReset = false,
   HeaderIcon = Users,
 }: Props) {
   return (
@@ -110,7 +112,17 @@ export function TeamMemberList({
 
                 <div className="shrink-0 flex items-center gap-1">
                   {isOwnerRow ? (
-                    <span className="text-[11px] text-[#AEAEAE] px-1">Owner</span>
+                    (allowOwnerPasswordReset || isSelf) && canEdit && onResetPassword ? (
+                      <>
+                        <span className="text-[11px] text-[#AEAEAE] px-1">{isSelf ? 'You' : 'Owner'}</span>
+                        <button onClick={() => onResetPassword(member)}
+                          className="p-2 rounded-[8px] hover:bg-gray-100 transition-colors" title="Reset password">
+                          <KeyRound size={14} className="text-[#AEAEAE]" />
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-[11px] text-[#AEAEAE] px-1">{isSelf ? 'You' : 'Owner'}</span>
+                    )
                   ) : isSelf ? (
                     <>
                       <span className="text-[11px] text-[#AEAEAE] px-1">You</span>

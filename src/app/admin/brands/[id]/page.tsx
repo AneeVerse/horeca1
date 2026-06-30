@@ -16,11 +16,14 @@ import {
     MapPin,
     MessageSquare,
     X,
+    LayoutDashboard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { CategoryMultiPicker } from '@/components/features/brand/CategoryMultiPicker';
 import { ImageUploadField } from '@/components/ui/ImageUploadField';
+import { AdminPasswordResetButton } from '@/components/features/admin/AdminPasswordResetButton';
+import { AdminUserTeamPanel } from '@/components/features/admin/AdminUserTeamPanel';
 
 interface BusinessAccountReview {
     legalName: string;
@@ -102,6 +105,17 @@ export default function AdminBrandEditPage() {
 
     const perms = (session?.user as { permissions?: string[] } | undefined)?.permissions;
     const canApprove = perms?.includes('brands.approve') ?? false;
+    const canEditBrand = perms?.includes('brands.edit') ?? false;
+
+    const viewBrandPortal = async () => {
+        if (!brand) return;
+        await fetch('/api/v1/admin/impersonate/brand', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ brandId: brand.id }),
+        });
+        router.push('/brand/portal');
+    };
 
     const [brand, setBrand] = useState<Brand | null>(null);
     const [loading, setLoading] = useState(true);
@@ -327,11 +341,23 @@ export default function AdminBrandEditPage() {
                             </p>
                         </div>
                     </div>
-                    <button onClick={save} disabled={saving}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-[#53B175] text-white text-[14px] font-bold rounded-2xl hover:bg-[#3d9e5f] transition-colors disabled:opacity-60">
-                        {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                        {isDraftStorefront ? 'Save Storefront' : 'Save Changes'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {canEditBrand && !isDraftStorefront && (
+                            <button
+                                type="button"
+                                onClick={() => void viewBrandPortal()}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-[#EDE9FE] border border-[#7C3AED]/20 text-[#7C3AED] text-[13px] font-bold rounded-2xl hover:bg-[#DDD6FE] transition-colors"
+                            >
+                                <LayoutDashboard size={16} />
+                                View Brand Portal
+                            </button>
+                        )}
+                        <button onClick={save} disabled={saving}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-[#53B175] text-white text-[14px] font-bold rounded-2xl hover:bg-[#3d9e5f] transition-colors disabled:opacity-60">
+                            {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                            {isDraftStorefront ? 'Save Storefront' : 'Save Changes'}
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -434,6 +460,15 @@ export default function AdminBrandEditPage() {
                                 </div>
                             )}
                         </div>
+                        {owner && !isDraftStorefront && (
+                            <div className="mt-4 flex justify-start">
+                                <AdminPasswordResetButton
+                                    user={owner}
+                                    permission="brands.edit"
+                                    accent="#7C3AED"
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {canApprove && (
@@ -615,6 +650,14 @@ export default function AdminBrandEditPage() {
                     />
                 </div>
             </div>
+
+            {!isDraftStorefront && (
+                <AdminUserTeamPanel
+                    teamEndpoint={`/api/v1/admin/brands/${id}/team`}
+                    editPermission="brands.edit"
+                    accent="#7C3AED"
+                />
+            )}
 
             {/* Reject modal */}
             {showRejectModal && (

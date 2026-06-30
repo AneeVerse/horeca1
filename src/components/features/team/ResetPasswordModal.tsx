@@ -1,24 +1,48 @@
 'use client';
 
-// Shared admin/vendor/brand password-reset modal. Lifted out of the admin
-// team page so it can be imported anywhere — Next.js refuses to compile a
-// route file that exports anything other than the default page component.
-
 import { useState } from 'react';
-import { KeyRound, X, AlertCircle, Loader2 } from 'lucide-react';
+import { KeyRound, X, AlertCircle, Loader2, Shuffle, Copy, Check } from 'lucide-react';
 
 interface Props {
   member: { user: { fullName: string; email: string | null; phone: string | null } };
   passwordEndpoint: string;
   accent: string;
   onClose: () => void;
+  showGenerate?: boolean;
 }
 
-export function ResetPasswordModal({ member, passwordEndpoint, accent, onClose }: Props) {
+function generatePassword(): string {
+  const chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$';
+  let out = '';
+  for (let i = 0; i < 12; i++) {
+    out += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return out;
+}
+
+export function ResetPasswordModal({ member, passwordEndpoint, accent, onClose, showGenerate = false }: Props) {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleGenerate = () => {
+    const next = generatePassword();
+    setPassword(next);
+    setCopied(false);
+  };
+
+  const handleCopy = async () => {
+    if (!password) return;
+    try {
+      await navigator.clipboard.writeText(password);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError('Could not copy to clipboard');
+    }
+  };
 
   const handleSubmit = async () => {
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
@@ -59,11 +83,28 @@ export function ResetPasswordModal({ member, passwordEndpoint, accent, onClose }
               Setting a new password for <span className="font-bold text-[#181725]">{member.user.fullName}</span>{' '}
               ({member.user.email ?? member.user.phone}).
             </p>
+            <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-[8px] p-2.5">
+              This logs the user out of all active sessions.
+            </p>
             <div>
               <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">New Password</label>
-              <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min. 6 characters"
-                className="w-full h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none bg-[#FAFAFA] focus:bg-white transition-colors" />
+              <div className="flex gap-2">
+                <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Min. 6 characters"
+                  className="flex-1 h-[44px] border border-[#EEEEEE] rounded-[10px] px-4 text-[14px] outline-none bg-[#FAFAFA] focus:bg-white transition-colors" />
+                {showGenerate && (
+                  <>
+                    <button type="button" onClick={handleGenerate} title="Generate password"
+                      className="h-[44px] w-[44px] shrink-0 border border-[#EEEEEE] rounded-[10px] flex items-center justify-center hover:bg-gray-50">
+                      <Shuffle size={16} className="text-[#7C7C7C]" />
+                    </button>
+                    <button type="button" onClick={handleCopy} disabled={!password} title="Copy password"
+                      className="h-[44px] w-[44px] shrink-0 border border-[#EEEEEE] rounded-[10px] flex items-center justify-center hover:bg-gray-50 disabled:opacity-40">
+                      {copied ? <Check size={16} className="text-green-600" /> : <Copy size={16} className="text-[#7C7C7C]" />}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
             {error && (
               <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-[8px] p-2.5">
