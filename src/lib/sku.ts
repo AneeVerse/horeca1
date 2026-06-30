@@ -35,6 +35,11 @@ type Db = PrismaClient | Prisma.TransactionClient;
  */
 export async function nextMasterSku(db: Db): Promise<string> {
   const last = await db.masterProduct.findFirst({
+    where: {
+      sku: {
+        startsWith: MASTER_SKU_PREFIX,
+      },
+    },
     orderBy: { sku: 'desc' },
     select: { sku: true },
   });
