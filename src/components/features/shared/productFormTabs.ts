@@ -1,3 +1,4 @@
+/** @deprecated Admin and vendor product forms use single-page scroll — brand portal only. */
 import {
     Info,
     Clock,
