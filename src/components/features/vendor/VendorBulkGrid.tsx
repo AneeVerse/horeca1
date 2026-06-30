@@ -28,6 +28,11 @@ interface GridProduct {
   vegNonVeg?: 'veg' | 'nonveg' | 'egg' | null;
   storageType?: string | null;
   metadata?: any;
+  vendor?: {
+    id: string;
+    businessName: string;
+    vendorCode?: string | null;
+  } | null;
 }
 
 type EditableField =
@@ -216,6 +221,8 @@ export default function VendorBulkGrid({
       return edits[p.id][field];
     }
     // Check top level
+    if (field === 'vendorId') return p.metadata?.vendorId || p.vendor?.vendorCode || '';
+    if (field === 'itemId') return p.metadata?.itemId || '';
     if (field === 'name') return p.name;
     if (field === 'sku') return p.sku ?? '';
     if (field === 'hsn') return p.hsn ?? '';
@@ -448,8 +455,27 @@ export default function VendorBulkGrid({
 
       {/* Grid */}
       <div className="flex-1 overflow-auto bg-gray-100 p-4">
+        <style>{`
+          .custom-excel-scrollbar::-webkit-scrollbar {
+            width: 14px !important;
+            height: 14px !important;
+            display: block !important;
+          }
+          .custom-excel-scrollbar::-webkit-scrollbar-track {
+            background: #F3F4F6 !important;
+            border-radius: 4px !important;
+          }
+          .custom-excel-scrollbar::-webkit-scrollbar-thumb {
+            background: #9CA3AF !important;
+            border: 2.5px solid #F3F4F6 !important;
+            border-radius: 6px !important;
+          }
+          .custom-excel-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #4B5563 !important;
+          }
+        `}</style>
         <div className="bg-white border border-[#D1D5DB] rounded-lg shadow-sm overflow-hidden h-full">
-          <div className="w-full h-full overflow-auto">
+          <div className="w-full h-full overflow-auto custom-excel-scrollbar">
             <table className="min-w-max table-fixed border-collapse text-[13px] bg-white">
               <thead className="sticky top-0 z-10 bg-[#F3F4F6]">
                 <tr className="text-left text-[11px] font-bold text-[#4B5563] uppercase tracking-wide h-[36px]">

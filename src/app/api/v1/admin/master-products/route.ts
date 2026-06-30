@@ -70,14 +70,16 @@ export const GET = adminOnly(async (req: NextRequest) => {
         include: {
           category: { select: { id: true, name: true } },
           _count: { select: { vendorProducts: true } },
-          // Fallback image source: a master's own imageUrl is usually empty
-          // (it isn't set when the master is auto-created during product
-          // import), so borrow the image from a linked vendor product that has
-          // one. Keeps the catalog list from showing blank placeholders.
           vendorProducts: {
-            where: { imageUrl: { not: null } },
-            select: { imageUrl: true },
-            take: 1,
+            select: {
+              imageUrl: true,
+              sku: true,
+              vendorSku: true,
+              hsn: true,
+              metadata: true,
+              vendor: { select: { id: true, businessName: true, vendorCode: true } }
+            },
+            take: 5,
             orderBy: { updatedAt: 'desc' },
           },
         },
@@ -92,14 +94,16 @@ export const GET = adminOnly(async (req: NextRequest) => {
         include: {
           category: { select: { id: true, name: true } },
           _count: { select: { vendorProducts: true } },
-          // Fallback image source: a master's own imageUrl is usually empty
-          // (it isn't set when the master is auto-created during product
-          // import), so borrow the image from a linked vendor product that has
-          // one. Keeps the catalog list from showing blank placeholders.
           vendorProducts: {
-            where: { imageUrl: { not: null } },
-            select: { imageUrl: true },
-            take: 1,
+            select: {
+              imageUrl: true,
+              sku: true,
+              vendorSku: true,
+              hsn: true,
+              metadata: true,
+              vendor: { select: { id: true, businessName: true, vendorCode: true } }
+            },
+            take: 5,
             orderBy: { updatedAt: 'desc' },
           },
         },
@@ -115,7 +119,22 @@ export const GET = adminOnly(async (req: NextRequest) => {
         masterProducts: rows.map((m) => {
           const { vendorProducts, _count, ...rest } = m;
           const imageUrl = m.imageUrl || vendorProducts.find((vp) => vp.imageUrl)?.imageUrl || null;
-          return { ...rest, imageUrl, vendorCount: _count.vendorProducts };
+          
+          const metadata = (m.metadata || {}) as Record<string, any>;
+          const finalMetadata = {
+            ...metadata,
+            itemId: metadata.itemId || (vendorProducts.find(vp => (vp.metadata as any)?.itemId)?.metadata as any)?.itemId || null,
+            vendorId: metadata.vendorId || (vendorProducts.find(vp => (vp.metadata as any)?.vendorId)?.metadata as any)?.vendorId || vendorProducts.find(vp => vp.vendor?.vendorCode)?.vendor?.vendorCode || null,
+          };
+
+          return {
+            ...rest,
+            imageUrl,
+            vendorCount: _count.vendorProducts,
+            hsn: vendorProducts[0]?.hsn || null,
+            vendor: vendorProducts[0]?.vendor || null,
+            metadata: finalMetadata,
+          };
         }),
         nextCursor: hasMore && !pageParam ? rows[rows.length - 1]?.id : null,
         hasMore,

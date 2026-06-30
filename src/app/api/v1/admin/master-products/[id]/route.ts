@@ -58,6 +58,14 @@ const updateSchema = z.object({
   isActive: z.boolean().optional(),
   /** Required when linked vendor count > 10 */
   confirmLinkedSync: z.boolean().optional(),
+  // Add fields sent by bulk grid to support master-product bulk-edits
+  unit: z.string().optional(),
+  hsn: z.string().optional(),
+  basePrice: z.number().optional(),
+  minOrderQty: z.number().optional(),
+  creditEligible: z.boolean().optional(),
+  vegNonVeg: z.string().optional(),
+  storageType: z.string().optional(),
 });
 
 export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
@@ -91,7 +99,20 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       );
     }
 
-    const { categoryIds, categoryId: _omitCategoryId, sku: rawSku, confirmLinkedSync: _confirm, ...rest } = data;
+    const {
+      categoryIds,
+      categoryId: _omitCategoryId,
+      sku: rawSku,
+      confirmLinkedSync: _confirm,
+      unit,
+      hsn,
+      basePrice,
+      minOrderQty,
+      creditEligible,
+      vegNonVeg,
+      storageType,
+      ...rest
+    } = data;
     const resolvedCategoryIds = categoryIds?.length
       ? categoryIds
       : data.categoryId
@@ -101,6 +122,9 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     if (resolvedCategoryIds) await assertLeafCategory(resolvedCategoryIds);
 
     const updateData: Prisma.MasterProductUpdateInput = { ...rest };
+    if (unit !== undefined && data.uom === undefined) {
+      updateData.uom = unit;
+    }
     if (data.brand !== undefined) updateData.brand = data.brand.trim();
     if (resolvedCategoryIds) {
       updateData.category = { connect: { id: resolvedCategoryIds[0] } };
@@ -128,6 +152,23 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
     }
 
     const updated = await prisma.masterProduct.update({ where: { id }, data: updateData });
+
+    if (hsn !== undefined || basePrice !== undefined || minOrderQty !== undefined || creditEligible !== undefined || vegNonVeg !== undefined || storageType !== undefined) {
+      const vendorUpdate: Prisma.ProductUpdateManyMutationInput = {};
+      if (hsn !== undefined) vendorUpdate.hsn = hsn;
+      if (basePrice !== undefined) vendorUpdate.basePrice = basePrice;
+      if (minOrderQty !== undefined) vendorUpdate.minOrderQty = minOrderQty;
+      if (creditEligible !== undefined) vendorUpdate.creditEligible = creditEligible;
+      if (vegNonVeg !== undefined) {
+        vendorUpdate.vegNonVeg = ['veg', 'nonveg', 'egg'].includes(vegNonVeg) ? (vegNonVeg as any) : null;
+      }
+      if (storageType !== undefined) vendorUpdate.storageType = storageType;
+
+      await prisma.product.updateMany({
+        where: { masterProductId: id, slug: { not: { startsWith: '_deleted_' } } },
+        data: vendorUpdate,
+      });
+    }
 
     if (resolvedCategoryIds) {
       await syncMasterProductCategories(id, resolvedCategoryIds);

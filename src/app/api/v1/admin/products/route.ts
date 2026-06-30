@@ -92,7 +92,7 @@ export const GET = adminOnly(async (req: NextRequest, _ctx) => {
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        vendor: { select: { id: true, businessName: true } },
+        vendor: { select: { id: true, businessName: true, vendorCode: true } },
         category: { select: { id: true, name: true } },
         inventory: { select: { qtyAvailable: true } },
         masterProduct: { select: { sku: true, name: true } },

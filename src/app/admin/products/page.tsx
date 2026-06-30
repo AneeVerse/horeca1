@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
     Search,
@@ -34,11 +34,13 @@ import Link from 'next/link';
 import { ImageUpload, MultiImageUpload } from '@/components/ui/ImageUpload';
 import ProductImportModal from '@/components/features/admin/ProductImportModal';
 import AdminBulkEngine from '@/components/features/admin/AdminBulkEngine';
+import VendorBulkGrid from '@/components/features/vendor/VendorBulkGrid';
 import { useAdminPermissions } from '@/hooks/useAdminPermissions';
 import { CategoryHierarchyPicker } from '@/components/features/brand/CategoryHierarchyPicker';
 import { BrandSinglePicker } from '@/components/features/brand/BrandSinglePicker';
 import { validateMasterSku } from '@/lib/sku';
 import { toast } from 'sonner';
+import { PRODUCT_FORM_TABS, type ProductFormTabId } from '@/components/features/shared/productFormTabs';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -433,7 +435,7 @@ export default function ProductsPage() {
 
     // Panel / Modal state
     const [panelOpen, setPanelOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<'identity' | 'status' | 'pricing' | 'accounting' | 'inventory' | 'packaging' | 'identifiers' | 'attributes' | 'bulk'>('identity');
+    const [activeTab, setActiveTab] = useState<ProductFormTabId>('identity');
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [formData, setFormData] = useState<ProductFormData>(EMPTY_FORM);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -441,6 +443,7 @@ export default function ProductsPage() {
     // Import modal
     const [importOpen, setImportOpen] = useState(false);
     const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
+    const [gridOpen, setGridOpen] = useState(false);
 
     // Export dropdown
     const [exportOpen, setExportOpen] = useState(false);
@@ -470,6 +473,11 @@ export default function ProductsPage() {
         });
     };
 
+    const gridProducts = useMemo(() => products.map(p => ({
+        ...p,
+        categoryName: p.category?.name ?? '',
+        originalPrice: p.originalPrice ?? undefined,
+    })), [products]);
 
     // -----------------------------------------------------------------------
     // Debounced search
@@ -564,6 +572,9 @@ export default function ProductsPage() {
                         uom: string | null;
                         category: { id: string; name: string } | null;
                         vendorCount: number;
+                        vendor?: { id: string; businessName: string; vendorCode?: string | null } | null;
+                        hsn?: string | null;
+                        metadata?: any;
                     }) => ({
                         id: m.id,
                         name: m.name,
@@ -573,7 +584,7 @@ export default function ProductsPage() {
                         basePrice: 0,
                         originalPrice: null,
                         imageUrl: m.imageUrl,
-                        hsn: null,
+                        hsn: m.hsn ?? null,
                         taxPercent: Number(m.taxPercent) || 0,
                         minOrderQty: 1,
                         creditEligible: false,
@@ -582,11 +593,12 @@ export default function ProductsPage() {
                         approvalStatus: m.approvalStatus,
                         approvalNote: null,
                         createdAt: m.createdAt,
-                        vendor: null,
+                        vendor: m.vendor ?? null,
                         category: m.category,
                         inventory: null,
                         vendorCount: m.vendorCount,
                         unit: m.uom,
+                        metadata: m.metadata ?? {},
                         isMasterRow: true,
                     }));
                     setProducts(incoming);
@@ -1456,10 +1468,10 @@ export default function ProductsPage() {
                     {/* Bulk Update Button */}
                     {perms.canWriteProducts && (
                         <button
-                            onClick={() => setBulkUpdateOpen(true)}
+                            onClick={() => setGridOpen(true)}
                             className="h-[44px] px-5 bg-white border border-[#EEEEEE] rounded-[12px] text-[13px] font-bold text-[#181725] hover:bg-[#F8F9FB] transition-all flex items-center gap-2 shadow-sm"
                         >
-                            <Wand2 size={16} className="text-[#299E60]" />
+                            <FileSpreadsheet size={16} className="text-[#299E60]" />
                             Bulk Update
                         </button>
                     )}
@@ -2000,24 +2012,14 @@ export default function ProductsPage() {
                 <div className="flex-1 flex overflow-hidden bg-[#F8F9FB]">
                     {/* Left Sidebar: 9 Groups */}
                     <div className="w-[240px] bg-white border-r border-[#EEEEEE] overflow-y-auto shrink-0 py-6 px-4 flex flex-col gap-1.5">
-                        {[
-                            { id: 'identity', label: '1. Identity', icon: Info },
-                            { id: 'status', label: '2. Status', icon: Clock },
-                            { id: 'pricing', label: '3. Pricing / Tax', icon: DollarSign },
-                            { id: 'accounting', label: '4. Accounting', icon: SettingsIcon },
-                            { id: 'inventory', label: '5. Inventory', icon: BarChart3 },
-                            { id: 'packaging', label: '6. Packaging', icon: Package },
-                            { id: 'identifiers', label: '7. Identifiers', icon: Tag },
-                            { id: 'attributes', label: '8. Attributes', icon: BoxIcon },
-                            { id: 'bulk', label: '9. Bulk Slabs', icon: Plus },
-                        ].map(tab => {
+                        {PRODUCT_FORM_TABS.map(tab => {
                             const isActive = activeTab === tab.id;
                             const Icon = tab.icon;
                             return (
                                 <button
                                     key={tab.id}
                                     type="button"
-                                    onClick={() => setActiveTab(tab.id as any)}
+                                    onClick={() => setActiveTab(tab.id)}
                                     className={cn(
                                         "flex items-center gap-3 px-4 py-3 rounded-xl text-[13px] font-bold transition-all outline-none text-left",
                                         isActive
@@ -2090,6 +2092,7 @@ export default function ProductsPage() {
 
                                         <div>
                                             <CategoryHierarchyPicker
+                                                key={`cat-${editingProduct?.id ?? (panelOpen ? 'open' : 'closed')}`}
                                                 value={formData.categoryIds}
                                                 onChange={(ids) => setFormData(prev => ({ ...prev, categoryIds: ids }))}
                                                 maxAdditional={4}
@@ -2996,6 +2999,22 @@ export default function ProductsPage() {
                 brands={brands}
                 vendors={vendors}
                 onComplete={() => { handleImportComplete(); setSelectedIds(new Set()); }}
+            />
+
+            <VendorBulkGrid
+                open={gridOpen}
+                onClose={() => setGridOpen(false)}
+                products={gridProducts}
+                onComplete={handleImportComplete}
+                categories={categories}
+                brands={brands}
+                patchUrl={(id) => {
+                    const row = products.find(p => p.id === id);
+                    return row?.isMasterRow
+                        ? `/api/v1/admin/master-products/${id}`
+                        : `/api/v1/admin/products/${id}`;
+                }}
+                onOpenAdvanced={() => setBulkUpdateOpen(true)}
             />
 
 

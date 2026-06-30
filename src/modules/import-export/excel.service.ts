@@ -132,6 +132,8 @@ function toTaxable(gross: number, taxPercent: number): number {
 // Schema accepts legacy + Vendor_Item_Template (Zoho) column headers
 const productImportRowSchema = z
   .object({
+    'Item ID': z.coerce.string().optional(),
+    'Vendor ID': z.coerce.string().optional(),
     'SKU': z.coerce.string().optional(),
     'Product Name': z.coerce.string().optional(),
     'Item Name': z.coerce.string().optional(),
@@ -443,6 +445,8 @@ export function parseProductImport(buffer: Buffer): ProductImportResult {
       moq: r['MOQ'],
       bulkSlabs,
       metadata: {
+        itemId: r['Item ID'],
+        vendorId: r['Vendor ID'],
         accounting: {
           account: r['Account'],
           accountCode: r['Account Code'],
