@@ -11,7 +11,7 @@ import { dal } from '@/lib/dal';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
 import type { Vendor, VendorProduct } from '@/types';
-import { Package, Star, CheckCircle, Clock, Sparkles, ChevronDown, ChevronRight, LayoutGrid } from 'lucide-react';
+import { Package, Star, CheckCircle, Clock, ChevronRight, LayoutGrid } from 'lucide-react';
 import Image from 'next/image';
 
 interface VendorOrder {
@@ -152,11 +152,15 @@ export default function VendorStorePage() {
         if (!initialCatSlug || products.length === 0) return;
         if (!activeTab.startsWith('cat:')) return;
         const current = activeTab.slice(4);
-        // If activeTab is already a real category name (not the raw slug), nothing to do.
-        if (products.some(p => p.category === current)) return;
+        // If activeTab is already a real category OR parent-category name (not the raw slug), nothing to do.
+        if (products.some(p => p.category === current || p.categoryParentName === current)) return;
         const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-        const matched = products.find(p => slugify(p.category) === slugify(initialCatSlug));
-        if (matched) setActiveTab(`cat:${matched.category}`);
+        const slug = slugify(initialCatSlug);
+        // Prefer a sub-category match (shows products); fall back to a parent match (shows sub-category tiles).
+        const subMatch = products.find(p => slugify(p.category) === slug);
+        if (subMatch) { setActiveTab(`cat:${subMatch.category}`); return; }
+        const parentMatch = products.find(p => p.categoryParentName && slugify(p.categoryParentName) === slug);
+        if (parentMatch?.categoryParentName) setActiveTab(`cat:${parentMatch.categoryParentName}`);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [products, initialCatSlug]);
 
@@ -172,32 +176,45 @@ export default function VendorStorePage() {
         const parents = new Map<string, SidebarNode>();
 
         for (const p of products) {
-            const catId = p.categoryId;
-            const catName = p.category;
-            if (!catId || !catName) continue;
+            // A product appears under EVERY sub-category it's tagged in (primary + the
+            // vendor's additional/display-only choices). Fall back to the primary fields
+            // when the link set isn't populated.
+            const links = (p.subCategories && p.subCategories.length > 0)
+                ? p.subCategories
+                : (p.categoryId && p.category
+                    ? [{ id: p.categoryId, name: p.category, image: p.categoryImage, parentId: p.categoryParentId, parentName: p.categoryParentName }]
+                    : []);
 
-            if (p.categoryParentId && p.categoryParentName) {
-                // Product is in a Sub-Category → roll up under its parent
-                let parent = parents.get(p.categoryParentId);
-                if (!parent) {
-                    parent = { id: p.categoryParentId, name: p.categoryParentName, count: 0, children: [] };
-                    parents.set(p.categoryParentId, parent);
+            const countedParents = new Set<string>(); // count each product once per parent badge
+            for (const sc of links) {
+                if (!sc.id || !sc.name) continue;
+                if (sc.parentId && sc.parentName) {
+                    // Sub-category → roll up under its parent.
+                    let parent = parents.get(sc.parentId);
+                    if (!parent) {
+                        parent = { id: sc.parentId, name: sc.parentName, count: 0, children: [] };
+                        parents.set(sc.parentId, parent);
+                    }
+                    // Only the primary parent carries a known image here; other parents get
+                    // theirs from products whose PRIMARY category sits under them.
+                    if (!parent.image && sc.parentId === p.categoryParentId) parent.image = p.categoryParentImage;
+                    let child = parent.children.find(c => c.id === sc.id);
+                    if (!child) {
+                        child = { id: sc.id, name: sc.name, count: 0, image: sc.image || p.images?.[0] };
+                        parent.children.push(child);
+                    }
+                    if (!child.image) child.image = sc.image || p.images?.[0];
+                    child.count += 1;
+                    if (!countedParents.has(sc.parentId)) { parent.count += 1; countedParents.add(sc.parentId); }
+                } else {
+                    // Sub-category with no parent (defensive — should not happen post-restructure)
+                    let parent = parents.get(sc.id);
+                    if (!parent) {
+                        parent = { id: sc.id, name: sc.name, count: 0, image: sc.image || p.images?.[0], children: [] };
+                        parents.set(sc.id, parent);
+                    }
+                    if (!countedParents.has(sc.id)) { parent.count += 1; countedParents.add(sc.id); }
                 }
-                let child = parent.children.find(c => c.id === catId);
-                if (!child) {
-                    child = { id: catId, name: catName, count: 0, image: p.images?.[0] };
-                    parent.children.push(child);
-                }
-                child.count += 1;
-                parent.count += 1;
-            } else {
-                // Product is in a top-level Category
-                let parent = parents.get(catId);
-                if (!parent) {
-                    parent = { id: catId, name: catName, count: 0, image: p.images?.[0], children: [] };
-                    parents.set(catId, parent);
-                }
-                parent.count += 1;
             }
         }
 
@@ -207,17 +224,21 @@ export default function VendorStorePage() {
         return list;
     }, [products]);
 
-    // Sidebar expand/collapse state. Parent of the current active sub-category opens by default.
-    const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
-    useEffect(() => {
-        if (!activeTab.startsWith('cat:')) return;
-        const activeName = activeTab.slice(4);
-        // If active is a sub-category, expand its parent
-        const parentOfActive = vendorCategoryTree.find(p => p.children.some(c => c.name === activeName));
-        if (parentOfActive) {
-            setExpandedCats(prev => prev[parentOfActive.id] ? prev : { ...prev, [parentOfActive.id]: true });
-        }
-    }, [activeTab, vendorCategoryTree]);
+    // Drill-down state derived from activeTab.
+    // Left rail = top-level categories (parents). Selecting a parent shows its
+    // sub-category TILES on the right; selecting a sub-category shows its products.
+    // Items are only ever mapped to sub-categories, so a parent never shows products directly.
+    const activeCatName = activeTab.startsWith('cat:') ? activeTab.slice(4) : '';
+    const activeParentNode = useMemo(
+        () => vendorCategoryTree.find(p => p.name === activeCatName && p.children.length > 0),
+        [vendorCategoryTree, activeCatName],
+    );
+    const parentOfActiveSub = useMemo(
+        () => vendorCategoryTree.find(p => p.children.some(c => c.name === activeCatName)),
+        [vendorCategoryTree, activeCatName],
+    );
+    // Show the sub-category grid when a parent (with children) is selected and the user isn't searching.
+    const showSubcategoryTiles = !searchQuery.trim() && !!activeParentNode;
 
     const filteredProducts = useMemo(() => {
         let result = products;
@@ -231,11 +252,12 @@ export default function VendorStorePage() {
             result = prevOrderedProducts;
         } else if (activeTab.startsWith('cat:')) {
             const category = activeTab.replace('cat:', '');
-            // Match products in this category directly, OR — if a top-level Category is
-            // selected — any of its sub-categories. This is what makes the Hyperpure-style
-            // parent click show ALL items in Dairy (Milk + Cheese + Butter), not just
-            // products whose primary categoryId equals Dairy itself.
+            // Match against EVERY sub-category the product is tagged in (primary + the
+            // vendor's additional/display-only choices) and that sub-category's parent.
+            // This makes a product showcased in multiple sub-categories appear in each,
+            // and a top-level Category click show all items across its sub-categories.
             result = result.filter(p =>
+                p.subCategories?.some(sc => sc.name === category || sc.parentName === category) ||
                 p.category === category ||
                 p.subcategory === category ||
                 p.categoryParentName === category
@@ -350,10 +372,10 @@ export default function VendorStorePage() {
                     </div>
                 ) : activeTab === 'all' || activeTab === 'deals' || activeTab === 'frequent' || activeTab === 'prev-ordered' || activeTab.startsWith('cat:') ? (
                     <div className="flex gap-2 md:gap-4 lg:gap-6 items-start">
-                        {/* ── CATEGORIES >> SUB-CATEGORIES SIDEBAR.
+                        {/* ── LEFT RAIL: TOP-LEVEL CATEGORIES ONLY (parents).
+                              Selecting a parent drills into its sub-categories on the right.
                               Mobile (<md): Hyperpure-style vertical tile rail (~76px), image-on-top + label-below.
-                              Tapping a parent both filters and toggles its children (no separate chevron in the rail).
-                              Desktop (md+): horizontal-row hierarchical panel with chevron expanders. ── */}
+                              Desktop (md+): row list with image + label + count. ── */}
                         <aside className="w-[76px] md:w-[200px] lg:w-[260px] shrink-0 sticky top-24">
                             <div className="bg-white rounded-2xl border border-gray-100 p-1 md:p-3 shadow-sm">
                                 {/* All Products entry */}
@@ -370,7 +392,7 @@ export default function VendorStorePage() {
                                             "w-12 h-12 md:w-9 md:h-9 rounded-lg flex items-center justify-center transition-all shrink-0",
                                             activeTab === 'all' ? "bg-white border border-[#53B175]/30 shadow-sm" : "bg-gray-50"
                                         )}>
-                                            <LayoutGrid className={cn('w-5 h-5 md:w-4 md:h-4', activeTab === 'all' ? 'text-[#53B175]' : 'text-gray-400')} strokeWidth={2} />
+                                            <LayoutGrid className={cn('w-5 h-5 md:w-4 md:h-4', activeTab === 'all' ? 'text-[#53B175]' : 'text-gray-400')} strokeWidth={1.5} />
                                         </div>
                                         <span className={cn(
                                             "text-[10px] md:text-[13px] font-semibold md:font-bold leading-tight text-center md:text-left mt-1 md:mt-0 line-clamp-2 md:line-clamp-none md:truncate w-full md:flex-1",
@@ -383,111 +405,105 @@ export default function VendorStorePage() {
                                 </button>
 
                                 {vendorCategoryTree.map((parent) => {
-                                    const isParentActive = activeTab === `cat:${parent.name}`;
-                                    const hasChildren = parent.children.length > 0;
-                                    const isOpen = expandedCats[parent.id] ?? isParentActive;
+                                    // Highlight the parent both when it is selected AND when one of its
+                                    // sub-categories is active, so the rail tracks the drill-down.
+                                    const isParentActive = activeTab === `cat:${parent.name}` || parent.children.some(c => activeTab === `cat:${c.name}`);
                                     return (
-                                        <div key={parent.id} className="mt-1">
-                                            <div className={cn(
-                                                "rounded-xl transition-all",
+                                        <button
+                                            key={parent.id}
+                                            type="button"
+                                            onClick={() => {
+                                                setActiveTab(`cat:${parent.name}`);
+                                            }}
+                                            className={cn(
+                                                "w-full mt-1 rounded-xl transition-all text-left flex flex-col items-center md:flex-row md:items-center md:gap-3 px-1 md:px-3 py-2 md:py-2.5 min-w-0",
                                                 isParentActive ? "bg-[#53B175]/10" : "hover:bg-gray-50"
-                                            )}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setActiveTab(`cat:${parent.name}`);
-                                                        // Mobile has no chevron — tap-on-parent also toggles expansion.
-                                                        if (hasChildren) setExpandedCats(prev => ({ ...prev, [parent.id]: !isOpen }));
-                                                    }}
-                                                    className="w-full flex flex-col items-center md:flex-row md:items-center md:gap-3 px-1 md:px-3 py-2 md:py-2.5 text-left min-w-0"
-                                                >
-                                                    <div className={cn(
-                                                        "w-12 h-12 md:w-9 md:h-9 rounded-lg flex items-center justify-center overflow-hidden relative transition-all shrink-0",
-                                                        isParentActive ? "bg-white border border-[#53B175]/30 shadow-sm" : "bg-gray-50"
-                                                    )}>
-                                                        {parent.image ? (
-                                                            <Image src={parent.image} alt={parent.name} width={36} height={36} className="object-contain w-full h-full p-1" />
-                                                        ) : (
-                                                            <Package size={16} className="text-gray-300" />
-                                                        )}
-                                                    </div>
-                                                    <span className={cn(
-                                                        "text-[10px] md:text-[13px] font-semibold md:font-bold leading-tight text-center md:text-left mt-1 md:mt-0 line-clamp-2 md:line-clamp-none md:truncate w-full md:flex-1",
-                                                        isParentActive ? "text-[#53B175]" : "text-[#181725]"
-                                                    )}>
-                                                        {parent.name}
-                                                    </span>
-                                                    <span className="hidden md:inline text-[11px] font-bold text-gray-400 shrink-0">{parent.count}</span>
-                                                    {hasChildren && (
-                                                        <span
-                                                            role="button"
-                                                            aria-label={isOpen ? 'Collapse sub-categories' : 'Expand sub-categories'}
-                                                            tabIndex={0}
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                setExpandedCats(prev => ({ ...prev, [parent.id]: !isOpen }));
-                                                            }}
-                                                            className="hidden md:flex w-7 h-7 ml-1 items-center justify-center text-gray-400 hover:text-[#53B175] rounded-md hover:bg-white transition-all shrink-0 cursor-pointer"
-                                                        >
-                                                            {isOpen ? <ChevronDown size={14} strokeWidth={2.5} /> : <ChevronRight size={14} strokeWidth={2.5} />}
-                                                        </span>
-                                                    )}
-                                                </button>
-                                            </div>
-
-                                            {/* Sub-categories — text-only on mobile rail, indented row on desktop */}
-                                            {hasChildren && isOpen && (
-                                                <div className="ml-0.5 md:ml-5 mt-1 md:border-l md:border-gray-100 pl-0.5 md:pl-2 space-y-0.5">
-                                                    {parent.children.map((child) => {
-                                                        const isChildActive = activeTab === `cat:${child.name}`;
-                                                        return (
-                                                            <button
-                                                                key={child.id}
-                                                                type="button"
-                                                                onClick={() => setActiveTab(`cat:${child.name}`)}
-                                                                className={cn(
-                                                                    "w-full flex items-center justify-center md:justify-between px-1 md:px-3 py-1.5 md:py-2 rounded-lg transition-all text-center md:text-left",
-                                                                    isChildActive ? "bg-[#53B175]/10" : "hover:bg-gray-50"
-                                                                )}
-                                                            >
-                                                                <span className={cn(
-                                                                    "text-[10px] md:text-[12px] font-semibold leading-tight line-clamp-2 md:line-clamp-none md:truncate",
-                                                                    isChildActive ? "text-[#53B175]" : "text-gray-600"
-                                                                )}>
-                                                                    {child.name}
-                                                                </span>
-                                                                <span className="hidden md:inline text-[10px] font-bold text-gray-400 shrink-0 ml-2">{child.count}</span>
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
                                             )}
-                                        </div>
+                                        >
+                                            <div className={cn(
+                                                "w-12 h-12 md:w-9 md:h-9 rounded-lg flex items-center justify-center overflow-hidden relative transition-all shrink-0",
+                                                isParentActive ? "bg-white border border-[#53B175]/30 shadow-sm" : "bg-gray-50"
+                                            )}>
+                                                {parent.image ? (
+                                                    <Image src={parent.image} alt={parent.name} width={36} height={36} className="object-contain w-full h-full p-1" />
+                                                ) : (
+                                                    <Package size={16} className="text-gray-300" strokeWidth={1.5} />
+                                                )}
+                                            </div>
+                                            <span className={cn(
+                                                "text-[10px] md:text-[13px] font-semibold md:font-bold leading-tight text-center md:text-left mt-1 md:mt-0 line-clamp-2 md:line-clamp-none md:truncate w-full md:flex-1",
+                                                isParentActive ? "text-[#53B175]" : "text-[#181725]"
+                                            )}>
+                                                {parent.name}
+                                            </span>
+                                            <span className="hidden md:inline text-[11px] font-bold text-gray-400 shrink-0">{parent.count}</span>
+                                        </button>
                                     );
                                 })}
                             </div>
                         </aside>
 
-                        {/* ── PRODUCT GRID — 2-up at every width in grid mode; single column in list mode ── */}
+                        {/* ── RIGHT: SUB-CATEGORY TILES (parent selected) → PRODUCTS (sub-category selected / All / search) ── */}
                         <div className="flex-1 min-w-0">
-                            {filteredProducts.length > 0 ? (
-                                <div className={cn(
-                                    layoutMode === 'grid'
-                                        ? 'grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 md:gap-4 lg:gap-5'
-                                        : 'flex flex-col gap-3 md:gap-4'
-                                )}>
-                                    {filteredProducts.map((product) => (
-                                        <VendorProductCard key={product.id} product={product} variant={layoutMode} />
-                                    ))}
+                            {showSubcategoryTiles && activeParentNode ? (
+                                <div>
+                                    <h2 className="text-[clamp(1.1rem,2vw+0.5rem,1.6rem)] font-black text-[#181725] mb-4">{activeParentNode.name}</h2>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+                                        {activeParentNode.children.map((child) => (
+                                            <button
+                                                key={child.id}
+                                                type="button"
+                                                onClick={() => setActiveTab(`cat:${child.name}`)}
+                                                className="group bg-white rounded-2xl border border-gray-100 p-4 shadow-sm hover:shadow-md hover:border-[#53B175]/40 transition-all flex flex-col items-center text-center"
+                                            >
+                                                <div className="w-20 h-20 rounded-xl bg-gray-50 flex items-center justify-center overflow-hidden mb-3">
+                                                    {child.image ? (
+                                                        <Image src={child.image} alt={child.name} width={64} height={64} className="object-contain w-full h-full p-1.5" />
+                                                    ) : (
+                                                        <Package size={28} className="text-gray-300" strokeWidth={1.5} />
+                                                    )}
+                                                </div>
+                                                <span className="text-[13px] font-bold text-[#181725] leading-tight line-clamp-2 group-hover:text-[#53B175] transition-colors">{child.name}</span>
+                                                <span className="text-[11px] font-bold text-gray-400 mt-1">{child.count} {child.count === 1 ? 'item' : 'items'}</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             ) : (
-                                <div className="flex flex-col items-center justify-center py-24 text-center">
-                                    <div className="p-6 bg-gray-50 rounded-full mb-4">
-                                        <Package className="text-gray-300" size={48} strokeWidth={1.5} />
-                                    </div>
-                                    <h3 className="text-[20px] font-black text-[#181725]">No items found</h3>
-                                    <p className="text-gray-400 font-bold mt-1">Try adjusting your search or filters</p>
+                                <div>
+                                    {/* Breadcrumb back to the sub-category tiles when viewing a sub-category's products */}
+                                    {parentOfActiveSub && (
+                                        <div className="flex items-center gap-1.5 mb-3 text-[12px] font-bold">
+                                            <button
+                                                type="button"
+                                                onClick={() => setActiveTab(`cat:${parentOfActiveSub.name}`)}
+                                                className="text-gray-400 hover:text-[#53B175] transition-colors"
+                                            >
+                                                {parentOfActiveSub.name}
+                                            </button>
+                                            <ChevronRight size={13} className="text-gray-300" strokeWidth={2.5} />
+                                            <span className="text-[#181725]">{activeCatName}</span>
+                                        </div>
+                                    )}
+                                    {filteredProducts.length > 0 ? (
+                                        <div className={cn(
+                                            layoutMode === 'grid'
+                                                ? 'grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 md:gap-4 lg:gap-5'
+                                                : 'flex flex-col gap-3 md:gap-4'
+                                        )}>
+                                            {filteredProducts.map((product) => (
+                                                <VendorProductCard key={product.id} product={product} variant={layoutMode} />
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center py-24 text-center">
+                                            <div className="p-6 bg-gray-50 rounded-full mb-4">
+                                                <Package className="text-gray-300" size={48} strokeWidth={1.5} />
+                                            </div>
+                                            <h3 className="text-[20px] font-black text-[#181725]">No items found</h3>
+                                            <p className="text-gray-400 font-bold mt-1">Try adjusting your search or filters</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

@@ -66,6 +66,11 @@ export interface VendorProduct extends Product {
     categoryId?: string;         // DB category UUID — used for reliable category-page filtering
     categoryParentId?: string;   // Parent category UUID — if set, this product's category is a sub-category
     categoryParentName?: string; // Parent category display name — for Hyperpure-style hierarchical sidebar
+    categoryImage?: string;      // Sub-category's own image — used for the drill-down sub-category tiles
+    categoryParentImage?: string;// Parent category's own image — used for the parent rail icon
+    // Every sub-category this product is tagged in (primary + vendor's additional/display-only choices).
+    // Storefront shows the product under ALL of these, not just the primary categoryId.
+    subCategories?: Array<{ id: string; name: string; image?: string; parentId?: string; parentName?: string }>;
     bulkPrices: BulkPriceTier[];
     creditBadge: boolean;
     minOrderQuantity: number;    // min qty the customer must add (from DB minOrderQty)

@@ -175,10 +175,15 @@ export async function resolveImportCategoryIds(input: {
     if (id) categoryIds.push(id);
   }
 
+  // Additional sub-categories are DISPLAY-ONLY, vendor's free choice: they just
+  // fan the product out across more sub-categories on the storefront. They link to
+  // EXISTING (approved) categories only — never create a new/pending category and
+  // never gate approval. "Request new category" is reserved for Parent / Sub. So a
+  // vendor tagging extra sub-categories never sends the product to the approvals queue.
   for (const addName of additional) {
     const trimmed = addName.trim();
     if (!trimmed) continue;
-    const id = await resolveName(trimmed, !!parentId);
+    const id = input.catMap.get(trimmed.toLowerCase());
     if (id && !categoryIds.includes(id)) categoryIds.push(id);
   }
 
@@ -628,8 +633,26 @@ export class CatalogService {
             id: true,
             name: true,
             slug: true,
+            imageUrl: true,
             parentId: true,
-            parent: { select: { id: true, name: true, slug: true } },
+            parent: { select: { id: true, name: true, slug: true, imageUrl: true } },
+          },
+        },
+        // ALL sub-categories this product is tagged in (primary + additional). The vendor's
+        // "Additional Sub-Category" choices are display-only, so the storefront shows the
+        // product under every one of these, not just the primary categoryId.
+        categoryLinks: {
+          select: {
+            isPrimary: true,
+            category: {
+              select: {
+                id: true,
+                name: true,
+                imageUrl: true,
+                parentId: true,
+                parent: { select: { id: true, name: true } },
+              },
+            },
           },
         },
         vendor: { select: { id: true, businessName: true, logoUrl: true } },
@@ -711,10 +734,17 @@ export class CatalogService {
   }
 
   async getCategoryVendors(categoryId: string, pincode?: string) {
+    // Items map only to SUB-categories, so a top-level category matches nothing directly.
+    // Match products in this category OR in any of its sub-categories (category.parentId).
     const where: Record<string, unknown> = {
       isActive: true,
       isVerified: true,
-      products: { some: { categoryId, isActive: true } },
+      products: {
+        some: {
+          isActive: true,
+          OR: [{ categoryId }, { category: { parentId: categoryId } }],
+        },
+      },
     };
 
     if (pincode) {
@@ -1181,6 +1211,8 @@ export class CatalogService {
           vegNonVeg: product.vegNonVeg,
           masterProductId: product.masterProductId,
           categoryId: product.categoryId,
+          imageUrl: product.imageUrl,
+          images: product.images,
         },
         currentCategoryIds,
         data,
@@ -1211,6 +1243,8 @@ export class CatalogService {
           'vegNonVeg',
           'masterProductId',
           'taxPercent',
+          'imageUrl',
+          'images',
         ] as const) {
           if (materialPayload[key as keyof typeof materialPayload] !== undefined) {
             delete data[key];
@@ -1420,6 +1454,12 @@ export class CatalogService {
     }
     if (pending.categoryIds?.length) {
       updateData.categoryId = pending.categoryIds[0];
+    }
+    if (pending.imageUrl !== undefined) {
+      updateData.imageUrl = pending.imageUrl;
+    }
+    if (pending.images !== undefined) {
+      updateData.images = pending.images;
     }
 
     await transitionProductApproval(productId, 'approved', adminUserId, {

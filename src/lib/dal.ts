@@ -194,6 +194,23 @@ function toVendorProduct(p: Record<string, unknown>, vendorInfo?: Record<string,
     categoryId: (p.categoryId as string) || ((p.category as Record<string, unknown>)?.id as string) || undefined,
     categoryParentId: ((p.category as Record<string, unknown>)?.parentId as string) || undefined,
     categoryParentName: (((p.category as Record<string, unknown>)?.parent as Record<string, unknown>)?.name as string) || undefined,
+    categoryImage: ((p.category as Record<string, unknown>)?.imageUrl as string) || undefined,
+    categoryParentImage: (((p.category as Record<string, unknown>)?.parent as Record<string, unknown>)?.imageUrl as string) || undefined,
+    // Every sub-category this product is tagged in (primary + vendor's additional choices).
+    subCategories: Array.isArray(p.categoryLinks)
+      ? (p.categoryLinks as Array<Record<string, unknown>>)
+          .map((l) => {
+            const c = (l.category as Record<string, unknown>) || {};
+            return {
+              id: c.id as string,
+              name: c.name as string,
+              image: (c.imageUrl as string) || undefined,
+              parentId: (c.parentId as string) || undefined,
+              parentName: ((c.parent as Record<string, unknown>)?.name as string) || undefined,
+            };
+          })
+          .filter((c) => c.id && c.name)
+      : [],
     bulkPrices: customerPriceApplied ? [] : priceSlabs.map((s): BulkPriceTier => ({
       minQty: Number(s.minQty),
       price: toGross(Number(s.price)),

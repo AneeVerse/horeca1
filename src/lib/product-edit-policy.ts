@@ -73,6 +73,8 @@ export interface PendingEditPayload {
   vegNonVeg?: string | null;
   masterProductId?: string | null;
   categoryIds?: string[];
+  imageUrl?: string | null;
+  images?: string[];
   submittedAt: string;
   submittedBy: string;
 }
@@ -100,6 +102,8 @@ type ProductSnapshot = {
   vegNonVeg: string | null;
   masterProductId: string | null;
   categoryId: string | null;
+  imageUrl: string | null;
+  images: string[];
 };
 
 /**
@@ -134,11 +138,23 @@ export function detectMaterialChanges(
   compare('unit', 'unit');
   compare('vegNonVeg', 'vegNonVeg');
   compare('masterProductId', 'masterProductId');
+  compare('imageUrl', 'imageUrl');
+
+  if (incoming.images !== undefined) {
+    const oldImages = current.images || [];
+    const newImages = incoming.images as string[] || [];
+    const oldStr = [...oldImages].sort().join(',');
+    const newStr = [...newImages].sort().join(',');
+    if (oldStr !== newStr) {
+      materialPayload.images = newImages;
+      hasMaterialChanges = true;
+    }
+  }
 
   if (incomingCategoryIds !== undefined) {
-    const sortedOld = [...currentCategoryIds].sort().join(',');
-    const sortedNew = [...incomingCategoryIds].sort().join(',');
-    if (sortedOld !== sortedNew) {
+    const oldPrimary = current.categoryId;
+    const newPrimary = incomingCategoryIds[0] ?? null;
+    if (oldPrimary !== newPrimary) {
       materialPayload.categoryIds = incomingCategoryIds;
       hasMaterialChanges = true;
     }

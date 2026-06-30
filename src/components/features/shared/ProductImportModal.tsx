@@ -338,7 +338,12 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
       { key: 'itemStatus', label: 'Item Status', width: 'w-[110px]', type: 'text' },
       { key: 'activeOnlineStore', label: 'Active on Online Store', width: 'w-[140px]', type: 'checkbox' },
     ];
-    const hasLegacyCategory = preview?.items.some((i) => i.category);
+    // The legacy single "Category" column is only for OLD flat sheets. Hide it whenever
+    // the sheet uses the Parent / Sub / Additional hierarchy (the canonical model) — i.e.
+    // show it only for rows that have a category label but NO hierarchy fields.
+    const hasLegacyCategory = preview?.items.some(
+      (i) => i.category && !i.parentCategory && !i.subCategory && !(i.additionalSubCategories?.length),
+    );
     if (preview && !hasLegacyCategory) {
       return list.filter((c) => c.key !== 'category');
     }
@@ -365,7 +370,11 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
     
     if (field === 'parentCategory') return item.parentCategory ?? '';
     if (field === 'subCategory') return item.subCategory ?? '';
-    if (field === 'additionalSubCategory') return item.additionalSubCategories?.join(', ') ?? '';
+    if (field === 'additionalSubCategory') {
+      const edited = edits[item.row]?.additionalSubCategories;
+      if (edited !== undefined) return edited.join(', ');
+      return item.additionalSubCategories?.join(', ') ?? '';
+    }
     if (field === 'vegNonVeg') return item.vegNonVeg ?? '';
     if (field === 'storageType') return item.storageType ?? '';
     if (field === 'moq') return item.moq ?? 1;
@@ -420,6 +429,16 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
   }, [edits]);
 
   const setVal = useCallback((row: number, field: string, value: any) => {
+    // The "Additional Sub-Category" cell is a comma-separated string in the grid, but the
+    // committed field is an array (`additionalSubCategories`). Map singular → array here so
+    // the edit isn't silently dropped by the server-side whitelist.
+    if (field === 'additionalSubCategory') {
+      const arr = typeof value === 'string'
+        ? value.split(/[,;|]/).map((s) => s.trim()).filter(Boolean)
+        : [];
+      setEdit(row, 'additionalSubCategories', arr);
+      return;
+    }
     setEdits((prev) => {
       const next = { ...prev };
       const rowEdits = { ...(next[row] ?? {}) };
@@ -432,7 +451,7 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
       else next[row] = rowEdits;
       return next;
     });
-  }, []);
+  }, [setEdit]);
   const handleClose = () => {
     if (!committing && !parsing) { reset(); onClose(); }
   };
@@ -954,12 +973,24 @@ export default function ProductImportModal({ open, onClose, onComplete, config }
                         <FieldGroup label="Unit">
                           <input type="text" value={edits[currentItem.row]?.unit ?? (currentItem.unit ?? '')} onChange={e => setEdit(currentItem.row, 'unit', e.target.value)} className={inputCls} />
                         </FieldGroup>
-                        <FieldGroup label="Category">
-                          <select value={edits[currentItem.row]?.category ?? (currentItem.category ?? '')} onChange={e => setEdit(currentItem.row, 'category', e.target.value || undefined)} className={selectCls}>
-                            <option value="">— Select category —</option>
-                            {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                          </select>
+                        <FieldGroup label="Parent Category">
+                          <input type="text" list="import-cat-list" placeholder="—"
+                            value={edits[currentItem.row]?.parentCategory ?? (currentItem.parentCategory ?? '')}
+                            onChange={e => setEdit(currentItem.row, 'parentCategory', e.target.value || undefined)} className={inputCls} />
                         </FieldGroup>
+                        <FieldGroup label="Sub-Category">
+                          <input type="text" list="import-cat-list" placeholder="—"
+                            value={edits[currentItem.row]?.subCategory ?? (currentItem.subCategory ?? '')}
+                            onChange={e => setEdit(currentItem.row, 'subCategory', e.target.value || undefined)} className={inputCls} />
+                        </FieldGroup>
+                        <FieldGroup label="Additional Sub-Category">
+                          <input type="text" list="import-cat-list" placeholder="Comma-separated"
+                            value={(edits[currentItem.row]?.additionalSubCategories ?? currentItem.additionalSubCategories ?? []).join(', ')}
+                            onChange={e => setEdit(currentItem.row, 'additionalSubCategories', e.target.value.split(/[,;|]/).map(s => s.trim()).filter(Boolean))} className={inputCls} />
+                        </FieldGroup>
+                        <datalist id="import-cat-list">
+                          {categories.map(c => <option key={c.id} value={c.name} />)}
+                        </datalist>
                         <FieldGroup label="Stock">
                           <input type="number" value={edits[currentItem.row]?.stock ?? (currentItem.stock ?? 0)} onChange={e => setEdit(currentItem.row, 'stock', parseInt(e.target.value) || 0)} className={inputCls} />
                         </FieldGroup>
