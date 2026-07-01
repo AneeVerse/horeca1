@@ -1,4 +1,6 @@
 // LEGACY SHIM — the CreditAccount-backed CreditService has been retired in favour
+// of CreditWalletService. Do NOT add new prisma.creditAccount reads/writes — use
+// creditWalletService instead.
 // of the unified CreditWallet (see creditWallet.service.ts). Nothing in the app
 // imports this anymore (the /credit/check, /apply and /signup routes were
 // repointed to CreditWallet). It is kept as a thin, build-safe adapter that

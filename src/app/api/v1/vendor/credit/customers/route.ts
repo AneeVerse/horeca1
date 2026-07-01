@@ -11,6 +11,7 @@ import { vendorOnly } from '@/middleware/rbac';
 import { errorResponse } from '@/middleware/errorHandler';
 import { resolveVendorId } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
+import { resolveCreditDisplayStatus } from '@/modules/credit/creditWallet.service';
 
 export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
@@ -28,7 +29,17 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         where: { vendorId },
         select: { userId: true },
       }),
-      prisma.creditWallet.findMany({ where: { vendorId } }),
+      prisma.creditWallet.findMany({
+        where: { vendorId },
+        include: {
+          assignedOwner: {
+            select: {
+              id: true,
+              user: { select: { fullName: true, businessName: true, email: true } },
+            },
+          },
+        },
+      }),
     ]);
 
     const userIds = new Set<string>([
@@ -68,6 +79,13 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
                 availableCredit: Number(w.availableCredit),
                 outstandingAmount: Number(w.outstandingAmount),
                 status: w.status,
+                workflowStatus: w.workflowStatus,
+                assignedOwnerId: w.assignedOwnerId,
+                ownerName: w.assignedOwner
+                  ? (w.assignedOwner.user.fullName ?? w.assignedOwner.user.businessName ?? w.assignedOwner.user.email)
+                  : null,
+                vendorNotes: w.vendorNotes,
+                displayStatus: resolveCreditDisplayStatus(w.status, w.workflowStatus),
                 currentDueDate: w.currentDueDate,
                 overdueDays: w.overdueDays,
                 // Current overrides so the edit form pre-fills; null = platform default.
@@ -82,6 +100,9 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
                 penaltyFrequencyDays: w.overridePenaltyFreqDays,
               }
             : null,
+          displayStatus: w
+            ? resolveCreditDisplayStatus(w.status, w.workflowStatus)
+            : 'IN_PROGRESS',
         };
       })
       // Credit customers first (highest exposure on top), then frequent buyers.

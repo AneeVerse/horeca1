@@ -69,6 +69,41 @@ export function toTeamMemberDTO(args: {
   };
 }
 
+/** Dropdown option shape used by vendor credit grid and similar UIs. */
+export interface TeamMemberOption {
+  id: string;
+  name: string;
+}
+
+/** Map a team API DTO row to a select option (nested `user.fullName`, not flat). */
+export function toTeamMemberOption(dto: {
+  id: string;
+  isOwner?: boolean;
+  user?: { fullName?: string | null; email?: string | null };
+  fullName?: string | null;
+  name?: string | null;
+  email?: string | null;
+}): TeamMemberOption | null {
+  if (dto.isOwner || String(dto.id).startsWith('owner-')) return null;
+  const name =
+    dto.user?.fullName?.trim()
+    || dto.fullName?.trim()
+    || dto.name?.trim()
+    || dto.user?.email?.trim()
+    || dto.email?.trim()
+    || 'Team member';
+  return { id: dto.id, name };
+}
+
+export function teamDtoListToOptions(
+  list: Array<Parameters<typeof toTeamMemberOption>[0]>,
+): TeamMemberOption[] {
+  return list.flatMap((dto) => {
+    const opt = toTeamMemberOption(dto);
+    return opt ? [opt] : [];
+  });
+}
+
 function legacyEnumLabel(role: string): string {
   switch (role) {
     case 'owner':   return 'Owner';

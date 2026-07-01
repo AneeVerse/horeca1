@@ -1077,6 +1077,14 @@ enum CreditPenaltyType {
   @@map("credit_penalty_type")
 }
 
+enum CreditWorkflowStatus {
+  SANCTIONED
+  IN_PROGRESS
+  COMPLETED
+
+  @@map("credit_workflow_status")
+}
+
 // Singleton global defaults. Every parameter is overridable per wallet (see
 // CreditWallet.override*). interest/penalty frequency are in DAYS so "1% per 2 days"
 // is expressible. unlockCreditAmount powers "buy X times -> unlock up to ₹Y".
@@ -1139,11 +1147,17 @@ model CreditWallet {
   overridePenaltyAmount   Decimal?            @map("override_penalty_amount") @db.Decimal(12, 2)
   overridePenaltyFreqDays Int?                @map("override_penalty_freq_days")
 
+  // Vendor CRM fields (workflow status is vendor-managed; runtime status is system-owned)
+  workflowStatus          CreditWorkflowStatus @default(IN_PROGRESS) @map("workflow_status")
+  assignedOwnerId         String?             @map("assigned_owner_id") @db.Uuid
+  vendorNotes             String?             @map("vendor_notes") @db.Text
+
   createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz
   updatedAt             DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   user                  User                @relation(fields: [userId], references: [id])
   vendor                Vendor?             @relation(fields: [vendorId], references: [id])
+  assignedOwner         VendorTeamMember?   @relation("CreditWalletOwner", fields: [assignedOwnerId], references: [id], onDelete: SetNull)
   transactions          CreditWalletTxn[]
   repayments            CreditWalletRepayment[]
   penalties             CreditWalletPenalty[]
@@ -1439,6 +1453,7 @@ model VendorTeamMember {
   user      User         @relation("VendorMemberships", fields: [userId], references: [id], onDelete: Cascade)
   inviter   User?        @relation("VendorInvites", fields: [invitedBy], references: [id])
   roleRef   AccountRole? @relation("VendorTeamMemberRole", fields: [roleId], references: [id], onDelete: Restrict)
+  assignedCreditWallets CreditWallet[] @relation("CreditWalletOwner")
 
   @@unique([vendorId, userId])
   @@index([userId])

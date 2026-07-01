@@ -1,30 +1,26 @@
 'use client';
 
 /**
- * Vendor → Credit tab (client-doc "Vendor-backed credit" MUST-HAVE).
- *
- * Flow per brief: Vendor >> Sees Customer List >> Fills Credit Limit >>
- * Chooses Payment Terms >> Configures Interest & other T&Cs.
- *
- * Writes through POST /api/v1/vendor/credit → creditWalletService — the SAME
- * CreditWallet engine the customer checkout reads, so an assigned line shows
- * up under "DiSCCO Credit Line" immediately. Empty term fields fall back to
- * the platform's global credit config.
+ * Vendor → DiSCCO Credit — excel-style customer grid for credit assignment + CRM fields.
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import {
-  Loader2, CreditCard, Search, X, Pencil, Plus, IndianRupee,
+  Loader2, CreditCard, Search, X, IndianRupee,
   AlertTriangle, ShieldOff, Landmark,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import {
+  CreditCustomerGrid,
+  STATUS_FILTER_OPTIONS,
+  type CreditDisplayStatus,
+  type CreditGridRow,
+} from '@/components/features/vendor/CreditCustomerGrid';
+import { teamDtoListToOptions, type TeamMemberOption } from '@/lib/teamMemberShape';
 
-// ─── Types ─────────────────────────────────────────────────────────────────
-
-type WalletStatus = 'ACTIVE' | 'BLOCKED' | 'BLACKLISTED';
 type RepaymentMode = 'REPAY_BEFORE_NEXT_USE' | 'ALLOW_USAGE_TILL_DUE';
 type BillingModel = 'BILL_TO_BILL' | 'WEEKLY' | 'FORTNIGHTLY' | 'MONTHLY';
 
@@ -34,7 +30,12 @@ interface WalletInfo {
   usedCredit: number;
   availableCredit: number;
   outstandingAmount: number;
-  status: WalletStatus;
+  status: 'ACTIVE' | 'BLOCKED' | 'BLACKLISTED';
+  workflowStatus: 'SANCTIONED' | 'IN_PROGRESS' | 'COMPLETED';
+  assignedOwnerId: string | null;
+  ownerName: string | null;
+  vendorNotes: string | null;
+  displayStatus: CreditDisplayStatus;
   currentDueDate: string | null;
   overdueDays: number;
   repaymentMode: RepaymentMode | null;
@@ -56,21 +57,12 @@ interface CustomerRow {
   phone: string | null;
   orderCount: number;
   lastOrderAt: string | null;
+  displayStatus: CreditDisplayStatus;
   wallet: WalletInfo | null;
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
-
 const inr = (v: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(v);
-
-const STATUS_STYLE: Record<WalletStatus, { label: string; cls: string }> = {
-  ACTIVE:      { label: 'Active',      cls: 'bg-[#EEF8F1] text-[#299E60]' },
-  BLOCKED:     { label: 'Blocked',     cls: 'bg-amber-50 text-amber-700' },
-  BLACKLISTED: { label: 'Blacklisted', cls: 'bg-red-50 text-red-600' },
-};
-
-// ─── Assign / edit modal ───────────────────────────────────────────────────
 
 function CreditModal({ row, onClose, onSaved }: {
   row: CustomerRow;
@@ -79,7 +71,6 @@ function CreditModal({ row, onClose, onSaved }: {
 }) {
   const w = row.wallet;
   const [limit, setLimit] = useState(w ? String(w.creditLimit) : '');
-  // 'default' = no override → platform global settings decide.
   const [terms, setTerms] = useState<'default' | RepaymentMode>(w?.repaymentMode ?? 'default');
   const [tenure, setTenure] = useState(w?.creditTenureDays != null ? String(w.creditTenureDays) : '');
   const [cycle, setCycle] = useState<BillingModel>(w?.billingModel && w.billingModel !== 'BILL_TO_BILL' ? w.billingModel : 'MONTHLY');
@@ -128,7 +119,7 @@ function CreditModal({ row, onClose, onSaved }: {
       });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error?.message || 'Failed to save credit line');
-      toast.success(w ? 'Credit line updated' : `Credit line of ${inr(limitNum)} given to ${row.name}`);
+      toast.success('Payment terms updated');
       onSaved();
       onClose();
     } catch (err) {
@@ -144,10 +135,9 @@ function CreditModal({ row, onClose, onSaved }: {
   return (
     <div className="fixed inset-0 z-[10001] bg-black/40 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-[16px] w-full max-w-[460px] shadow-2xl my-8">
-        {/* Header */}
         <div className="px-6 py-4 border-b border-[#EEEEEE] flex items-center justify-between">
           <div>
-            <h2 className="text-[16px] font-bold text-[#181725]">{w ? 'Edit credit line' : 'Give credit'}</h2>
+            <h2 className="text-[16px] font-bold text-[#181725]">Advanced payment terms</h2>
             <p className="text-[12px] text-[#AEAEAE]">{row.name}</p>
           </div>
           <button onClick={onClose} className="p-1 rounded-[6px] hover:bg-[#F5F5F5]">
@@ -156,26 +146,18 @@ function CreditModal({ row, onClose, onSaved }: {
         </div>
 
         <div className="px-6 py-5 space-y-5 max-h-[65vh] overflow-y-auto">
-          {/* Limit */}
           <div>
             <label className={labelCls}>Credit limit (₹)</label>
             <div className="relative">
               <IndianRupee size={14} strokeWidth={1.5} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE]" />
               <input
-                type="number" min="0" step="100" autoFocus
+                type="number" min="0" step="100"
                 value={limit} onChange={(e) => setLimit(e.target.value)}
-                placeholder="e.g. 25000"
                 className={cn(inputCls, 'pl-8')}
               />
             </div>
-            {w && w.usedCredit > 0 && (
-              <p className="text-[11px] text-[#AEAEAE] mt-1">
-                {inr(w.usedCredit)} is currently in use — lowering the limit below that pauses further credit until they repay.
-              </p>
-            )}
           </div>
 
-          {/* Payment terms */}
           <div>
             <label className={labelCls}>Payment terms</label>
             <div className="space-y-2">
@@ -207,94 +189,49 @@ function CreditModal({ row, onClose, onSaved }: {
             {terms === 'REPAY_BEFORE_NEXT_USE' && (
               <div className="mt-3">
                 <label className={labelCls}>Credit tenure (days after each bill)</label>
-                <input
-                  type="number" min="0" max="365"
-                  value={tenure} onChange={(e) => setTenure(e.target.value)}
-                  placeholder="Platform default"
-                  className={inputCls}
-                />
+                <input type="number" min="0" max="365" value={tenure} onChange={(e) => setTenure(e.target.value)} placeholder="Platform default" className={inputCls} />
               </div>
             )}
             {terms === 'ALLOW_USAGE_TILL_DUE' && (
               <div className="mt-3">
                 <label className={labelCls}>Billing cycle</label>
                 <select value={cycle} onChange={(e) => setCycle(e.target.value as BillingModel)} className={inputCls}>
-                  <option value="WEEKLY">Weekly — dues consolidated per week</option>
-                  <option value="FORTNIGHTLY">Fortnightly — dues consolidated per fortnight</option>
-                  <option value="MONTHLY">Monthly — dues consolidated per month</option>
+                  <option value="WEEKLY">Weekly</option>
+                  <option value="FORTNIGHTLY">Fortnightly</option>
+                  <option value="MONTHLY">Monthly</option>
                 </select>
               </div>
             )}
           </div>
 
-          {/* Advanced */}
           <div>
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((s) => !s)}
-              className="text-[12.5px] font-semibold text-[#299E60] hover:underline"
-            >
-              {showAdvanced ? 'Hide' : 'Show'} advanced settings (interest, penalty, grace)
+            <button type="button" onClick={() => setShowAdvanced((s) => !s)} className="text-[12.5px] font-semibold text-[#299E60] hover:underline">
+              {showAdvanced ? 'Hide' : 'Show'} interest, penalty &amp; grace
             </button>
             {showAdvanced && (
               <div className="mt-3 grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Grace period (days)</label>
-                  <input type="number" min="0" value={grace} onChange={(e) => setGrace(e.target.value)} placeholder="Default" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Blacklist after (days)</label>
-                  <input type="number" min="0" value={blacklist} onChange={(e) => setBlacklist(e.target.value)} placeholder="Default" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Interest (%)</label>
-                  <input type="number" min="0" step="0.1" value={interest} onChange={(e) => setInterest(e.target.value)} placeholder="Default" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>…per how many days</label>
-                  <input type="number" min="1" value={interestFreq} onChange={(e) => setInterestFreq(e.target.value)} placeholder="Default" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Late fee (₹)</label>
-                  <input type="number" min="0" value={penalty} onChange={(e) => setPenalty(e.target.value)} placeholder="Default" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>…per how many days</label>
-                  <input type="number" min="1" value={penaltyFreq} onChange={(e) => setPenaltyFreq(e.target.value)} placeholder="Default" className={inputCls} />
-                </div>
-                <p className="col-span-2 text-[11px] text-[#AEAEAE]">
-                  Leave any field empty to use the platform&apos;s global credit settings.
-                </p>
+                <div><label className={labelCls}>Grace (days)</label><input type="number" min="0" value={grace} onChange={(e) => setGrace(e.target.value)} placeholder="Default" className={inputCls} /></div>
+                <div><label className={labelCls}>Blacklist after (days)</label><input type="number" min="0" value={blacklist} onChange={(e) => setBlacklist(e.target.value)} placeholder="Default" className={inputCls} /></div>
+                <div><label className={labelCls}>Interest (%)</label><input type="number" min="0" step="0.1" value={interest} onChange={(e) => setInterest(e.target.value)} placeholder="Default" className={inputCls} /></div>
+                <div><label className={labelCls}>…per days</label><input type="number" min="1" value={interestFreq} onChange={(e) => setInterestFreq(e.target.value)} placeholder="Default" className={inputCls} /></div>
+                <div><label className={labelCls}>Late fee (₹)</label><input type="number" min="0" value={penalty} onChange={(e) => setPenalty(e.target.value)} placeholder="Default" className={inputCls} /></div>
+                <div><label className={labelCls}>…per days</label><input type="number" min="1" value={penaltyFreq} onChange={(e) => setPenaltyFreq(e.target.value)} placeholder="Default" className={inputCls} /></div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-[#EEEEEE] flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-5 h-[38px] rounded-[10px] border border-[#EEEEEE] text-[13px] font-semibold text-[#7C7C7C] hover:bg-[#F5F5F5] transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="px-5 h-[38px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold hover:bg-[#238a54] transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            {saving ? <Loader2 size={13} className="animate-spin" /> : null}
-            {w ? 'Save changes' : 'Give credit'}
+          <button onClick={onClose} className="px-5 h-[38px] rounded-[10px] border border-[#EEEEEE] text-[13px] font-semibold text-[#7C7C7C]">Cancel</button>
+          <button onClick={save} disabled={saving} className="px-5 h-[38px] rounded-[10px] bg-[#299E60] text-white text-[13px] font-bold disabled:opacity-50 flex items-center gap-2">
+            {saving && <Loader2 size={13} className="animate-spin" />}
+            Save terms
           </button>
         </div>
       </div>
     </div>
   );
 }
-
-// ─── Page ──────────────────────────────────────────────────────────────────
-
-type Filter = 'all' | 'with' | 'without' | 'overdue';
 
 export default function VendorCreditPage() {
   const { data: session } = useSession();
@@ -304,18 +241,27 @@ export default function VendorCreditPage() {
   }, [session]);
 
   const [rows, setRows] = useState<CustomerRow[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMemberOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
-  const [editing, setEditing] = useState<CustomerRow | null>(null);
+  const [statusFilter, setStatusFilter] = useState<CreditDisplayStatus | 'ALL'>('ALL');
+  const [advancedRow, setAdvancedRow] = useState<CustomerRow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/vendor/credit/customers');
-      const json = await res.json();
-      if (json.success) setRows(json.data.customers);
-      else toast.error(json.error?.message || 'Failed to load customers');
+      const [custRes, teamRes] = await Promise.all([
+        fetch('/api/v1/vendor/credit/customers'),
+        fetch('/api/v1/vendor/team'),
+      ]);
+      const custJson = await custRes.json();
+      const teamJson = await teamRes.json();
+      if (custJson.success) setRows(custJson.data.customers);
+      else toast.error(custJson.error?.message || 'Failed to load customers');
+      if (teamJson.success) {
+        const list = Array.isArray(teamJson.data) ? teamJson.data : (teamJson.data?.members ?? []);
+        setTeamMembers(teamDtoListToOptions(list));
+      }
     } catch {
       toast.error('Failed to load customers');
     } finally {
@@ -323,18 +269,40 @@ export default function VendorCreditPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  const filtered = useMemo(() => {
+  const searchFiltered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (q && !(`${r.name} ${r.fullName ?? ''} ${r.email ?? ''} ${r.phone ?? ''}`.toLowerCase().includes(q))) return false;
-      if (filter === 'with') return !!r.wallet;
-      if (filter === 'without') return !r.wallet;
-      if (filter === 'overdue') return !!r.wallet && r.wallet.overdueDays > 0 && r.wallet.outstandingAmount > 0;
-      return true;
-    });
-  }, [rows, search, filter]);
+    if (!q) return rows;
+    return rows.filter((r) =>
+      `${r.name} ${r.fullName ?? ''} ${r.email ?? ''} ${r.phone ?? ''}`.toLowerCase().includes(q),
+    );
+  }, [rows, search]);
+
+  const gridRows: CreditGridRow[] = useMemo(
+    () => searchFiltered.map((r) => ({
+      userId: r.userId,
+      name: r.name,
+      phone: r.phone,
+      email: r.email,
+      displayStatus: r.displayStatus,
+      wallet: r.wallet
+        ? {
+            id: r.wallet.id,
+            creditLimit: r.wallet.creditLimit,
+            outstandingAmount: r.wallet.outstandingAmount,
+            status: r.wallet.status,
+            workflowStatus: r.wallet.workflowStatus,
+            assignedOwnerId: r.wallet.assignedOwnerId,
+            ownerName: r.wallet.ownerName,
+            vendorNotes: r.wallet.vendorNotes,
+            displayStatus: r.wallet.displayStatus,
+            currentDueDate: r.wallet.currentDueDate,
+          }
+        : null,
+    })),
+    [searchFiltered],
+  );
 
   const stats = useMemo(() => {
     const withCredit = rows.filter((r) => r.wallet);
@@ -346,20 +314,14 @@ export default function VendorCreditPage() {
     };
   }, [rows]);
 
-  const FILTERS: Array<{ key: Filter; label: string }> = [
-    { key: 'all', label: 'All customers' },
-    { key: 'with', label: 'With credit' },
-    { key: 'without', label: 'No credit yet' },
-    { key: 'overdue', label: 'Overdue' },
-  ];
+  const findCustomerRow = (userId: string) => rows.find((r) => r.userId === userId) ?? null;
 
   return (
     <div className="space-y-5 pb-10">
-      {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-[24px] font-bold text-[#181725]">Credit</h1>
-          <p className="text-[12px] text-[#AEAEAE]">Give trusted customers a credit line — they order now and pay by the due date</p>
+          <h1 className="text-[24px] font-bold text-[#181725]">DiSCCO Credit</h1>
+          <p className="text-[12px] text-[#AEAEAE]">Assign credit lines and track customer status — changes save to checkout immediately</p>
         </div>
         <Link
           href="/vendor/collections"
@@ -370,13 +332,12 @@ export default function VendorCreditPage() {
         </Link>
       </div>
 
-      {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: 'Credit lines given', value: String(stats.lines), Icon: CreditCard, tint: 'text-[#299E60] bg-[#EEF8F1]' },
-          { label: 'Total limit given', value: inr(stats.exposure), Icon: IndianRupee, tint: 'text-blue-600 bg-blue-50' },
+          { label: 'Credit lines', value: String(stats.lines), Icon: CreditCard, tint: 'text-[#299E60] bg-[#EEF8F1]' },
+          { label: 'Total limit', value: inr(stats.exposure), Icon: IndianRupee, tint: 'text-blue-600 bg-blue-50' },
           { label: 'Outstanding', value: inr(stats.outstanding), Icon: AlertTriangle, tint: 'text-amber-600 bg-amber-50' },
-          { label: 'Overdue customers', value: String(stats.overdue), Icon: ShieldOff, tint: 'text-red-500 bg-red-50' },
+          { label: 'Overdue', value: String(stats.overdue), Icon: ShieldOff, tint: 'text-red-500 bg-red-50' },
         ].map(({ label, value, Icon, tint }) => (
           <div key={label} className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm p-4 flex items-center gap-3">
             <div className={cn('w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0', tint)}>
@@ -390,7 +351,6 @@ export default function VendorCreditPage() {
         ))}
       </div>
 
-      {/* Search + filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[220px] max-w-[360px]">
           <Search size={14} strokeWidth={1.5} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#AEAEAE]" />
@@ -402,14 +362,14 @@ export default function VendorCreditPage() {
             className="w-full h-[38px] pl-8 pr-3 rounded-[10px] border border-[#EEEEEE] text-[12.5px] outline-none focus:border-[#299E60]/40 bg-white"
           />
         </div>
-        <div className="flex items-center gap-1.5">
-          {FILTERS.map((f) => (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {STATUS_FILTER_OPTIONS.map((f) => (
             <button
               key={f.key}
-              onClick={() => setFilter(f.key)}
+              onClick={() => setStatusFilter(f.key)}
               className={cn(
                 'px-3 h-[32px] rounded-full text-[12px] font-semibold transition-colors',
-                filter === f.key ? 'bg-[#299E60] text-white' : 'bg-white border border-[#EEEEEE] text-[#7C7C7C] hover:border-[#299E60]/40',
+                statusFilter === f.key ? 'bg-[#4F46E5] text-white' : 'bg-white border border-[#EEEEEE] text-[#7C7C7C] hover:border-[#4F46E5]/40',
               )}
             >
               {f.label}
@@ -418,106 +378,39 @@ export default function VendorCreditPage() {
         </div>
       </div>
 
-      {/* Table */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="animate-spin text-[#299E60]" size={28} />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : gridRows.length === 0 ? (
         <div className="bg-white rounded-[14px] border border-[#EEEEEE] py-16 text-center shadow-sm">
           <CreditCard size={36} strokeWidth={1.5} className="text-[#E5E7EB] mx-auto mb-3" />
-          <p className="text-[14px] font-bold text-[#AEAEAE]">
-            {rows.length === 0 ? 'No customers yet' : 'No customers match'}
-          </p>
-          <p className="text-[12px] text-[#AEAEAE] mt-1">
-            {rows.length === 0
-              ? 'Customers appear here once they order from your store or you add them in Customers.'
-              : 'Try a different search or filter.'}
-          </p>
+          <p className="text-[14px] font-bold text-[#AEAEAE]">No customers match</p>
         </div>
       ) : (
-        <div className="bg-white rounded-[14px] border border-[#EEEEEE] shadow-sm overflow-x-auto">
-          <table className="w-full min-w-[860px]">
-            <thead>
-              <tr className="border-b border-[#F5F5F5]">
-                {['Customer', 'Orders', 'Limit', 'Used', 'Available', 'Outstanding', 'Due date', 'Status', ''].map((h, i) => (
-                  <th key={i} className={cn(
-                    'px-4 py-3 text-[10.5px] font-bold text-[#AEAEAE] uppercase tracking-wider whitespace-nowrap',
-                    i <= 1 ? 'text-left' : i >= 7 ? 'text-left' : 'text-right',
-                  )}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#F5F5F5]">
-              {filtered.map((r) => {
-                const w = r.wallet;
-                return (
-                  <tr key={r.userId} className="hover:bg-[#FAFAFA] transition-colors">
-                    <td className="px-4 py-3">
-                      <p className="text-[13px] font-semibold text-[#181725]">{r.name}</p>
-                      <p className="text-[11px] text-[#AEAEAE]">{r.phone ?? r.email ?? ''}</p>
-                    </td>
-                    <td className="px-4 py-3 text-[12.5px] text-[#7C7C7C]">{r.orderCount}</td>
-                    <td className="px-4 py-3 text-right text-[12.5px] font-semibold text-[#181725]">{w ? inr(w.creditLimit) : '—'}</td>
-                    <td className="px-4 py-3 text-right text-[12.5px] text-[#7C7C7C]">{w ? inr(w.usedCredit) : '—'}</td>
-                    <td className="px-4 py-3 text-right text-[12.5px] font-semibold text-[#299E60]">{w ? inr(w.availableCredit) : '—'}</td>
-                    <td className={cn('px-4 py-3 text-right text-[12.5px] font-semibold', w && w.outstandingAmount > 0 ? 'text-amber-600' : 'text-[#7C7C7C]')}>
-                      {w ? inr(w.outstandingAmount) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right text-[12px] text-[#7C7C7C] whitespace-nowrap">
-                      {w?.currentDueDate ? new Date(w.currentDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}
-                      {w && w.overdueDays > 0 && w.outstandingAmount > 0 && (
-                        <span className="block text-[10.5px] font-bold text-red-500">{w.overdueDays}d overdue</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {w ? (
-                        <span className={cn('inline-block px-2.5 py-1 rounded-full text-[10.5px] font-bold', STATUS_STYLE[w.status].cls)}>
-                          {STATUS_STYLE[w.status].label}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-[#AEAEAE]">No credit</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {canApprove && (
-                        w ? (
-                          <button
-                            onClick={() => setEditing(r)}
-                            className="flex items-center gap-1.5 px-3 h-[30px] rounded-[8px] border border-[#EEEEEE] text-[12px] font-semibold text-[#181725] hover:border-[#299E60]/40 transition-colors whitespace-nowrap"
-                          >
-                            <Pencil size={12} strokeWidth={1.5} /> Edit
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => setEditing(r)}
-                            className="flex items-center gap-1.5 px-3 h-[30px] rounded-[8px] bg-[#299E60] text-white text-[12px] font-bold hover:bg-[#238a54] transition-colors whitespace-nowrap"
-                          >
-                            <Plus size={12} strokeWidth={2} /> Give credit
-                          </button>
-                        )
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <CreditCustomerGrid
+          rows={gridRows}
+          teamMembers={teamMembers}
+          canEdit={canApprove}
+          statusFilter={statusFilter}
+          onRefresh={load}
+          onAdvancedTerms={(row) => {
+            const full = findCustomerRow(row.userId);
+            if (full) setAdvancedRow(full);
+          }}
+        />
       )}
 
       {!canApprove && !loading && rows.length > 0 && (
         <p className="text-[12px] text-[#AEAEAE]">
-          You can view credit lines but not change them — ask the account owner for the &ldquo;Approve Credit&rdquo; permission.
+          View-only — ask the account owner for &ldquo;Approve Credit&rdquo; permission to edit the grid.
         </p>
       )}
 
-      {editing && (
+      {advancedRow && (
         <CreditModal
-          row={editing}
-          onClose={() => setEditing(null)}
+          row={advancedRow}
+          onClose={() => setAdvancedRow(null)}
           onSaved={load}
         />
       )}
