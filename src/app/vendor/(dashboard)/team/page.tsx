@@ -168,9 +168,14 @@ export default function VendorTeamPage() {
                     roles={roles}
                     onClose={() => setShowInvite(false)}
                     onInvited={(newMember) => {
-                        setTeam((prev) => [...prev, newMember]);
                         setShowInvite(false);
-                        toast.success(`${newMember.user.fullName} added to team`);
+                        if (newMember) {
+                            setTeam((prev) => [...prev, newMember]);
+                            toast.success(`${newMember.user.fullName} added to team`);
+                        } else {
+                            fetchTeam();
+                            toast.success('Team member added');
+                        }
                     }}
                 />
             )}

@@ -142,3 +142,24 @@ export function buildInviteEmail(p: InviteEmailParams): {
 
   return { subject, text, html };
 }
+
+export interface InviteSmsParams {
+  recipientName: string;
+  loginIdentifier: string; // email or phone
+  tempPassword: string;
+  businessName: string;
+  loginUrl: string;
+  inviterName?: string;
+}
+
+export function buildInviteSms(p: InviteSmsParams): string {
+  const name = p.recipientName.trim() || 'there';
+  const inviter = p.inviterName?.trim() ? ` by ${p.inviterName.trim()}` : '';
+  return [
+    `Hello ${name}, you've been invited${inviter} to ${p.businessName} on HoReCa Hub.`,
+    `Login: ${p.loginUrl}`,
+    `User: ${p.loginIdentifier}`,
+    `Password: ${p.tempPassword}`,
+    'Change your password after first login.',
+  ].join(' ');
+}

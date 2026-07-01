@@ -7,6 +7,7 @@ import {
   Crown, Shield, Users, DollarSign, Package, Archive, Edit3,
 } from 'lucide-react';
 import { PasswordField } from '@/components/ui/form';
+import { InviteSuccessModal, type InviteMeta } from '@/components/features/team/InviteSuccessModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,7 @@ export interface AddMemberWizardConfig {
 interface AddMemberWizardProps {
   roles: RoleItem[];
   onClose: () => void;
-  onInvited: (member: TeamMember) => void;
+  onInvited: (member?: TeamMember) => void;
   config?: AddMemberWizardConfig;
 }
 
@@ -112,6 +113,19 @@ function getRoleStyle(name: string) {
 
 const STEP_LABELS = ['Member Info', 'Outlet Access', 'Role & Permissions'];
 
+function parseIdentifier(raw: string): { type: 'email'; value: string } | { type: 'phone'; value: string } | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return { type: 'email', value: trimmed.toLowerCase() };
+  }
+  let digits = trimmed.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+  if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+  if (/^[6-9]\d{9}$/.test(digits)) return { type: 'phone', value: digits };
+  return null;
+}
+
 // ─── Main wizard ──────────────────────────────────────────────────────────────
 
 export function AddMemberWizard({ roles, onClose, onInvited, config }: AddMemberWizardProps) {
@@ -157,6 +171,9 @@ export function AddMemberWizard({ roles, onClose, onInvited, config }: AddMember
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inviteMeta, setInviteMeta] = useState<InviteMeta | null>(null);
+  const [invitedMemberName, setInvitedMemberName] = useState('');
+  const [savedMemberData, setSavedMemberData] = useState<unknown>(null);
 
   useEffect(() => {
     if (step === 2 && outlets.length === 0 && !outletsLoading) {
@@ -220,10 +237,19 @@ export function AddMemberWizard({ roles, onClose, onInvited, config }: AddMember
     setError(null);
     if (step === 1) {
       const trimmed = identifier.trim();
-      if (!trimmed) { setError('Email address is required'); return; }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-        setError('Enter a valid email address');
-        setIdentifierError('Enter a valid email address');
+      if (!trimmed) { setError('Email or phone is required'); return; }
+      const parsed = parseIdentifier(trimmed);
+      if (!parsed) {
+        setError('Enter a valid email address or 10-digit mobile number');
+        setIdentifierError('Enter a valid email address or 10-digit mobile number');
+        return;
+      }
+      if (fullName.trim().length < 2) {
+        setError('Full name is required (at least 2 characters)');
+        return;
+      }
+      if (password.length < 6) {
+        setError('Password is required for new team members (at least 6 characters)');
         return;
       }
       setStep(2);
@@ -261,7 +287,16 @@ export function AddMemberWizard({ roles, onClose, onInvited, config }: AddMember
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error?.message ?? 'Failed to add member');
-      onInvited(json.data);
+
+      const meta = json.data?.inviteMeta as InviteMeta | undefined;
+      if (meta?.tempPassword) {
+        setInvitedMemberName(fullName.trim());
+        setInviteMeta(meta);
+        setSavedMemberData(json.data);
+      } else {
+        onInvited(json.data);
+        onClose();
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to add member');
     } finally {
@@ -270,6 +305,7 @@ export function AddMemberWizard({ roles, onClose, onInvited, config }: AddMember
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-[15000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="bg-white rounded-[20px] w-full max-w-[820px] shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
 
@@ -384,6 +420,19 @@ export function AddMemberWizard({ roles, onClose, onInvited, config }: AddMember
         </div>
       </div>
     </div>
+
+    {inviteMeta && (
+      <InviteSuccessModal
+        inviteMeta={inviteMeta}
+        memberName={invitedMemberName}
+        onClose={() => {
+          setInviteMeta(null);
+          onInvited(savedMemberData as TeamMember | undefined);
+          onClose();
+        }}
+      />
+    )}
+    </>
   );
 }
 
@@ -401,8 +450,8 @@ function Step1UserInfo({
   const handleBlur = () => {
     const trimmed = identifier.trim();
     if (!trimmed) { setIdentifierError(null); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      setIdentifierError('Enter a valid email address');
+    if (!parseIdentifier(trimmed)) {
+      setIdentifierError('Enter a valid email address or 10-digit mobile number');
     } else {
       setIdentifierError(null);
     }
@@ -412,14 +461,14 @@ function Step1UserInfo({
     <div className="space-y-4 max-w-[520px]">
       <div>
         <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
-          Email address <span className="text-red-400">*</span>
+          Email or Phone <span className="text-red-400">*</span>
         </label>
         <input
-          type="email" autoFocus autoComplete="off"
+          type="text" autoFocus autoComplete="off"
           value={identifier}
           onChange={e => { setIdentifier(e.target.value); if (identifierError) setIdentifierError(null); }}
           onBlur={handleBlur}
-          placeholder="e.g. teammate@company.com"
+          placeholder="e.g. teammate@company.com or 9876543210"
           className={`w-full h-[46px] border rounded-[10px] px-4 text-[14px] outline-none focus:ring-2 bg-[#FAFAFA] focus:bg-white transition-all ${
             identifierError
               ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
@@ -430,13 +479,13 @@ function Step1UserInfo({
           <p className="text-[11px] text-red-600 mt-1.5">{identifierError}</p>
         )}
         <p className="text-[11px] text-[#AEAEAE] mt-1.5 leading-relaxed">
-          Existing accounts get added straight in. For a brand-new user, fill name + password below — we&apos;ll email them the credentials.
+          Existing accounts get added straight in. For a brand-new user, fill name + password below — we&apos;ll email or SMS them the credentials.
         </p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
-            Full Name <span className="text-[#AEAEAE] font-normal normal-case">(new accounts)</span>
+            Full Name <span className="text-red-400">*</span>
           </label>
           <input
             type="text" autoComplete="off"
@@ -447,7 +496,7 @@ function Step1UserInfo({
         </div>
         <div>
           <label className="block text-[11px] font-bold text-[#AEAEAE] uppercase tracking-wider mb-1.5">
-            Password <span className="text-[#AEAEAE] font-normal normal-case">(new accounts)</span>
+            Password <span className="text-red-400">*</span>
           </label>
           <PasswordField
             name="newMemberPassword" autoComplete="new-password"

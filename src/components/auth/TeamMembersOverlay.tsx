@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, Loader2, UserPlus, X, Trash2, Users } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useSession } from 'next-auth/react';
+import { ChevronLeft, Loader2, UserPlus, X, Trash2 } from 'lucide-react';
+import { AddMemberWizard, type RoleItem } from '@/components/features/team/AddMemberWizard';
 
 interface Member {
   id: string;
@@ -18,7 +19,15 @@ interface Member {
   };
 }
 
-interface Role { id: string; name: string; scope: string; isTemplate: boolean }
+interface AccountRole {
+  id: string;
+  name: string;
+  scope: string;
+  description: string | null;
+  isTemplate: boolean;
+  permissions: Record<string, Record<string, boolean>>;
+}
+
 interface Outlet { id: string; name: string }
 
 interface TeamMembersOverlayProps {
@@ -28,8 +37,12 @@ interface TeamMembersOverlayProps {
 }
 
 export function TeamMembersOverlay({ isOpen, onClose, accountId }: TeamMembersOverlayProps) {
+  const { data: session } = useSession();
+  const sessionPerms = (session?.user as { permissions?: string[] } | undefined)?.permissions ?? [];
+  const canInvite = sessionPerms.includes('users.create');
+
   const [members, setMembers] = useState<Member[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
+  const [roles, setRoles] = useState<AccountRole[]>([]);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
@@ -43,7 +56,10 @@ export function TeamMembersOverlay({ isOpen, onClose, accountId }: TeamMembersOv
       fetch(`/api/v1/account/${accountId}/outlets`).then((r) => r.json()),
     ]).then(([m, r, o]) => {
       if (m.success) setMembers(m.data);
-      if (r.success) setRoles(r.data);
+      if (r.success) {
+        const filtered = (r.data as AccountRole[]).filter((role) => role.scope === 'account');
+        setRoles(filtered);
+      }
       if (o.success) setOutlets(o.data);
     }).finally(() => setLoading(false));
   };
@@ -70,7 +86,6 @@ export function TeamMembersOverlay({ isOpen, onClose, accountId }: TeamMembersOv
       <div className="hidden md:block fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
       <div className="w-full h-full md:h-auto md:max-h-[90vh] md:w-[600px] md:mt-[5vh] md:rounded-2xl md:shadow-2xl md:border md:border-gray-200 bg-[#F2F3F2] md:bg-white flex flex-col animate-in slide-in-from-right md:slide-in-from-bottom md:zoom-in-95 duration-300 relative z-10 overflow-hidden">
-        {/* Header */}
         <div className="flex items-center px-4 md:px-6 py-3 md:py-4 shrink-0 relative bg-white border-b border-gray-100">
           <button onClick={onClose} className="p-1 hover:bg-gray-50 rounded-full transition-colors absolute left-4 md:hidden z-10">
             <ChevronLeft size={20} className="text-[#181725]" />
@@ -84,13 +99,15 @@ export function TeamMembersOverlay({ isOpen, onClose, accountId }: TeamMembersOv
         <div className="flex-1 overflow-y-auto px-4 md:px-6 pt-4 md:pt-5 pb-28 md:pb-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-[14px] font-bold text-[#181725]">Account Members ({members.length})</h3>
-            <button
-              onClick={() => setShowInvite(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#53B175] text-white text-[12px] font-bold rounded-lg hover:bg-[#48a068] transition-colors"
-            >
-              <UserPlus size={14} />
-              Invite Member
-            </button>
+            {canInvite && (
+              <button
+                onClick={() => setShowInvite(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#53B175] text-white text-[12px] font-bold rounded-lg hover:bg-[#48a068] transition-colors"
+              >
+                <UserPlus size={14} />
+                Invite Member
+              </button>
+            )}
           </div>
 
           {loading ? (
@@ -148,108 +165,19 @@ export function TeamMembersOverlay({ isOpen, onClose, accountId }: TeamMembersOv
         </div>
       </div>
 
-      {showInvite && (
-        <InviteModal
-          accountId={accountId}
-          roles={roles}
-          outlets={outlets}
+      {showInvite && roles.length > 0 && (
+        <AddMemberWizard
+          roles={roles as unknown as RoleItem[]}
           onClose={() => setShowInvite(false)}
           onInvited={() => { setShowInvite(false); load(); }}
+          config={{
+            scope: 'account',
+            accountId,
+            accent: '#53B175',
+            businessAccountLabel: 'Customer Account',
+          }}
         />
       )}
-    </div>
-  );
-}
-
-function InviteModal({ accountId, roles, outlets, onClose, onInvited }: {
-  accountId: string;
-  roles: Role[];
-  outlets: Outlet[];
-  onClose: () => void;
-  onInvited: () => void;
-}) {
-  const [identifier, setIdentifier] = useState('');
-  const [roleId, setRoleId] = useState(roles[0]?.id ?? '');
-  const [outletId, setOutletId] = useState<string>('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const submit = async () => {
-    setSubmitting(true); setError(null);
-    const res = await fetch(`/api/v1/account/${accountId}/users`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        identifier,
-        roleId,
-        outletIds: outletId ? [outletId] : [],
-      }),
-    });
-    const json = await res.json();
-    setSubmitting(false);
-    if (json.success) onInvited();
-    else setError(json.error?.message ?? 'Could not invite user');
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-[15000] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-[450px] p-5 shadow-2xl animate-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-[15px] font-bold text-[#181725]">Invite Member</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={16} /></button>
-        </div>
-        <div className="space-y-4">
-          {/* Helper note moved above the form so the disabled-looking submit
-              button doesn't read as "permanently broken". */}
-          <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2.5 leading-snug">
-            The invitee must already have a HoReCa Hub account. Ask them to sign up at horeca1.com first, then enter their phone or email below.
-          </p>
-          <label className="block">
-            <span className="text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wider">Email or phone</span>
-            <input
-              type="text"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              placeholder="invitee@example.com or 9876543210"
-              className="mt-1.5 w-full px-3.5 py-2.5 text-[13px] border border-[#EEEEEE] rounded-xl outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/10 text-gray-700 bg-[#FAFAFA] focus:bg-white transition-all"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wider">Role</span>
-            <select
-              value={roleId}
-              onChange={(e) => setRoleId(e.target.value)}
-              className="mt-1.5 w-full px-3.5 py-2.5 text-[13px] border border-[#EEEEEE] rounded-xl outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/10 text-gray-700 bg-white transition-all"
-            >
-              {roles.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}{r.isTemplate ? ` (${r.scope})` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-semibold text-[#AEAEAE] uppercase tracking-wider">Outlet (optional)</span>
-            <select
-              value={outletId}
-              onChange={(e) => setOutletId(e.target.value)}
-              className="mt-1.5 w-full px-3.5 py-2.5 text-[13px] border border-[#EEEEEE] rounded-xl outline-none focus:border-[#53B175] focus:ring-2 focus:ring-[#53B175]/10 text-gray-700 bg-white transition-all"
-            >
-              <option value="">All outlets</option>
-              {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
-          </label>
-          {error && <p className="text-[12px] text-red-500 bg-red-50 border border-red-100 rounded-lg p-2.5">{error}</p>}
-          <button
-            onClick={submit}
-            disabled={submitting || !identifier || !roleId}
-            className="w-full py-3 bg-[#53B175] text-white text-[13.5px] font-[700] rounded-xl hover:bg-[#48a068] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2 transition-colors"
-          >
-            {submitting ? <Loader2 size={14} className="animate-spin" /> : null}
-            {submitting ? 'Sending…' : !identifier ? 'Enter email or phone' : 'Send Invite'}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

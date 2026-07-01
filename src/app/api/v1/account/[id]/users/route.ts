@@ -12,9 +12,9 @@ import { prisma } from '@/lib/prisma';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { assertAccountMember, assertAccountPermission } from '@/lib/accountAccess';
 import { uniqueHcid } from '@/lib/hcid';
-import { phoneLookupVariants } from '@/lib/phone';
+import { phoneLookupVariants, normalizePhone } from '@/lib/phone';
 import { sendEmail } from '@/lib/providers/email';
-import { buildInviteEmail } from '@/lib/email-templates/invite';
+import { buildInviteEmail, buildInviteSms } from '@/lib/email-templates/invite';
 import { sendSms } from '@/lib/providers/sms';
 
 export const GET = withAuth(async (req: NextRequest, ctx) => {
@@ -120,16 +120,15 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     }
 
     // Look up (or create) the invitee user.
-    // - email identifier + user missing  → admin must supply fullName + password → create User inline
-    // - email identifier + user exists   → use existing; if body.password is set, also reset their password
-    // - phone identifier + user missing  → reject (we only support new-user invites by email today)
+    // - email identifier + user missing  → fullName + password required → create User
+    // - phone identifier + user missing  → fullName + password required → create User with phone
     const looksEmail = body.identifier.includes('@');
-    const phoneRaw = body.identifier.replace(/\D/g, '');
-    const phoneDigits = phoneRaw.length === 12 ? phoneRaw.replace(/^91/, '') : phoneRaw;
-    const normalizedEmail = looksEmail ? body.identifier.toLowerCase() : null;
+    const normalizedPhone = looksEmail ? null : normalizePhone(body.identifier);
+    const normalizedEmail = looksEmail ? body.identifier.trim().toLowerCase() : null;
 
     let invitee: { id: string; email: string | null; fullName: string; phone: string | null } | null = null;
     let tempPassword: string | null = null;
+    let isNewUser = false;
 
     if (looksEmail && normalizedEmail) {
       const existing = await prisma.user.findUnique({
@@ -138,7 +137,6 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
       });
       if (existing) {
         invitee = existing;
-        // Admin opted to reset the invitee's password during the invite flow.
         if (body.password) {
           const hashed = await bcrypt.hash(body.password, 12);
           await prisma.user.update({ where: { id: existing.id }, data: { password: hashed } });
@@ -163,16 +161,41 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
         });
         invitee = created;
         tempPassword = body.password;
+        isNewUser = true;
       }
-    } else if (phoneDigits.length === 10) {
+    } else if (normalizedPhone) {
       const existing = await prisma.user.findFirst({
-        where: { phone: { in: phoneLookupVariants(phoneDigits) } },
+        where: { phone: { in: phoneLookupVariants(normalizedPhone) } },
         select: { id: true, email: true, fullName: true, phone: true },
       });
-      if (!existing) {
-        throw Errors.notFound('Phone-based invites require the user to already have an account. Use an email to invite a new user.');
+      if (existing) {
+        invitee = existing;
+        if (body.password) {
+          const hashed = await bcrypt.hash(body.password, 12);
+          await prisma.user.update({ where: { id: existing.id }, data: { password: hashed } });
+          tempPassword = body.password;
+        }
+      } else {
+        if (!body.fullName || !body.password) {
+          throw Errors.badRequest('fullName and password are required when inviting a new user by phone');
+        }
+        const hashed = await bcrypt.hash(body.password, 12);
+        const hcidDisplay = await uniqueHcid();
+        const created = await prisma.user.create({
+          data: {
+            fullName: body.fullName,
+            phone: normalizedPhone,
+            password: hashed,
+            role: 'customer',
+            isActive: true,
+            hcidDisplay,
+          },
+          select: { id: true, email: true, fullName: true, phone: true },
+        });
+        invitee = created;
+        tempPassword = body.password;
+        isNewUser = true;
       }
-      invitee = existing;
     } else {
       throw Errors.badRequest('Enter a valid email address or 10-digit phone number');
     }
@@ -212,24 +235,45 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     });
 
     // Fire-and-forget invite notification. Never let notification-send failure roll back the user creation.
-    if (tempPassword && inviteeUser.email) {
+    const credentialsDelivered = { email: false, sms: false };
+    const loginUrl = (process.env.AUTH_URL ?? 'http://localhost:3000') + '/login';
+    const loginIdentifier = inviteeUser.email ?? inviteeUser.phone ?? body.identifier.trim();
+
+    if (tempPassword) {
       try {
         const [account, inviter] = await Promise.all([
           prisma.businessAccount.findUnique({ where: { id }, select: { legalName: true, displayName: true } }),
           prisma.user.findUnique({ where: { id: ctx.userId }, select: { fullName: true } }),
         ]);
         const businessName = account?.displayName || account?.legalName || 'your business';
-        const loginUrl = (process.env.AUTH_URL ?? 'http://localhost:3000') + '/login';
-        const { subject, text, html } = buildInviteEmail({
-          recipientName: inviteeUser.fullName,
-          recipientEmail: inviteeUser.email,
-          tempPassword,
-          scope: 'customer',
-          businessName,
-          loginUrl,
-          inviterName: inviter?.fullName?.trim() || undefined,
-        });
-        await sendEmail({ to: inviteeUser.email, subject, text, html, name: inviteeUser.fullName });
+        const inviterName = inviter?.fullName?.trim() || undefined;
+
+        if (inviteeUser.email) {
+          const { subject, text, html } = buildInviteEmail({
+            recipientName: inviteeUser.fullName,
+            recipientEmail: inviteeUser.email,
+            tempPassword,
+            scope: 'customer',
+            businessName,
+            loginUrl,
+            inviterName,
+          });
+          const emailResult = await sendEmail({ to: inviteeUser.email, subject, text, html, name: inviteeUser.fullName });
+          credentialsDelivered.email = emailResult.sent;
+        }
+
+        if (inviteeUser.phone && (isNewUser || !inviteeUser.email)) {
+          const smsBody = buildInviteSms({
+            recipientName: inviteeUser.fullName,
+            loginIdentifier: inviteeUser.phone,
+            tempPassword,
+            businessName,
+            loginUrl,
+            inviterName,
+          });
+          await sendSms({ to: inviteeUser.phone, body: smsBody, channel: 'sms' });
+          credentialsDelivered.sms = true;
+        }
       } catch (err) {
         console.error('[invite-email]', err);
       }
@@ -241,7 +285,6 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
           prisma.user.findUnique({ where: { id: ctx.userId }, select: { fullName: true } }),
         ]);
         const businessName = account?.displayName || account?.legalName || 'your business';
-        const loginUrl = (process.env.AUTH_URL ?? 'http://localhost:3000') + '/login';
         const inviterName = inviter?.fullName?.trim() || 'Admin';
         const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c));
 
@@ -249,7 +292,8 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
           const subject = `Access granted to ${businessName} on HoReCa Hub`;
           const text = `Hello ${inviteeUser.fullName},\n\n${inviterName} has added you to the business account "${businessName}" on HoReCa Hub.\n\nYou can now log in and access this account.\n\nLogin URL: ${loginUrl}\n\n— The HoReCa Hub team`;
           const html = `<p>Hello <strong>${esc(inviteeUser.fullName)}</strong>,</p><p>${esc(inviterName)} has added you to the business account <strong>${esc(businessName)}</strong> on HoReCa Hub.</p><p>You can now log in and access this account.</p><p><a href="${esc(loginUrl)}">Sign in to HoReCa Hub</a></p><p>— The HoReCa Hub team</p>`;
-          await sendEmail({ to: inviteeUser.email, subject, text, html, name: inviteeUser.fullName });
+          const emailResult = await sendEmail({ to: inviteeUser.email, subject, text, html, name: inviteeUser.fullName });
+          credentialsDelivered.email = emailResult.sent;
         }
 
         if (inviteeUser.phone) {
@@ -261,7 +305,22 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
       }
     }
 
-    return NextResponse.json({ success: true, data: result }, { status: 201 });
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...result,
+        ...(tempPassword
+          ? {
+              inviteMeta: {
+                tempPassword,
+                loginIdentifier,
+                loginUrl,
+                credentialsDelivered,
+              },
+            }
+          : {}),
+      },
+    }, { status: 201 });
   } catch (err) { return errorResponse(err); }
 });
 

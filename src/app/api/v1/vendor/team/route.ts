@@ -14,10 +14,10 @@ import { requirePermission, sanitizePermissions } from '@/lib/permissions/engine
 import { prisma } from '@/lib/prisma';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { uniqueHcid } from '@/lib/hcid';
-import { phoneLookupVariants } from '@/lib/phone';
+import { phoneLookupVariants, normalizePhone } from '@/lib/phone';
 import { toTeamMemberDTO, teamMemberInclude, type TeamMemberDTO } from '@/lib/teamMemberShape';
 import { sendEmail } from '@/lib/providers/email';
-import { buildInviteEmail } from '@/lib/email-templates/invite';
+import { buildInviteEmail, buildInviteSms } from '@/lib/email-templates/invite';
 import { sendSms } from '@/lib/providers/sms';
 import type { AuthContext } from '@/middleware/auth';
 import type { TeamRole } from '@prisma/client';
@@ -168,32 +168,49 @@ export const POST = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
     // ── Resolve / create the user ──────────────────────────────────────────────
     const identifierTrim = input.identifier.trim();
     const looksEmail = identifierTrim.includes('@');
+    const normalizedPhone = looksEmail ? null : normalizePhone(identifierTrim);
     let user = looksEmail
       ? await prisma.user.findUnique({ where: { email: identifierTrim.toLowerCase() } })
-      : await prisma.user.findFirst({ where: { phone: { in: phoneLookupVariants(identifierTrim) } } });
+      : normalizedPhone
+        ? await prisma.user.findFirst({ where: { phone: { in: phoneLookupVariants(normalizedPhone) } } })
+        : null;
 
-    // Capture plain-text password BEFORE bcrypt.hash so we can email it. Only
-    // set on the new-user creation path; existing users keep their password.
     let tempPassword = '';
+    let isNewUser = false;
 
     if (!user) {
-      if (!looksEmail) throw Errors.badRequest('New vendor invites require an email identifier');
       if (!input.fullName || !input.password) {
         throw Errors.badRequest('fullName and password are required when the invitee is a new user');
       }
       tempPassword = input.password;
       const hashedPassword = await bcrypt.hash(input.password, 12);
       const hcidDisplay = await uniqueHcid();
-      user = await prisma.user.create({
-        data: {
-          fullName: input.fullName,
-          email: identifierTrim.toLowerCase(),
-          password: hashedPassword,
-          role: 'vendor',
-          isActive: true,
-          hcidDisplay,
-        },
-      });
+      if (looksEmail) {
+        user = await prisma.user.create({
+          data: {
+            fullName: input.fullName,
+            email: identifierTrim.toLowerCase(),
+            password: hashedPassword,
+            role: 'vendor',
+            isActive: true,
+            hcidDisplay,
+          },
+        });
+      } else if (normalizedPhone) {
+        user = await prisma.user.create({
+          data: {
+            fullName: input.fullName,
+            phone: normalizedPhone,
+            password: hashedPassword,
+            role: 'vendor',
+            isActive: true,
+            hcidDisplay,
+          },
+        });
+      } else {
+        throw Errors.badRequest('Enter a valid email address or 10-digit phone number');
+      }
+      isNewUser = true;
     }
 
     const existingMember = await prisma.vendorTeamMember.findUnique({
@@ -284,22 +301,44 @@ export const POST = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
     });
 
     // Notify the user.
-    if (user.email && tempPassword) {
+    const credentialsDelivered = { email: false, sms: false };
+    const loginUrl = (process.env.AUTH_URL ?? 'http://localhost:3000') + '/login';
+    const loginIdentifier = user.email ?? user.phone ?? identifierTrim;
+
+    if (tempPassword) {
       try {
         const inviter = await prisma.user.findUnique({
           where: { id: ctx.userId },
           select: { fullName: true },
         });
-        const { subject, text, html } = buildInviteEmail({
-          recipientName: user.fullName ?? '',
-          recipientEmail: user.email,
-          tempPassword,
-          scope: 'vendor',
-          businessName: vendor.businessName,
-          loginUrl: (process.env.AUTH_URL ?? 'http://localhost:3000') + '/login',
-          inviterName: inviter?.fullName ?? undefined,
-        });
-        await sendEmail({ to: user.email, subject, text, html });
+        const inviterName = inviter?.fullName ?? undefined;
+
+        if (user.email) {
+          const { subject, text, html } = buildInviteEmail({
+            recipientName: user.fullName ?? '',
+            recipientEmail: user.email,
+            tempPassword,
+            scope: 'vendor',
+            businessName: vendor.businessName,
+            loginUrl,
+            inviterName,
+          });
+          const emailResult = await sendEmail({ to: user.email, subject, text, html });
+          credentialsDelivered.email = emailResult.sent;
+        }
+
+        if (user.phone && (isNewUser || !user.email)) {
+          const smsBody = buildInviteSms({
+            recipientName: user.fullName ?? '',
+            loginIdentifier: user.phone,
+            tempPassword,
+            businessName: vendor.businessName,
+            loginUrl,
+            inviterName,
+          });
+          await sendSms({ to: user.phone, body: smsBody, channel: 'sms' });
+          credentialsDelivered.sms = true;
+        }
       } catch (err) {
         console.error('[invite-email] failed to send vendor invite email', err);
       }
@@ -311,14 +350,14 @@ export const POST = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
           select: { fullName: true },
         });
         const inviterName = inviter?.fullName?.trim() || 'Admin';
-        const loginUrl = (process.env.AUTH_URL ?? 'http://localhost:3000') + '/login';
         const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c));
 
         if (user.email) {
           const subject = `Access granted to vendor team ${vendor.businessName} on HoReCa Hub`;
           const text = `Hello ${user.fullName ?? ''},\n\n${inviterName} has added you to the vendor team "${vendor.businessName}" on HoReCa Hub.\n\nYou can now log in and access the vendor portal.\n\nLogin URL: ${loginUrl}\n\n— The HoReCa Hub team`;
           const html = `<p>Hello <strong>${esc(user.fullName ?? '')}</strong>,</p><p>${esc(inviterName)} has added you to the vendor team <strong>${esc(vendor.businessName)}</strong> on HoReCa Hub.</p><p>You can now log in and access the vendor portal.</p><p><a href="${esc(loginUrl)}">Sign in to HoReCa Hub</a></p><p>— The HoReCa Hub team</p>`;
-          await sendEmail({ to: user.email, subject, text, html });
+          const emailResult = await sendEmail({ to: user.email, subject, text, html });
+          credentialsDelivered.email = emailResult.sent;
         }
 
         if (user.phone) {
@@ -330,7 +369,22 @@ export const POST = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
       }
     }
 
-    return NextResponse.json({ success: true, data: dto }, { status: 201 });
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...dto,
+        ...(tempPassword
+          ? {
+              inviteMeta: {
+                tempPassword,
+                loginIdentifier,
+                loginUrl,
+                credentialsDelivered,
+              },
+            }
+          : {}),
+      },
+    }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }
