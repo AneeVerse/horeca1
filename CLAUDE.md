@@ -144,7 +144,7 @@ Defined in `.env.example` (dev) and `.env.production` (on the droplet). Required
 - `REDIS_URL` — BullMQ + rate limiter + cache
 - `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET` — payments
 - `IMAGEKIT_PUBLIC_KEY` / `IMAGEKIT_PRIVATE_KEY` / `IMAGEKIT_URL_ENDPOINT` — media
-- `RESEND_API_KEY` / `EMAIL_FROM` — email (falls back to console log if unset)
+- `EMAIL_USER` / `EMAIL_PASS` / `EMAIL_FROM` — Nodemailer + Gmail SMTP (invite, invoice, OTP email; falls back to console log if unset in dev)
 - `MSG91_AUTH_KEY` — SMS/OTP (falls back to console log if unset)
 - `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` — error tracking
 - `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` — Maps JS + Places + Geocoding

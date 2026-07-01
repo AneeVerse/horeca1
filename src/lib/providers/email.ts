@@ -1,8 +1,13 @@
 // Email provider adapter — Nodemailer + Gmail SMTP.
-// If EMAIL_USER / EMAIL_PASS are not set, falls back to console.log of the
-// payload (dev behavior) and returns silently without throwing.
+// If EMAIL_USER / EMAIL_PASS are not set, logs in dev and returns { sent: false }.
 
 import nodemailer from 'nodemailer';
+
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+}
 
 interface SendEmailInput {
   to: string;
@@ -10,6 +15,11 @@ interface SendEmailInput {
   text: string;
   html?: string;
   name?: string;
+  attachments?: EmailAttachment[];
+}
+
+export interface SendEmailResult {
+  sent: boolean;
 }
 
 const FROM = process.env.EMAIL_FROM ?? 'HoReCa Hub <team.horeca1@gmail.com>';
@@ -18,7 +28,7 @@ let cachedTransporter: nodemailer.Transporter | null = null;
 function getTransporter(): nodemailer.Transporter | null {
   if (cachedTransporter) return cachedTransporter;
   const user = process.env.EMAIL_USER;
-  const pass = process.env.EMAIL_PASS;
+  const pass = process.env.EMAIL_PASS?.replace(/\s/g, '');
   if (!user || !pass) return null;
   cachedTransporter = nodemailer.createTransport({
     service: process.env.EMAIL_SERVICE ?? 'gmail',
@@ -30,13 +40,16 @@ function getTransporter(): nodemailer.Transporter | null {
   return cachedTransporter;
 }
 
-export async function sendEmail(input: SendEmailInput): Promise<void> {
+export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
   const transporter = getTransporter();
   if (!transporter) {
+    const msg = `[email] SMTP not configured — could not send "${input.subject}" to ${input.to}`;
     if (process.env.NODE_ENV !== 'production') {
       console.log('[email:dev]', input.subject, '→', input.to, '\n', input.text.slice(0, 200));
+    } else {
+      console.error(msg);
     }
-    return;
+    return { sent: false };
   }
   const html = input.html ?? `<p>${input.text.replace(/\n/g, '<br>')}</p>`;
   await transporter.sendMail({
@@ -45,5 +58,11 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
     subject: input.subject,
     text: input.text,
     html,
+    attachments: input.attachments?.map((a) => ({
+      filename: a.filename,
+      content: a.content,
+      contentType: a.contentType,
+    })),
   });
+  return { sent: true };
 }

@@ -204,7 +204,24 @@ ssh root@64.227.187.210
 
 | File | Location | Purpose |
 |------|----------|---------|
-| `.env.production` | `/opt/horeca1/.env.production` | App environment variables (DB, Auth, Redis, Sentry, ImageKit) |
+| `.env.production` | `/opt/horeca1/.env.production` | App environment variables (DB, Auth, Redis, Sentry, ImageKit, email, SMS) |
+
+### Email (Nodemailer + Gmail SMTP)
+
+Production email uses **Gmail SMTP only** (no Resend). Required keys in `.env.production`:
+
+| Variable | Example |
+|----------|---------|
+| `EMAIL_SERVICE` | `gmail` |
+| `EMAIL_USER` | `team.horeca1@gmail.com` |
+| `EMAIL_PASS` | 16-char Gmail app password (no spaces) |
+| `EMAIL_HOST` | `smtp.gmail.com` |
+| `EMAIL_PORT` | `465` |
+| `EMAIL_FROM` | `HoReCa Hub <team.horeca1@gmail.com>` |
+
+After changing email vars: `docker compose -f docker/docker-compose.prod.yml up -d --force-recreate app worker` (restart alone does not reload `env_file`).
+
+Verify loaded in container: `docker exec horeca1-app printenv | grep -E '^EMAIL_' | cut -d= -f1`
 | `docker/.env` | `/opt/horeca1/docker/.env` | Docker Compose variable substitution (POSTGRES_PASSWORD) |
 
 ---
