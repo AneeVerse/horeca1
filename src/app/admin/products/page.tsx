@@ -18,6 +18,7 @@ import {
     Clock,
     XCircle,
     AlertTriangle,
+    AlertCircle,
     FileSpreadsheet,
     FileDown,
     ImageIcon,
@@ -115,7 +116,6 @@ interface BrandOption {
 
 interface SlabRow {
     minQty: string;
-    maxQty: string;
     price: string;
 }
 
@@ -436,8 +436,12 @@ export default function ProductsPage() {
     const [draftSaving, setDraftSaving] = useState(false);
     const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
     const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const creatingDraftRef = useRef(false);
+    const performDraftSaveRef = useRef<(opts?: { silent?: boolean }) => Promise<boolean>>(async () => false);
     const savedFormSnapshotRef = useRef<string>('');
+    const prevLoadingProductRef = useRef(false);
     const [panelOpen, setPanelOpen] = useState(false);
+    const [showCloseConfirm, setShowCloseConfirm] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [formData, setFormData] = useState<ProductFormData>(EMPTY_FORM);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -988,8 +992,18 @@ export default function ProductsPage() {
         setFormData(EMPTY_FORM);
         setFormErrors({});
         setDraftSaveError(null);
+        setShowCloseConfirm(false);
         savedFormSnapshotRef.current = JSON.stringify(EMPTY_FORM);
         setPanelOpen(true);
+        void (async () => {
+            if (creatingDraftRef.current) return;
+            creatingDraftRef.current = true;
+            try {
+                await performDraftSaveRef.current({ silent: true });
+            } finally {
+                creatingDraftRef.current = false;
+            }
+        })();
     };
 
     // Auto-open edit panel
@@ -1112,9 +1126,8 @@ export default function ProductsPage() {
                 substituteIds: Array.isArray(p.substituteIds) ? p.substituteIds : [],
                 isFeatured: !!p.isFeatured,
                 priceSlabs: Array.isArray(p.priceSlabs)
-                    ? p.priceSlabs.map((s: { minQty: number; maxQty?: number | null; price: number }) => ({
+                    ? p.priceSlabs.map((s: { minQty: number; price: number }) => ({
                         minQty: String(s.minQty),
-                        maxQty: s.maxQty != null ? String(s.maxQty) : '',
                         price: String(s.price),
                     }))
                     : [],
@@ -1192,9 +1205,10 @@ export default function ProductsPage() {
         }
     };
 
-    const closePanel = () => {
+    const closePanelImmediate = () => {
         if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
         setPanelOpen(false);
+        setShowCloseConfirm(false);
         setTimeout(() => {
             setEditingProduct(null);
             setFormData(EMPTY_FORM);
@@ -1295,7 +1309,6 @@ export default function ProductsPage() {
             .filter(s => s.minQty && s.price)
             .map(s => ({
                 minQty: Number(s.minQty),
-                maxQty: s.maxQty ? Number(s.maxQty) : undefined,
                 price: Number(s.price),
             }));
         if (slabs.length > 0) payload.priceSlabs = slabs;
@@ -1341,14 +1354,10 @@ export default function ProductsPage() {
         return formData.name.trim().length > 0;
     }, [panelOpen, loadingProduct, saving, draftSaving, editingProduct, formData.name]);
 
-    const handleSaveDraft = async () => {
+    const performDraftSave = useCallback(async (opts?: { silent?: boolean }): Promise<boolean> => {
         if (editingProduct?.isMasterRow) {
-            toast.error('Master catalog rows cannot be saved as drafts.');
-            return;
-        }
-        if (!formData.name.trim() && !editingProduct) {
-            toast.error('Enter a product name before saving a draft.');
-            return;
+            if (!opts?.silent) toast.error('Master catalog rows cannot be saved as drafts.');
+            return false;
         }
 
         setDraftSaving(true);
@@ -1369,11 +1378,11 @@ export default function ProductsPage() {
             const json = await res.json();
             if (!json.success && !res.ok) {
                 setDraftSaveError(json.error?.message ?? 'Couldn\'t save draft');
-                return;
+                return false;
             }
 
             const saved = json.data as Product;
-            syncFormSnapshot();
+            savedFormSnapshotRef.current = JSON.stringify(formData);
             if (!isEdit) {
                 setEditingProduct({ ...saved, listingStatus: 'draft', isMasterRow: false });
                 setProducts(prev => [{ ...saved, listingStatus: 'draft', isMasterRow: false }, ...prev]);
@@ -1382,12 +1391,39 @@ export default function ProductsPage() {
                 setProducts(prev => prev.map(p => p.id === saved.id ? { ...p, ...saved, listingStatus: 'draft' } : p));
             }
             void fetchDraftCount();
-            toast.success('Draft saved');
+            if (!opts?.silent) toast.success('Draft saved');
+            return true;
         } catch {
             setDraftSaveError('Couldn\'t save draft — check connection');
+            return false;
         } finally {
             setDraftSaving(false);
         }
+    }, [editingProduct, formData, buildProductPayload, fetchDraftCount]);
+
+    performDraftSaveRef.current = performDraftSave;
+
+    const handleSaveDraft = () => void performDraftSave({ silent: false });
+
+    const flushDraftAutosave = useCallback(async () => {
+        if (draftSaveTimeoutRef.current) {
+            clearTimeout(draftSaveTimeoutRef.current);
+            draftSaveTimeoutRef.current = null;
+        }
+        if (canAutosaveDraft() && isFormDirty()) {
+            await performDraftSaveRef.current({ silent: true });
+        }
+    }, [canAutosaveDraft, isFormDirty]);
+
+    const requestClosePanel = () => {
+        void (async () => {
+            await flushDraftAutosave();
+            if (isFormDirty()) {
+                setShowCloseConfirm(true);
+                return;
+            }
+            closePanelImmediate();
+        })();
     };
 
     const handleSave = async () => {
@@ -1426,7 +1462,7 @@ export default function ProductsPage() {
                 });
                 const json = await res.json();
                 if (json.success || res.ok) {
-                    closePanel();
+                    closePanelImmediate();
                     fetchProducts(currentPage);
                 } else {
                     const msg = json.error?.message ?? json.message ?? 'Failed to save master product';
@@ -1458,7 +1494,7 @@ export default function ProductsPage() {
                     setProducts(prev => [saved, ...prev]);
                 }
                 void fetchDraftCount();
-                closePanel();
+                closePanelImmediate();
             } else {
                 const msg = json.error?.message ?? json.message ?? 'Failed to save product';
                 applyServerError(msg);
@@ -1471,8 +1507,15 @@ export default function ProductsPage() {
         }
     };
 
-    const saveDraftRef = useRef(handleSaveDraft);
-    saveDraftRef.current = handleSaveDraft;
+    const saveDraftRef = useRef(() => performDraftSaveRef.current({ silent: true }));
+    saveDraftRef.current = () => performDraftSaveRef.current({ silent: true });
+
+    useEffect(() => {
+        if (prevLoadingProductRef.current && !loadingProduct && panelOpen) {
+            syncFormSnapshot();
+        }
+        prevLoadingProductRef.current = loadingProduct;
+    }, [loadingProduct, panelOpen, syncFormSnapshot]);
 
     useEffect(() => {
         if (!canAutosaveDraft() || !isFormDirty()) return;
@@ -2154,7 +2197,7 @@ export default function ProductsPage() {
                     'fixed inset-0 bg-black/40 z-[60] transition-opacity duration-300',
                     panelOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
                 )}
-                onClick={closePanel}
+                onClick={(e) => { if (e.target === e.currentTarget) requestClosePanel(); }}
             />
 
             {/* Panel */}
@@ -2193,7 +2236,7 @@ export default function ProductsPage() {
                         )}
                     </div>
                     <button
-                        onClick={closePanel}
+                        onClick={requestClosePanel}
                         className="w-[40px] h-[40px] rounded-[12px] flex items-center justify-center hover:bg-[#F8F9FB] text-[#7C7C7C] hover:text-[#181725] transition-all"
                     >
                         <X size={20} />
@@ -2889,7 +2932,7 @@ export default function ProductsPage() {
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                             <label className="flex items-center gap-3 cursor-pointer">
                                                 <input type="checkbox" checked={formData.sellable} onChange={(e) => updateField('sellable', e.target.checked)} className="w-5 h-5 accent-[#299E60]" />
                                                 <span className="text-[13px] font-bold text-[#181725]">Sellable</span>
@@ -2902,20 +2945,27 @@ export default function ProductsPage() {
                                                 <input type="checkbox" checked={formData.isFeatured} onChange={(e) => updateField('isFeatured', e.target.checked)} className="w-5 h-5 accent-[#F59E0B]" />
                                                 <span className="text-[13px] font-bold text-[#181725]">Featured</span>
                                             </label>
+                                            <label className="flex items-center gap-3 cursor-pointer">
+                                                <input type="checkbox" checked={formData.creditEligible} onChange={(e) => updateField('creditEligible', e.target.checked)} className="w-5 h-5 accent-[#7B1FA2]" />
+                                                <span>
+                                                    <span className="block text-[13px] font-bold text-[#181725]">DiSCCO credit</span>
+                                                    <span className="block text-[11px] text-[#AEAEAE] font-medium">Pay later on credit line</span>
+                                                </span>
+                                            </label>
                                         </div>
                                 </FormSection>
 
                                 <FormSection title="Bulk pricing tiers" icon={<Tag size={16} />} sectionId="bulk">
                                         <div className="flex items-start justify-between gap-4 mb-2">
                                             <p className="text-[12px] text-[#AEAEAE] font-medium">
-                                                Up to 3 quantity-based discount tiers (taxable rate, ex-GST)
+                                                Each tier applies from its min quantity. Up to 3 tiers (taxable rate, ex-GST).
                                             </p>
                                             {formData.priceSlabs.length < 3 && (
                                                 <button
                                                     type="button"
                                                     onClick={() => setFormData(prev => ({
                                                         ...prev,
-                                                        priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '' }],
+                                                        priceSlabs: [...prev.priceSlabs, { minQty: '', price: '' }],
                                                     }))}
                                                     className="h-[40px] px-5 bg-[#1a365d] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#1a365d]/90 transition-colors flex items-center gap-2 shrink-0"
                                                 >
@@ -2948,7 +2998,7 @@ export default function ProductsPage() {
                                                     </div>
 
                                                     <div className="p-5">
-                                                        <div className="grid grid-cols-3 gap-4">
+                                                        <div className="grid grid-cols-2 gap-4">
                                                             <div>
                                                                 <FieldLabel>Min Quantity</FieldLabel>
                                                                 <input
@@ -2961,20 +3011,6 @@ export default function ProductsPage() {
                                                                     }))}
                                                                     className={inputCls}
                                                                     placeholder="e.g. 10"
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <FieldLabel>Max Quantity</FieldLabel>
-                                                                <input
-                                                                    type="number"
-                                                                    min="1"
-                                                                    value={slab.maxQty}
-                                                                    onChange={e => setFormData(prev => ({
-                                                                        ...prev,
-                                                                        priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, maxQty: e.target.value } : s),
-                                                                    }))}
-                                                                    className={inputCls}
-                                                                    placeholder="(optional)"
                                                                 />
                                                             </div>
                                                             <div>
@@ -3016,7 +3052,7 @@ export default function ProductsPage() {
                 {/* Panel Footer */}
                 <div className="px-4 lg:px-6 py-4 border-t border-[#EEEEEE] shrink-0 flex items-center gap-3">
                     <button
-                        onClick={closePanel}
+                        onClick={requestClosePanel}
                         className="flex-1 h-[48px] bg-[#F8F9FB] border border-[#EEEEEE] text-[#181725] rounded-[12px] text-[14px] font-bold hover:bg-[#EEEEEE] transition-all"
                     >
                         Cancel
@@ -3046,6 +3082,56 @@ export default function ProductsPage() {
                     </button>
                 </div>
             </div>
+
+            {/* Unsaved changes confirmation */}
+            {showCloseConfirm && (
+                <>
+                    <div className="fixed inset-0 bg-black/40 z-[80]" onClick={() => setShowCloseConfirm(false)} />
+                    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+                        <div className="bg-white rounded-[16px] shadow-xl max-w-[420px] w-full p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-[40px] h-[40px] rounded-full bg-[#FFF7E6] flex items-center justify-center shrink-0">
+                                    <AlertCircle size={20} className="text-[#F59E0B]" />
+                                </div>
+                                <h3 className="text-[18px] font-bold text-[#181725]">Unsaved changes</h3>
+                            </div>
+                            <p className="text-[14px] text-[#7C7C7C] mb-6">
+                                {canAutosaveDraft()
+                                    ? 'You have unsaved changes. Changes are saved as draft automatically — save draft and close, or discard them.'
+                                    : 'You have changes that haven\'t been saved yet. Discard them and close the form?'}
+                            </p>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCloseConfirm(false)}
+                                    className="flex-1 h-[44px] border border-[#EEEEEE] rounded-[10px] text-[14px] font-bold text-[#181725] hover:bg-[#F8F9FB] transition-colors"
+                                >
+                                    Keep editing
+                                </button>
+                                {canAutosaveDraft() && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void (async () => {
+                                            await flushDraftAutosave();
+                                            closePanelImmediate();
+                                        })()}
+                                        className="flex-1 h-[44px] bg-[#FFCF4D] border border-[#E6B800] text-[#4A3800] rounded-[10px] text-[14px] font-bold hover:bg-[#F5C542] transition-colors"
+                                    >
+                                        Save draft &amp; close
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={closePanelImmediate}
+                                    className="flex-1 h-[44px] bg-[#E74C3C] text-white rounded-[10px] text-[14px] font-bold hover:bg-[#d44234] transition-colors"
+                                >
+                                    Discard
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
 
             {/* ============================================================= */}
             {/* Import Modal                                                    */}

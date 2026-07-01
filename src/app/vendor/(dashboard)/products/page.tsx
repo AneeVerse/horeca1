@@ -87,7 +87,6 @@ interface BrandOption {
 
 interface PriceSlabRow {
     minQty: string;
-    maxQty: string;
     price: string;
 }
 
@@ -536,6 +535,7 @@ export default function VendorProductsPage() {
     const [showCloseConfirm, setShowCloseConfirm] = useState(false);
     const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const skipDraftAutosaveRef = useRef(false);
+    const creatingDraftRef = useRef(false);
 
     const captureSnapshot = useCallback(
         () => serializeFormSnapshot(form, { masterProductId, basedOnProductId }),
@@ -966,7 +966,6 @@ export default function VendorProductsPage() {
             .filter(s => s.minQty && s.price)
             .map(s => ({
                 minQty: parseInt(s.minQty, 10),
-                maxQty: s.maxQty ? parseInt(s.maxQty, 10) : undefined,
                 price: parseFloat(s.price),
             }))
             .sort((a, b) => a.minQty - b.minQty);
@@ -1007,15 +1006,12 @@ export default function VendorProductsPage() {
         return body;
     }, [form, editingProduct, masterProductId, basedOnProductId]);
 
-    const saveDraftRef = useRef<() => Promise<void>>(async () => {});
+    const saveDraftRef = useRef<(force?: boolean) => Promise<boolean>>(async () => false);
 
-    const saveDraft = useCallback(async (force = false) => {
-        if (skipDraftAutosaveRef.current) return;
+    const saveDraft = useCallback(async (force = false): Promise<boolean> => {
+        if (skipDraftAutosaveRef.current && !force) return false;
         if (!force) {
-            if (!canAutosaveDraft() || !isFormDirty()) return;
-        } else if (!form.name.trim() && !editingProduct) {
-            toast.error('Enter a product name before saving a draft.');
-            return;
+            if (!canAutosaveDraft() || !isFormDirty()) return false;
         }
 
         setDraftSaving(true);
@@ -1040,7 +1036,7 @@ export default function VendorProductsPage() {
             const json = await res.json();
             if (!json.success) {
                 setDraftSaveError(json.error?.message ?? 'Couldn\'t save draft — retry');
-                return;
+                return false;
             }
             setDraftSaveError(null);
 
@@ -1087,12 +1083,14 @@ export default function VendorProductsPage() {
                         : existing
                 ));
             }
+            return true;
         } catch {
             setDraftSaveError('Couldn\'t save draft — check connection and retry');
+            return false;
         } finally {
             setDraftSaving(false);
         }
-    }, [canAutosaveDraft, isFormDirty, buildProductBody, editingProduct, categories, syncSavedSnapshot, form.name]);
+    }, [canAutosaveDraft, isFormDirty, buildProductBody, editingProduct, categories, syncSavedSnapshot]);
 
     useEffect(() => {
         saveDraftRef.current = saveDraft;
@@ -1120,9 +1118,17 @@ export default function VendorProductsPage() {
         setAuditLogs([]);
         setCategoryPickerKey((k) => k + 1);
         setIsPanelOpen(true);
-        Promise.resolve().then(() => {
-            skipDraftAutosaveRef.current = false;
-        });
+        void (async () => {
+            if (creatingDraftRef.current) return;
+            creatingDraftRef.current = true;
+            skipDraftAutosaveRef.current = true;
+            try {
+                await saveDraftRef.current(true);
+            } finally {
+                creatingDraftRef.current = false;
+                skipDraftAutosaveRef.current = false;
+            }
+        })();
     };
 
     const openEditPanel = async (product: VendorProduct) => {
@@ -1211,9 +1217,8 @@ export default function VendorProductsPage() {
                 creditEligible: !!p.creditEligible,
                 isFeatured: !!p.isFeatured,
                 priceSlabs: Array.isArray(p.priceSlabs)
-                    ? p.priceSlabs.map((s: { minQty: number; maxQty?: number | null; price: number }) => ({
+                    ? p.priceSlabs.map((s: { minQty: number; price: number }) => ({
                         minQty: String(s.minQty),
-                        maxQty: s.maxQty != null ? String(s.maxQty) : '',
                         price: String(s.price),
                     }))
                     : [],
@@ -1380,12 +1385,25 @@ export default function VendorProductsPage() {
         setDraftSaving(false);
     };
 
-    const requestClosePanel = () => {
-        if (isFormDirty()) {
-            setShowCloseConfirm(true);
-            return;
+    const flushDraftAutosave = useCallback(async () => {
+        if (draftSaveTimeoutRef.current) {
+            clearTimeout(draftSaveTimeoutRef.current);
+            draftSaveTimeoutRef.current = null;
         }
-        closePanelImmediate();
+        if (canAutosaveDraft() && isFormDirty()) {
+            await saveDraftRef.current();
+        }
+    }, [canAutosaveDraft, isFormDirty]);
+
+    const requestClosePanel = () => {
+        void (async () => {
+            await flushDraftAutosave();
+            if (isFormDirty()) {
+                setShowCloseConfirm(true);
+                return;
+            }
+            closePanelImmediate();
+        })();
     };
 
     // Debounced draft autosave while the panel is open (new products + draft listings only).
@@ -1451,7 +1469,7 @@ export default function VendorProductsPage() {
     const addPriceSlab = () => {
         setForm(prev => ({
             ...prev,
-            priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '' }],
+            priceSlabs: [...prev.priceSlabs, { minQty: '', price: '' }],
         }));
     };
 
@@ -2211,7 +2229,7 @@ export default function VendorProductsPage() {
                     {/* Backdrop */}
                     <div
                         className="fixed inset-0 z-[60] bg-black/40 transition-opacity"
-                        onClick={requestClosePanel}
+                        onClick={(e) => { if (e.target === e.currentTarget) requestClosePanel(); }}
                     />
 
                     {/* Panel */}
@@ -3119,7 +3137,7 @@ export default function VendorProductsPage() {
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#EEEEEE]">
+                                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-[#EEEEEE]">
                                                 <label className="flex items-center gap-3 cursor-pointer">
                                                     <input
                                                         type="checkbox"
@@ -3153,20 +3171,32 @@ export default function VendorProductsPage() {
                                                         <span className="text-[13px] font-bold text-[#181725]">Featured</span>
                                                     </div>
                                                 </label>
+                                                <label className="flex items-center gap-3 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={form.creditEligible}
+                                                        onChange={(e) => updateField('creditEligible', e.target.checked)}
+                                                        className="w-5 h-5 accent-[#7B1FA2]"
+                                                    />
+                                                    <div>
+                                                        <span className="text-[13px] font-bold text-[#181725]">DiSCCO credit</span>
+                                                        <span className="block text-[11px] text-[#AEAEAE] font-medium">Pay later on credit line</span>
+                                                    </div>
+                                                </label>
                                             </div>
                                 </FormSection>
 
                                 <FormSection title="Bulk pricing tiers" icon={<Tag size={16} />} sectionId="bulk">
                                             <div className="flex items-start justify-between gap-4 mb-2">
                                                 <p className="text-[12px] text-[#AEAEAE] font-medium">
-                                                    Up to 3 quantity-based discount tiers (taxable rate, ex-GST)
+                                                    Each tier applies from its min quantity. Up to 3 tiers (taxable rate, ex-GST).
                                                 </p>
                                                 {form.priceSlabs.length < 3 && (
                                                     <button
                                                         type="button"
                                                         onClick={() => setForm(prev => ({
                                                             ...prev,
-                                                            priceSlabs: [...prev.priceSlabs, { minQty: '', maxQty: '', price: '' }],
+                                                            priceSlabs: [...prev.priceSlabs, { minQty: '', price: '' }],
                                                         }))}
                                                         className="h-[32px] px-3.5 bg-[#EEF8F1] hover:bg-[#53B175] text-[#299E60] hover:text-white rounded-[8px] text-[12px] font-bold flex items-center gap-1.5 transition-colors shrink-0"
                                                     >
@@ -3198,7 +3228,7 @@ export default function VendorProductsPage() {
                                                         </div>
 
                                                         <div className="p-5">
-                                                            <div className="grid grid-cols-3 gap-4">
+                                                            <div className="grid grid-cols-2 gap-4">
                                                                 <div>
                                                                     <FieldLabel>Min Quantity</FieldLabel>
                                                                     <input
@@ -3211,20 +3241,6 @@ export default function VendorProductsPage() {
                                                                         }))}
                                                                         className={inputCls}
                                                                         placeholder="e.g. 10"
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <FieldLabel>Max Quantity</FieldLabel>
-                                                                    <input
-                                                                        type="number"
-                                                                        min="1"
-                                                                        value={slab.maxQty}
-                                                                        onChange={e => setForm(prev => ({
-                                                                            ...prev,
-                                                                            priceSlabs: prev.priceSlabs.map((s, idx) => idx === index ? { ...s, maxQty: e.target.value } : s),
-                                                                        }))}
-                                                                        className={inputCls}
-                                                                        placeholder="(optional)"
                                                                     />
                                                                 </div>
                                                                 <div>
@@ -3323,9 +3339,11 @@ export default function VendorProductsPage() {
                                 <h3 className="text-[18px] font-bold text-[#181725]">Unsaved changes</h3>
                             </div>
                             <p className="text-[14px] text-[#7C7C7C] mb-6">
-                                You have changes that haven&apos;t been saved yet. Discard them and close the form?
+                                {canAutosaveDraft()
+                                    ? 'You have unsaved changes. Changes are saved as draft automatically — save draft and close, or discard them.'
+                                    : 'You have changes that haven\'t been saved yet. Discard them and close the form?'}
                             </p>
-                            <div className="flex gap-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
                                 <button
                                     type="button"
                                     onClick={() => setShowCloseConfirm(false)}
@@ -3333,6 +3351,18 @@ export default function VendorProductsPage() {
                                 >
                                     Keep editing
                                 </button>
+                                {canAutosaveDraft() && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void (async () => {
+                                            await flushDraftAutosave();
+                                            closePanelImmediate();
+                                        })()}
+                                        className="flex-1 h-[44px] bg-[#FFCF4D] border border-[#E6B800] text-[#4A3800] rounded-[10px] text-[14px] font-bold hover:bg-[#F5C542] transition-colors"
+                                    >
+                                        Save draft &amp; close
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     onClick={closePanelImmediate}
