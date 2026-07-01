@@ -423,18 +423,20 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
               },
             });
 
-            // Ensure CreditAccount exists
-            const existingCredit = await tx.creditAccount.findUnique({
-              where: { userId_vendorId: { userId, vendorId } },
+            // Ensure CreditWallet row exists (zero limit until assigned)
+            const existingWallet = await tx.creditWallet.findFirst({
+              where: { userId, vendorId },
             });
-            if (!existingCredit) {
-              await tx.creditAccount.create({
+            if (!existingWallet) {
+              await tx.creditWallet.create({
                 data: {
                   userId,
                   vendorId,
                   creditLimit: 0,
-                  creditUsed: 0,
-                  status: 'active',
+                  availableCredit: 0,
+                  usedCredit: 0,
+                  outstandingAmount: 0,
+                  workflowStatus: 'IN_PROGRESS',
                 },
               });
             }

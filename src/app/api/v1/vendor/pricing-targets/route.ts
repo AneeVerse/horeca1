@@ -44,9 +44,9 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
           },
         },
       }),
-      prisma.creditAccount.findMany({
+      prisma.creditWallet.findMany({
         where: { vendorId },
-        select: { userId: true, status: true },
+        select: { userId: true, status: true, workflowStatus: true },
       }),
     ]);
 
@@ -56,7 +56,14 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
     const customers = new Map<string, { userId: string; label: string; creditStatus: string | null; pincodes: string[]; cities: string[]; tags: string[] }>();
     const accountIds = new Set<string>();
 
-    const creditMap = new Map(creditAccounts.map(c => [c.userId, c.status]));
+    const creditMap = new Map(
+      creditAccounts.map((c) => [
+        c.userId,
+        c.status === 'BLACKLISTED' || c.status === 'BLOCKED'
+          ? c.status.toLowerCase()
+          : c.workflowStatus.toLowerCase(),
+      ]),
+    );
 
     for (const o of orderBuyers) {
       customers.set(o.userId, {

@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { requirePermission } from '@/lib/permissions/engine';
+import { creditWalletService } from '@/modules/credit/creditWallet.service';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -443,22 +444,16 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
           update: vcData,
         });
 
-        // Sync credit account if credit settings are passed
-        if (vm.creditLimit !== undefined || vm.creditStatus !== undefined) {
-          await tx.creditAccount.upsert({
-            where: { userId_vendorId: { userId: id, vendorId: vm.vendorId } },
-            create: {
-              userId: id,
-              vendorId: vm.vendorId,
-              creditLimit: vm.creditLimit || 0,
-              creditUsed: 0,
-              status: vm.creditStatus || 'active',
-            },
-            update: {
-              creditLimit: vm.creditLimit !== undefined ? vm.creditLimit : undefined,
-              status: vm.creditStatus !== undefined ? vm.creditStatus : undefined,
-            },
-          });
+        // Sync credit wallet if credit settings are passed
+        if (vm.creditLimit !== undefined) {
+          await creditWalletService.assignCredit(
+            id,
+            vm.vendorId,
+            vm.creditLimit,
+            {},
+            ctx.userId,
+            'Credit synced from admin user update',
+          );
         }
       }
 

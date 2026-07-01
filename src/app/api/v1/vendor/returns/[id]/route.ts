@@ -12,6 +12,7 @@ import { vendorOnly } from '@/middleware/rbac';
 import { Errors, errorResponse } from '@/middleware/errorHandler';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
+import { creditWalletService } from '@/modules/credit/creditWallet.service';
 
 function extractId(req: NextRequest) {
   return new URL(req.url).pathname.split('/').at(-1) ?? '';
@@ -80,75 +81,46 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
         },
       });
 
-      // Ledger adjustment for refund on a credit order
-      if (
-        body.status === 'approved' &&
-        body.resolutionType === 'refund' &&
-        body.refundAmount &&
-        body.refundAmount > 0 &&
-        returnReq.order.paymentMethod === 'credit'
-      ) {
-        const creditAcc = await tx.creditAccount.findUnique({
-          where: {
-            userId_vendorId: { userId: returnReq.order.userId, vendorId },
-          },
-        });
-        if (creditAcc) {
-          const refund = Math.min(body.refundAmount, Number(creditAcc.creditUsed));
-          const newUsed = Math.max(0, Number(creditAcc.creditUsed) - refund);
-          await tx.creditAccount.update({
-            where: { id: creditAcc.id },
-            data: { creditUsed: newUsed },
-          });
-          await tx.creditTransaction.create({
-            data: {
-              creditAccountId: creditAcc.id,
-              orderId: returnReq.order.id,
-              vendorId,
-              type: 'credit',
-              amount: refund,
-              balanceAfter: newUsed,
-              notes: `Return approved — refund of ₹${refund.toFixed(2)} applied`,
-            },
-          });
-        }
-      }
-
-      // Credit note: issue a credit transaction on the customer's credit account
-      if (
-        body.status === 'approved' &&
-        body.resolutionType === 'credit_note' &&
-        body.creditNoteAmount &&
-        body.creditNoteAmount > 0
-      ) {
-        const creditNoteNumber = resolutionData.creditNoteNumber!;
-        const creditAcc = await tx.creditAccount.findUnique({
-          where: {
-            userId_vendorId: { userId: returnReq.order.userId, vendorId },
-          },
-        });
-        if (creditAcc) {
-          const newUsed = Math.max(0, Number(creditAcc.creditUsed) - body.creditNoteAmount);
-          await tx.creditAccount.update({
-            where: { id: creditAcc.id },
-            data: { creditUsed: newUsed },
-          });
-          await tx.creditTransaction.create({
-            data: {
-              creditAccountId: creditAcc.id,
-              orderId: returnReq.order.id,
-              vendorId,
-              type: 'credit',
-              amount: body.creditNoteAmount,
-              balanceAfter: newUsed,
-              notes: `Credit note ${creditNoteNumber}`,
-            },
-          });
-        }
-      }
-
       return result;
     });
+
+    if (body.status === 'approved') {
+      const wallet = await prisma.creditWallet.findFirst({
+        where: { userId: returnReq.order.userId, vendorId },
+      });
+      if (wallet && Number(wallet.outstandingAmount) > 0) {
+        if (
+          body.resolutionType === 'refund' &&
+          body.refundAmount &&
+          body.refundAmount > 0 &&
+          returnReq.order.paymentMethod === 'credit'
+        ) {
+          const refund = Math.min(body.refundAmount, Number(wallet.outstandingAmount));
+          await creditWalletService.applyRepayment(
+            wallet.id,
+            refund,
+            'REVERSAL',
+            undefined,
+            undefined,
+            `Return approved — refund of ₹${refund.toFixed(2)} applied`,
+          );
+        } else if (
+          body.resolutionType === 'credit_note' &&
+          body.creditNoteAmount &&
+          body.creditNoteAmount > 0
+        ) {
+          const amount = Math.min(body.creditNoteAmount, Number(wallet.outstandingAmount));
+          await creditWalletService.applyRepayment(
+            wallet.id,
+            amount,
+            'CREDIT_NOTE',
+            undefined,
+            undefined,
+            `Credit note on return ${returnId}`,
+          );
+        }
+      }
+    }
 
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {

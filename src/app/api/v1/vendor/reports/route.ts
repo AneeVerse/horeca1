@@ -78,15 +78,12 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
           select: { productId: true, qtyAvailable: true, qtyReserved: true, lowStockThreshold: true, product: { select: { id: true, name: true } } },
         }),
 
-        // Credit accounts for this vendor's customers
-        prisma.creditAccount.findMany({
+        // Credit wallets for this vendor's customers
+        prisma.creditWallet.findMany({
           where: { vendorId },
           include: {
             user: { select: { fullName: true, businessName: true } },
-            transactions: {
-              where: { type: 'debit', dueDate: { not: null } },
-              select: { dueDate: true, amount: true },
-            },
+            penalties: { where: { status: 'APPLIED' }, select: { type: true, amount: true } },
           },
         }),
 
@@ -251,20 +248,12 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
     let accountsWithNoOverdue = 0;
 
     for (const acc of creditData) {
-      const creditUsed = Number(acc.creditUsed);
+      const creditUsed = Number(acc.outstandingAmount);
       if (creditUsed <= 0) continue;
       accountsWithCredit += 1;
       totalOutstanding += creditUsed;
 
-      const overdueDebits = acc.transactions.filter(t => t.dueDate !== null && new Date(t.dueDate) < now);
-      let daysOverdue = 0;
-      if (overdueDebits.length > 0) {
-        const oldest = overdueDebits.reduce<Date>((min, t) => {
-          const d = new Date(t.dueDate as Date);
-          return d < min ? d : min;
-        }, new Date(overdueDebits[0].dueDate as Date));
-        daysOverdue = Math.floor((now.getTime() - oldest.getTime()) / 86_400_000);
-      }
+      const daysOverdue = acc.overdueDays;
 
       if (daysOverdue === 0) {
         aging.current += creditUsed;

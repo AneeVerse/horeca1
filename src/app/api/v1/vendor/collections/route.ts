@@ -25,67 +25,54 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
   try {
     const vendorId = await resolveVendorId(ctx, req);
 
-    const accounts = await prisma.creditAccount.findMany({
+    const wallets = await prisma.creditWallet.findMany({
       where: { vendorId },
       include: {
         user: { select: { id: true, fullName: true, email: true, phone: true, businessName: true } },
-        transactions: {
-          where: { type: 'debit', dueDate: { not: null } },
-          select: { dueDate: true, amount: true },
-          orderBy: { dueDate: 'asc' },
-        },
+        penalties: { where: { status: 'APPLIED' }, select: { type: true, amount: true } },
       },
       orderBy: { updatedAt: 'desc' },
     });
 
     const now = new Date();
 
-    const data = accounts.map((acc) => {
-      const overdueDebits = acc.transactions.filter(
-        (t) => t.dueDate && t.dueDate < now,
-      );
-      const oldestDue = overdueDebits[0]?.dueDate ?? null;
-      const daysOverdue = oldestDue
-        ? Math.floor((now.getTime() - oldestDue.getTime()) / 86_400_000)
-        : 0;
+    const data = wallets.map((w) => {
+      const creditUsed = Number(w.outstandingAmount);
+      const daysOverdue = w.overdueDays;
+      const effectiveDaysOverdue = Math.max(0, daysOverdue);
+      const overdueAmount = creditUsed > 0 && effectiveDaysOverdue > 0 ? creditUsed : 0;
 
-      // Grace period — overdue only counts after grace days pass
-      const effectiveDaysOverdue = Math.max(0, daysOverdue - acc.graceDays);
-      const overdueAmount = Number(acc.creditUsed) > 0 && effectiveDaysOverdue > 0
-        ? Number(acc.creditUsed)
-        : 0;
+      const accruedInterest = w.penalties
+        .filter((p) => p.type === 'INTEREST')
+        .reduce((s, p) => s + Number(p.amount), 0);
+      const accruedPenalty = w.penalties
+        .filter((p) => p.type === 'LATE_FEE')
+        .reduce((s, p) => s + Number(p.amount), 0);
 
-      // Accrued interest: monthly rate applied pro-rata (per day)
-      const interestRate = Number(acc.interestRatePct) / 100;
-      const accruedInterest = overdueAmount > 0 && interestRate > 0
-        ? Math.round(overdueAmount * interestRate * (effectiveDaysOverdue / 30) * 100) / 100
-        : 0;
-
-      // Accrued penalty: flat daily rate on overdue amount
-      const penaltyRate = Number(acc.penaltyRatePct) / 100;
-      const accruedPenalty = overdueAmount > 0 && penaltyRate > 0
-        ? Math.round(overdueAmount * penaltyRate * effectiveDaysOverdue * 100) / 100
-        : 0;
+      const legacyStatus =
+        w.status === 'BLACKLISTED' ? 'suspended' : w.status === 'BLOCKED' ? 'suspended' : 'active';
 
       return {
-        id: acc.id,
-        status: acc.status,
-        creditLimit: Number(acc.creditLimit),
-        creditUsed: Number(acc.creditUsed),
-        creditAvailable: Math.max(0, Number(acc.creditLimit) - Number(acc.creditUsed)),
+        id: w.id,
+        status: legacyStatus,
+        creditLimit: Number(w.creditLimit),
+        creditUsed,
+        creditAvailable: Number(w.availableCredit),
         overdueAmount,
         daysOverdue: effectiveDaysOverdue,
         aging: agingBucket(effectiveDaysOverdue),
         accruedInterest,
         accruedPenalty,
-        totalDue: overdueAmount + accruedInterest + accruedPenalty,
-        graceDays: acc.graceDays,
-        interestRatePct: Number(acc.interestRatePct),
-        penaltyRatePct: Number(acc.penaltyRatePct),
-        freezeOnOverdueDays: acc.freezeOnOverdueDays,
-        createdAt: acc.createdAt,
-        updatedAt: acc.updatedAt,
-        user: acc.user,
+        totalDue: creditUsed + accruedInterest + accruedPenalty,
+        graceDays: w.overrideGracePeriod ?? 0,
+        interestRatePct: w.overrideInterestRate != null ? Number(w.overrideInterestRate) : 0,
+        penaltyRatePct: w.overridePenaltyAmount != null ? Number(w.overridePenaltyAmount) : 0,
+        freezeOnOverdueDays: w.overrideBlacklistDays ?? 0,
+        createdAt: w.createdAt,
+        updatedAt: w.updatedAt,
+        user: w.user,
+        walletStatus: w.status,
+        currentDueDate: w.currentDueDate,
       };
     });
 

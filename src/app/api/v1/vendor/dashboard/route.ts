@@ -186,10 +186,10 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         select: { userId: true, createdAt: true },
       }),
 
-      // Credit utilization aggregate
-      prisma.creditAccount.aggregate({
+      // Credit utilization aggregate (CreditWallet engine)
+      prisma.creditWallet.aggregate({
         where: { vendorId },
-        _sum: { creditLimit: true, creditUsed: true },
+        _sum: { creditLimit: true, outstandingAmount: true },
       }),
 
       // Fulfillment: packing pending (processing), dispatch pending (shipped), delayed (48h+)
@@ -203,19 +203,22 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
         },
       }),
 
-      // Upcoming due in 7 days — CreditAccount has no dueDate field; use updatedAt
-      // as a fallback to surface recently-active credit accounts' outstanding balance
-      prisma.creditAccount.aggregate({
+      // Upcoming due in 7 days — wallets with due date within the next week
+      prisma.creditWallet.aggregate({
         where: {
           vendorId,
-          updatedAt: { gte: new Date(), lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+          outstandingAmount: { gt: 0 },
+          currentDueDate: {
+            gte: new Date(),
+            lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          },
         },
-        _sum: { creditUsed: true },
+        _sum: { outstandingAmount: true },
       }),
 
-      // Credit customers count — accounts with outstanding balance
-      prisma.creditAccount.count({
-        where: { vendorId, creditUsed: { gt: 0 } },
+      // Credit customers count — wallets with outstanding balance
+      prisma.creditWallet.count({
+        where: { vendorId, outstandingAmount: { gt: 0 } },
       }),
     ]);
 
@@ -263,7 +266,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
 
     // ── Credit utilization ──
     const totalCreditLimit = Number(creditAggregate._sum.creditLimit ?? 0);
-    const totalCreditUsed = Number(creditAggregate._sum.creditUsed ?? 0);
+    const totalCreditUsed = Number(creditAggregate._sum.outstandingAmount ?? 0);
     const creditUtilizationPct =
       totalCreditLimit > 0 ? Math.round((totalCreditUsed / totalCreditLimit) * 100) : 0;
     const creditUtilization = {
@@ -291,7 +294,7 @@ export const GET = vendorOnly(async (req: NextRequest, ctx) => {
           platformFees: Number(platformFeesResult._sum.platformFee ?? 0),
           overdueAmount: Number(overdueResult._sum.amount ?? 0),
           pendingWalletAmount: Number(vendorWallet?.pendingAmount ?? 0),
-          upcomingDue: Number(upcomingDueAggregate._sum.creditUsed ?? 0),
+          upcomingDue: Number(upcomingDueAggregate._sum.outstandingAmount ?? 0),
           creditCustomersCount,
         },
         ordersByStatus,
