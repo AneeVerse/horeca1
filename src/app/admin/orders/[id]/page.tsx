@@ -17,7 +17,9 @@ import {
     Calendar,
     Coins,
     RefreshCw,
-    FileText
+    FileText,
+    FileDown,
+    Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -196,6 +198,7 @@ export default function OrderDetailsPage() {
     const [reassignTo, setReassignTo] = useState('');
     const [vendorOptions, setVendorOptions] = useState<{ id: string; businessName: string }[]>([]);
     const [opsBusy, setOpsBusy] = useState(false);
+    const [emailingInvoice, setEmailingInvoice] = useState(false);
 
     useEffect(() => {
         fetch('/api/v1/admin/vendors?limit=200')
@@ -727,6 +730,47 @@ export default function OrderDetailsPage() {
                                 <span className="text-[20px] font-black text-[#111827]">{formatCurrency(order.totalAmount)}</span>
                             </div>
                         </div>
+
+                        {order.paymentStatus === 'paid' && (
+                            <div className="flex flex-col gap-2 pt-1 border-t border-[#E5E7EB]">
+                                <a
+                                    href={`/api/v1/admin/orders/${order.id}/invoice`}
+                                    download
+                                    className="w-full h-[38px] rounded-[8px] text-[12px] font-bold border border-[#299E60]/40 text-[#299E60] hover:bg-[#EEF8F1] transition-colors flex items-center justify-center gap-1.5"
+                                >
+                                    <FileDown size={14} />
+                                    Download Invoice
+                                </a>
+                                <button
+                                    type="button"
+                                    disabled={emailingInvoice || !order.user.email}
+                                    onClick={async () => {
+                                        setEmailingInvoice(true);
+                                        try {
+                                            const res = await fetch(`/api/v1/admin/orders/${order.id}/invoice?email=true`);
+                                            const json = await res.json();
+                                            if (!json.success) throw new Error(json.error?.message ?? 'Failed to email invoice');
+                                            if (json.data?.emailed) {
+                                                toast.success(`Invoice emailed to ${json.data.recipient}`);
+                                            } else {
+                                                toast.warning('SMTP not configured — use Download Invoice instead');
+                                            }
+                                        } catch (err) {
+                                            toast.error(err instanceof Error ? err.message : 'Failed to email invoice');
+                                        } finally {
+                                            setEmailingInvoice(false);
+                                        }
+                                    }}
+                                    className="w-full h-[38px] rounded-[8px] text-[12px] font-bold bg-[#299E60] text-white hover:bg-[#238A52] disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+                                >
+                                    {emailingInvoice ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+                                    {emailingInvoice ? 'Sending…' : 'Email to Customer'}
+                                </button>
+                                {!order.user.email && (
+                                    <p className="text-[10px] text-[#9CA3AF] text-center">Customer has no email on file</p>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* Customer Notes */}

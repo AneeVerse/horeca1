@@ -7,7 +7,7 @@ import {
     ChevronLeft, User, Package, MapPin, Loader2, AlertCircle, Clock,
     CheckCircle2, XCircle, Printer, ChevronRight, AlertTriangle,
     Truck, ClipboardList, Minus, Plus, Info, ShoppingBag, Landmark,
-    Calendar, FileText
+    Calendar, FileText, FileDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -1146,6 +1146,17 @@ setOrder(prev => prev ? { ...prev, ewayBillNo: ewayBill.trim() } : prev);
                                 </div>
                             )}
                         </div>
+
+                        {order.paymentStatus === 'paid' && (
+                            <a
+                                href={`/api/v1/vendor/orders/${order.id}/invoice`}
+                                download
+                                className="w-full h-[38px] rounded-[8px] text-[12px] font-bold border border-[#299E60]/40 text-[#299E60] hover:bg-[#EEF8F1] transition-colors flex items-center justify-center gap-1.5"
+                            >
+                                <FileDown size={14} />
+                                Download Invoice
+                            </a>
+                        )}
                     </div>
 
                     {/* E-Way Bill Box */}
