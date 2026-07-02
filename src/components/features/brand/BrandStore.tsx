@@ -2,15 +2,19 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, MapPin, Store, ArrowLeft, Search, X, AlertCircle, Plus, Minus, ShoppingCart, Loader2, Check, LayoutGrid, LayoutList, ChevronRight, ChevronDown, Package, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatPackSize } from '@/lib/utils';
 import { parseImageMeta, getDisplayStyle } from '@/lib/imageMeta';
+import { buildCategoryTree, filterProductsByCatalogTab, slugifyCategory } from '@/lib/categoryTree';
 import { useAddress } from '@/context/AddressContext';
 import { useCart } from '@/context/CartContext';
 import type { VendorProduct } from '@/types';
 import { VendorProductCard } from '@/components/features/vendor/VendorProductCard';
+
+const PRODUCT_IMAGE_FALLBACK = '/images/recom-product/product-img10.png';
 
 // Avatar that renders a clean logo if available, else a colored initial-letter tile.
 // Used for vendor cards on the brand storefront where many vendors won't have logos uploaded yet.
@@ -77,11 +81,22 @@ interface BrandDistributor {
     servicesPincode?: boolean;
 }
 
+interface BrandCategoryLink {
+    id: string;
+    name: string;
+    slug?: string;
+    imageUrl?: string | null;
+    parentId?: string | null;
+    parentName?: string | null;
+    parentImageUrl?: string | null;
+}
+
 interface BrandProduct {
     id: string;
     name: string;
     image: string;
     category: string;
+    categories: BrandCategoryLink[];
     packSize?: string;
     unit?: string;
     distributors: BrandDistributor[];
@@ -111,6 +126,7 @@ interface BrandStoreData {
 
 interface BrandStoreProps {
     brandId: string;
+    initialCatSlug?: string;
 }
 
 // Mock BRAND_DATA (Kitchen Smith / Kissan / etc.) removed 2026-04-29 — the
@@ -164,7 +180,39 @@ function TabBar({
     );
 }
 
-export function BrandStore({ brandId }: BrandStoreProps) {
+type ProductAvailState = 'serviceable' | 'area' | 'out' | 'none';
+
+function pickCheapestDistributor(product: BrandProduct): BrandDistributor | null {
+    const inStock = product.distributors.filter((d) => d.inStock);
+    const pool = inStock.length > 0 ? inStock : product.distributors;
+    if (pool.length === 0) return null;
+    return pool.slice().sort((a, b) => a.price - b.price)[0];
+}
+
+function resolveProductImage(product: BrandProduct, dist?: BrandDistributor | null): string {
+    if (product.image?.trim()) return product.image;
+    if (dist?.imageUrl) return dist.imageUrl;
+    const inStockImg = product.distributors.find((d) => d.inStock && d.imageUrl);
+    if (inStockImg?.imageUrl) return inStockImg.imageUrl;
+    const anyImg = product.distributors.find((d) => d.imageUrl);
+    if (anyImg?.imageUrl) return anyImg.imageUrl;
+    return PRODUCT_IMAGE_FALLBACK;
+}
+
+function getProductAvailState(
+    product: BrandProduct,
+    best: BrandDistributor | null,
+    pincode?: string,
+): ProductAvailState {
+    if (product.distributors.length === 0) return 'none';
+    const inStock = product.distributors.filter((d) => d.inStock);
+    if (inStock.length === 0) return 'out';
+    if (best) return 'serviceable';
+    if (pincode) return 'area';
+    return 'out';
+}
+
+export function BrandStore({ brandId, initialCatSlug = '' }: BrandStoreProps) {
     const router = useRouter();
     const { selectedAddress } = useAddress();
     const pincode = selectedAddress?.pincode;
@@ -177,7 +225,7 @@ export function BrandStore({ brandId }: BrandStoreProps) {
     const [showAllVendors, setShowAllVendors] = useState(false);
     const [vendorPickerProduct, setVendorPickerProduct] = useState<BrandProduct | null>(null);
     const [adding, setAdding] = useState<string | null>(null); // distributorProductId currently being added
-    const [selectedCategory, setSelectedCategory] = useState<string>('all');
+    const [catalogTab, setCatalogTab] = useState(initialCatSlug ? `cat:${initialCatSlug}` : 'all');
     const [layoutMode, setLayoutMode] = useState<'grid' | 'list'>('grid');
 
     useEffect(() => {
@@ -210,11 +258,21 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                         logoImage: d.logo ?? '',
                         tagline: d.tagline ?? '',
                         coverage: d.coverage ?? undefined,
-                        products: d.products.map((p: { id: string; name: string; image?: string; category: string; packSize?: string; unit?: string; distributors?: BrandDistributor[] }) => ({
+                        products: d.products.map((p: {
+                            id: string;
+                            name: string;
+                            image?: string;
+                            category: string;
+                            categories?: BrandCategoryLink[];
+                            packSize?: string;
+                            unit?: string;
+                            distributors?: BrandDistributor[];
+                        }) => ({
                             id: p.id,
                             name: p.name,
                             image: p.image ?? '',
                             category: p.category,
+                            categories: p.categories ?? [],
                             packSize: p.packSize ?? '',
                             unit: p.unit ?? '',
                             distributors: p.distributors ?? [],
@@ -235,33 +293,78 @@ export function BrandStore({ brandId }: BrandStoreProps) {
             .finally(() => setLoading(false));
     }, [brandId, pincode, showAllVendors]);
 
-    // Compute unique categories and counts from brand products
-    const categories = useMemo(() => {
+    const catalogProductsForTree = useMemo(() => {
         if (!brand) return [];
-        const counts: Record<string, number> = {};
-        brand.products.forEach((p) => {
-            counts[p.category] = (counts[p.category] || 0) + 1;
-        });
-        return Object.entries(counts).map(([name, count]) => ({
-            id: name,
-            name,
-            count,
-        })).sort((a, b) => b.count - a.count);
+        return brand.products.map((p) => ({
+            id: p.id,
+            image: p.image,
+            categoryId: p.categories[0]?.id,
+            category: p.category,
+            categoryImage: p.categories[0]?.imageUrl,
+            categoryParentId: p.categories[0]?.parentId,
+            categoryParentName: p.categories[0]?.parentName,
+            categoryParentImage: p.categories[0]?.parentImageUrl,
+            subCategories: p.categories.map((c) => ({
+                id: c.id,
+                name: c.name,
+                image: c.imageUrl,
+                parentId: c.parentId,
+                parentName: c.parentName,
+                parentImage: c.parentImageUrl,
+            })),
+        }));
     }, [brand]);
+
+    const brandCategoryTree = useMemo(
+        () => buildCategoryTree(catalogProductsForTree),
+        [catalogProductsForTree],
+    );
+
+    // Convert ?cat=<slug> to category name once products load.
+    useEffect(() => {
+        if (!initialCatSlug || !brand) return;
+        if (!catalogTab.startsWith('cat:')) return;
+        const current = catalogTab.slice(4);
+        const allNames = brand.products.flatMap((p) =>
+            p.categories.flatMap((c) => [c.name, c.parentName].filter(Boolean) as string[]),
+        );
+        if (allNames.includes(current)) return;
+        const slug = slugifyCategory(initialCatSlug);
+        const subMatch = brand.products.find((p) =>
+            p.categories.some((c) => slugifyCategory(c.name) === slug),
+        );
+        if (subMatch) {
+            const cat = subMatch.categories.find((c) => slugifyCategory(c.name) === slug);
+            if (cat) setCatalogTab(`cat:${cat.name}`);
+            return;
+        }
+        const parentMatch = brand.products.find((p) =>
+            p.categories.some((c) => c.parentName && slugifyCategory(c.parentName) === slug),
+        );
+        const parentName = parentMatch?.categories.find(
+            (c) => c.parentName && slugifyCategory(c.parentName) === slug,
+        )?.parentName;
+        if (parentName) setCatalogTab(`cat:${parentName}`);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [brand, initialCatSlug]);
+
+    const activeCatName = catalogTab.startsWith('cat:') ? catalogTab.slice(4) : '';
+    const activeParentNode = useMemo(
+        () => brandCategoryTree.find((p) => p.name === activeCatName && p.children.length > 0),
+        [brandCategoryTree, activeCatName],
+    );
+    const showSubcategoryTiles = !searchQuery.trim() && !!activeParentNode;
 
     // Must be before early returns (hook rules)
     const filteredProducts = useMemo(() => {
         if (!brand) return [];
-        let items = brand.products;
-        if (selectedCategory !== 'all') {
-            items = items.filter(p => p.category === selectedCategory);
-        }
+        let items = filterProductsByCatalogTab(brand.products, catalogTab);
         if (!searchQuery.trim()) return items;
         const q = searchQuery.toLowerCase();
         return items.filter(
-            (p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
+            (p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q),
         );
-    }, [brand, selectedCategory, searchQuery]);
+    }, [brand, catalogTab, searchQuery]);
 
     // Pick the cheapest in-stock serviceable distributor for a brand product.
     //
@@ -633,22 +736,22 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                                 {/* All Products option */}
                                 <button
                                     type="button"
-                                    onClick={() => setSelectedCategory('all')}
+                                    onClick={() => setCatalogTab('all')}
                                     className={cn(
                                         "w-full rounded-xl transition-all text-left flex flex-col items-center md:flex-row md:items-center md:justify-between px-1 md:px-3 py-2 md:py-2.5",
-                                        selectedCategory === 'all' ? "bg-[#53B175]/10" : "hover:bg-gray-50"
+                                        catalogTab === 'all' ? "bg-[#53B175]/10" : "hover:bg-gray-50"
                                     )}
                                 >
                                     <div className="flex flex-col items-center md:flex-row md:items-center md:gap-3 min-w-0 w-full">
                                         <div className={cn(
                                             "w-12 h-12 md:w-9 md:h-9 rounded-lg flex items-center justify-center transition-all shrink-0",
-                                            selectedCategory === 'all' ? "bg-white border border-[#53B175]/30 shadow-sm" : "bg-gray-50"
+                                            catalogTab === 'all' ? "bg-white border border-[#53B175]/30 shadow-sm" : "bg-gray-50"
                                         )}>
-                                            <LayoutGrid className={cn('w-5 h-5 md:w-4 md:h-4', selectedCategory === 'all' ? 'text-[#53B175]' : 'text-gray-400')} strokeWidth={2} />
+                                            <LayoutGrid className={cn('w-5 h-5 md:w-4 md:h-4', catalogTab === 'all' ? 'text-[#53B175]' : 'text-gray-400')} strokeWidth={2} />
                                         </div>
                                         <span className={cn(
                                             "text-[10px] md:text-[13px] font-semibold md:font-bold leading-tight text-center md:text-left mt-1 md:mt-0 line-clamp-2 md:line-clamp-none md:truncate w-full md:flex-1",
-                                            selectedCategory === 'all' ? "text-[#53B175]" : "text-[#181725]"
+                                            catalogTab === 'all' ? "text-[#53B175]" : "text-[#181725]"
                                         )}>
                                             All Products
                                         </span>
@@ -656,43 +759,68 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                                     <span className="hidden md:inline text-[11px] font-bold text-gray-400 shrink-0 ml-2">{brand.products.length}</span>
                                 </button>
 
-                                {/* Category list */}
-                                {categories.map((cat) => {
-                                    const isActive = selectedCategory === cat.name;
+                                {brandCategoryTree.map((parent) => {
+                                    const isParentActive = catalogTab === `cat:${parent.name}` || parent.children.some((c) => catalogTab === `cat:${c.name}`);
                                     return (
                                         <button
-                                            key={cat.id}
+                                            key={parent.id}
                                             type="button"
-                                            onClick={() => setSelectedCategory(cat.name)}
+                                            onClick={() => setCatalogTab(`cat:${parent.name}`)}
                                             className={cn(
-                                                "w-full rounded-xl transition-all text-left flex flex-col items-center md:flex-row md:items-center md:justify-between px-1 md:px-3 py-2 md:py-2.5 mt-1",
-                                                isActive ? "bg-[#53B175]/10" : "hover:bg-gray-50"
+                                                "w-full mt-1 rounded-xl transition-all text-left flex flex-col items-center md:flex-row md:items-center md:gap-3 px-1 md:px-3 py-2 md:py-2.5 min-w-0",
+                                                isParentActive ? "bg-[#53B175]/10" : "hover:bg-gray-50"
                                             )}
                                         >
-                                            <div className="flex flex-col items-center md:flex-row md:items-center md:gap-3 min-w-0 w-full">
-                                                <div className={cn(
-                                                    "w-12 h-12 md:w-9 md:h-9 rounded-lg flex items-center justify-center transition-all shrink-0",
-                                                    isActive ? "bg-white border border-[#53B175]/30 shadow-sm" : "bg-gray-50"
-                                                )}>
-                                                    <Package size={16} className={cn('md:!w-4 md:!h-4', isActive ? 'text-[#53B175]' : 'text-gray-400')} strokeWidth={2.5} />
-                                                </div>
-                                                <span className={cn(
-                                                    "text-[10px] md:text-[13px] font-semibold md:font-bold leading-tight text-center md:text-left mt-1 md:mt-0 line-clamp-2 md:line-clamp-none md:truncate w-full md:flex-1",
-                                                    isActive ? "text-[#53B175]" : "text-[#181725]"
-                                                )}>
-                                                    {cat.name}
-                                                </span>
+                                            <div className={cn(
+                                                "w-12 h-12 md:w-9 md:h-9 rounded-lg flex items-center justify-center overflow-hidden relative transition-all shrink-0",
+                                                isParentActive ? "bg-white border border-[#53B175]/30 shadow-sm" : "bg-gray-50"
+                                            )}>
+                                                {parent.image ? (
+                                                    <Image src={parent.image} alt={parent.name} width={36} height={36} className="object-contain w-full h-full p-1" />
+                                                ) : (
+                                                    <Package size={16} className="text-gray-300" strokeWidth={1.5} />
+                                                )}
                                             </div>
-                                            <span className="hidden md:inline text-[11px] font-bold text-gray-400 shrink-0 ml-2">{cat.count}</span>
+                                            <span className={cn(
+                                                "text-[10px] md:text-[13px] font-semibold md:font-bold leading-tight text-center md:text-left mt-1 md:mt-0 line-clamp-2 md:line-clamp-none md:truncate w-full md:flex-1",
+                                                isParentActive ? "text-[#53B175]" : "text-[#181725]"
+                                            )}>
+                                                {parent.name}
+                                            </span>
+                                            <span className="hidden md:inline text-[11px] font-bold text-gray-400 shrink-0">{parent.count}</span>
                                         </button>
                                     );
                                 })}
                             </div>
                         </aside>
 
-                        {/* RIGHT: PRODUCTS CATALOG */}
+                        {/* RIGHT: SUB-CATEGORY TILES or PRODUCTS */}
                         <div className="flex-1 min-w-0">
-                            {filteredProducts.length > 0 ? (
+                            {showSubcategoryTiles && activeParentNode ? (
+                                <div>
+                                    <h2 className="text-[clamp(1.1rem,2vw+0.5rem,1.6rem)] font-black text-[#181725] mb-4">{activeParentNode.name}</h2>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+                                        {activeParentNode.children.map((child) => (
+                                            <button
+                                                key={child.id}
+                                                type="button"
+                                                onClick={() => setCatalogTab(`cat:${child.name}`)}
+                                                className="group bg-white rounded-2xl border border-gray-100 p-4 shadow-sm hover:shadow-md hover:border-[#53B175]/40 transition-all flex flex-col items-center text-center"
+                                            >
+                                                <div className="w-20 h-20 rounded-xl bg-gray-50 flex items-center justify-center overflow-hidden mb-3">
+                                                    {child.image ? (
+                                                        <Image src={child.image} alt={child.name} width={80} height={80} className="object-contain w-full h-full p-2" />
+                                                    ) : (
+                                                        <Package size={28} className="text-gray-300" strokeWidth={1.5} />
+                                                    )}
+                                                </div>
+                                                <span className="text-[13px] font-bold text-[#181725] group-hover:text-[#53B175] transition-colors line-clamp-2">{child.name}</span>
+                                                <span className="text-[11px] font-bold text-gray-400 mt-1">{child.count} items</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : filteredProducts.length > 0 ? (
                                 <div className={cn(
                                     layoutMode === 'grid'
                                         ? 'grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4'
@@ -700,35 +828,44 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                                 )}>
                                     {filteredProducts.map((product) => {
                                         const best = pickBestDistributor(product);
-                                        const distCount = product.distributors.filter(d => d.inStock).length;
-                                        // True when at least one distributor stocks the product but
-                                        // none of them deliver to the customer's selected pincode.
-                                        // In that case we render the card in a "needs picker" state:
-                                        // stock=0 (so VendorProductCard's add button is disabled) AND
-                                        // a transparent click-capturing overlay that opens the vendor
-                                        // picker modal instead of silently swallowing the click.
-                                        const noServiceableButHasStock = !best && distCount > 0;
+                                        const cheapest = pickCheapestDistributor(product);
+                                        const displayDist = best ?? cheapest;
+                                        const avail = getProductAvailState(product, best, pincode);
+                                        const distCount = product.distributors.filter((d) => d.inStock).length;
+                                        const packDisplay = formatPackSize(product.packSize, product.unit) || '—';
 
                                         const mappedProduct: VendorProduct = {
                                             id: best ? best.distributorProductId : product.id,
                                             name: product.name,
                                             displayName: product.name,
                                             description: '',
-                                            price: best ? best.price : 0,
-                                            images: [product.image || ''],
+                                            price: displayDist?.price ?? 0,
+                                            images: [resolveProductImage(product, displayDist)],
                                             category: product.category,
-                                            packSize: formatPackSize(product.packSize, product.unit) || product.category,
-                                            unit: product.unit || '',
-                                            stock: (best && best.inStock) ? 999 : 0,
-                                            isActive: best ? true : false,
+                                            packSize: packDisplay,
+                                            unit: displayDist?.unit || product.unit || '',
+                                            stock: avail === 'serviceable' ? (best!.stock || 999) : avail === 'area' ? 1 : 0,
+                                            isActive: avail === 'serviceable',
                                             createdAt: new Date(),
                                             updatedAt: new Date(),
-                                            vendorId: best ? best.vendorId : '',
-                                            vendorName: best ? best.vendorName : (noServiceableButHasStock ? 'View distributors' : 'No distributor'),
-                                            bulkPrices: [],
+                                            vendorId: best?.vendorId ?? '',
+                                            vendorName: avail === 'serviceable'
+                                                ? best!.vendorName
+                                                : avail === 'area'
+                                                    ? 'View distributors'
+                                                    : 'No distributor',
+                                            bulkPrices: displayDist?.priceSlabs.map((s) => ({ minQty: s.minQty, price: s.price })) ?? [],
                                             creditBadge: false,
-                                            minOrderQuantity: 1,
+                                            minOrderQuantity: displayDist?.priceSlabs[0]?.minQty ?? 1,
                                         };
+
+                                        const availabilityLabel = avail === 'area'
+                                            ? 'area' as const
+                                            : avail === 'none'
+                                                ? 'none' as const
+                                                : avail === 'out'
+                                                    ? 'out' as const
+                                                    : undefined;
 
                                         const card = (
                                             <VendorProductCard
@@ -736,6 +873,8 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                                                 variant={layoutMode}
                                                 distributorName={best?.vendorName}
                                                 distributorCount={distCount}
+                                                availabilityLabel={availabilityLabel}
+                                                forceInStockDisplay={avail === 'area'}
                                                 onDistributorClick={(e) => {
                                                     e.preventDefault();
                                                     e.stopPropagation();
@@ -744,13 +883,7 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                                             />
                                         );
 
-                                        // When no distributor delivers to the pincode but the product
-                                        // is otherwise in stock, wrap the card in a relative container
-                                        // with an overlay that captures clicks and opens the picker
-                                        // modal. This lets the customer browse all distributors with
-                                        // explicit "Doesn't deliver to {pincode}" warnings instead of
-                                        // silently adding a non-deliverable item to cart.
-                                        if (noServiceableButHasStock) {
+                                        if (avail === 'area') {
                                             return (
                                                 <div key={product.id} className="relative">
                                                     {card}
@@ -789,7 +922,7 @@ export function BrandStore({ brandId }: BrandStoreProps) {
                             <div className="flex items-center gap-3 mb-5 p-4 bg-white rounded-[16px] border border-[#53B175]/20">
                                 <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden shrink-0">
                                     <img
-                                        src={selectedProduct.image}
+                                        src={resolveProductImage(selectedProduct)}
                                         alt={selectedProduct.name}
                                         className="w-full h-full object-contain p-1.5"
                                         onError={(e) => { (e.currentTarget as HTMLImageElement).src = fallbackSvg(40); }}

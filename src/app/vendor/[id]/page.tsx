@@ -9,6 +9,7 @@ import { VendorProductCard } from '@/components/features/vendor/VendorProductCar
 import { StickyCartBar } from '@/components/features/vendor/StickyCartBar';
 import { dal } from '@/lib/dal';
 import { cn } from '@/lib/utils';
+import { buildCategoryTree, filterProductsByCatalogTab } from '@/lib/categoryTree';
 import { useCart } from '@/context/CartContext';
 import type { Vendor, VendorProduct } from '@/types';
 import { Package, Star, CheckCircle, Clock, ChevronRight, LayoutGrid } from 'lucide-react';
@@ -165,64 +166,10 @@ export default function VendorStorePage() {
     }, [products, initialCatSlug]);
 
     // Hierarchical category tree the vendor actually sells.
-    // Spec: "Vendor Catalog Navigation: Categories >> Sub-Categories (Like Hyperpure 1-column grid)"
-    //
-    // Builds: [ { id, name, count, image, children: [{ id, name, count, image }, ...] }, ... ]
-    // - A product directly in a top-level Category becomes a top-level entry
-    // - A product in a Sub-Category is rolled up under its parent Category
-    // - count at each level is the # of products at THAT level (parent count includes children)
-    interface SidebarNode { id: string; name: string; count: number; image?: string; children: Array<{ id: string; name: string; count: number; image?: string }>; }
-    const vendorCategoryTree = useMemo<SidebarNode[]>(() => {
-        const parents = new Map<string, SidebarNode>();
-
-        for (const p of products) {
-            // A product appears under EVERY sub-category it's tagged in (primary + the
-            // vendor's additional/display-only choices). Fall back to the primary fields
-            // when the link set isn't populated.
-            const links = (p.subCategories && p.subCategories.length > 0)
-                ? p.subCategories
-                : (p.categoryId && p.category
-                    ? [{ id: p.categoryId, name: p.category, image: p.categoryImage, parentId: p.categoryParentId, parentName: p.categoryParentName }]
-                    : []);
-
-            const countedParents = new Set<string>(); // count each product once per parent badge
-            for (const sc of links) {
-                if (!sc.id || !sc.name) continue;
-                if (sc.parentId && sc.parentName) {
-                    // Sub-category → roll up under its parent.
-                    let parent = parents.get(sc.parentId);
-                    if (!parent) {
-                        parent = { id: sc.parentId, name: sc.parentName, count: 0, children: [] };
-                        parents.set(sc.parentId, parent);
-                    }
-                    // Only the primary parent carries a known image here; other parents get
-                    // theirs from products whose PRIMARY category sits under them.
-                    if (!parent.image && sc.parentId === p.categoryParentId) parent.image = p.categoryParentImage;
-                    let child = parent.children.find(c => c.id === sc.id);
-                    if (!child) {
-                        child = { id: sc.id, name: sc.name, count: 0, image: sc.image || p.images?.[0] };
-                        parent.children.push(child);
-                    }
-                    if (!child.image) child.image = sc.image || p.images?.[0];
-                    child.count += 1;
-                    if (!countedParents.has(sc.parentId)) { parent.count += 1; countedParents.add(sc.parentId); }
-                } else {
-                    // Sub-category with no parent (defensive — should not happen post-restructure)
-                    let parent = parents.get(sc.id);
-                    if (!parent) {
-                        parent = { id: sc.id, name: sc.name, count: 0, image: sc.image || p.images?.[0], children: [] };
-                        parents.set(sc.id, parent);
-                    }
-                    if (!countedParents.has(sc.id)) { parent.count += 1; countedParents.add(sc.id); }
-                }
-            }
-        }
-
-        // Sort parents by total count desc; sort children by count desc within each parent
-        const list = Array.from(parents.values()).sort((a, b) => b.count - a.count);
-        list.forEach(p => p.children.sort((a, b) => b.count - a.count));
-        return list;
-    }, [products]);
+    const vendorCategoryTree = useMemo(
+        () => buildCategoryTree(products),
+        [products],
+    );
 
     // Drill-down state derived from activeTab.
     // Left rail = top-level categories (parents). Selecting a parent shows its
@@ -251,17 +198,7 @@ export default function VendorStorePage() {
         } else if (activeTab === 'prev-ordered') {
             result = prevOrderedProducts;
         } else if (activeTab.startsWith('cat:')) {
-            const category = activeTab.replace('cat:', '');
-            // Match against EVERY sub-category the product is tagged in (primary + the
-            // vendor's additional/display-only choices) and that sub-category's parent.
-            // This makes a product showcased in multiple sub-categories appear in each,
-            // and a top-level Category click show all items across its sub-categories.
-            result = result.filter(p =>
-                p.subCategories?.some(sc => sc.name === category || sc.parentName === category) ||
-                p.category === category ||
-                p.subcategory === category ||
-                p.categoryParentName === category
-            );
+            result = filterProductsByCatalogTab(result, activeTab);
         }
 
         // Filter by search

@@ -92,31 +92,38 @@ export function LocationSelectionOverlay({ isOpen, onClose }: LocationSelectionO
         await handleSelectAddressAndSyncOutlet(addr);
     };
 
-    // ─── Select from autocomplete prediction (immediate 1-tap UX) ──────────
+    // ─── Select from autocomplete prediction — confirm before save for area-level picks ──
     const handleSelectPrediction = async (pred: PlacePrediction) => {
         const details = await getPlaceDetails(pred.placeId);
-        if (details) {
-            setSearchQuery('');
-            clearPredictions();
-            
-            const addressInput: Omit<Address, 'id'> = {
-                label: 'Other',
-                businessName: details.businessName,
-                fullAddress: details.fullAddress,
-                shortAddress: details.shortAddress,
-                latitude: details.latitude,
-                longitude: details.longitude,
-                pincode: details.pincode,
-                city: details.city,
-                state: details.state,
-                placeId: details.placeId,
-                isDefault: false,
-            };
+        if (!details) return;
 
-            const saved = await addAddress(addressInput);
-            if (saved) {
-                await handleSelectAddressAndSyncOutlet(saved);
-            }
+        setSearchQuery('');
+        clearPredictions();
+
+        if (details.isAreaLevel || !details.pincodeReliable) {
+            setInitialCoords({ lat: details.latitude, lng: details.longitude });
+            setDefaultMode('map');
+            setIsAddNewOpen(true);
+            return;
+        }
+
+        const addressInput: Omit<Address, 'id'> = {
+            label: 'Other',
+            businessName: details.businessName,
+            fullAddress: details.fullAddress,
+            shortAddress: details.shortAddress,
+            latitude: details.latitude,
+            longitude: details.longitude,
+            pincode: details.pincode,
+            city: details.city,
+            state: details.state,
+            placeId: details.placeId,
+            isDefault: false,
+        };
+
+        const saved = await addAddress(addressInput);
+        if (saved) {
+            await handleSelectAddressAndSyncOutlet(saved);
         }
     };
 

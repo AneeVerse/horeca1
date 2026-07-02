@@ -20,6 +20,10 @@ export interface PlaceDetails {
     city?: string;
     state?: string;
     businessName?: string;  // Populated when Place has a name (restaurant, hotel, cafe)
+    /** True when the place is a locality/area, not a street-level deliverable address. */
+    isAreaLevel?: boolean;
+    /** True when pincode came from place postal_code component (not centroid guess). */
+    pincodeReliable?: boolean;
 }
 
 interface UseGooglePlacesOptions {
@@ -155,6 +159,7 @@ export function useGooglePlacesAutocomplete(
                         const components = place.address_components || [];
 
                         const locality = components.find(c => c.types.includes('locality'));
+                        const admin2 = components.find(c => c.types.includes('administrative_area_level_2'));
                         const sublocality = components.find(c =>
                             c.types.includes('sublocality_level_1') || c.types.includes('sublocality')
                         );
@@ -163,41 +168,62 @@ export function useGooglePlacesAutocomplete(
                             c.types.includes('administrative_area_level_1')
                         );
 
-                        const pincode = postalCode?.long_name || '';
-                        const city = locality?.long_name || '';
+                        let pincode = postalCode?.long_name || '';
+                        const pincodeFromComponent = !!pincode;
+                        const city = locality?.long_name
+                            || admin2?.long_name
+                            || sublocality?.long_name
+                            || '';
                         const state = stateComp?.long_name || '';
+                        const placeTypes = place.types || [];
+                        const hasStreetLevel = placeTypes.some((t) =>
+                            ['street_address', 'premise', 'subpremise', 'establishment', 'point_of_interest'].includes(t),
+                        );
+                        const isAreaLevel = !hasStreetLevel && placeTypes.some((t) =>
+                            ['neighborhood', 'sublocality', 'sublocality_level_1', 'locality', 'administrative_area_level_2'].includes(t),
+                        );
 
-                        let shortAddr = '';
-                        if (sublocality && locality) {
-                            shortAddr = `${sublocality.long_name}, ${locality.long_name}`;
-                        } else if (locality) {
-                            shortAddr = locality.long_name;
-                        } else {
-                            shortAddr = (place.formatted_address || '').split(',').slice(0, 2).join(',');
+                        const resolveDetails = (resolvedPincode: string, pincodeReliable: boolean) => {
+                            let shortAddr = '';
+                            if (sublocality && (locality || admin2)) {
+                                shortAddr = `${sublocality.long_name}, ${locality?.long_name || admin2?.long_name}`;
+                            } else if (locality) {
+                                shortAddr = locality.long_name;
+                            } else if (admin2) {
+                                shortAddr = admin2.long_name;
+                            } else {
+                                shortAddr = (place.formatted_address || '').split(',').slice(0, 2).join(',');
+                            }
+
+                            const placeName = place.name || '';
+                            const isBusinessName = placeName.length > 0
+                                && !place.formatted_address?.startsWith(placeName)
+                                && !/^\d/.test(placeName);
+
+                            sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
+
+                            resolve({
+                                placeId: place.place_id || placeId,
+                                fullAddress: isAreaLevel ? '' : (place.formatted_address || ''),
+                                shortAddress: shortAddr,
+                                latitude: lat,
+                                longitude: lng,
+                                pincode: resolvedPincode,
+                                city,
+                                state,
+                                businessName: isBusinessName ? placeName : undefined,
+                                isAreaLevel,
+                                pincodeReliable,
+                            });
+                        };
+
+                        if (!pincodeFromComponent && lat && lng) {
+                            // Do not guess pincode from centroid — area picks need manual confirmation.
+                            resolveDetails('', false);
+                            return;
                         }
 
-                        // Determine businessName:
-                        // Only use place.name if it looks like a business name
-                        // (not a street address — those typically start with digits or match formatted_address)
-                        const placeName = place.name || '';
-                        const isBusinessName = placeName.length > 0
-                            && !place.formatted_address?.startsWith(placeName)
-                            && !/^\d/.test(placeName);
-
-                        // Refresh session token after place details call (cost optimization)
-                        sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
-
-                        resolve({
-                            placeId: place.place_id || placeId,
-                            fullAddress: place.formatted_address || '',
-                            shortAddress: shortAddr,
-                            latitude: lat,
-                            longitude: lng,
-                            pincode,
-                            city,
-                            state,
-                            businessName: isBusinessName ? placeName : undefined,
-                        });
+                        resolveDetails(pincode, pincodeFromComponent);
                     } else {
                         resolve(null);
                     }

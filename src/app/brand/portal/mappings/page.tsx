@@ -1,56 +1,54 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { GitMerge, Loader2, CheckCircle, Clock, XCircle, Zap, Store, Info } from 'lucide-react';
+import Link from 'next/link';
+import { GitMerge, Loader2, Zap, Info, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
-import { confidenceLabel, mappingStatusLabel, TONE_STYLES } from '@/lib/brandMappingLabels';
+import { cn, formatPackSize } from '@/lib/utils';
+import { mappingStatusLabel, distributorAuthLabel, TONE_STYLES } from '@/lib/brandMappingLabels';
 
-interface CoverageItem {
+interface CoverageRow {
+    mappingId: string;
     masterProductId: string;
     masterProductName: string;
-    packSize: string | null;
-    mappings: Array<{
-        id: string;
-        status: string;
-        confidenceScore: number;
-        distributorProduct: {
-            id: string;
-            name: string;
-            basePrice: number;
-            vendor: { id: string; businessName: string; logoUrl: string | null } | null;
-        };
-    }>;
+    masterPackSize: string | null;
+    masterUnit: string | null;
+    masterSku: string | null;
+    distributorProductName: string;
+    status: string;
+    vendorName: string;
+    distributorAuthStatus: string | null;
+    isAuthApproved: boolean;
 }
 
-interface RunMappingResponse {
-    success: boolean;
-    message?: string;
-    before?: number;
-    after?: number;
-    newMappings?: number;
-    error?: { message?: string };
+interface CoverageStats {
+    productsCovered: number;
+    activeMappings: number;
+    pendingReview: number;
+    pendingApproval: number;
+    totalProducts: number;
 }
 
-// Icon per status — labels + colours come from the shared helper.
-const STATUS_ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
-    auto_mapped: CheckCircle,
-    verified: CheckCircle,
-    pending_review: Clock,
-    rejected: XCircle,
-};
+interface CoveragePayload {
+    rows: CoverageRow[];
+    stats: CoverageStats;
+}
+
+type StatusFilter = 'all' | 'mapped' | 'pending';
 
 export default function BrandMappingsPage() {
-    const [coverage, setCoverage] = useState<CoverageItem[]>([]);
+    const [data, setData] = useState<CoveragePayload | null>(null);
     const [loading, setLoading] = useState(true);
     const [runningAll, setRunningAll] = useState(false);
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+    const [rejecting, setRejecting] = useState<string | null>(null);
 
     const fetchCoverage = useCallback(async () => {
         setLoading(true);
         try {
             const res = await fetch('/api/v1/brand/coverage');
             const json = await res.json();
-            if (json.success) setCoverage(json.data ?? []);
+            if (json.success) setData(json.data ?? { rows: [], stats: { productsCovered: 0, activeMappings: 0, pendingReview: 0, pendingApproval: 0, totalProducts: 0 } });
         } catch { /* silent */ }
         finally { setLoading(false); }
     }, []);
@@ -60,44 +58,63 @@ export default function BrandMappingsPage() {
     const handleRunAll = async () => {
         setRunningAll(true);
         try {
-            const res = await fetch('/api/v1/brand/coverage', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({}),
-            });
-            const result: RunMappingResponse = await res.json();
-            if (result.success) {
-                toast.success(result.message ?? 'Auto-mapping complete');
-            } else {
-                toast.error(result.error?.message ?? 'Auto-mapping failed');
-            }
+            const res = await fetch('/api/v1/brand/coverage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            const result = await res.json();
+            if (result.success) toast.success(result.data?.message ?? result.message ?? 'Auto-mapping complete');
+            else toast.error(result.error?.message ?? 'Auto-mapping failed');
             await fetchCoverage();
         } catch {
             toast.error('Network error — please try again');
+        } finally {
+            setRunningAll(false);
         }
-        finally { setRunningAll(false); }
     };
 
-    const totalCovered = coverage.filter(c => c.mappings.length > 0).length;
-    const activeMappings = coverage.reduce((sum, item) =>
-        sum + item.mappings.filter(m => m.status === 'auto_mapped' || m.status === 'verified').length, 0);
-    const pendingMappings = coverage.reduce((s, c) =>
-        s + c.mappings.filter(m => m.status === 'pending_review').length, 0);
+    const handleReject = async (mappingId: string) => {
+        const note = window.prompt('Reason for rejecting this mapping (optional):') ?? '';
+        setRejecting(mappingId);
+        try {
+            const res = await fetch(`/api/v1/brand/mappings/${mappingId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'reject', reviewNote: note || undefined }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error?.message || 'Reject failed');
+            toast.success('Mapping rejected');
+            await fetchCoverage();
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Reject failed');
+        } finally {
+            setRejecting(null);
+        }
+    };
+
+    const stats = data?.stats ?? { productsCovered: 0, activeMappings: 0, pendingReview: 0, pendingApproval: 0, totalProducts: 0 };
+    const rows = data?.rows ?? [];
+
+    const filteredRows = rows.filter((row) => {
+        if (statusFilter === 'mapped') {
+            return row.status === 'auto_mapped' || row.status === 'verified';
+        }
+        if (statusFilter === 'pending') {
+            return row.status === 'pending_review';
+        }
+        return true;
+    });
 
     return (
         <div className="max-w-[1100px] mx-auto space-y-6 animate-in fade-in duration-500">
-            {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-[26px] font-[900] text-[#181725] tracking-tight">Distributor Map</h1>
                     <p className="text-[#7C7C7C] font-medium mt-0.5 text-[14px]">
-                        See which distributors carry your products and at what price
+                        All distributor links for your catalog — approve vendors on the Distributors page
                     </p>
                 </div>
                 <button
                     onClick={handleRunAll}
                     disabled={runningAll}
-                    title="Scans all approved distributor catalogs for products that match your brand. New matches show up below."
                     className="flex items-center gap-2 px-4 py-2.5 bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold hover:bg-[#3d9e41] transition-colors disabled:opacity-60"
                 >
                     {runningAll ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
@@ -105,118 +122,108 @@ export default function BrandMappingsPage() {
                 </button>
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                    { label: 'Products Covered', value: totalCovered, color: '#3B82F6', bg: '#EFF6FF' },
-                    { label: 'Active Mappings', value: activeMappings, color: '#53B175', bg: '#EEF8F1' },
-                    { label: 'Pending Review', value: pendingMappings, color: '#F59E0B', bg: '#FFF7E6' },
-                ].map(stat => (
-                    <div key={stat.label} className="bg-white p-4 rounded-[14px] border border-[#EEEEEE] shadow-sm flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0" style={{ backgroundColor: stat.bg }}>
-                            <GitMerge size={18} style={{ color: stat.color }} />
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-bold text-[#AEAEAE] uppercase tracking-wider">{stat.label}</p>
-                            <p className="text-[22px] font-[900] text-[#181725] leading-none">{stat.value}</p>
-                        </div>
+                    { label: 'Products Covered', value: stats.productsCovered, color: '#3B82F6', bg: '#EFF6FF' },
+                    { label: 'Active (approved vendors)', value: stats.activeMappings, color: '#53B175', bg: '#EEF8F1' },
+                    { label: 'Pending confirmation', value: stats.pendingReview, color: '#F59E0B', bg: '#FFF7E6' },
+                    { label: 'Awaiting vendor approval', value: stats.pendingApproval, color: '#D97706', bg: '#FFF7E6' },
+                ].map((stat) => (
+                    <div key={stat.label} className="bg-white p-4 rounded-[14px] border border-[#EEEEEE] shadow-sm">
+                        <p className="text-[10px] font-bold text-[#AEAEAE] uppercase tracking-wider">{stat.label}</p>
+                        <p className="text-[22px] font-[900] text-[#181725] leading-none mt-1">{stat.value}</p>
                     </div>
                 ))}
             </div>
 
-            {/* Coverage list */}
-            {loading ? (
-                <div className="flex items-center justify-center py-16">
-                    <Loader2 className="w-8 h-8 animate-spin text-[#53B175]" />
-                </div>
-            ) : coverage.length === 0 ? (
-                <div className="bg-white rounded-[20px] border border-[#EEEEEE] p-12 text-center">
-                    <GitMerge size={40} className="mx-auto text-[#EEEEEE] mb-3" />
-                    <p className="text-[16px] font-bold text-[#AEAEAE]">No mapping data yet</p>
-                    <p className="text-[13px] text-[#AEAEAE] mt-1 mb-5">Add products first, then run auto-mapping to find distributors</p>
-                    <button onClick={handleRunAll} disabled={runningAll}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-[#53B175] text-white rounded-[10px] text-[13px] font-bold mx-auto disabled:opacity-60">
-                        <Zap size={14} /> Run Auto-Mapping
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-[10px] w-fit">
+                {(['all', 'mapped', 'pending'] as StatusFilter[]).map((f) => (
+                    <button
+                        key={f}
+                        onClick={() => setStatusFilter(f)}
+                        className={cn(
+                            'px-3 h-[30px] rounded-[8px] text-[12px] font-bold capitalize transition-colors',
+                            statusFilter === f ? 'bg-white text-[#181725] shadow-sm' : 'text-gray-500',
+                        )}
+                    >
+                        {f}
                     </button>
-                </div>
-            ) : (
-                <div className="space-y-4">
-                    {coverage.map(item => (
-                        <div key={item.masterProductId} className="bg-white rounded-[16px] border border-[#EEEEEE] shadow-sm overflow-hidden">
-                            <div className="px-5 py-4 border-b border-[#F5F5F5] flex items-center justify-between">
-                                <div>
-                                    <p className="text-[15px] font-[900] text-[#181725]">{item.masterProductName}</p>
-                                    {item.packSize && <p className="text-[12px] text-[#AEAEAE] mt-0.5">{item.packSize}</p>}
-                                </div>
-                                <span className={cn(
-                                    'text-[12px] font-[900] px-2.5 py-1 rounded-[6px]',
-                                    item.mappings.length > 0 ? 'bg-[#EEF8F1] text-[#53B175]' : 'bg-[#F8F9FB] text-[#AEAEAE]'
-                                )}>
-                                    {item.mappings.length} distributor{item.mappings.length !== 1 ? 's' : ''}
-                                </span>
-                            </div>
+                ))}
+            </div>
 
-                            {item.mappings.length === 0 ? (
-                                <div className="px-5 py-4 text-[13px] text-[#AEAEAE] font-bold flex items-center justify-between gap-2">
-                                    <span className="flex items-center gap-2">
-                                        <Store size={14} /> No distributors found yet
-                                    </span>
-                                    <span className="text-[11px] text-[#AEAEAE] font-medium">
-                                        Click <span className="text-[#53B175] font-bold">Run Auto-Mapping</span> above to scan vendor catalogs
-                                    </span>
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-[#F5F5F5]">
-                                    {item.mappings.map(mapping => {
-                                        const status = mappingStatusLabel(mapping.status);
-                                        const statusTone = TONE_STYLES[status.tone];
-                                        const StatusIcon = STATUS_ICONS[mapping.status] ?? Clock;
-                                        const confidence = confidenceLabel(mapping.confidenceScore);
-                                        const confidenceTone = TONE_STYLES[confidence.tone];
-                                        return (
-                                            <div key={mapping.id} className="px-5 py-3 flex items-center gap-3">
-                                                {mapping.distributorProduct.vendor?.logoUrl ? (
-                                                    <img src={mapping.distributorProduct.vendor.logoUrl} alt=""
-                                                        className="w-9 h-9 rounded-[8px] object-contain border border-[#EEEEEE] p-1 bg-white shrink-0" />
-                                                ) : (
-                                                    <div className="w-9 h-9 rounded-[8px] bg-[#F8F9FB] flex items-center justify-center text-[#AEAEAE] shrink-0">
-                                                        <Store size={16} />
-                                                    </div>
-                                                )}
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-[14px] font-bold text-[#181725] truncate">
-                                                        {mapping.distributorProduct.vendor?.businessName ?? 'Unassigned product'}
-                                                    </p>
-                                                    <p className="text-[12px] text-[#AEAEAE] truncate">{mapping.distributorProduct.name}</p>
+            <div className="bg-white rounded-[16px] border border-[#EEEEEE] overflow-hidden">
+                {loading ? (
+                    <div className="flex items-center justify-center py-16">
+                        <Loader2 className="w-8 h-8 animate-spin text-[#53B175]" />
+                    </div>
+                ) : filteredRows.length === 0 ? (
+                    <div className="py-16 text-center text-[14px] text-gray-400 font-medium">
+                        No mappings match this filter. Run auto-mapping after adding products.
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="border-b border-gray-100 bg-gray-50/50">
+                                    {['Brand Item', 'Distributor Item', 'SKU', 'Status', 'Vendor', 'Auth', ''].map((h) => (
+                                        <th key={h} className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {filteredRows.map((row) => {
+                                    const status = mappingStatusLabel(row.status, 'brand');
+                                    const auth = distributorAuthLabel(row.distributorAuthStatus);
+                                    const tone = TONE_STYLES[status.tone];
+                                    const authTone = TONE_STYLES[auth.tone];
+                                    return (
+                                        <tr key={row.mappingId} className="hover:bg-gray-50/50">
+                                            <td className="px-4 py-3">
+                                                <p className="text-[13px] font-bold text-[#181725]">{row.masterProductName}</p>
+                                                <p className="text-[11px] text-gray-400">{formatPackSize(row.masterPackSize, row.masterUnit) || '—'}</p>
+                                            </td>
+                                            <td className="px-4 py-3 text-[13px] text-gray-600">{row.distributorProductName}</td>
+                                            <td className="px-4 py-3 text-[12px] text-gray-500 font-mono">{row.masterSku ?? '—'}</td>
+                                            <td className="px-4 py-3">
+                                                <span className={cn('px-2 py-0.5 rounded-md text-[10px] font-bold uppercase', tone.bg, tone.text)}>
+                                                    {status.label}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-[12px] text-gray-500">{row.vendorName}</td>
+                                            <td className="px-4 py-3">
+                                                <span className={cn('px-2 py-0.5 rounded-md text-[10px] font-bold', authTone.bg, authTone.text)}>
+                                                    {auth.label}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {row.status === 'pending_review' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleReject(row.mappingId)}
+                                                            disabled={rejecting === row.mappingId}
+                                                            className="p-1.5 rounded-lg hover:bg-red-50 text-red-500"
+                                                            title="Reject incorrect match"
+                                                        >
+                                                            <XCircle size={14} />
+                                                        </button>
+                                                    )}
+                                                    {!row.isAuthApproved && (
+                                                        <Link href="/brand/portal/distributors" className="text-[11px] font-bold text-[#53B175] hover:underline px-2">
+                                                            Approve vendor
+                                                        </Link>
+                                                    )}
                                                 </div>
-                                                <div className="text-right shrink-0">
-                                                    <p className="text-[15px] font-[900] text-[#181725]">
-                                                        ₹{Number(mapping.distributorProduct.basePrice).toFixed(0)}
-                                                    </p>
-                                                    <div className="flex items-center gap-1 justify-end mt-0.5">
-                                                        <StatusIcon size={11} className={statusTone.text} />
-                                                        <span className={cn('text-[10px] font-bold', statusTone.text)}>{status.label}</span>
-                                                    </div>
-                                                </div>
-                                                <div
-                                                    className="text-right shrink-0 ml-2"
-                                                    title={`${confidence.percent}% confidence`}
-                                                >
-                                                    <span className={cn('text-[10px] font-bold', confidenceTone.text)}>
-                                                        {confidence.label}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
 
-            {/* How this works tip */}
             <div className="bg-[#F8F9FB] border border-[#EEEEEE] rounded-[14px] p-5 flex items-start gap-3">
                 <div className="w-9 h-9 rounded-[10px] bg-[#EEF8F1] flex items-center justify-center shrink-0">
                     <Info size={16} className="text-[#53B175]" />
@@ -224,7 +231,9 @@ export default function BrandMappingsPage() {
                 <div>
                     <p className="text-[13px] font-[900] text-[#181725]">How distributor mapping works</p>
                     <p className="text-[12px] text-[#7C7C7C] font-medium mt-1 leading-relaxed">
-                        Distributors carrying your brand are matched to your catalog automatically. High-confidence matches go live; lower-confidence ones wait for distributor confirmation. Click <span className="font-bold text-[#181725]">Run Auto-Mapping</span> to re-scan any time.
+                        Auto-mapping suggests links between your catalog and vendor inventory. Vendors must confirm each match.
+                        Only <span className="font-bold">approved distributors</span> appear on your public brand store.
+                        Reject wrong matches (e.g. Jeera mapped to Khus) here; vendors can remap from their portal.
                     </p>
                 </div>
             </div>

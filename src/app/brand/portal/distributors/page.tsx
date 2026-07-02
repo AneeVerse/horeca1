@@ -5,6 +5,23 @@ import { Users, Plus, Loader2, Check, X, Mail, Phone, MapPin, Building2, Clock, 
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
+interface AuthorizedDistributor {
+    id: string;
+    vendorId: string;
+    status: 'pending' | 'approved' | 'rejected';
+    brandApprovedAt: string | null;
+    adminApprovedAt: string | null;
+    note: string | null;
+    vendor: {
+        id: string;
+        businessName: string;
+        slug: string;
+        logoUrl: string | null;
+        city: string | null;
+        _count?: { products: number };
+    };
+}
+
 interface Invite {
     id: string;
     contactName: string;
@@ -28,13 +45,26 @@ const STATUS_CONFIG: Record<Invite['status'], { label: string; bg: string; text:
 
 export default function BrandDistributorsPage() {
     const [invites, setInvites] = useState<Invite[]>([]);
+    const [distributors, setDistributors] = useState<AuthorizedDistributor[]>([]);
     const [loading, setLoading] = useState(true);
+    const [authLoading, setAuthLoading] = useState(true);
+    const [actingId, setActingId] = useState<string | null>(null);
     const [showForm, setShowForm] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [form, setForm] = useState({
         contactName: '', email: '', phone: '', businessName: '', city: '', pincode: '', notes: '',
     });
     const [formError, setFormError] = useState<string | null>(null);
+
+    const fetchDistributors = useCallback(async () => {
+        try {
+            setAuthLoading(true);
+            const r = await fetch('/api/v1/brand/authorized-distributors');
+            const j = await r.json();
+            if (j.success) setDistributors(j.data.distributors ?? []);
+        } catch { /* silent */ }
+        finally { setAuthLoading(false); }
+    }, []);
 
     const fetchInvites = useCallback(async () => {
         try {
@@ -46,7 +76,26 @@ export default function BrandDistributorsPage() {
         finally { setLoading(false); }
     }, []);
 
-    useEffect(() => { fetchInvites(); }, [fetchInvites]);
+    useEffect(() => { fetchInvites(); fetchDistributors(); }, [fetchInvites, fetchDistributors]);
+
+    const handleDistributorAction = async (vendorId: string, action: 'approve' | 'reject') => {
+        setActingId(vendorId);
+        try {
+            const r = await fetch('/api/v1/brand/authorized-distributors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ vendorId, action }),
+            });
+            const j = await r.json();
+            if (!j.success) throw new Error(j.error?.message || 'Action failed');
+            toast.success(action === 'approve' ? 'Distributor approved — awaiting admin confirmation' : 'Distributor rejected');
+            fetchDistributors();
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : 'Action failed');
+        } finally {
+            setActingId(null);
+        }
+    };
 
     const submit = async () => {
         setFormError(null);
@@ -185,6 +234,57 @@ export default function BrandDistributorsPage() {
                     </div>
                 </div>
             )}
+
+            {/* Authorized distributors (vendors who mapped your SKUs) */}
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                <div className="p-5 border-b border-gray-100">
+                    <h2 className="text-[15px] font-bold text-[#181725]">Authorized distributors</h2>
+                    <p className="text-[12px] text-gray-500 mt-0.5">Vendors carrying your catalog — approve them so customers see stock on your brand store (admin must also approve).</p>
+                </div>
+                {authLoading ? (
+                    <div className="flex items-center justify-center py-10"><Loader2 size={20} className="animate-spin text-[#53B175]" /></div>
+                ) : distributors.length === 0 ? (
+                    <div className="p-8 text-center text-[13px] text-gray-400">No distributor requests yet — they appear when a vendor maps your SKUs.</div>
+                ) : (
+                    <div className="divide-y divide-gray-50">
+                        {distributors.map((d) => (
+                            <div key={d.id} className="p-4 flex items-center justify-between gap-4 flex-wrap">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <Building2 size={16} className="text-[#53B175] shrink-0" />
+                                    <div>
+                                        <p className="text-[14px] font-bold text-[#181725]">{d.vendor.businessName}</p>
+                                        <p className="text-[11px] text-gray-500">
+                                            {d.vendor.city ?? '—'}
+                                            {d.vendor._count ? ` · ${d.vendor._count.products} mapped SKU(s)` : ''}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className={cn('px-2.5 py-1 text-[10px] font-[900] rounded-md uppercase tracking-wider',
+                                        d.status === 'approved' ? 'bg-[#EEF8F1] text-[#2e7d46]'
+                                            : d.status === 'pending' ? 'bg-[#FFF7E6] text-[#D97706]'
+                                                : 'bg-[#FEF2F2] text-[#DC2626]')}>
+                                        {d.status === 'approved' ? 'Live' : d.status === 'pending' ? (d.brandApprovedAt ? 'Awaiting admin' : 'Pending your review') : 'Rejected'}
+                                    </span>
+                                    {d.status === 'pending' && !d.brandApprovedAt && (
+                                        <>
+                                            <button onClick={() => handleDistributorAction(d.vendorId, 'approve')} disabled={actingId === d.vendorId}
+                                                className="h-[32px] px-3 bg-[#53B175] text-white rounded-[8px] text-[11px] font-bold disabled:opacity-60 flex items-center gap-1">
+                                                {actingId === d.vendorId ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                                                Approve
+                                            </button>
+                                            <button onClick={() => handleDistributorAction(d.vendorId, 'reject')} disabled={actingId === d.vendorId}
+                                                className="h-[32px] px-3 bg-gray-100 text-gray-700 rounded-[8px] text-[11px] font-bold">
+                                                Reject
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
 
             {/* Invites list */}
             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">

@@ -55,6 +55,7 @@ export function AddNewAddressOverlay({
     const [selectedPlace, setSelectedPlace] = useState<PlaceDetails | null>(null);
     const [businessNameEdit, setBusinessNameEdit] = useState('');
     const [addressEdit, setAddressEdit] = useState('');
+    const [pincodeEdit, setPincodeEdit] = useState('');
     const [flatInfo, setFlatInfo] = useState('');
     const [landmark, setLandmark] = useState('');
     const [label, setLabel] = useState<LabelType>('Business');
@@ -301,7 +302,13 @@ export function AddNewAddressOverlay({
     const handleSelectBusiness = useCallback(async (placeId: string) => {
         setShowBusinessDropdown(false); setIsFetchingDetails(true); clearPredictions();
         const details = await getPlaceDetails(placeId);
-        if (details) { setSelectedPlace(details); setBusinessNameEdit(details.businessName || ''); setAddressEdit(details.fullAddress); }
+        if (details) {
+            setSelectedPlace(details);
+            setBusinessNameEdit(details.businessName || '');
+            setAddressEdit(details.isAreaLevel ? '' : details.fullAddress);
+            if (!details.pincodeReliable) setPincodeEdit('');
+            else setPincodeEdit(details.pincode || '');
+        }
         setIsFetchingDetails(false);
     }, [getPlaceDetails, clearPredictions]);
 
@@ -312,11 +319,11 @@ export function AddNewAddressOverlay({
             fullAddress: addressEdit || selectedPlace.fullAddress,
             shortAddress: selectedPlace.shortAddress,
             latitude: selectedPlace.latitude, longitude: selectedPlace.longitude,
-            pincode: selectedPlace.pincode, city: selectedPlace.city, state: selectedPlace.state,
+            pincode: pincodeEdit || selectedPlace.pincode, city: selectedPlace.city, state: selectedPlace.state,
             placeId: selectedPlace.placeId,
             flatInfo: flatInfo || undefined, landmark: landmark || undefined, isDefault: false,
         });
-    }, [selectedPlace, label, businessNameEdit, addressEdit, flatInfo, landmark, onSave]);
+    }, [selectedPlace, label, businessNameEdit, addressEdit, pincodeEdit, flatInfo, landmark, onSave]);
 
     const handleSaveMap = useCallback(() => {
         if (!mapAddress) return;
@@ -474,11 +481,31 @@ export function AddNewAddressOverlay({
                                             <textarea value={addressEdit} onChange={(e) => setAddressEdit(e.target.value)} rows={2}
                                                 className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-[13px] text-gray-700 outline-none focus:border-[#33a852] bg-white transition-colors resize-none" />
                                         </div>
-                                        <div className="flex flex-wrap gap-1.5 mt-1.5">
-                                            {[selectedPlace.city, selectedPlace.state, selectedPlace.pincode && `📍 ${selectedPlace.pincode}`].filter(Boolean).map((t, i) => (
+                                        <div className="flex flex-wrap gap-1.5 mt-1.5 items-center">
+                                            {[selectedPlace.city, selectedPlace.state].filter(Boolean).map((t, i) => (
                                                 <span key={i} className="text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{t}</span>
                                             ))}
+                                            {selectedPlace.pincodeReliable ? (
+                                                selectedPlace.pincode && (
+                                                    <span className="text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">📍 {selectedPlace.pincode}</span>
+                                                )
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    maxLength={6}
+                                                    value={pincodeEdit}
+                                                    onChange={(e) => setPincodeEdit(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                                    placeholder="Pincode"
+                                                    className="w-[88px] text-[11px] border border-amber-200 rounded-full px-2 py-0.5 outline-none focus:border-amber-400"
+                                                />
+                                            )}
                                         </div>
+                                        {selectedPlace.isAreaLevel && (
+                                            <p className="text-[11px] text-amber-700 mt-2 font-medium">
+                                                This is an area — enter your street address and pincode, or switch to Map to drop a pin.
+                                            </p>
+                                        )}
                                     </div>
                                     <div>
                                         <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Floor / Unit / Building</label>

@@ -17,6 +17,10 @@ interface VendorProductCardProps {
     distributorName?: string;
     distributorCount?: number;
     onDistributorClick?: (e: React.MouseEvent) => void;
+    /** Override stock badge for brand-store browse mode (area / no distributor). */
+    availabilityLabel?: 'out' | 'area' | 'none';
+    /** Keep card visually in-stock when browsing catalog (e.g. wrong pincode). */
+    forceInStockDisplay?: boolean;
 }
 
 export const VendorProductCard = React.memo(function VendorProductCard({ 
@@ -24,7 +28,9 @@ export const VendorProductCard = React.memo(function VendorProductCard({
     variant = 'grid',
     distributorName,
     distributorCount,
-    onDistributorClick
+    onDistributorClick,
+    availabilityLabel,
+    forceInStockDisplay = false,
 }: VendorProductCardProps) {
     const { addToCart, groups, updateQuantity, removeFromCart } = useCart();
     const { status: sessionStatus } = useSession();
@@ -173,7 +179,9 @@ export const VendorProductCard = React.memo(function VendorProductCard({
             ?.originalIdx
         : null;
 
-    const isOutOfStock = product.stock === 0 || product.isActive === false;
+    const isOutOfStock = forceInStockDisplay || availabilityLabel === 'area'
+        ? false
+        : (product.stock === 0 || product.isActive === false || availabilityLabel === 'none');
 
     // ── Renders a single bulk-tier pill (used by the desktop grid card).
     //    Directly adds the tier's minimum quantity to the cart on click. ──
@@ -359,7 +367,15 @@ export const VendorProductCard = React.memo(function VendorProductCard({
     const imageBadges = (
         <>
             <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
-                {isOutOfStock ? (
+                {availabilityLabel === 'area' ? (
+                    <span className="bg-amber-500 text-white text-[9px] sm:text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wide leading-tight max-w-[110px] text-center">
+                        Not in your area
+                    </span>
+                ) : availabilityLabel === 'none' ? (
+                    <span className="bg-gray-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        No distributor
+                    </span>
+                ) : isOutOfStock ? (
                     <span className="bg-gray-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
                         Out
                     </span>
