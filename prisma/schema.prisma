@@ -234,6 +234,7 @@ model Vendor {
   cashbackCampaigns  CashbackCampaign[]
   customerGroups     CustomerGroup[]
   combos             ProductCombo[]
+  brandAuthorizations BrandAuthorizedDistributor[]
 
   // Ordering defaults applied to new products and checkout
   defaultMOQ          Int?      @map("default_moq")
@@ -538,6 +539,7 @@ model MasterProduct {
   name           String   @db.VarChar(255)
   aliasNames     String[] @default([]) @map("alias_names")
   brand          String?  @db.VarChar(150)
+  packSize       String?  @map("pack_size") @db.VarChar(100)
   uom            String?  @db.VarChar(50)
   taxPercent     Decimal  @default(0) @map("tax_percent") @db.Decimal(5, 2)
   imageUrl       String?  @map("image_url") @db.VarChar(512)
@@ -1323,6 +1325,7 @@ model Brand {
   productMappings BrandProductMapping[]
   teamMembers     BrandTeamMember[]
   distributorInvites BrandDistributorInvite[]
+  authorizedDistributors BrandAuthorizedDistributor[]
   // V2.2 Phase 4 — pricelists assigned to this brand
   priceListAssignments PriceListAssignment[] @relation("PriceListAssignmentBrand")
 
@@ -1364,6 +1367,38 @@ enum BrandDistributorInviteStatus {
   contacted
   onboarded
   declined
+}
+
+// Official brand ↔ distributor authorization (distinct from SKU mapping).
+// A vendor carrying brand SKUs is NOT a distributor until both brand and admin approve.
+enum BrandAuthorizedDistributorStatus {
+  pending
+  approved
+  rejected
+}
+
+model BrandAuthorizedDistributor {
+  id              String                           @id @default(uuid()) @db.Uuid
+  brandId         String                           @map("brand_id") @db.Uuid
+  vendorId        String                           @map("vendor_id") @db.Uuid
+  status          BrandAuthorizedDistributorStatus @default(pending)
+  brandApprovedAt DateTime?                        @map("brand_approved_at") @db.Timestamptz
+  brandApprovedBy String?                          @map("brand_approved_by") @db.Uuid
+  adminApprovedAt DateTime?                        @map("admin_approved_at") @db.Timestamptz
+  adminApprovedBy String?                          @map("admin_approved_by") @db.Uuid
+  rejectedAt      DateTime?                        @map("rejected_at") @db.Timestamptz
+  rejectedBy      String?                          @map("rejected_by") @db.Uuid
+  note            String?                          @db.Text
+  createdAt       DateTime                         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime                         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  brand  Brand  @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([brandId, vendorId])
+  @@index([brandId, status])
+  @@index([vendorId])
+  @@map("brand_authorized_distributors")
 }
 
 // Brand's canonical product catalog (the truth layer — no pricing)
