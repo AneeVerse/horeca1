@@ -14,13 +14,30 @@ export function confidenceLabel(score: number): { label: string; tone: Confidenc
 
 export type MappingStatusTone = 'live' | 'pending' | 'rejected';
 
-export function mappingStatusLabel(status: string): { label: string; tone: MappingStatusTone } {
+export type MappingLabelAudience = 'brand' | 'vendor' | 'default';
+
+export function mappingStatusLabel(
+  status: string,
+  audience: MappingLabelAudience = 'default',
+): { label: string; tone: MappingStatusTone } {
   switch (status) {
     case 'auto_mapped':    return { label: 'Live · Auto', tone: 'live' };
     case 'verified':       return { label: 'Live · Confirmed', tone: 'live' };
-    case 'pending_review': return { label: 'Awaiting your review', tone: 'pending' };
+    case 'pending_review':
+      return audience === 'brand'
+        ? { label: 'Awaiting distributor confirmation', tone: 'pending' }
+        : { label: 'Awaiting your review', tone: 'pending' };
     case 'rejected':       return { label: 'Unlinked', tone: 'rejected' };
     default:               return { label: status, tone: 'pending' };
+  }
+}
+
+export function distributorAuthLabel(status: string | null | undefined): { label: string; tone: MappingStatusTone } {
+  switch (status) {
+    case 'approved': return { label: 'Approved', tone: 'live' };
+    case 'rejected': return { label: 'Rejected', tone: 'rejected' };
+    case 'pending': return { label: 'Pending approval', tone: 'pending' };
+    default: return { label: 'Not authorized', tone: 'pending' };
   }
 }
 

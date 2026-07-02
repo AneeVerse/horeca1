@@ -4,12 +4,13 @@
 // Strategy: deterministic matching with human review fallback
 //
 // Confidence thresholds:
-//   >= 0.90 → auto_mapped   (high confidence, no review needed)
-//   >= 0.70 → pending_review (medium, queue for admin)
+//   >= 0.90 → pending_review (vendor must confirm before discovery)
+//   >= 0.70 → pending_review (medium, queue for vendor review)
 //   <  0.70 → ignored        (too uncertain)
 //
 // Phase 2: replace scoring with embeddings + fuzzy matching
 
+import { ensurePendingDistributorAuth } from '@/lib/brandAuthorizedDistributor';
 import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/events/emitter';
 import type { MatchMethod } from '@prisma/client';
@@ -304,21 +305,25 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
     }
 
     if (finalScore < 0.70) {
-      // Clean up stale pending_review when re-evaluation drops the score below threshold —
-      // typically when AI says "not a match" with high confidence on an old false-positive.
+      // Soft-reject stale pending_review when AI is confident it's wrong — keep audit trail.
       if (s.existingStatus === 'pending_review' && aiVerdict && !aiVerdict.match && aiVerdict.confidence >= 0.7) {
-        await prisma.brandProductMapping.deleteMany({
+        await prisma.brandProductMapping.updateMany({
           where: {
             brandMasterProductId,
             distributorProductId: s.candidate.id,
             status: 'pending_review',
+          },
+          data: {
+            status: 'rejected',
+            reviewNote: aiVerdict.reason ? `AI rejected: ${aiVerdict.reason}` : 'AI rejected on re-evaluation',
+            updatedAt: new Date(),
           },
         });
       }
       continue;
     }
 
-    const status: 'auto_mapped' | 'pending_review' = finalScore >= 0.90 ? 'auto_mapped' : 'pending_review';
+    const status: 'auto_mapped' | 'pending_review' = 'pending_review';
     const matchedBy: MatchMethod = 'rule_based';
 
     await prisma.brandProductMapping.upsert({
@@ -345,6 +350,10 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
         updatedAt: new Date(),
       },
     });
+
+    if (s.candidate.vendorId) {
+      await ensurePendingDistributorAuth(masterProduct.brandId, s.candidate.vendorId);
+    }
 
     emitEvent('BrandProductMapped', {
       mappingId: brandMasterProductId,
@@ -375,7 +384,7 @@ export async function runMappingForBrand(brandId: string): Promise<void> {
 export async function runMappingForVendorProduct(distributorProductId: string): Promise<void> {
   const distributorProduct = await prisma.product.findUnique({
     where: { id: distributorProductId },
-    select: { id: true, name: true, brand: true, isActive: true, approvalStatus: true, embedding: true, embeddingModel: true },
+    select: { id: true, name: true, brand: true, vendorId: true, isActive: true, approvalStatus: true, embedding: true, embeddingModel: true },
   });
   if (!distributorProduct || !distributorProduct.isActive || distributorProduct.approvalStatus !== 'approved') {
     return;
@@ -455,7 +464,7 @@ export async function runMappingForVendorProduct(distributorProductId: string): 
     }
     if (finalScore < 0.70) continue;
 
-    const status: 'auto_mapped' | 'pending_review' = finalScore >= 0.90 ? 'auto_mapped' : 'pending_review';
+    const status: 'auto_mapped' | 'pending_review' = 'pending_review';
 
     await prisma.brandProductMapping.upsert({
       where: {
@@ -481,6 +490,10 @@ export async function runMappingForVendorProduct(distributorProductId: string): 
         updatedAt: new Date(),
       },
     });
+
+    if (distributorProduct.vendorId) {
+      await ensurePendingDistributorAuth(s.mp.brandId, distributorProduct.vendorId);
+    }
 
     emitEvent('BrandProductMapped', {
       mappingId: s.mp.id,

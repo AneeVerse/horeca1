@@ -24,21 +24,44 @@ interface ErrorResponse {
   };
 }
 
+// Human-readable message for an arbitrary caught error. Used for per-row
+// import errors (and by errorResponse) — never surfaces raw Prisma engine
+// dumps ("Invalid `prisma.…` invocation in …") to the client.
+export function friendlyErrorMessage(error: unknown, fallback = 'Something went wrong'): string {
+  if (error instanceof ZodError) {
+    const flat = error.flatten().fieldErrors as Record<string, string[] | undefined>;
+    const firstField = Object.entries(flat).find(([, msgs]) => Array.isArray(msgs) && msgs.length > 0);
+    return firstField
+      ? `${firstField[0]}: ${firstField[1]?.[0] ?? 'invalid'}`
+      : 'Invalid input';
+  }
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    const target = (error as { meta?: { target?: unknown } }).meta?.target;
+    if (code === 'P2002') {
+      const field = Array.isArray(target) ? String(target[target.length - 1]) : 'Record';
+      return `${field} already exists`;
+    }
+    if (code === 'P2003') return 'Linked record not found';
+    if (code === 'P2000') return 'A value is too long for its field';
+  }
+  if (error instanceof Error && error.message && !error.message.includes('invocation')) {
+    return error.message;
+  }
+  return fallback;
+}
+
 export function errorResponse(error: unknown): NextResponse<ErrorResponse> {
   // Zod validation error — surface the FIRST failing field so the user knows what to fix
   // instead of a generic "Invalid input". Full per-field details still in details.fields.
   if (error instanceof ZodError) {
     const flat = error.flatten().fieldErrors as Record<string, string[] | undefined>;
-    const firstField = Object.entries(flat).find(([, msgs]) => Array.isArray(msgs) && msgs.length > 0);
-    const message = firstField
-      ? `${firstField[0]}: ${firstField[1]?.[0] ?? 'invalid'}`
-      : 'Invalid input';
     return NextResponse.json(
       {
         success: false as const,
         error: {
           code: 'VALIDATION_ERROR',
-          message,
+          message: friendlyErrorMessage(error),
           details: { fields: flat },
         },
       },
@@ -54,12 +77,10 @@ export function errorResponse(error: unknown): NextResponse<ErrorResponse> {
     typeof error === 'object' && error !== null && 'code' in error &&
     (error as { code?: unknown }).code === 'P2002'
   ) {
-    const target = (error as { meta?: { target?: unknown } }).meta?.target;
-    const field = Array.isArray(target) ? String(target[target.length - 1]) : 'Record';
     return NextResponse.json(
       {
         success: false as const,
-        error: { code: 'DUPLICATE', message: `${field} already exists` },
+        error: { code: 'DUPLICATE', message: friendlyErrorMessage(error) },
       },
       { status: 409 }
     );

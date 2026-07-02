@@ -1,3 +1,4 @@
+import { getApprovedDistributorKeys, filterAuthorizedMappings } from '@/lib/brandAuthorizedDistributor';
 import { Prisma, type ApprovalStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { Errors } from '@/middleware/errorHandler';
@@ -652,6 +653,7 @@ export async function resolveMasterForVendorApproval(input: {
     master.name,
     master.categoryId,
     master.imageUrl,
+    master.packSize,
     master.uom,
     master.sku,
     master.id,
@@ -780,6 +782,7 @@ export class CatalogService {
         brandMappings: {
           where: { status: { in: ['verified', 'auto_mapped'] } },
           select: {
+            brandId: true,
             brandMasterProduct: {
               select: {
                 name: true,
@@ -787,6 +790,7 @@ export class CatalogService {
               },
             },
           },
+          orderBy: { confidenceScore: 'desc' },
           take: 1,
         },
       },
@@ -795,9 +799,12 @@ export class CatalogService {
     const hasMore = products.length > limit;
     if (hasMore) products.pop();
 
+    const approvedKeys = await getApprovedDistributorKeys({ vendorId });
+
     return {
       products: products.map((p) => ({
         ...p,
+        brandMappings: filterAuthorizedMappings(p.brandMappings, vendorId, approvedKeys),
         categoryName: p.category?.name || '',
         categorySlug: p.category?.slug || '',
         in_stock: p.inventory ? p.inventory.qtyAvailable - p.inventory.qtyReserved > 0 : false,

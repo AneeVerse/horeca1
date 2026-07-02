@@ -1,20 +1,11 @@
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { getApprovedDistributorKeys, filterAuthorizedMappings } from '@/lib/brandAuthorizedDistributor';
 
 // Shape returned by Prisma.$queryRaw for trgm fuzzy match
 interface TrgmRow {
   id: string;
 }
-
-// Full product shape returned by findMany (with all includes below)
-type ProductWithIncludes = Prisma.ProductGetPayload<{
-  include: {
-    vendor: { select: { id: true; businessName: true; slug: true; logoUrl: true; rating: true; minOrderValue: true } };
-    priceSlabs: { orderBy: { sortOrder: 'asc' } };
-    inventory: { select: { qtyAvailable: true } };
-    category: { select: { id: true; name: true; slug: true; imageUrl: true } };
-  };
-}>;
 
 const PRODUCT_INCLUDE = {
   vendor: {
@@ -26,6 +17,7 @@ const PRODUCT_INCLUDE = {
   brandMappings: {
     where: { status: { in: ['verified' as const, 'auto_mapped' as const] } },
     select: {
+      brandId: true,
       brandMasterProduct: {
         select: {
           name: true,
@@ -33,9 +25,12 @@ const PRODUCT_INCLUDE = {
         },
       },
     },
+    orderBy: { confidenceScore: 'desc' as const },
     take: 1,
   },
 } satisfies Prisma.ProductInclude;
+
+type ProductWithIncludes = Prisma.ProductGetPayload<{ include: typeof PRODUCT_INCLUDE }>;
 
 export class SearchService {
   async search(query: string, pincode?: string, cursor?: string, limit = 20) {
@@ -114,6 +109,23 @@ export class SearchService {
     // Honour the original limit + cursor pagination contract
     const hasMore = products.length > limit;
     if (hasMore) products.pop();
+
+    const vendorIds = [...new Set(products.map((p) => p.vendorId).filter((id): id is string => id != null))];
+    const brandIds = new Set<string>();
+    for (const p of products) {
+      for (const m of p.brandMappings ?? []) {
+        if (m.brandId) brandIds.add(m.brandId);
+      }
+    }
+    const approvedKeys = brandIds.size > 0 && vendorIds.length > 0
+      ? await getApprovedDistributorKeys()
+      : new Set<string>();
+    products = products.map((p) => {
+      const vendorId = p.vendorId ?? p.vendor?.id;
+      if (!vendorId || !p.brandMappings?.length) return p;
+      const filtered = filterAuthorizedMappings(p.brandMappings, vendorId, approvedKeys);
+      return filtered.length === p.brandMappings.length ? p : { ...p, brandMappings: filtered };
+    });
 
     // Extract unique vendors and categories for the 3-block response
     const vendorMap = new Map<string, ProductWithIncludes['vendor']>();

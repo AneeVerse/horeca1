@@ -1,5 +1,6 @@
 import type { ApprovalStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { getApprovedDistributorKeys, distributorAuthKey } from '@/lib/brandAuthorizedDistributor';
 import { emitEvent } from '@/events/emitter';
 import { Errors } from '@/middleware/errorHandler';
 import { provisionDefaultAccount } from '@/lib/provisionAccount';
@@ -146,7 +147,16 @@ export class BrandService {
           where: { isActive: true },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
           include: {
-            categoryRel: { select: { id: true, name: true } },
+            categoryRel: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                imageUrl: true,
+                parentId: true,
+                parent: { select: { id: true, name: true, slug: true, imageUrl: true } },
+              },
+            },
             mappings: {
               where: { status: { in: ['auto_mapped', 'verified'] } },
               include: {
@@ -184,7 +194,40 @@ export class BrandService {
 
     if (!brand) throw Errors.notFound('Brand not found');
 
-    // Build vendor index (deduplicated)
+    const approvedKeys = await getApprovedDistributorKeys({ brandId: brand.id });
+
+    // Resolve all categoryIds on master products for multi-category navigation.
+    const allCategoryIds = new Set<string>();
+    for (const mp of brand.masterProducts) {
+      if (mp.categoryId) allCategoryIds.add(mp.categoryId);
+      for (const cid of mp.categoryIds ?? []) allCategoryIds.add(cid);
+    }
+    const categoryRows = allCategoryIds.size > 0
+      ? await prisma.category.findMany({
+        where: { id: { in: [...allCategoryIds] } },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          imageUrl: true,
+          parentId: true,
+          parent: { select: { id: true, name: true, slug: true, imageUrl: true } },
+        },
+      })
+      : [];
+    const categoryById = new Map(categoryRows.map((c) => [c.id, c]));
+
+    const mapCategoryLink = (c: typeof categoryRows[number]) => ({
+      id: c.id,
+      name: c.name,
+      slug: c.slug,
+      imageUrl: c.imageUrl,
+      parentId: c.parentId ?? c.parent?.id ?? null,
+      parentName: c.parent?.name ?? null,
+      parentImageUrl: c.parent?.imageUrl ?? null,
+    });
+
+    // Build vendor index (deduplicated) — only approved distributors
     const vendorMap = new Map<string, {
       id: string; name: string; slug: string; logo: string | null;
       pincodes: string[]; productIds: string[];
@@ -196,6 +239,7 @@ export class BrandService {
       const distributors = mp.mappings.map(m => {
         const v = m.distributorProduct.vendor;
         if (!v) return null;
+        if (!approvedKeys.has(distributorAuthKey(brand.id, v.id))) return null;
 
         const priceWithTax = Number(m.distributorProduct.basePrice) *
           (1 + Number(m.distributorProduct.taxPercent) / 100);
@@ -240,6 +284,22 @@ export class BrandService {
         };
       }).filter(Boolean);
 
+      const categoryIdList = mp.categoryIds?.length
+        ? mp.categoryIds
+        : (mp.categoryId ? [mp.categoryId] : []);
+      const categories = categoryIdList
+        .map((id) => categoryById.get(id))
+        .filter((c): c is NonNullable<typeof c> => !!c)
+        .map(mapCategoryLink);
+      if (categories.length === 0 && mp.categoryRel) {
+        categories.push(mapCategoryLink(mp.categoryRel));
+      }
+
+      const primaryCategory = mp.categoryRel?.name
+        ?? categories[0]?.name
+        ?? ((mp as Record<string, unknown>).category as string | undefined)
+        ?? 'General';
+
       return {
         id: mp.id,
         name: mp.name,
@@ -247,7 +307,8 @@ export class BrandService {
         image: mp.imageUrl,
         packSize: mp.packSize,
         unit: mp.unit,
-        category: mp.categoryRel?.name ?? (mp as Record<string, unknown>).category as string | undefined ?? 'General',
+        category: primaryCategory,
+        categories,
         distributors,
       };
     });
@@ -536,6 +597,19 @@ export class BrandService {
     });
   }
 
+  // ── Brand: find master product by SKU (brand-scoped) ───────
+  async findBrandProductBySku(userId: string, sku: string) {
+    const brandId = await this.getBrandIdForUser(userId);
+    return prisma.brandMasterProduct.findFirst({
+      where: {
+        brandId,
+        isActive: true,
+        sku: { equals: sku.trim(), mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+  }
+
   // ── Brand: create master product ──────────────────────────
   async createMasterProduct(userId: string, input: CreateBrandProductInput) {
     const brandId = await this.getBrandIdForUser(userId);
@@ -546,11 +620,22 @@ export class BrandService {
     const categoryIds = input.categoryIds ?? (input.categoryId ? [input.categoryId] : []);
     const primaryCategoryId = input.categoryId ?? categoryIds[0] ?? null;
 
+    // Slug is unique per (brandId, slug) — suffix -2, -3… on name collisions so
+    // same-named SKUs (batches, pack variants) don't hit the DB constraint.
+    const slugBase = slugify(input.name) || 'product';
+    let slug = slugBase;
+    for (let n = 2; await prisma.brandMasterProduct.findUnique({
+      where: { brandId_slug: { brandId, slug } },
+      select: { id: true },
+    }); n++) {
+      slug = `${slugBase}-${n}`;
+    }
+
     const product = await prisma.brandMasterProduct.create({
       data: {
         brandId,
         masterProductId: input.masterProductId ?? null,
-        slug: slugify(input.name),
+        slug,
         name: input.name,
         description: input.description,
         imageUrl: input.imageUrl,
@@ -606,7 +691,7 @@ export class BrandService {
   // ── Brand: submit new master catalog entry for admin approval ──
   async submitPendingMasterProduct(
     userId: string,
-    input: { name: string; sku: string; categoryId: string; imageUrl?: string; uom?: string },
+    input: { name: string; sku: string; categoryId: string; imageUrl?: string; packSize?: string; uom?: string },
   ) {
     const brandId = await this.getBrandIdForUser(userId);
     const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { name: true } });
@@ -635,7 +720,8 @@ export class BrandService {
         brand: brand.name,
         categoryId: input.categoryId,
         imageUrl: input.imageUrl ?? null,
-        uom: input.uom ?? null,
+        packSize: input.packSize?.trim() || null,
+        uom: input.uom?.trim() || null,
         approvalStatus: 'pending',
         suggestedBy: userId,
       },
@@ -702,18 +788,27 @@ export class BrandService {
   async getDistributorCoverage(userId: string) {
     const brandId = await this.getBrandIdForUser(userId);
 
-    // Get all master products with their mappings
+    const approvedKeys = await getApprovedDistributorKeys({ brandId });
+    const authRows = await prisma.brandAuthorizedDistributor.findMany({
+      where: { brandId },
+      select: { vendorId: true, status: true, brandApprovedAt: true, adminApprovedAt: true },
+    });
+    const authByVendor = new Map(authRows.map((a) => [a.vendorId, a]));
+
     const masterProducts = await prisma.brandMasterProduct.findMany({
       where: { brandId, isActive: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: {
         mappings: {
+          where: { status: { not: 'rejected' } },
           include: {
             distributorProduct: {
               select: {
                 id: true,
                 name: true,
+                packSize: true,
                 basePrice: true,
+                vendorId: true,
                 vendor: { select: { id: true, businessName: true, logoUrl: true } },
               },
             },
@@ -722,22 +817,93 @@ export class BrandService {
       },
     });
 
-    return masterProducts.map(mp => ({
-      masterProductId: mp.id,
-      masterProductName: mp.name,
-      packSize: mp.packSize,
-      mappings: mp.mappings.map(m => ({
-        id: m.id,
-        status: m.status,
-        confidenceScore: Number(m.confidenceScore),
-        distributorProduct: {
-          id: m.distributorProduct.id,
-          name: m.distributorProduct.name,
-          basePrice: Number(m.distributorProduct.basePrice),
-          vendor: m.distributorProduct.vendor,
-        },
-      })),
-    }));
+    type CoverageRow = {
+      mappingId: string;
+      masterProductId: string;
+      masterProductName: string;
+      masterPackSize: string | null;
+      masterUnit: string | null;
+      masterSku: string | null;
+      distributorProductId: string;
+      distributorProductName: string;
+      distributorPackSize: string | null;
+      status: string;
+      confidenceScore: number;
+      vendorId: string;
+      vendorName: string;
+      vendorLogo: string | null;
+      distributorAuthStatus: string | null;
+      isAuthApproved: boolean;
+    };
+
+    const rows: CoverageRow[] = [];
+    const coveredProductIds = new Set<string>();
+
+    for (const mp of masterProducts) {
+      for (const m of mp.mappings) {
+        const vendorId = m.distributorProduct.vendorId;
+        if (!vendorId) continue;
+        const auth = authByVendor.get(vendorId);
+        const isAuthApproved = approvedKeys.has(distributorAuthKey(brandId, vendorId));
+        coveredProductIds.add(mp.id);
+        rows.push({
+          mappingId: m.id,
+          masterProductId: mp.id,
+          masterProductName: mp.name,
+          masterPackSize: mp.packSize,
+          masterUnit: mp.unit,
+          masterSku: mp.sku,
+          distributorProductId: m.distributorProduct.id,
+          distributorProductName: m.distributorProduct.name,
+          distributorPackSize: m.distributorProduct.packSize,
+          status: m.status,
+          confidenceScore: Number(m.confidenceScore),
+          vendorId,
+          vendorName: m.distributorProduct.vendor?.businessName ?? '—',
+          vendorLogo: m.distributorProduct.vendor?.logoUrl ?? null,
+          distributorAuthStatus: auth?.status ?? null,
+          isAuthApproved,
+        });
+      }
+    }
+
+    const activeMappings = rows.filter(
+      (r) => (r.status === 'auto_mapped' || r.status === 'verified') && r.isAuthApproved,
+    ).length;
+    const pendingReview = rows.filter((r) => r.status === 'pending_review').length;
+    const pendingApproval = rows.filter(
+      (r) => (r.status === 'auto_mapped' || r.status === 'verified') && !r.isAuthApproved,
+    ).length;
+
+    return {
+      rows,
+      stats: {
+        productsCovered: coveredProductIds.size,
+        activeMappings,
+        pendingReview,
+        pendingApproval,
+        totalProducts: masterProducts.length,
+      },
+    };
+  }
+
+  // ── Brand: reject / flag an incorrect mapping ─────────────────────────
+  async brandRejectMapping(userId: string, mappingId: string, reviewNote?: string) {
+    const brandId = await this.getBrandIdForUser(userId);
+    const mapping = await prisma.brandProductMapping.findFirst({
+      where: { id: mappingId, brandId },
+    });
+    if (!mapping) throw Errors.notFound('Mapping not found');
+
+    return prisma.brandProductMapping.update({
+      where: { id: mappingId },
+      data: {
+        status: 'rejected',
+        reviewNote: reviewNote?.trim() || 'Rejected by brand owner',
+        reviewedBy: userId,
+        updatedAt: new Date(),
+      },
+    });
   }
 
   // ── Brand: trigger manual re-mapping ──────────────────────
@@ -911,9 +1077,10 @@ export async function syncProductToBrand(
   name: string,
   categoryId: string | null | undefined,
   imageUrl: string | null | undefined,
-  uom: string | null | undefined,
+  packSize: string | null | undefined,
+  unit: string | null | undefined,
   sku: string | null | undefined,
-  masterProductId?: string
+  masterProductId?: string,
 ) {
   if (!brandName) return;
 
@@ -938,7 +1105,8 @@ export async function syncProductToBrand(
           name: name.trim(),
           slug,
           imageUrl: imageUrl || null,
-          packSize: uom || null,
+          packSize: packSize?.trim() || null,
+          unit: unit?.trim() || null,
           sku: sku || null,
           categoryId: categoryId || null,
           categoryIds: categoryId ? [categoryId] : [],
@@ -955,7 +1123,8 @@ export async function syncProductToBrand(
         where: { id: existing.id },
         data: {
           imageUrl: imageUrl || existing.imageUrl || null,
-          packSize: uom || existing.packSize || null,
+          packSize: packSize?.trim() || existing.packSize || null,
+          unit: unit?.trim() || existing.unit || null,
           sku: sku || existing.sku || null,
           categoryId: categoryId || existing.categoryId || null,
           categoryIds: categoryId

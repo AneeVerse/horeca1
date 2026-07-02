@@ -15,6 +15,8 @@ export const AUDIT_ACTIONS = {
   brandMappingVerified: 'brand_mapping.verified',
   brandMappingRejected: 'brand_mapping.rejected',
   brandMappingUnlinked: 'brand_mapping.unlinked',
+  brandDistributorApproved: 'brand_distributor.approved',
+  brandDistributorRejected: 'brand_distributor.rejected',
   couponCreate: 'coupon.create',
   couponUpdate: 'coupon.update',
   couponDelete: 'coupon.delete',
