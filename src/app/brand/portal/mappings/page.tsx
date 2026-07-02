@@ -185,9 +185,15 @@ export default function BrandMappingsPage() {
                                             <td className="px-4 py-3 text-[13px] text-gray-600">{row.distributorProductName}</td>
                                             <td className="px-4 py-3 text-[12px] text-gray-500 font-mono">{row.masterSku ?? '—'}</td>
                                             <td className="px-4 py-3">
-                                                <span className={cn('px-2 py-0.5 rounded-md text-[10px] font-bold uppercase', tone.bg, tone.text)}>
-                                                    {status.label}
-                                                </span>
+                                                {!row.isAuthApproved ? (
+                                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200" title="This distributor has not been approved yet, so their pricing is hidden on your brand storefront.">
+                                                        Inactive (Needs Auth)
+                                                    </span>
+                                                ) : (
+                                                    <span className={cn('px-2 py-0.5 rounded-md text-[10px] font-bold uppercase', tone.bg, tone.text)}>
+                                                        {status.label}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3 text-[12px] text-gray-500">{row.vendorName}</td>
                                             <td className="px-4 py-3">

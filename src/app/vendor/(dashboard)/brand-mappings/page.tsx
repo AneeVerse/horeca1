@@ -395,7 +395,7 @@ export default function VendorBrandMappingsPage() {
                     <table className="w-full text-left">
                         <thead>
                             <tr className="border-b border-gray-100 bg-gray-50/50">
-                                {['Brand Item', 'Distributor Item', 'SKU', 'Status', 'Distributor', ''].map((h) => (
+                                {['Brand Item', 'Distributor Item', 'Brand SKU', 'Status', 'Brand', ''].map((h) => (
                                     <th key={h} className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">{h}</th>
                                 ))}
                             </tr>
@@ -409,7 +409,12 @@ export default function VendorBrandMappingsPage() {
                                 return (
                                     <tr key={`${row.productId}-${row.mappingId ?? 'u'}`} className="hover:bg-gray-50/50">
                                         <td className="px-4 py-3 text-[13px] font-medium text-[#181725]">{row.brandItemName ?? '—'}</td>
-                                        <td className="px-4 py-3 text-[13px] text-gray-600">{row.distributorProductName}</td>
+                                        <td className="px-4 py-3">
+                                            <p className="text-[13px] font-bold text-[#181725]">{row.distributorProductName}</p>
+                                            {row.distributorPackSize && (
+                                                <p className="text-[10px] text-gray-400 mt-0.5">{row.distributorPackSize}</p>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3 text-[12px] text-gray-500 font-mono">{row.brandSku ?? '—'}</td>
                                         <td className="px-4 py-3">
                                             <span className={cn('px-2 py-0.5 rounded-md text-[10px] font-bold uppercase', tone.bg, tone.text)}>

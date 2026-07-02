@@ -189,6 +189,7 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
     where: {
       isActive: true,
       approvalStatus: 'approved',
+      vendorId: { not: null },
       OR: [
         { brand: { contains: brandNameLower, mode: 'insensitive' } },
         { name:  { contains: brandNameLower, mode: 'insensitive' } },
@@ -209,6 +210,7 @@ export async function runMappingForProduct(brandMasterProductId: string): Promis
       where: {
         isActive: true,
         approvalStatus: 'approved',
+        vendorId: { not: null },
         embeddingModel: { equals: masterProduct.embeddingModel ?? undefined }, // only same model produces comparable vectors
       },
       select: { id: true, name: true, brand: true, vendorId: true, embedding: true },
@@ -386,7 +388,7 @@ export async function runMappingForVendorProduct(distributorProductId: string): 
     where: { id: distributorProductId },
     select: { id: true, name: true, brand: true, vendorId: true, isActive: true, approvalStatus: true, embedding: true, embeddingModel: true },
   });
-  if (!distributorProduct || !distributorProduct.isActive || distributorProduct.approvalStatus !== 'approved') {
+  if (!distributorProduct || !distributorProduct.isActive || distributorProduct.approvalStatus !== 'approved' || !distributorProduct.vendorId) {
     return;
   }
 

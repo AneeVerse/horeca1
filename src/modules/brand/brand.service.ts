@@ -1122,6 +1122,7 @@ export async function syncProductToBrand(
       brandMasterProduct = await prisma.brandMasterProduct.update({
         where: { id: existing.id },
         data: {
+          masterProductId: masterProductId || existing.masterProductId || null,
           imageUrl: imageUrl || existing.imageUrl || null,
           packSize: packSize?.trim() || existing.packSize || null,
           unit: unit?.trim() || existing.unit || null,
