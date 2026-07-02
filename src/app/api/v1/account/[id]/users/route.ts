@@ -65,7 +65,7 @@ const InviteBody = z.object({
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
     const id = extractAccountId(req);
-    await assertAccountPermission(ctx.userId, id, 'users.create');
+    await assertAccountPermission(ctx.userId, id, 'users.create', ctx.activeOutletId);
     const body = InviteBody.parse(await req.json());
 
     // Resolve the role for this membership.

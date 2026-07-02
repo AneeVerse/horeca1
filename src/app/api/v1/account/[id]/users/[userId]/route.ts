@@ -22,7 +22,7 @@ const PatchBody = z.object({
 export const PATCH = withAuth(async (req: NextRequest, ctx) => {
   try {
     const { id, userId } = extractIds(req);
-    await assertAccountPermission(ctx.userId, id, 'users.edit');
+    await assertAccountPermission(ctx.userId, id, 'users.edit', ctx.activeOutletId);
     const body = PatchBody.parse(await req.json());
 
     // Validate every role + outlet ref belongs to the account
@@ -59,7 +59,7 @@ export const PATCH = withAuth(async (req: NextRequest, ctx) => {
 export const DELETE = withAuth(async (req: NextRequest, ctx) => {
   try {
     const { id, userId } = extractIds(req);
-    await assertAccountPermission(ctx.userId, id, 'users.delete');
+    await assertAccountPermission(ctx.userId, id, 'users.delete', ctx.activeOutletId);
 
     // Don't remove the last Owner — would orphan the account.
     const ownerTemplate = await prisma.accountRole.findFirst({

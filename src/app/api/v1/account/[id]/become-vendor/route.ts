@@ -45,7 +45,7 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
     // .../account/<id>/become-vendor
     const accountId = segments[segments.length - 2];
 
-    await assertAccountPermission(ctx.userId, accountId, 'settings.edit');
+    await assertAccountPermission(ctx.userId, accountId, 'settings.edit', ctx.activeOutletId);
 
     const body = Body.parse(await req.json());
 

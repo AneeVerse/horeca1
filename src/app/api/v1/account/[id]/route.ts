@@ -52,7 +52,7 @@ const PatchBody = z.object({
 export const PATCH = withAuth(async (req: NextRequest, ctx) => {
   try {
     const id = extractId(req);
-    await assertAccountPermission(ctx.userId, id, 'settings.edit');
+    await assertAccountPermission(ctx.userId, id, 'settings.edit', ctx.activeOutletId);
     const body = PatchBody.parse(await req.json());
 
     // If changing primaryOutletId, verify it belongs to this account.

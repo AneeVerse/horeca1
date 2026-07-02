@@ -18,6 +18,7 @@ const submitSchema = z.object({
   categoryId: z.string().uuid(),
   imageUrl: z.string().url().optional(),
   uom: z.string().max(50).optional(),
+  packSize: z.string().max(100).optional(),
 });
 
 export const POST = brandOnly(async (req: NextRequest, ctx: AuthContext) => {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { adminOnly } from '@/middleware/rbac';
-import { Errors, errorResponse } from '@/middleware/errorHandler';
+import { Errors, errorResponse, friendlyErrorMessage } from '@/middleware/errorHandler';
 import { parseProductImport, type ParsedProductRow } from '@/modules/import-export/excel.service';
 import { requirePermission } from '@/lib/permissions/engine';
 import {
@@ -743,6 +743,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
               updatedProduct.imageUrl,
               updatedProduct.packSize ?? undefined,
               updatedProduct.unit ?? undefined,
+              updatedProduct.sku ?? undefined,
               updatedProduct.masterProductId || undefined
             ).catch(console.error);
           }
@@ -830,6 +831,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
               product.imageUrl,
               product.packSize ?? undefined,
               product.unit ?? undefined,
+              product.sku ?? undefined,
               product.masterProductId || undefined
             ).catch(console.error);
           }
@@ -843,7 +845,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
           } catch (err) {
             commitErrors.push({
               row: rowNum,
-              message: err instanceof Error ? err.message : 'Failed to process product',
+              message: friendlyErrorMessage(err, 'Failed to process product'),
             });
             if (!force) {
               throw err;

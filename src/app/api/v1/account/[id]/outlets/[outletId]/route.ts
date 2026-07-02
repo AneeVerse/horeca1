@@ -29,7 +29,7 @@ const PatchBody = z.object({
 export const PATCH = withAuth(async (req: NextRequest, ctx) => {
   try {
     const { id, outletId } = extractIds(req);
-    await assertAccountPermission(ctx.userId, id, 'outlets.edit');
+    await assertAccountPermission(ctx.userId, id, 'outlets.edit', ctx.activeOutletId);
     const existing = await prisma.outlet.findFirst({
       where: { id: outletId, businessAccountId: id },
       select: { id: true, pincode: true, requiresAddressUpdate: true },
@@ -79,7 +79,7 @@ export const PATCH = withAuth(async (req: NextRequest, ctx) => {
 export const DELETE = withAuth(async (req: NextRequest, ctx) => {
   try {
     const { id, outletId } = extractIds(req);
-    await assertAccountPermission(ctx.userId, id, 'outlets.delete');
+    await assertAccountPermission(ctx.userId, id, 'outlets.delete', ctx.activeOutletId);
     const existing = await prisma.outlet.findFirst({ where: { id: outletId, businessAccountId: id }, select: { id: true } });
     if (!existing) throw Errors.notFound('Outlet');
 

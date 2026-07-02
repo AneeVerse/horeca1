@@ -189,6 +189,7 @@ export const POST = adminOnly(async (req: NextRequest, ctx) => {
       master.name,
       master.categoryId,
       master.imageUrl,
+      master.packSize,
       master.uom,
       master.sku,
       master.id,

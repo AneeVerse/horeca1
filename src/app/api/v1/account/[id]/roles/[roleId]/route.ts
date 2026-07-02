@@ -20,7 +20,7 @@ const PatchBody = z.object({
 export const PATCH = withAuth(async (req: NextRequest, ctx) => {
   try {
     const { id, roleId } = extractIds(req);
-    await assertAccountPermission(ctx.userId, id, 'users.edit');
+    await assertAccountPermission(ctx.userId, id, 'users.edit', ctx.activeOutletId);
     const role = await prisma.accountRole.findFirst({ where: { id: roleId, businessAccountId: id }, select: { id: true, isTemplate: true } });
     if (!role) throw Errors.notFound('Role');
     if (role.isTemplate) throw Errors.badRequest('System templates cannot be edited; duplicate and customize instead');
@@ -38,7 +38,7 @@ export const PATCH = withAuth(async (req: NextRequest, ctx) => {
 export const DELETE = withAuth(async (req: NextRequest, ctx) => {
   try {
     const { id, roleId } = extractIds(req);
-    await assertAccountPermission(ctx.userId, id, 'users.delete');
+    await assertAccountPermission(ctx.userId, id, 'users.delete', ctx.activeOutletId);
     const role = await prisma.accountRole.findFirst({ where: { id: roleId, businessAccountId: id }, select: { id: true, isTemplate: true, _count: { select: { userRoles: true } } } });
     if (!role) throw Errors.notFound('Role');
     if (role.isTemplate) throw Errors.badRequest('System templates cannot be deleted');

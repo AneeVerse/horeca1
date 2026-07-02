@@ -104,6 +104,7 @@ export const PATCH = vendorOnly(async (req: NextRequest, ctx) => {
         updated.imageUrl,
         updated.packSize ?? undefined,
         updated.unit ?? undefined,
+        updated.sku ?? undefined,
         updated.masterProductId || undefined
       ).catch(console.error);
     }

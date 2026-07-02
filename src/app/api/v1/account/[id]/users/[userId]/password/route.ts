@@ -24,7 +24,7 @@ function extractIds(req: NextRequest) {
 export const PATCH = withAuth(async (req: NextRequest, ctx) => {
   try {
     const { id, userId } = extractIds(req);
-    await assertAccountPermission(ctx.userId, id, 'users.edit');
+    await assertAccountPermission(ctx.userId, id, 'users.edit', ctx.activeOutletId);
 
     // Caller must outrank — actually here we use a simpler check: the target must
     // be a member of this account (otherwise any account admin could reset any

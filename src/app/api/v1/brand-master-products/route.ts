@@ -11,11 +11,13 @@ import { errorResponse } from '@/middleware/errorHandler';
 export const GET = withRole(['vendor', 'brand', 'admin'], async (req: NextRequest) => {
   try {
     const q = req.nextUrl.searchParams.get('q')?.trim() ?? '';
+    const brandId = req.nextUrl.searchParams.get('brandId')?.trim() ?? '';
     const limit = Math.min(Number(req.nextUrl.searchParams.get('limit') ?? 20), 50);
 
     const where = {
       isActive: true,
       brand: { isActive: true, approvalStatus: 'approved' as const },
+      ...(brandId && { brandId }),
       ...(q.length >= 2 ? {
         OR: [
           { name: { contains: q, mode: 'insensitive' as const } },

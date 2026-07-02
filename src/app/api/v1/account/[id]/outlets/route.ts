@@ -40,7 +40,7 @@ const CreateBody = z.object({
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
     const id = extractAccountId(req);
-    await assertAccountPermission(ctx.userId, id, 'outlets.create');
+    await assertAccountPermission(ctx.userId, id, 'outlets.create', ctx.activeOutletId);
     const body = CreateBody.parse(await req.json());
 
     const result = await prisma.$transaction(async (tx) => {

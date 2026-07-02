@@ -19,6 +19,7 @@ import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { logAction, AUDIT_ACTIONS } from '@/lib/auditLog';
+import { ensurePendingDistributorAuth } from '@/lib/brandAuthorizedDistributor';
 import type { AuthContext } from '@/middleware/auth';
 
 const createMappingSchema = z.object({
@@ -29,6 +30,14 @@ const createMappingSchema = z.object({
 export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
   try {
     const { vendorId } = await resolveVendorContext(ctx, req);
+    const view = req.nextUrl.searchParams.get('view');
+    const brandFilter = req.nextUrl.searchParams.get('brandId') ?? undefined;
+
+    const distributorAuths = await prisma.brandAuthorizedDistributor.findMany({
+      where: { vendorId },
+      select: { brandId: true, status: true },
+    });
+    const authByBrand = new Map(distributorAuths.map((a) => [a.brandId, a.status]));
 
     // Fetch every active approved product for this vendor, with ALL its mappings
     // in any reviewable state. We deliberately DO NOT `take: 1` — the auto-mapper
@@ -125,6 +134,124 @@ export const GET = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
       }
     }
 
+    if (view === 'table') {
+      type TableRow = {
+        productId: string;
+        distributorProductName: string;
+        distributorPackSize: string | null;
+        distributorImage: string | null;
+        basePrice: number;
+        brandId: string | null;
+        brandName: string | null;
+        brandMasterProductId: string | null;
+        brandItemName: string | null;
+        brandPackSize: string | null;
+        brandSku: string | null;
+        mappingId: string | null;
+        mappingStatus: 'mapped' | 'pending' | 'unmapped';
+        linkStatus: 'auto_mapped' | 'verified' | 'pending_review' | null;
+        distributorAuthStatus: 'pending' | 'approved' | 'rejected' | null;
+      };
+
+      const rows: TableRow[] = [];
+
+      for (const p of products) {
+        const liveMappings = p.brandMappings.filter(
+          (m) => m.status === 'auto_mapped' || m.status === 'verified',
+        );
+        const pendingMappings = p.brandMappings.filter((m) => m.status === 'pending_review');
+
+        if (liveMappings.length > 0) {
+          for (const m of liveMappings) {
+            if (brandFilter && m.brandMasterProduct.brand.id !== brandFilter) continue;
+            rows.push({
+              productId: p.id,
+              distributorProductName: p.name,
+              distributorPackSize: p.packSize,
+              distributorImage: p.imageUrl,
+              basePrice: Number(p.basePrice),
+              brandId: m.brandMasterProduct.brand.id,
+              brandName: m.brandMasterProduct.brand.name,
+              brandMasterProductId: m.brandMasterProduct.id,
+              brandItemName: m.brandMasterProduct.name,
+              brandPackSize: m.brandMasterProduct.packSize,
+              brandSku: m.brandMasterProduct.sku,
+              mappingId: m.id,
+              mappingStatus: 'mapped',
+              linkStatus: m.status as 'auto_mapped' | 'verified',
+              distributorAuthStatus: authByBrand.get(m.brandMasterProduct.brand.id) ?? null,
+            });
+          }
+        }
+
+        if (pendingMappings.length > 0) {
+          for (const pending of pendingMappings) {
+            if (brandFilter && pending.brandMasterProduct.brand.id !== brandFilter) continue;
+            const alreadyLive = liveMappings.some(
+              (m) => m.brandMasterProduct.brand.id === pending.brandMasterProduct.brand.id,
+            );
+            if (alreadyLive) continue;
+            rows.push({
+              productId: p.id,
+              distributorProductName: p.name,
+              distributorPackSize: p.packSize,
+              distributorImage: p.imageUrl,
+              basePrice: Number(p.basePrice),
+              brandId: pending.brandMasterProduct.brand.id,
+              brandName: pending.brandMasterProduct.brand.name,
+              brandMasterProductId: pending.brandMasterProduct.id,
+              brandItemName: pending.brandMasterProduct.name,
+              brandPackSize: pending.brandMasterProduct.packSize,
+              brandSku: pending.brandMasterProduct.sku,
+              mappingId: pending.id,
+              mappingStatus: 'pending',
+              linkStatus: 'pending_review',
+              distributorAuthStatus: authByBrand.get(pending.brandMasterProduct.brand.id) ?? null,
+            });
+          }
+        }
+
+        if (liveMappings.length === 0 && pendingMappings.length === 0) {
+          rows.push({
+            productId: p.id,
+            distributorProductName: p.name,
+            distributorPackSize: p.packSize,
+            distributorImage: p.imageUrl,
+            basePrice: Number(p.basePrice),
+            brandId: null,
+            brandName: null,
+            brandMasterProductId: null,
+            brandItemName: null,
+            brandPackSize: null,
+            brandSku: null,
+            mappingId: null,
+            mappingStatus: 'unmapped',
+            linkStatus: null,
+            distributorAuthStatus: null,
+          });
+        }
+      }
+
+      const brands = await prisma.brand.findMany({
+        where: {
+          isActive: true,
+          approvalStatus: 'approved',
+          masterProducts: {
+            some: {
+              mappings: { some: { distributorProduct: { vendorId } } },
+            },
+          },
+        },
+        select: { id: true, name: true, slug: true, logoUrl: true },
+        orderBy: { name: 'asc' },
+      });
+
+      return NextResponse.json({
+        success: true,
+        data: { rows, brands, distributorAuths },
+      });
+    }
+
     return NextResponse.json({
       success: true,
       data: { unmapped, pendingReview, mapped },
@@ -182,6 +309,8 @@ export const POST = vendorOnly(async (req: NextRequest, ctx: AuthContext) => {
         updatedAt: new Date(),
       },
     });
+
+    await ensurePendingDistributorAuth(masterProduct.brandId, vendorId);
 
     logAction(ctx, req, {
       action: AUDIT_ACTIONS.brandMappingVerified,

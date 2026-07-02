@@ -3,6 +3,7 @@
 // PUBLIC: No auth required
 
 import { NextRequest, NextResponse } from 'next/server';
+import { filterProductBrandMappings } from '@/lib/brandAuthorizedDistributor';
 import { prisma } from '@/lib/prisma';
 import { errorResponse, Errors } from '@/middleware/errorHandler';
 import { attachCustomerPricing } from '@/modules/pricing/catalog-pricing';
@@ -35,6 +36,7 @@ export async function GET(req: NextRequest) {
         brandMappings: {
           where: { status: { in: ['verified', 'auto_mapped'] } },
           select: {
+            brandId: true,
             brandMasterProduct: {
               select: {
                 name: true,
@@ -42,6 +44,7 @@ export async function GET(req: NextRequest) {
               },
             },
           },
+          orderBy: { confidenceScore: 'desc' },
           take: 1,
         },
       },
@@ -53,7 +56,8 @@ export async function GET(req: NextRequest) {
 
     // Logged-in buyers see THEIR price (price lists / overrides) on the
     // detail page — same resolver the cart uses.
-    const [withPricing] = await attachCustomerPricing([product]);
+    const [filtered] = await filterProductBrandMappings([product]);
+    const [withPricing] = await attachCustomerPricing([filtered]);
     return NextResponse.json({ success: true, data: withPricing });
   } catch (error) {
     return errorResponse(error);

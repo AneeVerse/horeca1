@@ -199,6 +199,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
           product.imageUrl,
           product.packSize ?? undefined,
           product.unit ?? undefined,
+          product.sku ?? undefined,
           product.masterProductId || undefined
         ).catch(console.error);
       }

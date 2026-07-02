@@ -24,7 +24,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { vendorOnly } from '@/middleware/rbac';
-import { Errors, errorResponse } from '@/middleware/errorHandler';
+import { Errors, errorResponse, friendlyErrorMessage } from '@/middleware/errorHandler';
 import { parseProductImport, generateImportTemplate, type ParsedProductRow } from '@/modules/import-export/excel.service';
 import { resolveVendorContext } from '@/lib/resolveVendorId';
 import { requirePermission } from '@/lib/permissions/engine';
@@ -703,7 +703,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       } catch (err) {
         validationErrors.push({
           row: rowNum,
-          message: err instanceof Error ? err.message : 'Failed to validate product',
+          message: friendlyErrorMessage(err, 'Failed to validate product'),
         });
       }
     }
@@ -883,7 +883,7 @@ export const POST = vendorOnly(async (req: NextRequest, ctx) => {
       updated = 0;
       responseErrors.push({
         row: 0,
-        message: txErr instanceof Error ? `Import rolled back: ${txErr.message}` : 'Import rolled back',
+        message: `Import rolled back: ${friendlyErrorMessage(txErr, 'unexpected error')}`,
       });
     }
 

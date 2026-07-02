@@ -38,7 +38,7 @@ const CreateBody = z.object({
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   try {
     const id = extractAccountId(req);
-    await assertAccountPermission(ctx.userId, id, 'users.create');
+    await assertAccountPermission(ctx.userId, id, 'users.create', ctx.activeOutletId);
     const body = CreateBody.parse(await req.json());
     const cleanedPerms = sanitizePermissions(body.permissions);
     const created = await prisma.accountRole.create({

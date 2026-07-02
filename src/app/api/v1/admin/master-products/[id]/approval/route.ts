@@ -42,7 +42,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
 
     const existing = await prisma.masterProduct.findUnique({
       where: { id },
-      select: { id: true, name: true, brand: true, categoryId: true, imageUrl: true, uom: true, sku: true, suggestedBy: true },
+      select: { id: true, name: true, brand: true, categoryId: true, imageUrl: true, packSize: true, uom: true, sku: true, suggestedBy: true },
     });
     if (!existing) throw Errors.notFound('Master product');
 
@@ -94,11 +94,14 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
               categoryId: existing.categoryId,
               categoryIds: [existing.categoryId],
               imageUrl: existing.imageUrl,
+              packSize: existing.packSize,
               unit: existing.uom,
             },
             update: {
               masterProductId: master.id,
-              sku: existing.sku,
+              sku: finalSku,
+              ...(existing.packSize ? { packSize: existing.packSize } : {}),
+              ...(existing.uom ? { unit: existing.uom } : {}),
               isActive: true,
             },
           });
@@ -110,6 +113,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
         master.name,
         master.categoryId,
         master.imageUrl,
+        master.packSize,
         master.uom,
         master.sku,
         master.id,

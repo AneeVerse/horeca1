@@ -192,6 +192,7 @@ export const PATCH = adminOnly(async (req: NextRequest, ctx) => {
       updated.name,
       updated.categoryId,
       updated.imageUrl,
+      updated.packSize,
       updated.uom,
       updated.sku,
       updated.id
